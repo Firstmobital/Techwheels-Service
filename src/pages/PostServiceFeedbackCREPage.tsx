@@ -61,6 +61,7 @@ interface TodayProductivity {
   inProgress: number
   resolved: number
   total: number
+  waSent: number
 }
 
 const PAGE_SIZE = 50
@@ -95,6 +96,23 @@ function fmtDateTime(s: string | null): string {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata',
   })
+}
+
+function getTodayKolkataRange() {
+  const now = new Date()
+  const opts = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' } as const
+  const tzDateStr = now.toLocaleString('en-US', opts)
+  const [mm, dd, yyyy] = tzDateStr.split('/')
+  const start = `${yyyy}-${mm}-${dd}T00:00:00+05:30`
+  
+  const startDate = new Date(start)
+  startDate.setDate(startDate.getDate() + 1)
+  const tm = startDate.getMonth() + 1
+  const td = startDate.getDate()
+  const ty = startDate.getFullYear()
+  const end = `${ty}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}T00:00:00+05:30`
+  
+  return { start, end }
 }
 
 function daysSinceSent(sentAt: string | null): string {
@@ -475,7 +493,7 @@ export default function PostServiceFeedbackCREPage() {
     total: 0, open: 0, in_progress: 0, resolved: 0,
   })
   const [todayProductivity, setTodayProductivity] = useState<TodayProductivity>({
-    positive: 0, needsFollowup: 0, inProgress: 0, resolved: 0, total: 0,
+    positive: 0, needsFollowup: 0, inProgress: 0, resolved: 0, total: 0, waSent: 0,
   })
   const [filteredTotal, setFilteredTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -542,6 +560,14 @@ export default function PostServiceFeedbackCREPage() {
     const dueTodayCount = () =>
       supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
 
+    const kolkataRange = getTodayKolkataRange()
+    const waSentCount = () =>
+      supabase.from('post_service_feedback_messages')
+        .select('id', { count: 'exact', head: true })
+        .not('sent_at', 'is', null)
+        .gte('sent_at', kolkataRange.start)
+        .lt('sent_at', kolkataRange.end)
+
     const [
       totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved,
       prodRes
@@ -557,6 +583,7 @@ export default function PostServiceFeedbackCREPage() {
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'in_progress')),
       tier === 'high' || tier === 'today' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'resolved')),
       supabase.rpc('psf_get_today_productivity'),
+      readCount(waSentCount()),
     ])
 
     if (pageRes.error) throw pageRes.error
@@ -578,6 +605,7 @@ export default function PostServiceFeedbackCREPage() {
         inProgress: prod.inProgress,
         resolved: prod.resolved,
         total: prod.total,
+        waSent: todayWaSentCount,
       },
       rows: (pageRes.data || []) as QueueRow[],
       filteredTotal: pageRes.count || 0,
@@ -709,12 +737,13 @@ export default function PostServiceFeedbackCREPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="Today's 4★ & Above" value={todayProductivity.positive} color="text-green-700" />
         <StatCard label="Today's 3★ & Below" value={todayProductivity.needsFollowup} color="text-red-700" />
         <StatCard label="Today's In Progress" value={todayProductivity.inProgress} color="text-yellow-700" />
         <StatCard label="Today's Resolved" value={todayProductivity.resolved} color="text-green-700" />
         <StatCard label="Today's Total Unique Calls" value={todayProductivity.total} color="text-blue-700" />
+        <StatCard label="Today's WA Sent" value={todayProductivity.waSent} color="text-purple-700" />
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
