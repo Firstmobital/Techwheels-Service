@@ -55,7 +55,7 @@ export default function CustomerDocumentsScreen() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const { isMechanical, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
+  const { isMechanical, isBodyshop, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
 
   const selected = useMemo(() => {
     const norm = (selectedReg || '').trim().toUpperCase()
@@ -65,7 +65,10 @@ export default function CustomerDocumentsScreen() {
   }, [vehicles, selectedReg])
 
   const activeServiceType = String(job?.service_type || selected?.service_type || '')
-  const isEffectiveMechanical = isMechanical || isMechanicalServiceType(activeServiceType)
+  const isEffectiveMechanical =
+    (isMechanical || isMechanicalServiceType(activeServiceType)) &&
+    !repairCard &&
+    !isBodyshop
 
   const claimMode = claimModeFromRepairCard(repairCard)
   const ownershipType = ownershipFromRepairCard(repairCard)

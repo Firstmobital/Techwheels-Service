@@ -249,7 +249,8 @@ export default function CustomerTrackerScreen() {
     })
   }, [selectedBodyshopStage, card, job?.jc_number, selected?.jc_number, advisor, techInfo])
 
-  const isAccident = isBodyshop
+  const isAccident = isBodyshop || Boolean(card)
+  const isEffectiveMechanical = !isAccident && isMechanicalVisit
 
   // Same pointer as workshop web: bodyshop_repair_cards.current_stage
   const currentBodyshopStage = resolveBodyshopEffectiveStage(card, { invoiced })
@@ -340,9 +341,7 @@ export default function CustomerTrackerScreen() {
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* ── CASE 1: ACCIDENT / BODYSHOP VEHICLE (18 STAGES VIEW) ─────────── */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
-          {isMechanicalVisit ? (
-            <MechanicalJourneyContent mechCase={mechCase} advisor={advisor} />
-          ) : isAccident ? (
+          {isAccident ? (
             <>
               {/* Top Bodyshop Status Banner */}
               <CustomerCard style={{ borderColor: '#e2e8f0', padding: 16 }}>
@@ -576,6 +575,8 @@ export default function CustomerTrackerScreen() {
                 })}
               </CustomerCard>
             </>
+          ) : isEffectiveMechanical ? (
+            <MechanicalJourneyContent mechCase={mechCase} advisor={advisor} />
           ) : (
             /* ═══════════════════════════════════════════════════════════════════ */
             /* ── CASE 2: REGULAR SERVICE (6 STAGES WORKSHOP TIMELINE) ─────────── */

@@ -37,10 +37,11 @@ import { useCustomerScreenRefresh } from '../../components/customer/customerScre
 export default function CustomerEstimateScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const { isMechanical, mechCase } = useCustomerVisit()
+  const { isMechanical, isBodyshop, repairCard, mechCase } = useCustomerVisit()
   const isEffectiveMechanical =
-    isMechanical ||
-    isMechanicalServiceType(String(selected?.service_type || ''))
+    (isMechanical || isMechanicalServiceType(String(selected?.service_type || ''))) &&
+    !repairCard &&
+    !isBodyshop
   const [rows, setRows] = useState<EstimateView[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [loading, setLoading] = useState(true)

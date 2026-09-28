@@ -177,11 +177,9 @@ export function CustomerScreen({
 
   const activeServiceType = String(job?.service_type || selectedVehicle?.service_type || '')
   const isEffectiveMechanical =
-    isMechanical ||
-    isMechanicalServiceType(activeServiceType)
-  const isAccident = visitReady
-    ? isBodyshop
-    : !isEffectiveMechanical && activeServiceType.toLowerCase().includes('accident')
+    (isMechanical || isMechanicalServiceType(activeServiceType)) &&
+    !isBodyshop
+  const isAccident = isBodyshop || (!isEffectiveMechanical && activeServiceType.toLowerCase().includes('accident'))
 
   type CustomerMenuItem = {
     label: string

@@ -116,8 +116,9 @@ export default function CustomerDashboardScreen() {
   const approvedEstimate =
     approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
-  const mechanicalStatus = isMechanical ? mechanicalStatusLabel(mechCase) : null
-  const showBodyshopFields = visitReady && isBodyshop
+  const isEffectiveMechanical = isMechanical && !isBodyshop && !repairCard
+  const mechanicalStatus = isEffectiveMechanical ? mechanicalStatusLabel(mechCase) : null
+  const showBodyshopFields = visitReady && (isBodyshop || Boolean(repairCard))
   const homeContentReady = visitReady && Boolean(selected)
   return (
     <CustomerScreen title="" subtitle="">
@@ -175,10 +176,10 @@ export default function CustomerDashboardScreen() {
             }}
           >
             <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>
-              {isMechanical ? dash(serviceType) || 'Workshop service' : 'Accidental & bodyshop care'}
+              {isEffectiveMechanical ? dash(serviceType) || 'Workshop service' : 'Accidental & bodyshop care'}
             </Text>
             <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900', marginTop: 6, lineHeight: 26, maxWidth: '92%' }}>
-              {isMechanical ? (mechanicalStatus || 'Your service visit') : 'Care That Keeps You Moving.'}
+              {isEffectiveMechanical ? (mechanicalStatus || 'Your service visit') : 'Care That Keeps You Moving.'}
             </Text>
           </LinearGradient>
 

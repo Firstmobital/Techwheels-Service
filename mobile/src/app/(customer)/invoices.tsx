@@ -26,7 +26,7 @@ export default function CustomerInvoicesScreen() {
   const [pass, setPass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { isMechanical: isMechanicalVisit, mechCase, ready: visitReady, refresh: refreshVisit } =
+  const { isMechanical: isMechanicalVisit, isBodyshop, repairCard, mechCase, ready: visitReady, refresh: refreshVisit } =
     useCustomerVisit()
 
   const load = useCallback(async () => {
@@ -187,7 +187,7 @@ export default function CustomerInvoicesScreen() {
         <ActivityIndicator color="#2563eb" />
       ) : (
         <>
-          {visitReady && isMechanicalVisit ? (
+          {visitReady && isMechanicalVisit && !isBodyshop && !repairCard ? (
             mechCase ? (
               <MechanicalInvoicesContent
                 mechCase={mechCase}

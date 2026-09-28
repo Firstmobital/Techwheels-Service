@@ -137,16 +137,15 @@ export async function customerGetVisitContext(
     if (error.message?.includes('Could not find the function') || error.code === 'PGRST202') {
       const legacy = await customerGetActiveJob(sessionToken, reg)
       const job = legacy.job ? { ...legacy.job } : null
-      const visitKind = resolveCustomerVisitKind(job, legacy.visit_kind as string | undefined)
+      const jcNo = (job?.jc_number as string) || null
+      let repair_card = await resolveLatestRepairCardRow(reg, jcNo, null)
+      if (repair_card) {
+        repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+      }
+      const visitKind = resolveCustomerVisitKind(job, legacy.visit_kind as string | undefined, repair_card)
       let mechanical_case: Record<string, unknown> | null = null
-      let repair_card: Record<string, unknown> | null = null
       if (visitKind === 'mechanical') {
         mechanical_case = (await customerGetMechanicalCase(sessionToken, reg).catch(() => null)) as Record<
-          string,
-          unknown
-        > | null
-      } else if (visitKind === 'bodyshop') {
-        repair_card = (await customerGetRepairCard(sessionToken, reg).catch(() => null)) as Record<
           string,
           unknown
         > | null
@@ -154,7 +153,7 @@ export async function customerGetVisitContext(
       return setCache(cacheKey, {
         ...legacy,
         visit_kind: visitKind,
-        mechanical_case,
+        mechanical_case: visitKind === 'bodyshop' ? null : mechanical_case,
         repair_card,
       })
     }
@@ -189,7 +188,7 @@ export async function customerGetVisitContext(
     vehicle: res.vehicle ?? null,
     job,
     visit_kind: visitKind,
-    mechanical_case: res.mechanical_case ?? null,
+    mechanical_case: visitKind === 'bodyshop' ? null : (res.mechanical_case ?? null),
     repair_card,
   }
 
