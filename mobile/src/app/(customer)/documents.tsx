@@ -63,6 +63,7 @@ export default function CustomerDocumentsScreen() {
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const { isMechanical, isBodyshop, repairCard, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
+  const [freshRepairCard, setFreshRepairCard] = useState<Record<string, unknown> | null>(null)
 
   const selected = useMemo(() => {
     const norm = (selectedReg || '').trim().toUpperCase()
@@ -80,18 +81,19 @@ export default function CustomerDocumentsScreen() {
   const [overrideCustomerType, setOverrideCustomerType] = useState<string | null>(null)
   const [updatingType, setUpdatingType] = useState(false)
 
+  const baseCard = freshRepairCard || repairCard
   const activeCustomerType = (
     overrideCustomerType ??
-    String(repairCard?.customer_type || '').trim().toLowerCase()
+    String(baseCard?.customer_type || '').trim().toLowerCase()
   ) || 'individual'
 
   const effectiveRepairCard = useMemo(() => {
-    if (!repairCard && !overrideCustomerType) return repairCard
+    if (!baseCard && !overrideCustomerType) return baseCard
     return {
-      ...(repairCard || {}),
+      ...(baseCard || {}),
       customer_type: activeCustomerType,
     }
-  }, [repairCard, activeCustomerType])
+  }, [baseCard, activeCustomerType])
 
   const claimMode = claimModeFromRepairCard(effectiveRepairCard)
   const ownershipType = ownershipFromRepairCard(effectiveRepairCard)
@@ -138,6 +140,9 @@ export default function CustomerDocumentsScreen() {
   const applySnapshot = useCallback(
     (snapshot: { repairCard: Record<string, unknown> | null; documents: CustomerBodyshopAsset[] }) => {
       setDocuments(snapshot.documents)
+      if (snapshot.repairCard) {
+        setFreshRepairCard(snapshot.repairCard)
+      }
     },
     []
   )
@@ -197,6 +202,14 @@ export default function CustomerDocumentsScreen() {
   )
 
   useCustomerScreenRefresh(() => load('refresh'))
+
+  useEffect(() => {
+    if (!token || !selectedReg) return
+    const timer = setInterval(() => {
+      void load('refresh')
+    }, 12000)
+    return () => clearInterval(timer)
+  }, [token, selectedReg, load])
 
   const uploadSlot = async (
     slot: CustomerClaimDocumentDef,

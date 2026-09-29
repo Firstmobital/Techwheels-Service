@@ -39,6 +39,8 @@ const ALLOWED_DOC_KEYS = new Set([
   'doc_company_pan',
   'doc_bank_detail',
   'doc_tp_affidavit',
+  'doc_job_card',
+  'job_card',
 ])
 
 /** Boolean approval columns that exist on bodyshop_repair_cards. */
@@ -134,7 +136,7 @@ async function resolveContext(
   }
 
   if (!dealerCode) {
-    throw new Error('Dealer context is not available for this repair card. Please contact your Service Advisor.')
+    dealerCode = text(cardRow.branch) || 'TATA_DEFAULT'
   }
 
   const activePayload = (active || {}) as Record<string, unknown>
@@ -200,9 +202,9 @@ async function offloadBodyshopDocument(
   input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number; regNumber?: string }
 ): Promise<{ ok: true; drive_url: string } | { ok: false; error: string }> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 9000)
+  const timeout = setTimeout(() => controller.abort(), 35000)
   try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+    const send = () => fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -220,9 +222,15 @@ async function offloadBodyshopDocument(
       }),
       signal: controller.signal,
     })
-    const payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
-    const driveUrl = text(payload.drive_url || payload.link)
+    let res = await send()
+    let payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
+    let driveUrl = text(payload.drive_url || payload.link)
     if (!res.ok || payload.ok === false || !driveUrl) {
+      res = await send()
+      payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
+      driveUrl = text(payload.drive_url || payload.link)
+    }
+    if (!driveUrl) {
       return { ok: false, error: text(payload.error) || `Drive upload failed (${res.status})` }
     }
     return { ok: true, drive_url: driveUrl }
@@ -351,6 +359,7 @@ Deno.serve(async (req) => {
       bucket: BUCKET,
       path: storagePath,
       token: signed.token,
+      signed_url: signed.signedUrl,
       repair_card_id: ctx.repairCardId,
     })
   }

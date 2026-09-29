@@ -19,6 +19,8 @@ const DOC_LABELS: Record<string, string> = {
   doc_tp_affidavit: 'T/P Affidavit',
   doc_estimate: 'Estimate Upload',
   doc_survey_approval: 'Survey Approval',
+  doc_job_card: 'Job Card',
+  job_card: 'Job Card',
 }
 
 function asText(v: unknown): string {
@@ -137,7 +139,7 @@ function docChecklist(card: Record<string, unknown> | null): string {
   for (const row of uploaded) {
     const k = asText(row.doc_key)
     if (!k || (DOC_LABELS[k] && INTAKE_DOC_KEYS.includes(k as (typeof INTAKE_DOC_KEYS)[number]))) continue
-    if (k === 'doc_estimate' || k === 'doc_survey_approval') continue
+    if (k === 'doc_estimate' || k === 'doc_survey_approval' || k === 'doc_job_card' || k === 'job_card') continue
     lines.push(`✓ ${DOC_LABELS[k] || k}${row.file_name ? `: ${row.file_name}` : ''}`)
   }
 
