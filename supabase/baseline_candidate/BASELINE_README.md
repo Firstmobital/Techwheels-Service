@@ -73,7 +73,7 @@ Verified: 877 rows, last id = 877, sequence setval included, no hardcoded creden
   - Tables: 164 ✓ | Functions: 408 ✓ | Views: 10 ✓ | Enums: 4 ✓
   - Public triggers: 118 ✓ | Auth trigger (on_auth_user_created): 1 ✓
   - Policies (public): 483 ✓ | Storage.objects policies: 5 ✓
-- **Definition-level comparison vs full_metadata.sql:** UNEXPLAINED_APPLICATION_DIFFERENCE = 0, UNSUPPORTED = 1
+- **Definition-level comparison vs full_metadata.sql:** UNEXPLAINED_APPLICATION_DIFFERENCE = 0, UNSUPPORTED = 0
   - **Tables (164/164):** column names, order, data types, nullability, defaults, identity,
     generated columns — all match. Column count verified including quoted identifiers and
     GENERATED ALWAYS AS CASE expressions. PK columns verified per table ✓
@@ -87,13 +87,18 @@ Verified: 877 rows, last id = 877, sequence setval included, no hardcoded creden
     USING and WITH CHECK from same pg_dump baseline ✓
   - **Indexes (602 total):** 374 explicit CREATE INDEX matched by name and definition;
     162 PK + 66 unique constraint-implied (ALTER TABLE ADD CONSTRAINT) — all 602 accounted for ✓
-  - **Grants/ACLs:** anon and authenticated grants present in local (applied from baseline
-    GRANT + ALTER DEFAULT PRIVILEGES statements). Direct text comparison unsupported
-    (pg_class.relacl combines explicit grants + default privileges; UNSUPPORTED = 1) ✓
+  - **Grants/ACLs:** ACL_UNEXPLAINED_DIFFERENCE = 0, ACL_UNSUPPORTED_COMPARISON = 0 ✓
+    Normalized privilege tuple comparison (object_type, schema, name, grantee, privilege_type):
+    - Tables/Views: 1738/1738 matched — all explicit GRANTs from pg_dump present in local ✓
+    - Functions: 1080/1080 matched across 402 shared application functions; 344 extension
+      functions (pg_trgm etc.) excluded from scope (present in pg_dump, not app-owned) ✓
+    - Sequences: 948/948 matched across 116 shared sequences ✓
+    - Local extra (local > meta): expected — ALTER DEFAULT PRIVILEGES cumulative effect
+      applies to objects created after the statement; zero missing from local ✓
   - **storage.objects policies (5/5):** presence and cmd match ✓
 - **Seed:** 877 rows, min=1, max=877, duplicates=0, sequence=877 — PASS ✓
 - **Security scan:** No hardcoded credentials in baseline or seed ✓
-- **Production:** READ-ONLY, untouched; last production migration `20260929120000`, baseline `20260929152000` not in production history ✓
+- **Production:** READ-ONLY, untouched; last production migration `20260928123035`, baseline `20260929152000` not in production history ✓
 
 ## Cutover Authorization Required
 
