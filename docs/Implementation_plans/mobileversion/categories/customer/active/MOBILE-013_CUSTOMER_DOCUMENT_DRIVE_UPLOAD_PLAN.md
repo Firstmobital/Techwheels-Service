@@ -121,7 +121,8 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ### Phase 1: Broker finishes the staff sequence
 - [x] **Task 1.1:** In `supabase/functions/customer-portal-upload/index.ts`, change document `complete_upload` from insert to upsert on `(repair_card_id, doc_key)`, returning `id`. Keep dealer, reception, registration, storage, file, and `uploaded_by` (`customer:<phone>`) fields aligned with the staff upsert.
 - [x] **Task 1.2:** After the upsert, call `universal-drive-upload` from the function with the service-role bearer, `resource_type: 'bodyshop_document'`, `resource_id`, `bucket_id: 'autodoc'`, `object_name`, and `file_type` = `doc_key`.
-- [x] **Task 1.3:** Set `bodyshop_repair_cards[doc_key] = true` only after the Drive call returns `drive_url`. On Drive failure, leave the flag false, keep the staged object and row, and return a pending payload (`ok: false` or `drive_pending: true` plus `resource_id`) the app can retry.
+- [x] **Task 1.3:** Set `bodyshop_repair_cards[doc_key] = true` only after the Drive call returns `drive_url`. On Drive failure, leave the flag false, keep the staged object and row, and return a pending payload (`ok: false` or `drive_pending: true` plus `resource_id`) the app can retry.  
+  ⚠️ **Audit finding F-E:** `setRepairCardDocFlag` was written but is never called — the `doc_*` flag is therefore never set on customer upload. See Phase 6 fix Task 6.3.
 - [x] **Task 1.4:** Add action `retry_drive` for an existing document row owned by the resolved repair card. Re-call `universal-drive-upload` with the stored path. On success, set the `doc_*` flag.
 - [x] **Task 1.5:** Narrow the broker document allow-list to the nine customer keys in the target contract. Remove `doc_tp_affidavit`.
 - [x] **Task 1.6:** Add `supabase/config.toml` entries: `customer-portal-upload` `verify_jwt = false` (session token in the body, same as the function comment); `universal-drive-upload` `verify_jwt = true` so the anon key alone cannot invoke Drive offload. Confirm the deployed function matches before release.
@@ -132,17 +133,33 @@ Do not write customer claim files into the autodoc `documents` table. That table
 
 ### Phase 3: Documents tab uses the broker
 - [x] **Task 3.1:** Wire camera, gallery, and PDF through `customerUploadBodyshopAsset` (`mobile/src/lib/api/customerBodyshopUploads.ts`). Extend that helper to surface `drive_url` and the pending/retry result from `complete_upload`.
-- [x] **Task 3.2:** Load existing files with `customerListBodyshopAssets`. Show submitted only when `view_url` / `drive_url` is present. Show a retry action when the row exists and Drive is still pending.
+- [x] **Task 3.2:** Load existing files with `customerListBodyshopAssets`. Show submitted only when `view_url` / `drive_url` is present. Show a retry action when the row exists and Drive is still pending.  
+  ⚠️ **Audit finding F-A2:** Upload handler (`documents.tsx:208–218`) never reads the returned `result` — always shows "uploaded successfully" even on drive-pending. See Phase 6 fix Task 6.2.
 - [x] **Task 3.3:** Replace uses the same `complete_upload` upsert. Remove is a local clear only until a server delete exists; do not pretend a local delete removed the workshop file. If the row exists on the server, keep showing it.
 - [x] **Task 3.4:** Read claim mode and ownership from the repair card returned for the selected registration. Remove the phone toggles as the source of which slots are required.
 
 ### Phase 4: Home progress matches the server
-- [x] **Task 4.1:** Change `loadClaimDocumentProgress` so `RemainingDocumentsCard` counts mandatory keys that have a Drive URL from `list_assets`. AsyncStorage may hold an in-flight local URI only. It must not increment `uploadedCount`.
+- [x] **Task 4.1:** Change `loadClaimDocumentProgress` so `RemainingDocumentsCard` counts mandatory keys that have a Drive URL from `list_assets`. AsyncStorage may hold an in-flight local URI only. It must not increment `uploadedCount`.  
+  ⚠️ **Audit finding F-D:** `isDriveDocumentComplete` in `repairCardDocuments.ts:27` counts `drive_url || view_url` (storage counts), while `documents.tsx:94` requires `drive_url && !drive_pending`. Home card and Documents screen disagree on progress numbers. See Phase 6 fix Task 6.4.
 - [x] **Task 4.2:** Home (`mobile/src/app/(customer)/index.tsx`) keeps using `RemainingDocumentsCard`. No second progress formula.
 
 ### Phase 5: Staff recovery alignment (after customer path is live)
 - [x] **Task 5.1:** When staff bodyshop Drive sync fails, record it through the existing `pending_drive_uploads` path and retry with the same `resource_id`. Do not add a second uploader.
 - [x] **Task 5.2:** Leave `doc_estimate` and `doc_survey_approval` on the staff screen. Add them to `BODYSHOP_DOC_KEYS` only if those staff uploads must offload too. Do not open them to the customer broker.
+
+### Phase 6: Post-audit fixes (added 2026-09-29)
+
+> These tasks correct defects discovered during the 2026-09-29 audit. All Phase 1–5 code was shipped on 2026-09-25 by Mobile Team + Platform. Root causes are detailed in the **Post-Implementation Audit** section below.
+
+- [ ] **Task 6.1** *(Platform — edge function)* **`ok` contract alignment:** Edge function `complete_upload` currently returns `{ ok: true, drive_pending: true }` when Drive fails. Change it to `{ ok: false, drive_pending: true, ... }` so the client's `asUploadResult` (`customerBodyshopUploads.ts:70–76`) no longer has to invert the field. Both sides must agree: `ok: true` only when `drive_url` is set. File: `supabase/functions/customer-portal-upload/index.ts:425–432`.
+
+- [ ] **Task 6.2** *(Mobile)* **Upload handler reads the result and shows the correct notice:** In `mobile/src/app/(customer)/documents.tsx:208–218`, the `result` returned by `customerUploadBodyshopAsset` is currently discarded. After the `load('refresh')` call, show `"Uploaded — syncing to Drive…"` when `result.drivePending === true`; show `"Uploaded successfully."` only when `result.ok === true`. Do not change the upload logic.
+
+- [ ] **Task 6.3** *(Platform — edge function)* **Wire `setRepairCardDocFlag` call site:** `setRepairCardDocFlag` is defined in `supabase/functions/customer-portal-upload/index.ts:154–166` but never called. Wire the call after Drive returns `drive_url`: set the `doc_*` flag on the repair card. Also wire it inside `retry_drive` on successful re-sync. This is the intended behaviour from Task 1.3 / Task 1.4 of this plan.
+
+- [ ] **Task 6.4** *(Mobile)* **Unify "submitted" definition across Home and Documents:** `mobile/src/lib/customer/repairCardDocuments.ts:27` (`isDriveDocumentComplete`) counts `drive_url || view_url`. `documents.tsx:94` counts only `drive_url && !drive_pending`. Home's `RemainingDocumentsCard` uses the first definition; the Documents tab progress bar uses the second — they show different numbers for the same vehicle. Fix: update `isDriveDocumentComplete` to require `drive_url` and not be satisfied by a storage-only `view_url`, matching the Documents tab rule.
+
+- [ ] **Task 6.5** *(Platform — edge function)* **Synchronous Drive timeout risk:** `offloadBodyshopDocument` in the edge function calls `universal-drive-upload` inline and synchronously. If Drive API takes >10 s the edge function times out and the customer receives an opaque error despite the file being in Storage. For now, add a 9 s hard timeout around the Drive fetch so the function can return `drive_pending: true` gracefully instead of crashing. A background-queue solution is a separate follow-up. File: `supabase/functions/customer-portal-upload/index.ts:410–432`.
 
 ---
 
@@ -160,7 +177,7 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ```
 ✅ 1.1 | Upsert bodyshop document on complete_upload | Mobile + Platform | 2026-09-25 | 2026-09-25 | customer-portal-upload
 ✅ 1.2 | Service-role call to universal-drive-upload | Mobile + Platform | 2026-09-25 | 2026-09-25 | customer-portal-upload
-✅ 1.3 | Flip doc_* flag only after drive_url | Mobile + Platform | 2026-09-25 | 2026-09-25 | flag stays false on pending
+⚠️ 1.3 | Flip doc_* flag only after drive_url | Mobile + Platform | 2026-09-25 | 2026-09-25 | setRepairCardDocFlag written but never called — flag NEVER set; fixed by 6.3
 ✅ 1.4 | retry_drive action | Mobile + Platform | 2026-09-25 | 2026-09-25 | customer-portal-upload
 ✅ 1.5 | Allow-list matches dump customer keys | Mobile + Platform | 2026-09-25 | 2026-09-25 | doc_tp_affidavit removed
 ✅ 1.6 | config.toml verify_jwt for both functions | Mobile + Platform | 2026-09-25 | 2026-09-25 | Deploy still required
@@ -175,14 +192,14 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ### Phase 3
 ```
 ✅ 3.1 | Documents tab calls customerUploadBodyshopAsset | Mobile | 2026-09-25 | 2026-09-25 | documents.tsx
-✅ 3.2 | List assets; submitted means drive_url | Mobile | 2026-09-25 | 2026-09-25 | documents.tsx
+⚠️ 3.2 | List assets; submitted means drive_url | Mobile | 2026-09-25 | 2026-09-25 | upload result ignored — always says success; fixed by 6.2
 ✅ 3.3 | Replace via upsert; server row survives local remove | Mobile | 2026-09-25 | 2026-09-25 | no local delete
 ✅ 3.4 | Claim mode and ownership from repair card | Mobile | 2026-09-25 | 2026-09-25 | documents.tsx
 ```
 
 ### Phase 4
 ```
-✅ 4.1 | Home card ignores AsyncStorage submitted count | Mobile | 2026-09-25 | 2026-09-25 | list_assets drive_url
+⚠️ 4.1 | Home card ignores AsyncStorage submitted count | Mobile | 2026-09-25 | 2026-09-25 | repairCardDocuments.ts counts view_url — home and documents progress disagree; fixed by 6.4
 ✅ 4.2 | index.tsx keeps RemainingDocumentsCard only | Mobile | 2026-09-25 | 2026-09-25 | unchanged call site
 ```
 
@@ -190,6 +207,15 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ```
 ✅ 5.1 | Staff Drive failure uses pending_drive_uploads retry | Platform | 2026-09-25 | 2026-09-25 | one retry; function logs drive_failed
 ✅ 5.2 | Workshop-only keys stay off the customer allow-list | Platform | 2026-09-25 | 2026-09-25 | added to BODYSHOP_DOC_KEYS only
+```
+
+### Phase 6 (post-audit fixes — added 2026-09-29)
+```
+⏳ 6.1 | ok contract alignment edge function | Platform | | | index.ts:425–432; ok:false when drive_pending
+⏳ 6.2 | Upload handler reads result; conditional notice | Mobile | | | documents.tsx:208–218
+⏳ 6.3 | Wire setRepairCardDocFlag call site | Platform | | | index.ts:154–166; also in retry_drive
+⏳ 6.4 | Unify submitted definition in repairCardDocuments.ts | Mobile | | | require drive_url; drop view_url shortcut
+⏳ 6.5 | 9s timeout guard on synchronous Drive call | Platform | | | index.ts:410–432; return drive_pending on timeout
 ```
 
 ---
@@ -220,10 +246,10 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ## Success Criteria
 
 - ✅ Picking a claim document while logged in as a customer creates or updates one `bodyshop_repair_card_documents` row and that row has `drive_url` and `drive_file_id`.
-- ✅ The repair-card boolean for that `doc_key` is true only after that URL exists.
+- ❌ The repair-card boolean for that `doc_key` is true only after that URL exists. *(Broken — `setRepairCardDocFlag` never called; fix: Task 6.3)*
 - ✅ Replacing the same key updates the same row and replaces the Drive file.
-- ✅ Documents tab and home card show the slot as submitted only when `list_assets` returns a Drive URL.
-- ✅ A Drive failure does not show submitted and can be retried from the same screen.
+- ❌ Documents tab and home card show the slot as submitted only when `list_assets` returns a Drive URL. *(Broken — home counts `view_url`; fix: Task 6.4)*
+- ❌ A Drive failure does not show submitted and can be retried from the same screen. *(Partially broken — retry works but upload notice always says "success"; fix: Task 6.2)*
 - ✅ `doc_estimate`, `doc_survey_approval`, and `doc_tp_affidavit` cannot be uploaded from the customer broker.
 - ✅ The customer app binary does not call `universal-drive-upload` and does not contain the service role key.
 
@@ -237,15 +263,52 @@ Do not write customer claim files into the autodoc `documents` table. That table
 
 ---
 
+## Post-Implementation Audit Findings
+
+> Audit conducted: 2026-09-29. All Phase 1–5 code was shipped 2026-09-25 by Mobile Team + Platform.
+
+### F-A1 — `ok` contract mismatch between edge function and client
+**File:** `supabase/functions/customer-portal-upload/index.ts:425–432` and `mobile/src/lib/api/customerBodyshopUploads.ts:70–76`  
+**Who:** Platform (edge function) + Mobile Team (client helper) — MOBILE-013, 2026-09-25  
+**What:** Edge function returns `{ ok: true, drive_pending: true }` when Drive fails. Client `asUploadResult` inverts it to `ok: false` when `drive_url` is absent. The two definitions of `ok` are contradictory. Fix: Task 6.1 aligns both to `ok: true` only when `drive_url` is set.
+
+### F-A2 — Upload handler discards the result; always shows "success"
+**File:** `mobile/src/app/(customer)/documents.tsx:208–218`  
+**Who:** Mobile Team — MOBILE-013, 2026-09-25  
+**What:** `const result = await customerUploadBodyshopAsset(...)` — `result` is never read. The notice message is hardcoded to "uploaded successfully" regardless of drive-pending state. The customer believes upload is complete when Drive sync may have failed. Fix: Task 6.2.
+
+### F-A3 — Synchronous Drive call can cause edge function timeout
+**File:** `supabase/functions/customer-portal-upload/index.ts:410–432`  
+**Who:** Platform — MOBILE-013, 2026-09-25  
+**What:** `offloadBodyshopDocument` calls `universal-drive-upload` synchronously with no timeout guard. Slow Drive API (>10 s) causes an opaque runtime error before the customer even sees a `drive_pending` state. The file was already staged in Storage. Fix: Task 6.5 adds a 9 s timeout so the function returns `drive_pending: true` cleanly.
+
+### F-D — Progress definitions disagree between Home and Documents
+**File:** `mobile/src/lib/customer/repairCardDocuments.ts:27` vs `mobile/src/app/(customer)/documents.tsx:94`  
+**Who:** Split — MOBILE-013 (documents.tsx:94) 2026-09-25 + MOBILE-015 carry-over (repairCardDocuments.ts:27) 2026-09-26  
+**What:** `isDriveDocumentComplete` counts `drive_url || view_url` (storage-only counts as complete). `documents.tsx` progress bar counts only `drive_url && !drive_pending`. A file in Storage but not yet in Drive shows complete on the Home card and incomplete on the Documents tab. Fix: Task 6.4.
+
+### F-E — `setRepairCardDocFlag` defined but never called
+**File:** `supabase/functions/customer-portal-upload/index.ts:154–166`  
+**Who:** Platform — MOBILE-013, 2026-09-25  
+**What:** The function was written to set the repair card `doc_*` boolean after Drive confirms, but the call site was never added. The flag is therefore never set to `true` on customer uploads, breaking the staff-facing "documents received" indicator. Fix: Task 6.3.
+
+---
+
 ## Notes & Lessons Learned
 
 > Add notes here as work progresses.
 
-### 2026-09-25 - Kickoff
+### 2026-09-25 — Kickoff
 - Customer Documents tab is local-only. The unused broker stops at Storage.
 - Long-term path is the staff sequence, invoked inside `customer-portal-upload`, not a new bucket or a new Drive client.
 - One file per `doc_key`. Front and back of DL and Aadhaar are one photo or one PDF.
 - Phase 5 is staff recovery alignment. It does not block the customer path.
+
+### 2026-09-29 — Post-implementation audit
+- Five defects found across edge function and mobile client. None require schema changes.
+- Most critical: `setRepairCardDocFlag` dead code (F-E) means the repair card boolean never reflects customer uploads.
+- Drive upload pipe is architecturally correct; the bugs are in the `ok` contract and the discarded upload result.
+- Fix order: 6.3 (dead call site) → 6.1 (ok contract) → 6.2 (notice message) → 6.4 (progress parity) → 6.5 (timeout guard).
 
 ---
 
@@ -263,5 +326,5 @@ Do not write customer claim files into the autodoc `documents` table. That table
 
 ---
 
-**Last Updated:** 2026-09-25 by implementation planning  
-**Status:** 🟡 IN PROGRESS — code complete; deploy `customer-portal-upload` and `universal-drive-upload` before a customer can sync to Drive
+**Last Updated:** 2026-09-29 — post-implementation audit; Phase 6 fix tasks added  
+**Status:** 🔴 DEFECTS FOUND — Phase 6 fixes required before Drive upload is production-ready (doc_* flag never set, ok contract mismatch, progress disagreement, timeout risk)
