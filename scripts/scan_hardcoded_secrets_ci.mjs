@@ -1,19 +1,29 @@
 /**
- * CI hardcoded-secret detector for Supabase edge functions.
+ * CI hardcoded-secret detector for Supabase edge functions and new SQL migrations.
  *
- * Detects credential-like literals in TypeScript source without printing
- * matched values. Reports path, line, and rule only.
+ * Detects credential-like literals in TypeScript source and SQL migrations
+ * without printing matched values. Reports path, line, and rule only.
  *
- * Rules:
+ * TypeScript rules (supabase/functions/**):
  *   HEX64    — 64-char lowercase hex string assigned to a variable whose
  *              name contains SECRET/TOKEN/KEY/PASSWORD/CREDENTIAL/AUTH
  *   HEX40    — 40-char lowercase hex string in the same assignment context
  *   BEARER   — Bearer token literal longer than 32 chars
  *
+ * SQL rules (supabase/migrations/** — new/non-historical files only):
+ *   SQL_HEX64  — 64-char hex literal appearing next to a credential-header key
+ *                (e.g. 'x-cron-secret', '<hex64>') in pg_net / jsonb calls
+ *   SQL_HEX40  — same for 40-char hex
+ *
+ * Historical migrations excluded from SQL scan (immutable evidence; known
+ * compromised values cannot be rotated in-place by design):
+ *   20260722193000_insurance_renewal_rc_fetch_jobs.sql
+ *   20260722203000_insurance_renewal_rc_fetch_worker_max_4.sql
+ *
  * Non-rules (deliberately not flagged):
  *   - Config keys / identifiers that merely contain SECRET/TOKEN in name
  *     but have short values
- *   - Deno.env.get(...) calls (environment variable reads)
+ *   - Deno.env.get(...) / vault.decrypted_secrets calls (runtime reads)
  *   - process.env, import.meta.env references
  *   - GitHub Actions ${{ secrets.* }} expressions
  *   - UUID / project-ref values (36-char with dashes) — structural, not credentials
@@ -38,6 +48,21 @@ const repoRoot = join(__dirname, '..');
 const SCAN_DIRS = [
   'supabase/functions',
 ];
+
+// SQL migrations to scan (new/forward files only).
+// Historical migrations listed in HISTORICAL_MIGRATION_EXCLUSIONS are skipped.
+const SQL_SCAN_DIRS = [
+  'supabase/migrations',
+];
+
+// These immutable historical files contain a known-compromised secret that
+// cannot be removed from migration history. They are excluded from CI scanning
+// to avoid an unresolvable failure. The forward migration at
+// 20260929120000_invoke_rc_fetch_worker_vault_secret.sql supersedes them.
+const HISTORICAL_MIGRATION_EXCLUSIONS = new Set([
+  '20260722193000_insurance_renewal_rc_fetch_jobs.sql',
+  '20260722203000_insurance_renewal_rc_fetch_worker_max_4.sql',
+]);
 
 const EXCLUDED_DIRS = [
   'local_folder',
@@ -133,7 +158,62 @@ function scanFile(absPath) {
   return findings;
 }
 
-function walkDir(dir, results = []) {
+/**
+ * Scan a single SQL migration file for credential-like literals in
+ * pg_net / jsonb_build_object header pairs, e.g.:
+ *   'x-cron-secret', '<hex64>'
+ *   'Authorization', 'Bearer <token>'
+ *
+ * The SQL pattern is a string key that names a credential header
+ * followed immediately by a long hex or long alpha literal value.
+ */
+function scanSqlFile(absPath) {
+  const findings = [];
+  const basename = absPath.split('/').pop();
+  if (HISTORICAL_MIGRATION_EXCLUSIONS.has(basename)) return findings;
+
+  let content;
+  try {
+    content = readFileSync(absPath, 'utf8');
+  } catch {
+    return findings;
+  }
+
+  // SQL header credential key names (case-insensitive)
+  const SQL_CRED_KEY_RE = /(?:secret|token|key|password|credential|auth|Authorization)/i;
+
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNo = i + 1;
+
+    // Skip comment lines
+    if (/^\s*--/.test(line)) continue;
+    if (/^\s*\/\*/.test(line)) continue;
+
+    // Match: '<credential-key>', '<long-hex-or-token>' in SQL
+    // Pattern: a single-quoted credential key followed by comma and a single-quoted value
+    const sqlPairRe = /'([^']+)'\s*,\s*'([^']+)'/g;
+    let m;
+    while ((m = sqlPairRe.exec(line)) !== null) {
+      const key   = m[1];
+      const value = m[2];
+
+      if (!SQL_CRED_KEY_RE.test(key)) continue;
+
+      if (HEX64_RE.test(value)) {
+        findings.push({ lineNo, rule: 'SQL_HEX64', redacted: '[REDACTED]' });
+      } else if (HEX40_RE.test(value)) {
+        findings.push({ lineNo, rule: 'SQL_HEX40', redacted: '[REDACTED]' });
+      } else if (LONGALPHA_RE.test(value) && value.length > 32) {
+        findings.push({ lineNo, rule: 'SQL_BEARER', redacted: '[REDACTED]' });
+      }
+    }
+  }
+  return findings;
+}
+
+function walkDir(dir, results = [], extFilter = ['.ts', '.js']) {
   let entries;
   try {
     entries = readdirSync(dir);
@@ -145,8 +225,8 @@ function walkDir(dir, results = []) {
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) {
-      walkDir(full, results);
-    } else if (extname(entry) === '.ts' || extname(entry) === '.js') {
+      walkDir(full, results, extFilter);
+    } else if (extFilter.includes(extname(entry))) {
       results.push(full);
     }
   }
@@ -157,9 +237,25 @@ let totalFindings = 0;
 
 for (const dir of SCAN_DIRS) {
   const absDir = join(repoRoot, dir);
-  const files = walkDir(absDir);
+  const files = walkDir(absDir, [], ['.ts', '.js']);
   for (const file of files) {
     const findings = scanFile(file);
+    if (findings.length > 0) {
+      const rel = relative(repoRoot, file);
+      for (const f of findings) {
+        console.log(`FINDING  ${rel}:${f.lineNo}  rule=${f.rule}  value=${f.redacted}`);
+        totalFindings++;
+      }
+    }
+  }
+}
+
+// Scan new/non-historical SQL migrations
+for (const dir of SQL_SCAN_DIRS) {
+  const absDir = join(repoRoot, dir);
+  const files = walkDir(absDir, [], ['.sql']);
+  for (const file of files) {
+    const findings = scanSqlFile(file);
     if (findings.length > 0) {
       const rel = relative(repoRoot, file);
       for (const f of findings) {
