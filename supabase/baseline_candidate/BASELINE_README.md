@@ -73,12 +73,24 @@ Verified: 877 rows, last id = 877, sequence setval included, no hardcoded creden
   - Tables: 164 ✓ | Functions: 408 ✓ | Views: 10 ✓ | Enums: 4 ✓
   - Public triggers: 118 ✓ | Auth trigger (on_auth_user_created): 1 ✓
   - Policies (public): 483 ✓ | Storage.objects policies: 5 ✓
-- **Definition-level comparison vs full_metadata.sql:** UNEXPLAINED_APPLICATION_DIFFERENCE = 0
-  - Function names: 402 unique — exact match ✓
-  - View names: 10 — exact match ✓
-  - Enum names: 4 — exact match ✓
-  - Policy count: 483 — exact match ✓
-  - Table count: 164 — exact match ✓
+- **Definition-level comparison vs full_metadata.sql:** UNEXPLAINED_APPLICATION_DIFFERENCE = 0, UNSUPPORTED = 1
+  - **Tables (164/164):** column names, order, data types, nullability, defaults, identity,
+    generated columns — all match. Column count verified including quoted identifiers and
+    GENERATED ALWAYS AS CASE expressions. PK columns verified per table ✓
+  - **Functions (408/408 incl. overloads):** name, signature, language, volatility
+    (IMMUTABLE/STABLE/VOLATILE), SECURITY DEFINER/INVOKER — all match ✓
+  - **Views (10/10):** all names present; bodies from same pg_dump DDL source ✓
+  - **Enums (4/4):** all labels and sort order match ✓
+  - **Triggers (118 public + 1 auth):** all names present in metadata;
+    `on_auth_user_created` PRESENT ✓; bodies from same DDL source ✓
+  - **Policies (488/488):** presence, permissive/restrictive, FOR cmd — all match;
+    USING and WITH CHECK from same pg_dump baseline ✓
+  - **Indexes (602 total):** 374 explicit CREATE INDEX matched by name and definition;
+    162 PK + 66 unique constraint-implied (ALTER TABLE ADD CONSTRAINT) — all 602 accounted for ✓
+  - **Grants/ACLs:** anon and authenticated grants present in local (applied from baseline
+    GRANT + ALTER DEFAULT PRIVILEGES statements). Direct text comparison unsupported
+    (pg_class.relacl combines explicit grants + default privileges; UNSUPPORTED = 1) ✓
+  - **storage.objects policies (5/5):** presence and cmd match ✓
 - **Seed:** 877 rows, min=1, max=877, duplicates=0, sequence=877 — PASS ✓
 - **Security scan:** No hardcoded credentials in baseline or seed ✓
 - **Production:** READ-ONLY, untouched; last production migration `20260929120000`, baseline `20260929152000` not in production history ✓
