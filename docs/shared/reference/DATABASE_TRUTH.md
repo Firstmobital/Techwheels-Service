@@ -114,8 +114,18 @@ Key facts:
   retired from remote history via `supabase migration repair --linked --status reverted`.
   All historical migration SQL files are preserved in Git history under tag
   `database-rebaseline-pre-cutover-2026-09-29` (commit ae5bad09).
-- `20260929160000_customer_set_customer_type.sql` is the first future incremental migration.
-  It is NOT yet applied to production and must be deployed via normal DB_CHANGE_PROTOCOL.
+- `20260929160000_customer_set_customer_type.sql` and `20260929170000_add_doc_job_card_key.sql`
+  are the first and second incremental migrations. Both were applied to production on
+  2026-09-29 as UNAUTHORIZED_EARLY_DEPLOYMENT (INCIDENT-2026-09-29 in DB_CHANGE_LEDGER.md).
+  All three active migrations are now APPLIED to production. Post-incident verification
+  confirmed live definitions match migrations exactly and no production defects were found.
+
+  **⚠ LOCAL VALIDATION GUARDRAIL (added post-incident):**
+  In a Supabase project that is linked to a remote, bare `supabase db push` pushes to the
+  REMOTE production database. For local-only migration validation, always use:
+    `supabase db push --local`   ← local container only
+    `supabase db push --linked`  ← remote production (requires explicit intent)
+  Never use bare `supabase db push` for local development/validation steps.
 
 1. **`supabase/backups/full_metadata.sql` remains the primary schema truth.**
    It is regenerated after every production schema change. It is never replaced by

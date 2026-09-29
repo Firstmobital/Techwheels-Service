@@ -1,6 +1,6 @@
-# Baseline Candidate — Pre-Cutover
+# Baseline Candidate — Cutover Complete
 
-**Status:** PRE-CUTOVER-VERIFIED — Supabase-compatible recreate PASS (2026-09-29). Awaiting cutover authorization.
+**Status:** CUTOVER_COMPLETE — 2026-09-29. All three active migrations applied to production.
 
 **Generated:** 2026-09-29
 **Source:** `supabase/backups/full_metadata.sql` + pg_dump --schema=public (PostgreSQL 17.6)
@@ -98,9 +98,18 @@ Verified: 877 rows, last id = 877, sequence setval included, no hardcoded creden
   - **storage.objects policies (5/5):** presence and cmd match ✓
 - **Seed:** 877 rows, min=1, max=877, duplicates=0, sequence=877 — PASS ✓
 - **Security scan:** No hardcoded credentials in baseline or seed ✓
-- **Production:** READ-ONLY, untouched; last production migration `20260928123035`, baseline `20260929152000` not in production history ✓
+- **Production at cutover time:** READ-ONLY, untouched; last production migration `20260928123035`, baseline `20260929152000` not in production history ✓
+  **Post-cutover (2026-09-29):** All three active migrations now APPLIED (20260929152000 via CLI repair; 20260929160000 + 20260929170000 via INCIDENT-2026-09-29 — see DB_CHANGE_LEDGER.md)
 
-## Cutover Authorization Required
+## Cutover Status: COMPLETE
 
-See `HUMAN_ACTION_REQUIRED_FOR_REBASELINE_CUTOVER` in the rebaseline report.
-Do NOT promote this file or modify production migration history without explicit user authorization.
+Rebaseline cutover executed 2026-09-29. The baseline was promoted to
+`supabase/migrations/20260929152000_production_schema_baseline.sql` and marked applied
+in production migration history via `supabase migration repair --linked --status applied`.
+
+Both incremental migrations (20260929160000, 20260929170000) were applied to production
+on 2026-09-29 as UNAUTHORIZED_EARLY_DEPLOYMENT (INCIDENT-2026-09-29). Post-incident
+verification confirmed definitions match migrations exactly and no production defects.
+
+See `docs/shared/reference/DB_CHANGE_LEDGER.md` entries DBL-REBASELINE, DBL-0085,
+DBL-0086, and INCIDENT-2026-09-29 for full evidence.
