@@ -440,7 +440,6 @@ Deno.serve(async (req) => {
 
       try {
         await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
-        await setRepairCardDocFlag(supabase, ctx.repairCardId, docKey, true)
       } catch (flagError) {
         return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
       }
@@ -521,7 +520,6 @@ Deno.serve(async (req) => {
 
     try {
       await markDocAwaitingAdvisor(supabase, ctx.repairCardId, text(row.doc_key))
-      await setRepairCardDocFlag(supabase, ctx.repairCardId, text(row.doc_key), true)
     } catch (flagError) {
       return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
     }
