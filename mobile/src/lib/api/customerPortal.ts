@@ -588,37 +588,10 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
   const cached = getCached<Record<string, unknown>>(cacheKey)
   if (cached) return cached
 
-  const rawReg = (regNumber || '').trim()
-  const regNorm = rawReg.toUpperCase()
-  const regClean = regNorm.replace(/\s+/g, '')
-
-  // 1. Direct real-time check from post_feedback_bot_data for mode customer_gatepass_payload
-  if (regClean || regNorm) {
-    try {
-      const { data: botRows } = await supabase
-        .from('post_feedback_bot_data')
-        .select('feedback_text')
-        .ilike('vehicle_registration_number', `%${regClean}%`)
-        .eq('mode', 'customer_gatepass_payload')
-        .order('complaint_date_time', { ascending: false })
-        .limit(1)
-
-      if (botRows && botRows.length > 0) {
-        try {
-          const parsed = JSON.parse(botRows[0].feedback_text)
-          if (parsed && (parsed.gate_pass_no || parsed.qr_token)) {
-            return setCache(cacheKey, parsed as Record<string, unknown>)
-          }
-        } catch {
-          // ignore
-        }
-      }
-    } catch (e) {
-      console.warn('customerGetGatePass bot payload error:', e)
-    }
-  }
-
-  // 2. Try RPC
+  // Use session-scoped RPC which resolves the current active entry for this vehicle,
+  // correctly handling multiple entries (e.g. mechanical + bodyshop) per registration.
+  // The post_feedback_bot_data shortcut was removed because it queries by reg number only
+  // and returns the wrong entry when multiple entries exist for the same vehicle.
   try {
     const { data, error } = await supabase.rpc('customer_get_gate_pass', {
       p_session_token: sessionToken,

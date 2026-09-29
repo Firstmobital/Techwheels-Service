@@ -87,7 +87,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     } finally {
       if (seq === loadSeq.current) {
         setLoading(false)
-        if (resolved) setReady(true)
+        setReady(true)
       }
     }
   }, [token, selectedReg])
