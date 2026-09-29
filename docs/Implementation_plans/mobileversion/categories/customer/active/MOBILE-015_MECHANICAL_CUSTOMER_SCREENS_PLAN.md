@@ -190,16 +190,36 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 - [ ] **Task 3.2:** `CustomerScreen.tsx` — filter overflow menu items for mechanical visits.
 
 ### Phase 4: Documents + Journey
-- [ ] **Task 4.1:** `documents.tsx` — mechanical branch: two read-only file rows; skip claim uploader and `DamagePhotosSection` / claim progress when mechanical.
-- [ ] **Task 4.2:** `tracker.tsx` — mechanical five-phase journey from RPC; fix `isAccident` so open floor job is not treated as bodyshop because of an old repair card.
+- [ ] **Task 4.1:** `documents.tsx` — mechanical branch: two read-only file rows; skip claim uploader and `DamagePhotosSection` / claim progress when mechanical.  
+  ⚠️ **Audit finding F-C1:** `documents.tsx` still holds a local `repairCard` state (line 50) separate from the context. `isEffectiveMechanical` at line 69–72 is `(isMechanical || isMechanicalServiceType(activeServiceType)) && !repairCard && !isBodyshop`. Until `load()` populates local state, `repairCard === null` allows a bodyshop visit to briefly satisfy the mechanical branch. Use context's `repairCard` (from `useCustomerVisit()`) as the guard, not a second local copy. See Phase 6 fix Task 6.4.
+- [ ] **Task 4.2:** `tracker.tsx` — mechanical five-phase journey from RPC; fix `isAccident` so open floor job is not treated as bodyshop because of an old repair card.  
+  ⚠️ **Audit finding F-C2:** `tracker.tsx:252–253` computes `isAccident = isBodyshop || Boolean(card)` where `card` is local state. If a vehicle has a closed accident repair card in DB, `Boolean(card)` is `true` even for a new mechanical visit, forcing bodyshop journey. The context's `isBodyshop` is the authoritative source; `Boolean(card)` is redundant. See Phase 6 fix Task 6.3.
 - [ ] **Task 4.3:** Remove direct supabase `technician_assignments` read from customer tracker; use RPC floor block only.
 
 ### Phase 5: Payments + regression
-- [ ] **Task 5.1:** `invoices.tsx` — mechanical branch loads `customer_get_mechanical_case`; do not use bodyshop settlement for active mechanical visit.
+- [ ] **Task 5.1:** `invoices.tsx` — mechanical branch loads `customer_get_mechanical_case`; do not use bodyshop settlement for active mechanical visit.  
+  ⚠️ **Audit finding F-C3:** `invoices.tsx:116–125` derives `isAccidentalCase` from payment data independently of the visit context. If a vehicle had a past bodyshop settlement, `isAccidentalCase=true` even when `isMechanicalVisit=true`. The branch guards at lines 190 and 205 then produce **a silent blank screen** (mechanical branch requires `!repairCard`; bodyshop branch requires `!isMechanicalVisit` — neither fires). Fix: derive branch solely from context `isBodyshop`/`isMechanicalVisit`. See Phase 6 fix Task 6.5.
 - [ ] **Task 5.2:** `gatepass.tsx` — no behaviour change; confirm mechanical gate pass still loads via existing `customer_get_gate_pass`.
 - [ ] **Task 5.3:** Regression: Accident registration unchanged (18 stages, claim docs, insurance settlement).
 - [ ] **Task 5.4:** Regression: same reg with old repair card + new open Paid Service or **Mini Paid Service** → mechanical screens.
 - [ ] **Task 5.5:** Device verification checklist (section Success Criteria) on real customer sessions.
+
+### Phase 6: Post-audit fixes (added 2026-09-29)
+
+> These tasks correct defects discovered during the 2026-09-29 audit. All Phase 1–5 code was shipped 2026-09-26 by Mobile Team + Platform. Root causes are detailed in the **Post-Implementation Audit** section below.
+
+- [ ] **Task 6.1** *(Mobile — `customerPortal.ts`)* **Remove `|| true` debug artifact — CRITICAL:** `mobile/src/lib/api/customerPortal.ts` ~line 749 has `|| true` at the end of the `isInsuranceClaim` assignment. This makes every non-cash bodyshop settlement object claim `is_insurance_claim: true`, forcing full insurance UI for every bodyshop vehicle. Remove the `|| true`. The real conditions (`doAmount > 0 || Boolean(bsCard.insurance_company) || Boolean(bsCard.claim_intimation_no)`) are correct and sufficient.
+
+- [ ] **Task 6.2** *(Mobile — `customerPortal.ts`)* **Bodyshop settlement path must not activate for mechanical visits with past repair card:** `customerGetSettlement` uses `const useBodyshopPath = bsCard && (!entry || !entryIsMechanical) && bsTime > 0`. If a vehicle had an accident repair and returns for mechanical service with no new reception entry yet, `entry` is null and `useBodyshopPath` becomes true — old bodyshop settlement shown. Fix: when `visit_kind` is `mechanical` in the visit context, short-circuit to the mechanical branch regardless of `bsCard` presence.
+
+- [ ] **Task 6.3** *(Mobile — `tracker.tsx`)* **Remove `Boolean(card)` from `isAccident` guard:** `tracker.tsx:252–253` computes `isAccident = isBodyshop || Boolean(card)`. Remove the `Boolean(card)` term. `isBodyshop` from `useCustomerVisit()` is already authoritative; a stale local repair card variable must not override the server-resolved visit kind. Also confirm `isEffectiveMechanical = !isAccident && isMechanicalVisit` still works after removal.
+
+- [ ] **Task 6.4** *(Mobile — `documents.tsx`)* **Remove local `repairCard` state; use context exclusively for branch guard:** `documents.tsx` declares `const [repairCard, setRepairCard] = useState(null)` (line 50) and uses it in `isEffectiveMechanical`. Replace with `const { repairCard } = useCustomerVisit()`. Remove the local state and any `setRepairCard` calls in `load()`. The branch condition becomes `isMechanical && !isBodyshop && !repairCard` using all context values, matching `index.tsx` (the correct reference).  
+  Also fix the TOCTOU in `load()` at line 131–133: replace stale `isMechanical` check with the fresh `activeKind` returned by `refreshVisit()`.
+
+- [ ] **Task 6.5** *(Mobile — `invoices.tsx`)* **Derive branch from context visit kind, not payment data heuristic:** Remove `isAccidentalCase` computed from payment fields. Replace all branch guards with context values: `isMechanicalVisit && !isBodyshop` → mechanical UI; `isBodyshop && !isMechanicalVisit` → bodyshop settlement UI; fallback → neutral state. Ensure the case where `mechCase` is null while `isMechanicalVisit` is true shows a clean "billing not yet available" message, not the outdated "database update required" placeholder.
+
+- [ ] **Task 6.6** *(Mobile — `CustomerVisitContext.tsx`)* **Guard `ready` flag on error:** Context sets `ready: true` even when the first `refresh()` call errors, leaving all context values null/other and causing mechanical vehicles to flash bodyshop UI. Add a `hasData` guard: only set `ready: true` when the RPC returned a non-error payload. On error, keep `ready: false` and expose an `error` field so screens can show a retry prompt rather than wrong content.
 
 ---
 
@@ -237,18 +257,28 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 
 ### Phase 4
 ```
-✅ 4.1 | Mechanical Documents | Mobile | 2026-09-26 | 2026-09-26 |
-✅ 4.2 | Mechanical Journey | Mobile | 2026-09-26 | 2026-09-26 | MechanicalJourneyContent
+⚠️ 4.1 | Mechanical Documents | Mobile | 2026-09-26 | 2026-09-26 | local repairCard state diverges from context — isEffectiveMechanical wrong during load; fixed by 6.4
+⚠️ 4.2 | Mechanical Journey | Mobile | 2026-09-26 | 2026-09-26 | isAccident = isBodyshop || Boolean(card) — old card forces bodyshop journey; fixed by 6.3
 ✅ 4.3 | No technician_assignments on mechanical path | Mobile | 2026-09-26 | 2026-09-26 | tracker.tsx
 ```
 
 ### Phase 5
 ```
-✅ 5.1 | Mechanical Payments | Mobile | 2026-09-26 | 2026-09-26 |
+⚠️ 5.1 | Mechanical Payments | Mobile | 2026-09-26 | 2026-09-26 | isAccidentalCase from payment data causes silent blank screen on same-reg vehicles; fixed by 6.5
 ⏳ 5.2 | Gate pass smoke | Mobile | | | needs applied migration + live JC
-⏳ 5.3 | Accident regression | Mobile | | | device QA
-⏳ 5.4 | Old repair card + new mechanical job | Mobile | | | device QA
+⏳ 5.3 | Accident regression | Mobile | | | BLOCKED until 6.1 (|| true bug) fixed
+⏳ 5.4 | Old repair card + new mechanical job | Mobile | | | BLOCKED until 6.2, 6.3, 6.4, 6.5 fixed
 ⏳ 5.5 | Live customer verification | Mobile + Platform | | |
+```
+
+### Phase 6 (post-audit fixes — added 2026-09-29)
+```
+⏳ 6.1 | Remove || true from isInsuranceClaim — CRITICAL | Mobile | | | customerPortal.ts ~749; all bodyshop treated as insurance
+⏳ 6.2 | Bodyshop settlement bypass for mechanical visit | Mobile | | | customerPortal.ts useBodyshopPath guard
+⏳ 6.3 | Remove Boolean(card) from isAccident in tracker | Mobile | | | tracker.tsx:252–253
+⏳ 6.4 | Remove local repairCard state in documents.tsx | Mobile | | | use context repairCard; fix TOCTOU on activeKind
+⏳ 6.5 | invoices.tsx branch from context not payment data | Mobile | | | remove isAccidentalCase heuristic
+⏳ 6.6 | CustomerVisitContext ready guard on error | Mobile | | | CustomerVisitContext.tsx; ready only on non-error payload
 ```
 
 ---
@@ -277,12 +307,17 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 ## Success Criteria
 
 - [ ] Customer with active **Mini Paid Service** (or any floor type) sees mechanical Home copy and no claim-document card.
-- [ ] Documents tab for mechanical visit: estimate/invoice view only; no claim upload slots.
-- [ ] Journey phase 3 matches Floor Incharge `work_status` for that JC (via RPC).
-- [ ] After Accounts saves invoice, billed/remaining/receipts match `/accounts` Mechanical for that JC.
+- [ ] Documents tab for mechanical visit: estimate/invoice view only; no claim upload slots.  
+  *(Blocked by F-C1 — local repairCard state; fix: Task 6.4)*
+- [ ] Journey phase 3 matches Floor Incharge `work_status` for that JC (via RPC).  
+  *(Blocked by F-C2 — Boolean(card) in isAccident; fix: Task 6.3)*
+- [ ] After Accounts saves invoice, billed/remaining/receipts match `/accounts` Mechanical for that JC.  
+  *(Blocked by F-C3 — isAccidentalCase heuristic causes blank screen; fix: Task 6.5)*
 - [ ] Gate pass button only after Accounts issues mechanical gate pass.
-- [ ] Active **Accident** visit on same app build still shows 18-stage journey, claim documents, and insurance settlement.
-- [ ] Registration with historical repair card + newer open Paid Service uses mechanical screens.
+- [ ] Active **Accident** visit on same app build still shows 18-stage journey, claim documents, and insurance settlement.  
+  *(Blocked by F-B — `|| true` bug makes all bodyshop appear as insurance; fix: Task 6.1)*
+- [ ] Registration with historical repair card + newer open Paid Service uses mechanical screens.  
+  *(Blocked by F-C2, F-C3; fix: Tasks 6.2, 6.3, 6.5)*
 
 ---
 
@@ -292,6 +327,37 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 - [ ] Mobile: _______________ (Signature) (Date)
 - [ ] Platform: _______________ (Signature) (Date)
 - [ ] Product: _______________ (Signature) (Date)
+
+---
+
+## Post-Implementation Audit Findings
+
+> Audit conducted: 2026-09-29. All Phase 1–5 code was shipped 2026-09-26 by Mobile Team + Platform.
+
+### F-B — `|| true` debug artifact makes all bodyshop vehicles appear as insurance claims — CRITICAL
+**File:** `mobile/src/lib/api/customerPortal.ts` ~line 749  
+**Who:** Mobile Team — MOBILE-015, 2026-09-26  
+**What:** `const isInsuranceClaim = !isCashCase && (...conditions... || true)`. The trailing `|| true` makes the parenthesised expression always `true` for any non-cash bodyshop vehicle. Every bodyshop settlement object therefore has `is_insurance_claim: true`, forcing the full insurance settlement UI (DO amount, insurer, difference amount) for every bodyshop visit regardless of whether it actually has an insurance claim. This is almost certainly a debugging shortcut committed by mistake. Fix: Task 6.1 — remove `|| true`.
+
+### F-C1 — `documents.tsx` local `repairCard` state diverges from context during load
+**File:** `mobile/src/app/(customer)/documents.tsx:50, 69–72`  
+**Who:** Mobile Team — MOBILE-015, 2026-09-26  
+**What:** The screen maintains its own `const [repairCard, setRepairCard] = useState(null)` alongside the context's `repairCard`. `isEffectiveMechanical` uses the local state: until `load()` populates it, a bodyshop visit has `repairCard === null`, satisfying the mechanical branch briefly. `index.tsx` (the reference implementation) uses only context values for the same branch and is correct. Fix: Task 6.4.
+
+### F-C2 — `tracker.tsx` old repair card forces bodyshop journey for mechanical visits
+**File:** `mobile/src/app/(customer)/tracker.tsx:252–253`  
+**Who:** Mobile Team — MOBILE-015, 2026-09-26  
+**What:** `isAccident = isBodyshop || Boolean(card)`. If a vehicle ever had an accident repair, `card` is populated from `customerGetRepairCard`. For a vehicle now in for Paid Service, context correctly sets `isBodyshop=false`, but `Boolean(card)` is `true`, making `isAccident=true` and rendering the 18-stage bodyshop journey instead of the 5-phase mechanical journey. The plan's locked rule 2 ("active visit wins; historical repair card does not make a current Paid Service visit an accident") is violated. Fix: Task 6.3.
+
+### F-C3 — `invoices.tsx` derives visit kind from payment data, causing silent blank screen
+**File:** `mobile/src/app/(customer)/invoices.tsx:116–125, 190, 205`  
+**Who:** Mobile Team — MOBILE-015, 2026-09-26  
+**What:** `isAccidentalCase` is computed from payment fields (`is_insurance_claim`, `insurance_company`, `do_amount`, etc.) independently of the context visit kind. For a vehicle with a past bodyshop settlement now returning for mechanical service: `isAccidentalCase=true` AND `isMechanicalVisit=true`. The mechanical branch (line 190) requires `!repairCard` — the bodyshop settlement satisfies `repairCard` so mechanical content does not render. The bodyshop branch (line 205) requires `!isMechanicalVisit` — also false. **Neither branch renders.** The customer sees a blank Payments screen. Fix: Task 6.5.
+
+### F-C4 — `CustomerVisitContext` sets `ready=true` on first call even when it errored
+**File:** `mobile/src/context/CustomerVisitContext.tsx` (line ~after first refresh)  
+**Who:** Mobile Team — MOBILE-015, 2026-09-26  
+**What:** After the first `refresh()` call, `ready: true` is set regardless of success or failure. If the first call errors, all context values remain null/`'other'`, and every screen that gates on `visitReady` will proceed with wrong defaults (bodyshop fallback for a mechanical vehicle). Fix: Task 6.6.
 
 ---
 
@@ -307,6 +373,12 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 ### 2026-09-26 — Server visit contract
 - Added `customer_resolve_visit_kind`, `customer_get_visit_context`, and `visit_kind` on `customer_get_active_job`.
 - Mobile visit shell loads one bundled context per selected reg; fixes bodyshop flash on mechanical login.
+
+### 2026-09-29 — Post-implementation audit
+- Four mobile defects found; none require SQL changes.
+- Most critical: `|| true` in `customerPortal.ts` (F-B) — corrupts settlement classification for every bodyshop vehicle. Fix this first.
+- Fix order: 6.1 (`|| true` removal) → 6.2 (settlement bypass) → 6.3 (tracker isAccident) → 6.4 (documents.tsx local state) → 6.5 (invoices branch) → 6.6 (context ready guard).
+- Root pattern: three screens (documents, tracker, invoices) maintained local copies of data the context already owns, creating TOCTOU races and stale-data overrides. `index.tsx` is the correct reference: all branch decisions from context, no local state copies.
 
 ---
 
@@ -325,5 +397,5 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 
 ---
 
-**Last Updated:** 2026-09-26  
-**Status:** In progress — mechanical screens + server visit_kind shipped in repo; operator apply migrations before device QA
+**Last Updated:** 2026-09-29 — post-implementation audit; Phase 6 fix tasks added  
+**Status:** 🔴 DEFECTS FOUND — Phase 6 fixes required; device QA BLOCKED until Tasks 6.1–6.5 are applied (critical: `|| true` bug breaks all bodyshop settlement, blank Payments screen on same-reg vehicles)
