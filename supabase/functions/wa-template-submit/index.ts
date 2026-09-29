@@ -1,6 +1,19 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+/**
+ * Supabase JS v2's PostgrestFilterBuilder.select() type does not carry
+ * { count, head } options when chained after update(). The runtime accepts
+ * the call; this narrow structural type isolates the boundary so type errors
+ * do not leak to surrounding code.
+ */
+type UpdateWithCountSelect = {
+  select(
+    columns: string,
+    opts: { count: 'exact' | 'planned' | 'estimated'; head: boolean },
+  ): Promise<{ count: number | null; error: { message: string } | null }>
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -215,10 +228,9 @@ serve(async (req) => {
         if (newStatus === 'approved') updateData.approved_at = new Date().toISOString()
         if (mt.rejection_reason) updateData.rejection_reason = mt.rejection_reason
 
-        const { count } = await supabase.from('wa_templates')
+        const { count } = await (supabase.from('wa_templates')
           .update(updateData)
-          .eq('name', mt.name)
-          // @ts-ignore select count options
+          .eq('name', mt.name) as unknown as UpdateWithCountSelect)
           .select('*', { count: 'exact', head: true })
         
         if ((count ?? 0) > 0) synced++

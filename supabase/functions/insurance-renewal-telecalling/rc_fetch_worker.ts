@@ -1,13 +1,18 @@
 // Background IDSPay RC fetch for insurance renewal campaigns (pg_cron + admin enqueue).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 // deno-lint-ignore no-explicit-any
 type SupabaseClient = { from: (table: string) => any; rpc: (fn: string, args?: any) => any };
 
-/** Must match invoke_insurance_renewal_rc_fetch_worker() pg_net header (migration). */
-export const RC_FETCH_PG_CRON_SECRET =
-  "d4738d9a19012e96922a7e9d53959c0b8169ba573743e08f5609a9a601986511";
+/**
+ * Must match the x-cron-secret header in invoke_insurance_renewal_rc_fetch_worker()
+ * pg_net calls (supabase/migrations/20260722193000_insurance_renewal_rc_fetch_jobs.sql
+ * and 20260722203000_insurance_renewal_rc_fetch_worker_max_4.sql).
+ * TELECALLING_CRON_SECRET must be set in Supabase project secrets.
+ * See HUMAN_ACTION_REQUIRED note in CI hardening result.
+ */
+export const RC_FETCH_PG_CRON_SECRET = Deno.env.get('TELECALLING_CRON_SECRET') ?? '';
 
 const STALE_INSURANCE_DAYS = 365;
 const RC_FETCH_DEFAULT_LOOKUPS = 4;

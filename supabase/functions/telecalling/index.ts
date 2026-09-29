@@ -1,6 +1,28 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
+/**
+ * Structural alias for mutable Supabase filter chain.
+ * Supabase's deep generics hit TS2589 (type instantiation too deep) when a
+ * chain result is reassigned across conditional branches. Casting to this
+ * flat structural type at the chain boundary keeps the builder's runtime
+ * behaviour while avoiding the compiler limit.
+ * deno-lint-ignore no-explicit-any is needed only because the column values
+ * are dynamically typed; the outer interface shape is still narrow.
+ */
+// deno-lint-ignore no-explicit-any
+type TelecallQueryChain = {
+  not(col: string, op: string, val: any): TelecallQueryChain
+  neq(col: string, val: any): TelecallQueryChain
+  gte(col: string, val: any): TelecallQueryChain
+  lte(col: string, val: any): TelecallQueryChain
+  eq(col: string, val: any): TelecallQueryChain
+  then<T>(
+    resolve: (v: { data: Record<string, unknown>[] | null; error: { message: string } | null }) => T,
+    reject?: (r: unknown) => never,
+  ): Promise<T>
+}
+
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -14,7 +36,9 @@ export default async function handler(req: Request) {
 
     // ── Cron bypass: scheduled/system calls authenticate via shared secret ──
     const cronSecret = req.headers.get('x-cron-secret') || ''
-    const CRON_SECRET = 'd4738d9a19012e96922a7e9d53959c0b8169ba573743e08f5609a9a601986511'
+    // TELECALLING_CRON_SECRET must be set in Supabase project secrets.
+    // See HUMAN_ACTION_REQUIRED note in CI hardening result.
+    const CRON_SECRET = Deno.env.get('TELECALLING_CRON_SECRET') ?? ''
     const isCronCall = cronSecret === CRON_SECRET && cronSecret.length > 0
 
     let userEmail: string
@@ -122,19 +146,17 @@ export default async function handler(req: Request) {
 
       if (campErr) throw new Error(`Failed to create campaign: ${campErr.message}`)
 
-      let query = serviceClient
+      let query: TelecallQueryChain = (serviceClient
         .from('all_service_data')
         .select('id, chassis_no, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type, last_insurance_expiry_date')
         .not('contact_phones', 'is', null)
-        .neq('contact_phones', '')
+        .neq('contact_phones', '') as unknown as TelecallQueryChain)
 
       if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
         const today = new Date().toISOString().split('T')[0]
         const expiry_to = new Date(Date.now() + warranty_expiry_days * 86400000).toISOString().split('T')[0]
-        // @ts-ignore deep Supabase query chain
         query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', today).lte('extended_warranty_end_date', expiry_to)
       } else {
-        // @ts-ignore deep Supabase query chain
         query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', date_from).lte('assumed_next_service_date', date_to)
       }
 
@@ -804,9 +826,9 @@ export default async function handler(req: Request) {
         previewTo = new Date(Date.now() + 5.5 * 3600000 + Number(upd) * 86400000).toISOString().split('T')[0]
       }
 
-      let query = serviceClient.from('all_service_data')
+      let query: TelecallQueryChain = (serviceClient.from('all_service_data')
         .select('id, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type, last_insurance_expiry_date')
-        .not('contact_phones', 'is', null)
+        .not('contact_phones', 'is', null) as unknown as TelecallQueryChain)
 
       if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
         const expiry_to = new Date(Date.now() + 5.5 * 3600000 + warranty_expiry_days * 86400000).toISOString().split('T')[0]

@@ -85,15 +85,28 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          # Pinned to the exact version confirmed in run 36513379589.
+          # Update only after verifying compatibility with esm.sh imports.
+          deno-version: 2.9.7
+
+      - name: Scan for hardcoded credential literals
+        # Reports path/rule/line only — never prints matched values.
+        # Detects hex-64 and similar credential patterns assigned to
+        # *_SECRET / *_TOKEN / *_KEY names in Supabase edge functions.
+        run: node scripts/scan_hardcoded_secrets_ci.mjs
 
       - name: Validate SQL migration filenames and ordering
+        # Structure-only: validates filename format and timestamp ordering.
+        # Does NOT validate SQL syntax or semantics.
+        # Classification: SQL_STRUCTURE_VALIDATION_ONLY
         run: node scripts/validate_migrations_ci.mjs
 
       - name: Type-check Supabase edge functions
         # Checks all function entrypoints and non-shared .ts files.
         # Downloads type definitions from esm.sh (read-only network; no
         # production connection, no deployment, no secrets required).
+        # NOTE: insurance-renewal-telecalling/index.ts contains @ts-nocheck
+        # and is NOT fully type-checked by this step.
         run: |
           find supabase/functions -maxdepth 2 -name "*.ts" ! -path "*/_shared/*" \
             | sort | xargs -r deno check --no-lock
