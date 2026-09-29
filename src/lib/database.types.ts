@@ -87,6 +87,7 @@ export type Database = {
           ifsc: string | null
           is_active: boolean
           location: string | null
+          phone: string | null
           role: string | null
           updated_at: string
         }
@@ -102,6 +103,7 @@ export type Database = {
           ifsc?: string | null
           is_active?: boolean
           location?: string | null
+          phone?: string | null
           role?: string | null
           updated_at?: string
         }
@@ -117,6 +119,7 @@ export type Database = {
           ifsc?: string | null
           is_active?: boolean
           location?: string | null
+          phone?: string | null
           role?: string | null
           updated_at?: string
         }

@@ -16,6 +16,8 @@ export interface CustomerVehicle {
   service_type: string | null
   sa_name: string | null
   sa_display_name?: string | null
+  sa_phone?: string | null
+  advisor_phone?: string | null
   jc_number: string | null
   branch: string | null
   created_at: string
@@ -130,6 +132,7 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
         km_reading: finalKm,
         sa_name: prev.sa_name || veh.sa_name,
         sa_display_name: prev.sa_display_name || veh.sa_display_name,
+        sa_phone: prev.sa_phone || veh.sa_phone || veh.advisor_phone || null,
         jc_number: prev.jc_number || veh.jc_number,
         service_type: prev.service_type || veh.service_type,
       }
