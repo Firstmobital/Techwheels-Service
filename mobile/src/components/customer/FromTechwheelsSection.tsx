@@ -39,6 +39,12 @@ type FromTechwheelsSectionProps = {
   workshopDocuments?: CustomerBodyshopAsset[]
 }
 
+function isImageName(name?: string | null, contentType?: string | null) {
+  const type = String(contentType || '').toLowerCase()
+  const file = String(name || '').toLowerCase()
+  return type.startsWith('image/') || /\.(jpg|jpeg|png|webp|heic)$/.test(file)
+}
+
 export function FromTechwheelsSection({
   repairCard: repairCardProp,
   workshopDocuments: workshopDocumentsProp,
@@ -46,7 +52,7 @@ export function FromTechwheelsSection({
   const { token, selectedReg } = useCustomerSession()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<WorkshopDoc[]>([])
-  const [estimatePreviewUri, setEstimatePreviewUri] = useState<string | null>(null)
+  const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [openingEstimate, setOpeningEstimate] = useState(false)
 
   const openEstimate = useCallback(
@@ -56,7 +62,7 @@ export function FromTechwheelsSection({
       try {
         const result = await customerOpenBodyshopEstimateDocument(token, selectedReg, estimateDoc)
         if (result.mode === 'preview') {
-          setEstimatePreviewUri(result.uri)
+          setPreviewUri(result.uri)
         }
       } catch (err) {
         Alert.alert(
@@ -87,6 +93,23 @@ export function FromTechwheelsSection({
         customerGetGatePass(token, selectedReg).catch(() => null),
       ])
 
+      // Job card resolution
+      const jobCardAsset = (workshopDocumentsProp ?? []).find(
+        (d) => String(d.doc_key ?? '').trim() === 'doc_job_card' || String(d.doc_key ?? '').trim() === 'job_card'
+      )
+      const cardJobDoc = (card as Record<string, unknown> | null)?.job_card_document as Record<string, unknown> | null | undefined
+      const jcDriveUrl = String(
+        jobCardAsset?.drive_url ||
+        jobCardAsset?.view_url ||
+        cardJobDoc?.drive_url ||
+        cardJobDoc?.view_url ||
+        (card as Record<string, unknown> | null)?.job_card_drive_url ||
+        (card as Record<string, unknown> | null)?.job_card_pdf_url ||
+        ''
+      ).trim()
+      const hasJobCard = Boolean(jobCardAsset || cardJobDoc || jcDriveUrl)
+      const jcNumber = String((card as Record<string, unknown> | null)?.job_card_no || '').trim()
+
       const estimateDoc = resolveWorkshopEstimateDocument(card, workshopDocumentsProp)
       const estRow = estimates[0] as Record<string, unknown> | undefined
       const estUrl = String(estRow?.estimate_drive_url ?? '').trim()
@@ -115,6 +138,41 @@ export function FromTechwheelsSection({
       }
 
       const list: WorkshopDoc[] = [
+        {
+          id: 'job_card',
+          title: 'Job Card',
+          subtitle: hasJobCard
+            ? (jcNumber ? `Job Card No: ${jcNumber}` : 'Ready to view')
+            : (jcNumber ? `Job Card No: ${jcNumber} · Available once uploaded` : 'Available once uploaded by workshop'),
+          ready: hasJobCard,
+          onView: async () => {
+            if (jobCardAsset) {
+              const targetUrl = String(jobCardAsset.drive_url || jobCardAsset.view_url || '').trim()
+              if (isImageName(jobCardAsset.file_name, jobCardAsset.content_type) && !targetUrl.includes('drive.google.com')) {
+                setPreviewUri(targetUrl)
+                return
+              }
+              if (targetUrl) {
+                await openUrl(targetUrl, 'Job Card')
+                return
+              }
+            }
+            if (cardJobDoc) {
+              const targetUrl = String(cardJobDoc.drive_url || cardJobDoc.view_url || '').trim()
+              if (isImageName(cardJobDoc.file_name as string, cardJobDoc.content_type as string) && !targetUrl.includes('drive.google.com')) {
+                setPreviewUri(targetUrl)
+                return
+              }
+              if (targetUrl) {
+                await openUrl(targetUrl, 'Job Card')
+                return
+              }
+            }
+            if (jcDriveUrl) {
+              await openUrl(jcDriveUrl, 'Job Card')
+            }
+          },
+        },
         {
           id: 'quotation',
           title: 'Estimate repair',
@@ -261,20 +319,20 @@ export function FromTechwheelsSection({
       </View>
 
       <Modal
-        visible={Boolean(estimatePreviewUri)}
+        visible={Boolean(previewUri)}
         transparent
         animationType="fade"
-        onRequestClose={() => setEstimatePreviewUri(null)}
+        onRequestClose={() => setPreviewUri(null)}
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', padding: 16 }}>
           <TouchableOpacity
-            onPress={() => setEstimatePreviewUri(null)}
+            onPress={() => setPreviewUri(null)}
             style={{ alignSelf: 'flex-end', marginBottom: 12, padding: 8 }}
           >
             <Icon name="x" size={22} color="#fff" />
           </TouchableOpacity>
-          {estimatePreviewUri ? (
-            <Image source={{ uri: estimatePreviewUri }} style={{ width: '100%', height: '78%' }} resizeMode="contain" />
+          {previewUri ? (
+            <Image source={{ uri: previewUri }} style={{ width: '100%', height: '78%' }} resizeMode="contain" />
           ) : null}
         </View>
       </Modal>

@@ -881,6 +881,7 @@ type BodyshopDocKey =
   | 'doc_tp_affidavit'
   | 'doc_estimate'
   | 'doc_survey_approval'
+  | 'doc_job_card'
 
 type BodyshopRepairCardDocumentRow = {
   id: number
@@ -968,8 +969,8 @@ const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_a
   { k: 'doc_tp_affidavit', label: 'T/P Affidavit (PDF)', mandatoryFor: [] },
 ]
 
-const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'> => (
-  docKey !== 'doc_estimate' && docKey !== 'doc_survey_approval'
+const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card'> => (
+  docKey !== 'doc_estimate' && docKey !== 'doc_survey_approval' && docKey !== 'doc_job_card'
 )
 
 // ── component ──────────────────────────────────────────────────────────────────
@@ -5624,17 +5625,54 @@ export default function BodyshopRepairPage() {
                             <div className="brx-sa-grid-3">
                               <div className="brx-sa-box">
                                 <div className="brx-sa-box-k">Job Card</div>
-                                <input
-                                  className="inp"
-                                  type="text"
-                                  value={jcDraft}
-                                  onChange={(event) => {
-                                    setJcDraft(event.target.value.toUpperCase())
-                                    setReceivingSaveError(null)
-                                  }}
-                                  placeholder="Enter Job Card"
-                                  autoComplete="off"
-                                />
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <input
+                                    className="inp"
+                                    type="text"
+                                    value={jcDraft}
+                                    onChange={(event) => {
+                                      setJcDraft(event.target.value.toUpperCase())
+                                      setReceivingSaveError(null)
+                                    }}
+                                    placeholder="Enter Job Card"
+                                    autoComplete="off"
+                                    style={{ flex: 1 }}
+                                  />
+                                  {bodyshopDocsByKey['doc_job_card'] ? (
+                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                      <button
+                                        type="button"
+                                        className="btn brx-doc-btn"
+                                        style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '6px 10px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
+                                        onClick={() => void handleViewBodyshopDoc('doc_job_card')}
+                                        title="View uploaded Job Card"
+                                      >
+                                        👁️ View
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn brx-doc-btn"
+                                        style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '6px 10px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
+                                        onClick={() => startBodyshopDocUpload('doc_job_card', 'replace')}
+                                        disabled={uploadingDocKey === 'doc_job_card'}
+                                        title="Reupload or replace Job Card file"
+                                      >
+                                        {uploadingDocKey === 'doc_job_card' ? 'Uploading…' : '🔄 Reupload'}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="btn btn--primary brx-doc-btn"
+                                      style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
+                                      onClick={() => startBodyshopDocUpload('doc_job_card', 'upload')}
+                                      disabled={uploadingDocKey === 'doc_job_card'}
+                                      title="Upload Job Card PDF or photo"
+                                    >
+                                      {uploadingDocKey === 'doc_job_card' ? 'Uploading…' : '📤 Upload'}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               {[
                                 ['Registration No', vehicleSnapshot?.reg_number ?? selected.reg_number ?? '—'],
