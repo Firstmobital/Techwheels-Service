@@ -1,5 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.5'
+import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6?target=deno'
 
 type UploadBody = {
   resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
