@@ -25,6 +25,7 @@
       }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "package": "com.techwheels.service",
       "googleServicesFile": "./google-services.json",

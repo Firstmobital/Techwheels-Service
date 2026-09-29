@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -85,6 +86,16 @@ export default function CustomerAdvisorChatScreen() {
     scroller.current?.scrollToEnd({ animated: true })
   }, [messages.length])
 
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setTimeout(() => {
+        scroller.current?.scrollToEnd({ animated: true })
+      }, 80)
+    })
+    return () => showSub.remove()
+  }, [])
+
   async function onSend() {
     const body = draft.trim()
     if (!token || !regNumber || !body || sending) return
@@ -104,7 +115,8 @@ export default function CustomerAdvisorChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: CustomerTheme.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <View
         style={{
@@ -142,6 +154,8 @@ export default function CustomerAdvisorChatScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
           onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           {messages.length === 0 && (
             <Text style={{ color: CustomerTheme.inkMuted, textAlign: 'center', marginTop: 24 }}>
@@ -189,7 +203,7 @@ export default function CustomerAdvisorChatScreen() {
           gap: 8,
           paddingHorizontal: 12,
           paddingTop: 10,
-          paddingBottom: 12,
+          paddingBottom: Math.max(insets.bottom, 12),
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: CustomerTheme.border,
