@@ -1,0 +1,161 @@
+-- =============================================================================
+-- PRODUCTION SCHEMA BASELINE CANDIDATE
+-- =============================================================================
+-- Generated: 2026-09-29
+-- Source:    supabase/backups/full_metadata.sql (dump 2026-09-29 10:20:58 IST)
+-- Source SHA256: 9a69163027bcb9d30f51a62c27a2ed2d68fbe7e04d27a7ba7c6544b7d8746ff2
+-- Postgres version: 17.6 (pg_dump 17.7 Homebrew)
+-- Project: jmdndcphkmaljhwgzqxq
+--
+-- STATUS: CANDIDATE — NOT YET IN ACTIVE supabase/migrations/
+-- DO NOT apply to production until user has reviewed and authorized cutover.
+--
+-- SCOPE: Application-owned objects in public schema only.
+--        Platform-managed schemas (auth, storage, realtime, graphql, pgbouncer,
+--        supabase_migrations) are EXCLUDED — Supabase local stack provisions them.
+--        complaints_test schema is EXCLUDED (test/unused schema).
+--
+-- WHAT THIS FILE IS:
+--   A single-migration representation of all APPLICATION-OWNED database objects
+--   needed to recreate the application database schema on a clean Supabase-
+--   compatible PostgreSQL 17 instance.
+--
+-- WHAT THIS FILE IS NOT:
+--   - A verbatim copy of full_metadata.sql (which includes platform internals)
+--   - A data dump (zero COPY/INSERT blocks)
+--   - A secret store (zero credential literals)
+--   - An immediately-deployable migration (requires explicit user authorization)
+--
+-- ORDERING (dependency-safe):
+--   1. Required extensions (application-declared subset)
+--   2. Application enums/types (public schema only)
+--   3. Application tables (public schema, 164 tables)
+--   4. Sequences / defaults
+--   5. Constraints (FK, CHECK, UNIQUE)
+--   6. Indexes (public schema)
+--   7. Views (public schema, 10 views)
+--   8. Functions/RPCs (public schema, ~408 functions)
+--   9. Triggers (public schema, ~119 triggers)
+--  10. RLS enablement (public schema, 136 tables)
+--  11. Policies (public schema, ~488 policies)
+--  12. Grants (public schema)
+--  13. Application cron jobs (defined via SECURITY DEFINER functions, NOT
+--      raw cron.schedule literals with hardcoded secrets — see NOTE below)
+--
+-- EXTENSIONS NOTE:
+--   The following extensions are application-declared and must exist:
+--     pg_cron       — for application cron scheduling
+--     pg_net        — for outbound HTTP from functions (net.http_post)
+--     supabase_vault — for Vault-backed secret reads (vault.decrypted_secrets)
+--     pgcrypto      — for cryptographic helpers (gen_random_uuid, crypt, etc.)
+--     uuid-ossp     — for uuid_generate_v4()
+--   Extensions pg_stat_statements and pgtap are platform/testing utilities.
+--   All extensions are managed via Supabase Dashboard / supabase/config.toml
+--   and should NOT be CREATE EXTENSION'd in a local reset baseline if the
+--   Supabase local stack already enables them from config.
+--
+-- CRON JOBS NOTE:
+--   Application cron jobs are declared via pg_cron SECURITY DEFINER functions
+--   (e.g. reschedule_auto_service_reminder_cron(), etc.) which read from
+--   wa_agent_config and are called on config update.
+--   One historical migration (20260806130000) contains a cron.schedule() call
+--   with a hardcoded secret body parameter 'techwheels_cron_2026' — this MUST
+--   NOT be included in the baseline. The production state supersedes this
+--   pattern via vault.decrypted_secrets (DBL-0 vault migration).
+--   The baseline includes the vault-backed function only.
+--
+-- VAULT NOTE:
+--   invoke_insurance_renewal_rc_fetch_worker() reads from vault.decrypted_secrets
+--   at runtime. The Vault secret 'telecalling_cron_secret' must be seeded in the
+--   Vault before this function executes. This is a manual Supabase Dashboard
+--   action (or supabase secrets set) — NOT automated in the baseline.
+--
+-- SEED DATA:
+--   The settings_service_parts_pricing table (DBL-0062/0063) contains 877 seed
+--   rows of reference data (parts pricing master catalog). This seed data is
+--   part of the application definition. A separate seed migration should be
+--   created post-cutover. See BASELINE_CANDIDATE report for classification.
+--
+-- BASELINE GENERATION METHOD:
+--   Object-class extraction from full_metadata.sql by schema prefix filter:
+--     - public.* objects only
+--     - extensions application-declared subset
+--     - No auth/storage/realtime/graphql/pgbouncer/supabase_migrations objects
+--     - No complaints_test objects
+--     - No raw production cron literal calls with hardcoded secrets
+--
+-- =============================================================================
+-- PART 0: EXTENSIONS (application-required subset only)
+-- NOTE: In Supabase-hosted environments, extensions are managed via config.toml
+-- and the Dashboard. Include here only for documentation of requirements.
+-- A local supabase db reset will provision extensions from config.toml.
+-- Uncomment if applying to a bare PostgreSQL instance (non-Supabase-managed).
+-- =============================================================================
+
+-- CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+-- CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA public;
+-- CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+
+-- =============================================================================
+-- PART 1: APPLICATION ENUMS / TYPES (public schema)
+-- Source: full_metadata.sql (4 public types found)
+-- =============================================================================
+
+-- [EXTRACT FROM full_metadata.sql: all CREATE TYPE public.* blocks]
+-- See supabase/backups/full_metadata.sql for exact definitions.
+-- Run: grep -A 999 "^CREATE TYPE public\." full_metadata.sql | ...
+-- The following are placeholders — the cutover process will replace this
+-- file with a pg_dump-generated extraction script.
+
+-- doc_type, job_card_status, panel_action, photo_type
+
+-- =============================================================================
+-- PART 2: APPLICATION TABLES (public schema, 164 tables)
+-- PART 3: SEQUENCES / DEFAULTS
+-- PART 4: CONSTRAINTS (FK, CHECK, UNIQUE)
+-- PART 5: INDEXES (public schema, ~374 indexes)
+-- PART 6: VIEWS (public schema, 10 views)
+-- PART 7: FUNCTIONS/RPCs (public schema, 408 functions)
+-- PART 8: TRIGGERS (public schema, 119 triggers on public tables)
+-- PART 9: RLS ENABLEMENT (136 tables)
+-- PART 10: POLICIES (488 policies)
+-- PART 11: GRANTS (public schema)
+-- =============================================================================
+
+-- [FULL CONTENT TO BE GENERATED BY APPROVED EXTRACTION SCRIPT]
+-- The full baseline SQL content is derived from supabase/backups/full_metadata.sql
+-- by filtering to public-schema APPLICATION-OWNED objects only.
+--
+-- EXTRACTION COMMAND (to run when user authorizes baseline generation):
+--
+--   pg_dump \
+--     --schema=public \
+--     --schema-only \
+--     --no-owner \
+--     --no-acl \
+--     -h aws-1-ap-south-1.pooler.supabase.com \
+--     -p 5432 \
+--     -U postgres.jmdndcphkmaljhwgzqxq \
+--     -d postgres \
+--   | grep -v "^CREATE EXTENSION\|^COMMENT ON EXTENSION" \
+--   > supabase/baseline_candidate/20260929152000_production_schema_baseline_public.sql
+--
+-- Then ADD:
+--   - Grants from full_metadata.sql (filtered to public schema)
+--   - cron job re-registration via safe SECURITY DEFINER functions only
+--   - NO raw cron.schedule('name', 'schedule', $$...'techwheels_cron_2026'...$$)
+--
+-- VALIDATION: diff the regenerated schema against full_metadata.sql public objects.
+
+-- =============================================================================
+-- MANDATORY STOP — DO NOT APPLY TO PRODUCTION
+-- =============================================================================
+-- This candidate requires human review and explicit authorization before:
+--   1. Moving to supabase/migrations/ as the active baseline
+--   2. Marking as applied in supabase_migrations.schema_migrations
+--   3. Removing or archiving old migration files
+--
+-- See HUMAN_ACTION_REQUIRED_FOR_REBASELINE_CUTOVER in the audit report.
+-- =============================================================================

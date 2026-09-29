@@ -96,6 +96,36 @@ scripts/backup-full-db.sh
 
 `scripts/refresh_authoritative_dump.sh` still works and simply calls `scripts/backup-full-db.sh` — kept for backward compatibility with existing docs/automation.
 
+## Migration History Policy (Post-Rebaseline)
+
+*Added 2026-09-29 as part of the Migration Rebaseline audit.*
+
+After the rebaseline cutover is authorized and executed:
+
+1. **`supabase/backups/full_metadata.sql` remains the primary schema truth.**
+   It is regenerated after every production schema change. It is never replaced by
+   a migration file.
+
+2. **`supabase/migrations/` contains only:**
+   - The single canonical baseline migration (timestamp `20260929152000` or the
+     version promoted at cutover time)
+   - Future incremental migrations created AFTER the baseline
+
+3. **SQL Editor is not the normal path for schema changes.**
+   Normal flow: create migration → review → validate → explicitly authorize apply
+   → apply migration → run sql_checks → refresh full_metadata.sql → commit evidence.
+
+4. **Emergency manual SQL in SQL Editor** (only when unavoidable):
+   Capture the exact SQL immediately in a migration file. Assign a timestamp.
+   Verify production matches. Reconcile remote migration tracking. Refresh
+   full_metadata.sql. Document evidence. Never leave an undocumented manual change.
+
+5. **Remote migration history is tracking metadata only.**
+   Current database state is proven by full_metadata.sql, not by migration file presence.
+
+6. **Historical pre-baseline migrations are archive/evidence only.**
+   They must not re-enter the active migration execution path. Git history preserves them.
+
 ## Related Process Docs (Operational Detail, Not Authority)
 
 These remain valid for their specific workflows; they defer to this file for "which file is truth":
@@ -104,3 +134,4 @@ These remain valid for their specific workflows; they defer to this file for "wh
 - `docs/shared/reference/DB_CHANGE_PROTOCOL.md` — required workflow for proposing/applying/verifying schema changes.
 - `docs/shared/reference/DB_CHANGE_LEDGER.md` — change log of schema/RLS/function/view/index changes.
 - `supabase/evidence/authoritative_dump_manifest.json` / `authoritative_metadata_manifest.json` — sha256/size/timestamp evidence for the two dumps, written automatically by the regeneration scripts.
+- `supabase/baseline_candidate/` — holds the rebaseline candidate (not yet in active migrations; requires explicit user authorization to promote).
