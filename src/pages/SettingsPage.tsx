@@ -75,7 +75,6 @@ interface EmployeeRow {
   bank_name: string | null
   account_number: string | null
   ifsc: string | null
-  phone: string | null
 }
 
 interface MappingIssueRow {
@@ -107,7 +106,6 @@ interface EmployeeUploadRow {
   bank_name: string | null
   account_number: string | null
   ifsc: string | null
-  phone: string | null
 }
 
 interface RateUploadRow {
@@ -218,7 +216,7 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           }
         }
 
-        // Optional headers for location, fuel_type, role, bank details, and phone.
+        // Optional headers for location, fuel_type, role, and bank details.
         const locationHeader = normalizedToOriginal.get('location')
         const fuelTypeHeader = normalizedToOriginal.get('fuel type') || normalizedToOriginal.get('fuel_type')
         const roleHeader = normalizedToOriginal.get('role') || normalizedToOriginal.get('rote')
@@ -228,14 +226,6 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           normalizedToOriginal.get('account_number') ||
           normalizedToOriginal.get('a/c number')
         const ifscHeader = normalizedToOriginal.get('ifsc') || normalizedToOriginal.get('ifsc code') || normalizedToOriginal.get('ifsc_code')
-        const phoneHeader =
-          normalizedToOriginal.get('phone') ||
-          normalizedToOriginal.get('phone number') ||
-          normalizedToOriginal.get('phone_number') ||
-          normalizedToOriginal.get('mobile') ||
-          normalizedToOriginal.get('mobile number') ||
-          normalizedToOriginal.get('mobile_number') ||
-          normalizedToOriginal.get('contact')
 
         if (missingHeaders.length > 0) {
           reject(new Error(`Missing required headers: ${missingHeaders.join(', ')}`))
@@ -253,7 +243,6 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
             const bankName = bankNameHeader ? String(row[bankNameHeader] ?? '').trim() : ''
             const accountNumber = accountNumberHeader ? String(row[accountNumberHeader] ?? '').trim() : ''
             const ifsc = ifscHeader ? String(row[ifscHeader] ?? '').trim() : ''
-            const phone = phoneHeader ? String(row[phoneHeader] ?? '').trim() : ''
             const derived = deriveLocationAndFuelType(code)
 
             if (!code || !name) {
@@ -270,7 +259,6 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
               bank_name: bankName || null,
               account_number: accountNumber || null,
               ifsc: ifsc || null,
-              phone: phone || null,
             }
           })
           .filter((row): row is EmployeeUploadRow => row !== null)
@@ -402,7 +390,6 @@ export default function SettingsPage() {
   const [newEmployee, setNewEmployee] = useState({
     employee_code: '',
     employee_name: '',
-    phone: '',
     location: '',
     department: '',
     fuel_type: '',
@@ -413,29 +400,12 @@ export default function SettingsPage() {
   })
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false)
-  const [saOnlyFilter, setSaOnlyFilter] = useState(false)
-
-  const saCount = useMemo(() => {
-    return employees.filter((e) => {
-      const r = (e.role || '').toLowerCase()
-      const d = (e.department || '').toLowerCase()
-      return r.includes('advisor') || r.includes('sa') || d.includes('advisor') || d.includes('service')
-    }).length
-  }, [employees])
 
   const filteredEmployees = useMemo(() => {
-    let list = employees
-    if (saOnlyFilter) {
-      list = list.filter((e) => {
-        const r = (e.role || '').toLowerCase()
-        const d = (e.department || '').toLowerCase()
-        return r.includes('advisor') || r.includes('sa') || d.includes('advisor') || d.includes('service')
-      })
-    }
     const query = employeeSearch.trim().toLowerCase()
-    if (!query) return list
+    if (!query) return employees
 
-    return list.filter((employee) => {
+    return employees.filter((employee) => {
       const haystack = [
         employee.employee_code,
         employee.employee_name,
@@ -446,13 +416,12 @@ export default function SettingsPage() {
         employee.bank_name ?? '',
         employee.account_number ?? '',
         employee.ifsc ?? '',
-        employee.phone ?? '',
       ]
         .join(' ')
         .toLowerCase()
       return haystack.includes(query)
     })
-  }, [employees, employeeSearch, saOnlyFilter])
+  }, [employees, employeeSearch])
 
   const handleExportEmployees = useCallback(() => {
     if (employees.length === 0) {
@@ -463,7 +432,6 @@ export default function SettingsPage() {
     const exportData = employees.map((emp) => ({
       'SA Code': emp.employee_code,
       'SA Name': emp.employee_name,
-      'Phone Number': emp.phone || '',
       Location: emp.location || '',
       Department: emp.department || '',
       'Fuel Type': emp.fuel_type || '',
@@ -1138,7 +1106,7 @@ export default function SettingsPage() {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('id, employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc, phone')
+      .select('id, employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
@@ -1721,7 +1689,6 @@ export default function SettingsPage() {
     const codeChanged = baselineCode !== '' && baselineCode !== nextCode
     const updatePayload: Partial<EmployeeRow> & { employee_name: string } = {
       employee_name: employee.employee_name.trim(),
-      phone: employee.phone?.trim() || null,
       location: employee.location?.trim() || null,
       department: normalizeDepartmentForStorage(employee.department),
       fuel_type: employee.fuel_type?.trim() || null,
@@ -1784,7 +1751,6 @@ export default function SettingsPage() {
     const payload = {
       employee_code: newEmployee.employee_code.trim(),
       employee_name: newEmployee.employee_name.trim(),
-      phone: newEmployee.phone.trim() || null,
       location: newEmployee.location.trim() || derived?.location || null,
       department: normalizeDepartmentForStorage(newEmployee.department),
       fuel_type: newEmployee.fuel_type.trim() || derived?.fuel_type || null,
@@ -1820,7 +1786,6 @@ export default function SettingsPage() {
     setNewEmployee({
       employee_code: '',
       employee_name: '',
-      phone: '',
       location: '',
       department: '',
       fuel_type: '',
@@ -2506,41 +2471,22 @@ export default function SettingsPage() {
               Governance: Business Role supports comma-separated values (example: PAINTER, RUBBING). Platform Role is managed in Admin → Users.
             </div>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative w-full sm:w-64">
-                  <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
-                    <Icon name="search" size={14} strokeWidth={2.2} />
-                  </span>
-                  <input
-                    value={employeeSearch}
-                    onChange={(event) => setEmployeeSearch(event.target.value)}
-                    placeholder="Search code, name, phone, role..."
-                    className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white p-1">
-                  <button
-                    type="button"
-                    onClick={() => setSaOnlyFilter(false)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${!saOnlyFilter ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-                  >
-                    All ({employees.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSaOnlyFilter(true)}
-                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${saOnlyFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-700 hover:bg-blue-50'}`}
-                  >
-                    <span>👨‍🔧</span>
-                    Advisors ({saCount})
-                  </button>
-                </div>
+              <div className="relative w-full sm:max-w-sm">
+                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
+                  <Icon name="search" size={14} strokeWidth={2.2} />
+                </span>
+                <input
+                  value={employeeSearch}
+                  onChange={(event) => setEmployeeSearch(event.target.value)}
+                  placeholder="Search code, name, role, location, bank, IFSC"
+                  className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
+                />
               </div>
               <span className="text-xs font-medium text-gray-500">{filteredEmployees.length} shown</span>
             </div>
 
             {showAddEmployeeForm && (
-            <div className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-11">
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-10">
               <input
                 value={newEmployee.employee_code}
                 onChange={(event) => {
@@ -2560,12 +2506,6 @@ export default function SettingsPage() {
                 value={newEmployee.employee_name}
                 onChange={(event) => setNewEmployee((prev) => ({ ...prev, employee_name: event.target.value }))}
                 placeholder="SA NAME"
-                className="rounded border border-gray-300 px-2 py-1 text-xs"
-              />
-              <input
-                value={newEmployee.phone}
-                onChange={(event) => setNewEmployee((prev) => ({ ...prev, phone: event.target.value }))}
-                placeholder="Phone (10-digit)"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
               <input
@@ -2617,7 +2557,7 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-1 rounded bg-gray-800 px-3 py-1 text-xs font-semibold text-white"
                 >
                   <Icon name="plus" size={12} strokeWidth={2.3} />
-                  Save
+                  Save Employee
                 </button>
               </div>
             </div>
@@ -2629,7 +2569,6 @@ export default function SettingsPage() {
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
                     <th className="px-3 py-2 font-semibold">SA CODE</th>
                     <th className="px-3 py-2 font-semibold">SA NAME</th>
-                    <th className="px-3 py-2 font-semibold">Phone / Mobile</th>
                     <th className="px-3 py-2 font-semibold">Location</th>
                     <th className="px-3 py-2 font-semibold">Department</th>
                     <th className="px-3 py-2 font-semibold">Fuel Type</th>
@@ -2643,11 +2582,11 @@ export default function SettingsPage() {
                 <tbody>
                   {loadingEmployees ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={11}>Loading employees...</td>
+                      <td className="px-3 py-3 text-gray-400" colSpan={10}>Loading employees...</td>
                     </tr>
                   ) : filteredEmployees.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={11}>
+                      <td className="px-3 py-3 text-gray-400" colSpan={10}>
                         {employees.length === 0 ? 'No employees found.' : 'No matching employees for current search.'}
                       </td>
                     </tr>
@@ -2690,22 +2629,6 @@ export default function SettingsPage() {
                               )
                             }}
                             className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            value={employee.phone ?? ''}
-                            disabled={editingEmployeeId !== employee.id}
-                            onChange={(event) => {
-                              const value = event.target.value
-                              setEmployees((prev) =>
-                                prev.map((row) =>
-                                  row.id === employee.id ? { ...row, phone: value } : row,
-                                ),
-                              )
-                            }}
-                            placeholder="Mobile No."
-                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600 font-mono"
                           />
                         </td>
                         <td className="px-3 py-2">

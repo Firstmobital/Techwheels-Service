@@ -20,7 +20,6 @@ function mapVehicle(raw: Record<string, unknown>, index: number): CustomerVehicl
     service_type: (raw.service_type as string | null) ?? null,
     sa_name: (raw.sa_name as string | null) ?? null,
     sa_display_name: (raw.sa_display_name as string | null) ?? null,
-    sa_phone: (raw.sa_phone as string | null) ?? (raw.advisor_phone as string | null) ?? null,
     jc_number: (raw.jc_number as string | null) ?? null,
     branch: (raw.branch as string | null) ?? null,
     created_at: String(raw.created_at || new Date().toISOString()),
