@@ -121,6 +121,12 @@ export default function CustomerDocumentsScreen() {
     }
   }
 
+  const [reuploadingKeys, setReuploadingKeys] = useState<Record<string, boolean>>({})
+
+  const toggleReupload = (key: string) => {
+    setReuploadingKeys((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
   const byKey = useMemo(() => {
     const map = new Map<string, CustomerBodyshopAsset>()
     for (const doc of documents) {
@@ -130,9 +136,11 @@ export default function CustomerDocumentsScreen() {
     return map
   }, [documents])
 
+  const baseCard = freshRepairCard || repairCard
+  const approvedCount = requiredSlots.filter((slot) => baseCard?.[slot.docKey] === true).length
   const submittedCount = requiredSlots.filter((slot) => {
     const row = byKey.get(slot.docKey)
-    return Boolean(row && (String(row.drive_url || '').trim() || String(row.view_url || '').trim()))
+    return Boolean(row && (String(row.drive_url || '').trim() || String(row.view_url || '').trim() || String(row.file_name || '').trim()))
   }).length
   const progressPercent = requiredSlots.length
     ? Math.round((submittedCount / requiredSlots.length) * 100)
@@ -262,6 +270,8 @@ export default function CustomerDocumentsScreen() {
         fileName,
         contentType,
       })
+      // Clear reupload open state once upload finishes
+      setReuploadingKeys((prev) => ({ ...prev, [slot.docKey]: false }))
       await load('refresh')
       setNotice(
         result.drivePending
@@ -336,53 +346,141 @@ export default function CustomerDocumentsScreen() {
     const row = byKey.get(slot.docKey)
     const driveUrl = String(row?.drive_url || '').trim()
     const viewUrl = String(row?.view_url || '').trim()
-    const fileAvailable = Boolean(row && (driveUrl || viewUrl))
+    const fileAvailable = Boolean(row && (driveUrl || viewUrl || row.file_name))
     const driveSynced = Boolean(row && driveUrl && !row.drive_pending)
     const submitted = fileAvailable
-    const approved = repairCard?.[slot.docKey] === true
-    const rejectedKeys = Array.isArray(repairCard?.doc_rejected_keys) ? repairCard.doc_rejected_keys.map(String) : []
+    const base = freshRepairCard || repairCard
+    const approved = base?.[slot.docKey] === true
+    const rejectedKeys = Array.isArray(base?.doc_rejected_keys) ? base.doc_rejected_keys.map(String) : []
     const rejected = !approved && rejectedKeys.includes(slot.docKey)
     const busy = busyKey === slot.docKey
-    const badgeBg = approved ? '#ECFDF5' : rejected ? '#FEF2F2' : submitted ? '#EFF6FF' : slot.required ? '#FEF3C7' : '#F1F5F9'
-    const badgeColor = approved ? '#047857' : rejected ? '#B91C1C' : submitted ? '#1D4ED8' : slot.required ? '#92400E' : CustomerTheme.inkMuted
-    const badgeLabel = approved ? 'Approved' : rejected ? 'Rejected' : submitted ? 'With advisor' : slot.required ? 'Required' : 'Optional'
+    const isReuploading = Boolean(reuploadingKeys[slot.docKey])
+
+    const badgeBg = approved
+      ? '#DEF7EC'
+      : rejected
+      ? '#FDE8E8'
+      : submitted
+      ? '#EFF6FF'
+      : slot.required
+      ? '#FEF3C7'
+      : '#F1F5F9'
+    const badgeColor = approved
+      ? '#03543F'
+      : rejected
+      ? '#9B1C1C'
+      : submitted
+      ? '#1E40AF'
+      : slot.required
+      ? '#92400E'
+      : CustomerTheme.inkMuted
+    const badgeLabel = approved
+      ? '✓ Approved'
+      : rejected
+      ? '✕ Rejected'
+      : submitted
+      ? 'Approval Pending'
+      : slot.required
+      ? 'Upload Required'
+      : 'Optional'
 
     return (
       <CustomerCard key={slot.docKey} style={{ marginBottom: 12, padding: 16 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: CustomerTheme.ink, fontSize: 15, fontWeight: '900' }}>{slot.title}</Text>
             <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, marginTop: 4, lineHeight: 17 }}>{slot.hint}</Text>
           </View>
-          <View style={{ backgroundColor: badgeBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-            <Text style={{ fontSize: 10, fontWeight: '800', color: badgeColor }}>
+          <View style={{ backgroundColor: badgeBg, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: badgeColor }}>
               {badgeLabel}
             </Text>
           </View>
         </View>
 
         {busy ? (
-          <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ marginTop: 12, padding: 10, backgroundColor: '#EFF6FF', borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ActivityIndicator color={CustomerTheme.primary} />
-            <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12 }}>Saving document…</Text>
+            <Text style={{ color: CustomerTheme.primary, fontSize: 12, fontWeight: '700' }}>Saving document…</Text>
           </View>
         ) : null}
 
-        {fileAvailable && row ? (
-          <TouchableOpacity onPress={() => void openRow(row)} style={{ marginTop: 12 }}>
-            <Text style={{ color: CustomerTheme.ink, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
-              {row.file_name || slot.title}
+        {/* 1. Approved State */}
+        {approved ? (
+          <View style={{ marginTop: 12, padding: 10, backgroundColor: '#F0FDF4', borderRadius: 8, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Icon name="check-circle" size={16} color="#16A34A" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#15803D', fontSize: 12, fontWeight: '800' }}>
+                Approved & Verified by Service Advisor
+              </Text>
+              <Text style={{ color: '#166534', fontSize: 11, marginTop: 1 }}>
+                This document is verified and locked.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* 2. Rejected State */}
+        {rejected ? (
+          <View style={{ marginTop: 12, padding: 10, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' }}>
+            <Text style={{ color: '#B91C1C', fontSize: 12, fontWeight: '800' }}>
+              ⚠️ Document Rejected by Service Advisor
             </Text>
-            <Text style={{ color: CustomerTheme.primary, fontSize: 12, marginTop: 3, fontWeight: '700' }}>
-              {driveSynced ? 'Open Drive file' : 'View uploaded file'}
+            <Text style={{ color: '#991B1B', fontSize: 11, marginTop: 2 }}>
+              Please re-upload a clear and valid copy using the options below.
             </Text>
+          </View>
+        ) : null}
+
+        {/* 3. Uploaded / Awaiting Review State */}
+        {submitted && !approved && !rejected ? (
+          <View style={{ marginTop: 12, padding: 10, backgroundColor: '#EFF6FF', borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Icon name="clock" size={15} color="#2563EB" />
+                <Text style={{ color: '#1D4ED8', fontSize: 12, fontWeight: '800' }}>
+                  File Uploaded · Awaiting Review
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => toggleReupload(slot.docKey)}
+                style={{
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  backgroundColor: isReuploading ? '#FEE2E2' : '#DBEAFE',
+                  borderRadius: 6,
+                }}
+              >
+                <Text style={{ color: isReuploading ? '#991B1B' : '#1E40AF', fontSize: 11, fontWeight: '800' }}>
+                  {isReuploading ? '✕ Cancel' : '🔄 Replace File'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: '#2563EB', fontSize: 11, marginTop: 3 }}>
+              Your file is uploaded. Waiting for the Service Advisor to approve or reject it.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* File Link Preview */}
+        {fileAvailable && row && !busy ? (
+          <TouchableOpacity onPress={() => void openRow(row)} style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={{ color: CustomerTheme.ink, fontWeight: '700', fontSize: 12.5 }} numberOfLines={1}>
+                📄 {row.file_name || slot.title}
+              </Text>
+              <Text style={{ color: CustomerTheme.primary, fontSize: 11.5, marginTop: 2, fontWeight: '700' }}>
+                {driveSynced ? 'Open Drive file ↗' : 'View uploaded file ↗'}
+              </Text>
+            </View>
           </TouchableOpacity>
         ) : null}
 
+        {/* Drive Sync Pending Note */}
         {fileAvailable && !driveSynced && row && !busy ? (
           <View style={{ marginTop: 8, padding: 8, backgroundColor: '#FEF3C7', borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={{ color: '#92400E', fontSize: 11, flex: 1, marginRight: 8 }}>
-              File is saved. Drive backup sync is pending.
+              File is saved in app. Drive backup sync is pending.
             </Text>
             <TouchableOpacity
               onPress={() => void retrySlot(slot, row)}
@@ -393,23 +491,19 @@ export default function CustomerDocumentsScreen() {
           </View>
         ) : null}
 
-        {rejected ? (
-          <Text style={{ color: '#B91C1C', fontSize: 12, marginTop: 10, fontWeight: '800' }}>
-            Rejected by advisor. Upload this document again.
-          </Text>
-        ) : null}
-        {!busy && !approved ? renderActions(slot) : null}
-        {approved ? (
-          <Text style={{ color: '#047857', fontSize: 11, marginTop: 8, fontWeight: '700' }}>
-            Advisor approved this document. It cannot be changed.
-          </Text>
-        ) : null}
-        {submitted && !approved && !rejected ? (
-          <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11, marginTop: 8 }}>
-            Waiting for the advisor to approve or reject this file.
-          </Text>
+        {/* Upload Action Buttons */}
+        {!busy && (!submitted || rejected || isReuploading) && !approved ? (
+          <View style={{ marginTop: isReuploading || rejected ? 10 : 0 }}>
+            {isReuploading ? (
+              <Text style={{ fontSize: 11, fontWeight: '700', color: CustomerTheme.inkMuted, marginBottom: 2 }}>
+                Select new file to replace current upload:
+              </Text>
+            ) : null}
+            {renderActions(slot)}
+          </View>
         ) : null}
 
+        {/* Two Sided Print section */}
         {(() => {
           const TWO_SIDED_PAIRS: Record<string, { frontKey: string; backKey: string; name: string }> = {
             doc_aadhaar: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
@@ -642,14 +736,40 @@ export default function CustomerDocumentsScreen() {
 
       {!loading && claimMode === 'insurance' ? (
         <CustomerCard>
-          <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 15 }}>
-            {submittedCount} of {requiredSlots.length} submitted
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 15 }}>
+              {submittedCount} of {requiredSlots.length} Uploaded
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Icon
+                name="check-circle"
+                size={14}
+                color={approvedCount === requiredSlots.length && requiredSlots.length > 0 ? '#16A34A' : CustomerTheme.primary}
+              />
+              <Text
+                style={{
+                  color: approvedCount === requiredSlots.length && requiredSlots.length > 0 ? '#047857' : CustomerTheme.primary,
+                  fontWeight: '800',
+                  fontSize: 13,
+                }}
+              >
+                {approvedCount}/{requiredSlots.length} Approved
+              </Text>
+            </View>
+          </View>
           <View style={{ height: 8, borderRadius: 999, backgroundColor: '#E2E8F0', marginTop: 10, overflow: 'hidden' }}>
-            <View style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: progressPercent === 100 ? CustomerTheme.success : CustomerTheme.primary }} />
+            <View
+              style={{
+                width: `${progressPercent}%`,
+                height: '100%',
+                backgroundColor: approvedCount === requiredSlots.length && requiredSlots.length > 0 ? CustomerTheme.success : CustomerTheme.primary,
+              }}
+            />
           </View>
           <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, marginTop: 8, lineHeight: 17 }}>
-            A document counts only after it has a Drive link.
+            {approvedCount === requiredSlots.length && requiredSlots.length > 0
+              ? '🎉 All required documents are approved by the Service Advisor.'
+              : `${submittedCount} of ${requiredSlots.length} documents uploaded. Once uploaded, your Service Advisor will review and approve each file.`}
           </Text>
         </CustomerCard>
       ) : null}
