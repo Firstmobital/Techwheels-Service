@@ -55,21 +55,25 @@ in Supabase Vault. Seed it manually via Dashboard → Vault before enabling the 
 
 | Table | Rows | Classification | Source |
 |---|---|---|---|
-| `settings_service_parts_pricing` | 877 | REQUIRED_REFERENCE_DATA | `supabase/migrations/20260915153000_settings_service_parts_pricing.sql` (lines 123+) |
+| `settings_service_parts_pricing` | 877 | REQUIRED_REFERENCE_DATA | `seed_settings_service_parts_pricing.sql` (extracted from migration, INSERT block only) |
 
-The seed data exists in the historical migration file. At cutover, a separate seed migration
-(or extracting the INSERT block from that file) must be applied after the baseline.
+Seed file extracted to `supabase/baseline_candidate/seed_settings_service_parts_pricing.sql`.
+Apply AFTER the baseline SQL. The original DDL migration must NOT be re-applied (table already created by baseline).
+Verified: 877 rows, last id = 877, sequence setval included, no hardcoded credentials.
 
 ## Local Recreate Status
 
-**BLOCKED** — Docker image corrupted by prior disk-full event.
+**BLOCKED** — Docker daemon unresponsive due to containerd metadata.db corruption from prior disk-full event.
+`docker system prune --volumes` was attempted but Docker daemon hung (bolt meta.db deadlock).
 
-Steps to unblock:
-1. Run `docker system prune` to clear corrupted layers
-2. Re-pull Supabase images: `supabase start` (requires ~5GB free disk space)
+**Requires user action:** Restart Docker Desktop from the macOS menu bar → Docker icon → Restart.
+After restart:
+1. Run `docker system prune --volumes --force` to clear corrupted layers
+2. Re-pull Supabase images: `supabase start` (requires ~5GB free disk space; currently 5.1Gi available)
 3. Apply baseline: `psql -h localhost -p 54322 -U postgres -d postgres -f 20260929152000_production_schema_baseline.sql`
-4. Verify object counts against production full_metadata.sql
-5. Apply seed: extract INSERT block from `supabase/migrations/20260915153000_settings_service_parts_pricing.sql`
+4. Verify object counts: 164 tables, 408 functions, 10 views, 4 enums, 118+ triggers, 483+ policies
+5. Apply seed: `psql -h localhost -p 54322 -U postgres -d postgres -f seed_settings_service_parts_pricing.sql`
+6. Verify: `SELECT count(*) FROM public.settings_service_parts_pricing;` → expect 877
 
 ## Cutover Authorization Required
 
