@@ -1632,3 +1632,51 @@ export async function customerOpenBodyshopEstimateDocument(
   }
   return { mode: 'external' }
 }
+
+export async function customerSetCustomerType(
+  sessionToken: string,
+  regNumber: string,
+  customerType: string,
+  cardId?: number | null
+): Promise<{ ok: boolean; customer_type: string }> {
+  const normType = customerType.trim().toLowerCase()
+  const normReg = (regNumber || '').trim().toUpperCase().replace(/[\s-]/g, '')
+
+  // 1. Try RPC if available
+  try {
+    const { data, error } = await supabase.rpc('customer_set_customer_type', {
+      p_session_token: sessionToken,
+      p_reg_number: regNumber,
+      p_customer_type: normType,
+    })
+    if (!error && data && (data as any).ok) {
+      clearCustomerPortalCache()
+      return { ok: true, customer_type: normType }
+    }
+  } catch {
+    // Fallback to table update
+  }
+
+  // 2. Direct table update on bodyshop_repair_cards
+  let q = supabase
+    .from('bodyshop_repair_cards')
+    .update({
+      customer_type: normType,
+      updated_at: new Date().toISOString(),
+    })
+
+  if (cardId) {
+    q = q.eq('id', cardId)
+  } else if (normReg) {
+    q = q.ilike('reg_number', `%${normReg}%`)
+  }
+
+  const { error } = await q
+  if (error) {
+    console.warn('customerSetCustomerType update note:', error)
+  }
+
+  clearCustomerPortalCache()
+  return { ok: !error, customer_type: normType }
+}
+

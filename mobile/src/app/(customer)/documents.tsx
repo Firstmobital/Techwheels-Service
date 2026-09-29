@@ -27,7 +27,14 @@ import {
 } from '../../lib/api/customerBodyshopUploads'
 import { fetchCustomerDocuments } from '../../lib/customer/customerDocumentsCache'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
-import { customerListEstimates } from '../../lib/api/customerPortal'
+import { customerListEstimates, customerSetCustomerType } from '../../lib/api/customerPortal'
+
+const CUSTOMER_TYPE_OPTIONS = [
+  { key: 'individual', label: '👤 Individual', desc: 'Personal Insurance' },
+  { key: 'firm', label: '🏢 Firm / Company', desc: 'Commercial / GST' },
+  { key: 'cash', label: '💵 Cash', desc: 'Direct Payment' },
+  { key: 'foc', label: '🎁 FOC', desc: 'Free of Cost' },
+] as const
 import { parseEstimate, type EstimateView } from '../../lib/customer/math'
 import { MechanicalDocumentsContent } from '../../components/customer/MechanicalDocumentsContent'
 import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
@@ -70,14 +77,46 @@ export default function CustomerDocumentsScreen() {
     !repairCard &&
     !isBodyshop
 
-  const claimMode = claimModeFromRepairCard(repairCard)
-  const ownershipType = ownershipFromRepairCard(repairCard)
+  const [overrideCustomerType, setOverrideCustomerType] = useState<string | null>(null)
+  const [updatingType, setUpdatingType] = useState(false)
+
+  const activeCustomerType = (
+    overrideCustomerType ??
+    String(repairCard?.customer_type || '').trim().toLowerCase()
+  ) || 'individual'
+
+  const effectiveRepairCard = useMemo(() => {
+    if (!repairCard && !overrideCustomerType) return repairCard
+    return {
+      ...(repairCard || {}),
+      customer_type: activeCustomerType,
+    }
+  }, [repairCard, activeCustomerType])
+
+  const claimMode = claimModeFromRepairCard(effectiveRepairCard)
+  const ownershipType = ownershipFromRepairCard(effectiveRepairCard)
   const slots = useMemo(
     () => listClaimDocumentsForUpload(claimMode, ownershipType),
     [claimMode, ownershipType]
   )
   const requiredSlots = slots.filter((slot) => slot.required)
   const optionalSlots = slots.filter((slot) => !slot.required)
+
+  const handleSelectCustomerType = async (newType: string) => {
+    if (newType === activeCustomerType || updatingType) return
+    setOverrideCustomerType(newType)
+    setUpdatingType(true)
+    try {
+      if (token && selectedReg) {
+        const cardId = Number(repairCard?.id) || undefined
+        await customerSetCustomerType(token, selectedReg, newType, cardId)
+      }
+    } catch (err) {
+      console.warn('Failed to update customer type:', err)
+    } finally {
+      setUpdatingType(false)
+    }
+  }
 
   const byKey = useMemo(() => {
     const map = new Map<string, CustomerBodyshopAsset>()
@@ -461,15 +500,109 @@ export default function CustomerDocumentsScreen() {
       }
     >
       <CustomerCard>
-        <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 13, marginBottom: 6 }}>
-          {claimMode === 'cash' ? 'Cash bodyshop' : 'Insurance claim'}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="file-text" size={17} color={CustomerTheme.primary} />
+            <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 14 }}>
+              Customer & Claim Case Type
+            </Text>
+          </View>
+          {updatingType && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <ActivityIndicator size="small" color={CustomerTheme.primary} />
+              <Text style={{ fontSize: 11, color: CustomerTheme.inkMuted }}>Saving…</Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, lineHeight: 17, marginBottom: 12 }}>
+          Choose your claim type to upload the required documents. Updates live on the workshop portal.
         </Text>
-        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, lineHeight: 17 }}>
-          {ownershipType === 'firm'
-            ? 'Firm / company case: RC, insurance, DL, claim form, Aadhaar, PAN, GST, company PAN, and bank details are required (same as workshop SA screen).'
-            : 'Individual case: RC, insurance, DL, claim form, Aadhaar, and PAN are required.'}
-          {' '}Type is taken from your repair card.
-        </Text>
+
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {CUSTOMER_TYPE_OPTIONS.map((opt) => {
+            const isSelected = activeCustomerType === opt.key
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => void handleSelectCustomerType(opt.key)}
+                activeOpacity={0.7}
+                style={{
+                  flexBasis: '48%',
+                  flexGrow: 1,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: 10,
+                  borderWidth: 1.5,
+                  borderColor: isSelected ? CustomerTheme.primary : '#E2E8F0',
+                  backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '800',
+                      color: isSelected ? CustomerTheme.primary : CustomerTheme.ink,
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                  {isSelected && (
+                    <View
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        backgroundColor: CustomerTheme.primary,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Icon name="check" size={12} color="#fff" />
+                    </View>
+                  )}
+                </View>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: isSelected ? '#1E40AF' : CustomerTheme.inkMuted,
+                    marginTop: 3,
+                    lineHeight: 14,
+                  }}
+                >
+                  {opt.desc}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        <View
+          style={{
+            padding: 10,
+            borderRadius: 8,
+            backgroundColor: claimMode === 'cash' ? '#ECFDF5' : '#F1F5F9',
+            marginTop: 4,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 11.5,
+              fontWeight: '600',
+              color: claimMode === 'cash' ? '#065F46' : '#334155',
+              lineHeight: 16,
+            }}
+          >
+            {activeCustomerType === 'firm'
+              ? '🏢 Firm / Company: 9 documents required (RC, Insurance, DL, Claim Form, Aadhaar, PAN, GST, Company PAN, Bank Details).'
+              : activeCustomerType === 'individual'
+              ? '👤 Individual: 6 documents required (RC, Insurance, DL, Claim Form, Aadhaar, PAN Card).'
+              : activeCustomerType === 'foc'
+              ? '🎁 Free of Cost (FOC): No insurance claim documents required.'
+              : '💵 Cash Customer: Direct payment repair. No insurance claim documents required.'}
+          </Text>
+        </View>
       </CustomerCard>
 
       {loading ? (
@@ -488,7 +621,7 @@ export default function CustomerDocumentsScreen() {
         <CustomerCard style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
           <Text style={{ color: '#064E3B', fontWeight: '900', fontSize: 15 }}>No claim documents required</Text>
           <Text style={{ color: '#065F46', fontSize: 12, marginTop: 4, lineHeight: 17 }}>
-            This repair is cash. Insurance documents are not collected here.
+            This repair is {activeCustomerType === 'foc' ? 'Free of Cost (FOC)' : 'Cash'}. Insurance documents are not collected here.
           </Text>
         </CustomerCard>
       ) : null}
@@ -524,7 +657,7 @@ export default function CustomerDocumentsScreen() {
 
       <DamagePhotosSection sessionToken={token} regNumber={selectedReg} />
 
-      <FromTechwheelsSection repairCard={repairCard} workshopDocuments={documents} />
+      <FromTechwheelsSection repairCard={effectiveRepairCard} workshopDocuments={documents} />
     </CustomerScreen>
   )
 }
