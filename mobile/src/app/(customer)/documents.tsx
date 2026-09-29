@@ -220,41 +220,6 @@ export default function CustomerDocumentsScreen() {
     return () => clearInterval(timer)
   }, [token, selectedReg, load])
 
-  // Auto-sync any uploaded document that is in Supabase storage but pending Drive backup
-  useEffect(() => {
-    if (!token || !selectedReg || documents.length === 0) return
-    const pendingDocs = documents.filter((d) => d && !d.drive_url && d.id)
-    if (pendingDocs.length === 0) return
-
-    let cancelled = false
-    const syncPending = async () => {
-      let anySynced = false
-      for (const doc of pendingDocs) {
-        if (cancelled) break
-        try {
-          const res = await customerRetryBodyshopDrive({
-            sessionToken: token,
-            regNumber: selectedReg,
-            resourceId: doc.id,
-            docKey: doc.doc_key,
-          })
-          if (res.ok && res.driveUrl) {
-            anySynced = true
-          }
-        } catch (err) {
-          console.warn('[documents] Background Drive sync error for', doc.doc_key, err)
-        }
-      }
-      if (anySynced && !cancelled) {
-        void load('refresh')
-      }
-    }
-    void syncPending()
-    return () => {
-      cancelled = true
-    }
-  }, [documents, token, selectedReg, load])
-
   const uploadSlot = async (
     slot: CustomerClaimDocumentDef,
     source: 'camera' | 'gallery' | 'file'
@@ -394,30 +359,30 @@ export default function CustomerDocumentsScreen() {
     const badgeBg = approved
       ? '#DEF7EC'
       : rejected
-      ? '#FDE8E8'
-      : submitted
-      ? '#EFF6FF'
-      : slot.required
-      ? '#FEF3C7'
-      : '#F1F5F9'
+        ? '#FDE8E8'
+        : submitted
+          ? '#EFF6FF'
+          : slot.required
+            ? '#FEF3C7'
+            : '#F1F5F9'
     const badgeColor = approved
       ? '#03543F'
       : rejected
-      ? '#9B1C1C'
-      : submitted
-      ? '#1E40AF'
-      : slot.required
-      ? '#92400E'
-      : CustomerTheme.inkMuted
+        ? '#9B1C1C'
+        : submitted
+          ? '#1E40AF'
+          : slot.required
+            ? '#92400E'
+            : CustomerTheme.inkMuted
     const badgeLabel = approved
       ? '✓ Approved'
       : rejected
-      ? '✕ Rejected'
-      : submitted
-      ? 'Approval Pending'
-      : slot.required
-      ? 'Upload Required'
-      : 'Optional'
+        ? '✕ Rejected'
+        : submitted
+          ? 'Approval Pending'
+          : slot.required
+            ? 'Upload Required'
+            : 'Optional'
 
     return (
       <CustomerCard key={slot.docKey} style={{ marginBottom: 12, padding: 16 }}>
@@ -740,10 +705,10 @@ export default function CustomerDocumentsScreen() {
             {activeCustomerType === 'firm'
               ? '🏢 Firm / Company: 9 documents required (RC, Insurance, DL, Claim Form, Aadhaar, PAN, GST, Company PAN, Bank Details).'
               : activeCustomerType === 'individual'
-              ? '👤 Individual: 6 documents required (RC, Insurance, DL, Claim Form, Aadhaar, PAN Card).'
-              : activeCustomerType === 'foc'
-              ? '🎁 Free of Cost (FOC): No insurance claim documents required.'
-              : '💵 Cash Customer: Direct payment repair. No insurance claim documents required.'}
+                ? '👤 Individual: 6 documents required (RC, Insurance, DL, Claim Form, Aadhaar, PAN Card).'
+                : activeCustomerType === 'foc'
+                  ? '🎁 Free of Cost (FOC): No insurance claim documents required.'
+                  : '💵 Cash Customer: Direct payment repair. No insurance claim documents required.'}
           </Text>
         </View>
       </CustomerCard>

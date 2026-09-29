@@ -86,6 +86,23 @@ function sanitizeFileNamePart(raw: string): string {
   return cleaned || 'upload'
 }
 
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise
+      .then((value) => {
+        clearTimeout(timer)
+        resolve(value)
+      }, (error) => {
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
+}
+
 function parseJwtClaims(token: string | null | undefined): Record<string, unknown> | null {
   if (!token) return null
   const parts = token.split('.')
@@ -2658,22 +2675,6 @@ export default function BodyshopRepairPage() {
     }
 
     const uploadDebugId = `intake-${receptionEntryId}-${Date.now()}`
-    const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> => {
-      return await new Promise<T>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error(`${label} timed out after ${timeoutMs}ms`))
-        }, timeoutMs)
-
-        promise
-          .then((value) => {
-            clearTimeout(timer)
-            resolve(value)
-          }, (error) => {
-            clearTimeout(timer)
-            reject(error)
-          })
-      })
-    }
 
     console.log('[BodyshopIntakeUpload] start', {
       uploadDebugId,
@@ -3002,21 +3003,48 @@ export default function BodyshopRepairPage() {
     }))
 
     try {
-      const dealerCtx = await getDealerContext()
-      const dealerCode = String((selected as unknown as Record<string, unknown>)['dealer_code'] || dealerCtx.data?.dealerCode?.trim() || 'TATA_DEFAULT').trim()
+      const dealerScopeCtx = await getDealerScopeContext()
+      const dealerCodeFromScope = dealerScopeCtx.data?.dealerCode?.trim().toUpperCase() || 'unknown'
+      const myDealerCodeRpc = await supabase.rpc('my_dealer_code')
+      const myDealerCodeValue = String(myDealerCodeRpc.data ?? '').trim().toUpperCase()
+      const effectiveDealerCode = myDealerCodeValue || dealerCodeFromScope || 'TATA_DEFAULT'
+
+      const receptionEntryId = Number(selected.reception_entry_id)
+      let metadataDealerCode = effectiveDealerCode
+      if (Number.isFinite(receptionEntryId) && receptionEntryId > 0) {
+        const receptionDealerRes = await getReceptionEntryById(receptionEntryId)
+        const receptionDealerCode = String(receptionDealerRes.data?.dealer_code ?? '').trim().toUpperCase()
+        if (receptionDealerCode) {
+          metadataDealerCode = receptionDealerCode
+        }
+      }
+
       const regNo = String(selected.reg_number ?? selectedReception?.reg_number ?? '').trim().toUpperCase()
-      const folder = `${dealerCode}/service-advisor-bodyshop-docs/${selected.id}/${docKey}`
-      const safeName = sanitizeFileNamePart(file.name || `${docKey}.bin`)
+      const folder = `${effectiveDealerCode}/service-advisor-bodyshop-docs/${selected.id}/${docKey}`
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : (file.type?.includes('pdf') ? 'pdf' : 'jpg')
+      const safeName = sanitizeFileNamePart(file.name || `${docKey}.${ext}`)
       const storagePath = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`
 
-      const uploadRes = await supabase.storage
-        .from(AUTODOC_BUCKET)
-        .upload(storagePath, file, {
-          upsert: false,
-          contentType: file.type || 'application/octet-stream',
-        })
+      console.log('[BodyshopDocUpload] uploading to storage', {
+        docKey,
+        storagePath,
+        fileSize: file.size,
+        fileType: file.type,
+      })
+
+      const uploadRes = await withTimeout(
+        supabase.storage
+          .from(AUTODOC_BUCKET)
+          .upload(storagePath, file, {
+            upsert: false,
+            contentType: file.type || 'application/octet-stream',
+          }),
+        45000,
+        'Supabase storage upload',
+      )
 
       if (uploadRes.error) {
+        console.error('[BodyshopDocUpload] storage upload failed', uploadRes.error)
         setDocUploadFeedbackByKey((prev) => ({
           ...prev,
           [docKey]: { tone: 'error', text: `Upload failed: ${uploadRes.error.message}` },
@@ -3027,27 +3055,30 @@ export default function BodyshopRepairPage() {
 
       const authRes = await supabase.auth.getUser()
       const uploadedBy = authRes.data.user?.email || authRes.data.user?.id || null
-      const receptionEntryId = Number(selected.reception_entry_id)
 
-      const { data: upsertedRows, error: upsertErr } = await supabase
-        .from('bodyshop_repair_card_documents')
-        .upsert({
-          dealer_code: dealerCode,
-          repair_card_id: selected.id,
-          reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
-          reg_number: regNo || null,
-          doc_key: docKey,
-          storage_bucket: AUTODOC_BUCKET,
-          storage_path: storagePath,
-          file_name: file.name,
-          content_type: file.type || null,
-          file_size_bytes: file.size,
-          uploaded_by: uploadedBy,
-          uploaded_at: new Date().toISOString(),
-        }, {
-          onConflict: 'repair_card_id,doc_key',
-        })
-        .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
+      const { data: upsertedRows, error: upsertErr } = await withTimeout(
+        supabase
+          .from('bodyshop_repair_card_documents')
+          .upsert({
+            dealer_code: metadataDealerCode,
+            repair_card_id: selected.id,
+            reception_entry_id: Number.isFinite(receptionEntryId) && receptionEntryId > 0 ? receptionEntryId : null,
+            reg_number: regNo || null,
+            doc_key: docKey,
+            storage_bucket: AUTODOC_BUCKET,
+            storage_path: storagePath,
+            file_name: file.name,
+            content_type: file.type || null,
+            file_size_bytes: file.size,
+            uploaded_by: uploadedBy,
+            uploaded_at: new Date().toISOString(),
+          }, {
+            onConflict: 'repair_card_id,doc_key',
+          })
+          .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at'),
+        20000,
+        'Metadata save',
+      )
 
       if (upsertErr || !upsertedRows?.length) {
         const rawErr = upsertErr?.message ?? 'Failed to save document metadata'
@@ -3138,7 +3169,14 @@ export default function BodyshopRepairPage() {
         return
       }
 
-      const { body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
+      console.log('[BodyshopDocUpload] triggering universal drive sync', {
+        docKey,
+        resourceId: row.id,
+        storagePath,
+        regNo,
+      })
+
+      const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
         resource_type: 'bodyshop_document',
         resource_id: row.id,
         bucket_id: AUTODOC_BUCKET,
@@ -3152,6 +3190,11 @@ export default function BodyshopRepairPage() {
       const driveFileId = drivePayload?.drive_file_id || drivePayload?.result?.fileId || null
 
       if (driveUrl) {
+        console.log('[BodyshopDocUpload] universal drive sync success', {
+          docKey,
+          driveUrl,
+          driveFileId,
+        })
         setBodyshopDocsByKey((prev) => ({
           ...prev,
           [docKey]: {
@@ -3171,6 +3214,10 @@ export default function BodyshopRepairPage() {
           })
           .eq('id', row.id)
       } else {
+        console.warn('[BodyshopDocUpload] drive sync pending/retry required', {
+          status: driveRes?.status,
+          error: drivePayload?.error,
+        })
         // Direct background auto-sync retry
         void autoSyncBodyshopDocToDriveDirect(row, regNo)
       }
@@ -3196,11 +3243,12 @@ export default function BodyshopRepairPage() {
 
       setDocUploadFeedbackByKey((prev) => ({
         ...prev,
-        [docKey]: { tone: 'ok', text: action.mode === 'replace' ? 'Photo replaced successfully.' : 'Photo uploaded successfully.' },
+        [docKey]: { tone: 'ok', text: action.mode === 'replace' ? 'Document replaced successfully.' : 'Document uploaded successfully.' },
       }))
 
       toast_(action.mode === 'replace' ? 'Document replaced ✅' : 'Document uploaded ✅')
     } catch (e) {
+      console.error('[BodyshopDocUpload] upload failed', e)
       setDocUploadFeedbackByKey((prev) => ({
         ...prev,
         [docKey]: { tone: 'error', text: e.message ?? 'Upload failed' },
@@ -3511,8 +3559,17 @@ export default function BodyshopRepairPage() {
     const info = await getDirectDocViewInfo(row)
     const targetUrl = info.driveUrl || info.displayUrl
     if (!targetUrl) {
-      toast_('Unable to load file URL', false)
+      if (row.storage_path && !row.drive_url) {
+        const regNo = String(row.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+        void autoSyncBodyshopDocToDriveDirect(row, regNo)
+      }
+      toast_('Unable to load file URL. Syncing to Google Drive in background...', false)
       return
+    }
+
+    if (!info.driveUrl && row.storage_path) {
+      const regNo = String(row.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+      void autoSyncBodyshopDocToDriveDirect(row, regNo)
     }
 
     window.open(targetUrl, '_blank', 'noopener,noreferrer')
@@ -6224,6 +6281,7 @@ export default function BodyshopRepairPage() {
                     <input
                       ref={bodyshopDocInputRef}
                       type="file"
+                      accept="image/*,application/pdf"
                       className="hidden"
                       onChange={(event) => {
                         void handleBodyshopDocFilePicked(event.target.files)
@@ -6733,6 +6791,7 @@ export default function BodyshopRepairPage() {
                     <input
                       ref={bodyshopDocInputRef}
                       type="file"
+                      accept="image/*,application/pdf"
                       className="hidden"
                       onChange={(event) => {
                         void handleBodyshopDocFilePicked(event.target.files)
