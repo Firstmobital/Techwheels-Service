@@ -3176,8 +3176,10 @@ export default function BodyshopRepairPage() {
 
       if (isLegacyBooleanDocKey(docKey)) {
         const hasDraftChanges = Object.keys(editPatch).length > 0
+        const nextRejected = rejectedDocKeys(selected).filter((item) => item !== docKey)
         const updated = await updateRepairCard(selected.id, {
           [docKey]: true,
+          doc_rejected_keys: nextRejected,
           ...(hasDraftChanges ? editPatch : {}),
         } as Partial<RepairCard>)
         setSelected(updated)
@@ -5896,7 +5898,7 @@ export default function BodyshopRepairPage() {
                                           {checked ? '✅ Approved' : rejected ? '✕ Rejected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
                                         </div>
                                       </div>
-                                      <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                      <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         {checked ? (
                                           attachedDoc ? (
                                             <>
@@ -5908,8 +5910,27 @@ export default function BodyshopRepairPage() {
                                               >
                                                 👁️ View
                                               </button>
+                                              <button
+                                                type="button"
+                                                className="btn brx-doc-btn"
+                                                style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }}
+                                                onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                                disabled={busy}
+                                                title="Reupload or replace this document"
+                                              >
+                                                {busy ? 'Uploading…' : '🔄 Reupload'}
+                                              </button>
                                             </>
-                                          ) : null
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              className="btn btn--primary brx-doc-btn"
+                                              onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                              disabled={busy}
+                                            >
+                                              {busy ? 'Uploading…' : '📤 Upload'}
+                                            </button>
+                                          )
                                         ) : attachedDoc ? (
                                           <>
                                             <button
@@ -5923,9 +5944,20 @@ export default function BodyshopRepairPage() {
                                             <button
                                               type="button"
                                               className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }}
+                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                              disabled={busy}
+                                              title="Reupload or replace this document"
+                                            >
+                                              {busy ? 'Uploading…' : '🔄 Reupload'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
                                               style={{ backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}
                                               onClick={() => approveDoc(k)}
                                               title="Approve this document"
+                                              disabled={busy}
                                             >
                                               ✓ Approve
                                             </button>
@@ -5935,6 +5967,7 @@ export default function BodyshopRepairPage() {
                                               style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
                                               onClick={() => rejectDoc(k)}
                                               title="Reject this document"
+                                              disabled={busy}
                                             >
                                               ✕ Reject
                                             </button>
@@ -5974,30 +6007,37 @@ export default function BodyshopRepairPage() {
                                             <div className="brx-doc-name is-optional">{label}</div>
                                             <div className="brx-doc-sub">Firm Applicable</div>
                                           </div>
-                                          <div className="brx-doc-actions">
-                                            <button
-                                              className="btn brx-doc-btn"
-                                              onClick={() => startBodyshopDocUpload(k, 'upload')}
-                                              disabled={busy}
-                                            >
-                                              {busy ? 'Uploading…' : 'Upload'}
-                                            </button>
-                                            {attachedDoc && (
+                                          <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            {attachedDoc ? (
                                               <>
                                                 <button
+                                                  type="button"
                                                   className="btn brx-doc-btn"
+                                                  style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
                                                   onClick={() => void handleViewBodyshopDoc(k)}
                                                 >
-                                                  View
+                                                  👁️ View
                                                 </button>
                                                 <button
+                                                  type="button"
                                                   className="btn brx-doc-btn"
+                                                  style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }}
                                                   onClick={() => startBodyshopDocUpload(k, 'replace')}
                                                   disabled={busy}
+                                                  title="Reupload or replace this document"
                                                 >
-                                                  Replace
+                                                  {busy ? 'Uploading…' : '🔄 Reupload'}
                                                 </button>
                                               </>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                className="btn btn--primary brx-doc-btn"
+                                                onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                                disabled={busy}
+                                              >
+                                                {busy ? 'Uploading…' : '📤 Upload'}
+                                              </button>
                                             )}
                                           </div>
                                         </div>

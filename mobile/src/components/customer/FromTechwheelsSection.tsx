@@ -60,7 +60,7 @@ export function FromTechwheelsSection({
         }
       } catch (err) {
         Alert.alert(
-          'Repair quotation',
+          'Estimate repair',
           err instanceof Error ? err.message : 'Unable to open workshop estimate.'
         )
       } finally {
@@ -117,7 +117,7 @@ export function FromTechwheelsSection({
       const list: WorkshopDoc[] = [
         {
           id: 'quotation',
-          title: 'Repair quotation',
+          title: 'Estimate repair',
           subtitle: hasQuotation ? 'Ready to view' : 'Available after workshop estimate is prepared',
           ready: hasQuotation,
           onView: async () => {
@@ -125,7 +125,7 @@ export function FromTechwheelsSection({
               await openEstimate(estimateDoc)
               return
             }
-            if (estUrl) await openUrl(estUrl, 'Quotation')
+            if (estUrl) await openUrl(estUrl, 'Estimate repair')
           },
         },
         {
