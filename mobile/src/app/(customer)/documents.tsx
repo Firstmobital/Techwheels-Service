@@ -220,6 +220,41 @@ export default function CustomerDocumentsScreen() {
     return () => clearInterval(timer)
   }, [token, selectedReg, load])
 
+  // Auto-sync any uploaded document that is in Supabase storage but pending Drive backup
+  useEffect(() => {
+    if (!token || !selectedReg || documents.length === 0) return
+    const pendingDocs = documents.filter((d) => d && !d.drive_url && d.id)
+    if (pendingDocs.length === 0) return
+
+    let cancelled = false
+    const syncPending = async () => {
+      let anySynced = false
+      for (const doc of pendingDocs) {
+        if (cancelled) break
+        try {
+          const res = await customerRetryBodyshopDrive({
+            sessionToken: token,
+            regNumber: selectedReg,
+            resourceId: doc.id,
+            docKey: doc.doc_key,
+          })
+          if (res.ok && res.driveUrl) {
+            anySynced = true
+          }
+        } catch (err) {
+          console.warn('[documents] Background Drive sync error for', doc.doc_key, err)
+        }
+      }
+      if (anySynced && !cancelled) {
+        void load('refresh')
+      }
+    }
+    void syncPending()
+    return () => {
+      cancelled = true
+    }
+  }, [documents, token, selectedReg, load])
+
   const uploadSlot = async (
     slot: CustomerClaimDocumentDef,
     source: 'camera' | 'gallery' | 'file'

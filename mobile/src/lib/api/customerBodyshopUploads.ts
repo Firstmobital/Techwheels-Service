@@ -68,7 +68,7 @@ async function callUploadBroker(
 function asUploadResult(body: any): CustomerUploadResult {
   return {
     ok: body?.ok === true && Boolean(String(body?.drive_url || '').trim()),
-    drivePending: body?.drive_pending === true || body?.ok !== true,
+    drivePending: body?.drive_pending === true || !Boolean(String(body?.drive_url || '').trim()),
     driveUrl: String(body?.drive_url || '').trim() || null,
     resourceId: body?.resource_id ?? null,
     docKey: body?.doc_key ? String(body.doc_key) : null,
@@ -83,6 +83,61 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i)
   }
   return bytes.buffer
+}
+
+export async function triggerDirectDriveUpload(input: {
+  resourceType: string
+  resourceId: number | string
+  bucketId: string
+  objectName: string
+  fileType: string
+  regNumber: string
+}): Promise<{ ok: boolean; driveUrl?: string; error?: string }> {
+  const supabaseUrl = getSupabaseBaseUrl()
+  if (!supabaseUrl) return { ok: false, error: 'Supabase URL missing' }
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        resource_type: input.resourceType,
+        resource_id: input.resourceId,
+        bucket_id: input.bucketId,
+        object_name: input.objectName,
+        file_type: input.fileType,
+        registration_no: input.regNumber,
+      }),
+    })
+
+    const data = await res.json().catch(() => ({}))
+    const driveUrl = String(data?.drive_url || data?.link || data?.result?.driveUrl || '').trim()
+    const driveFileId = String(data?.drive_file_id || data?.result?.fileId || '').trim() || null
+
+    if (!res.ok || data?.ok === false || !driveUrl) {
+      return { ok: false, error: data?.error || `Drive upload failed (${res.status})` }
+    }
+
+    // Direct table update fallback to guarantee drive_url is persisted in database
+    if (driveUrl && input.resourceType === 'bodyshop_document') {
+      await supabase
+        .from('bodyshop_repair_card_documents')
+        .update({
+          drive_url: driveUrl,
+          drive_file_id: driveFileId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', Number(input.resourceId))
+    }
+
+    return { ok: true, driveUrl }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Drive direct upload failed' }
+  }
 }
 
 export async function customerUploadBodyshopAsset(input: UploadRequest): Promise<CustomerUploadResult> {
@@ -126,7 +181,30 @@ export async function customerUploadBodyshopAsset(input: UploadRequest): Promise
     content_type: input.contentType,
     file_size_bytes: fileSize,
   })
-  return asUploadResult(completed)
+
+  let result = asUploadResult(completed)
+
+  // Direct Drive upload fallback if broker edge function had a timeout or returned drive_pending
+  if (result.drivePending && completed?.resource_id) {
+    const driveDirect = await triggerDirectDriveUpload({
+      resourceType: input.kind === 'photo' ? 'bodyshop_intake_photo' : 'bodyshop_document',
+      resourceId: completed.resource_id,
+      bucketId: String(ticket.bucket || 'autodoc'),
+      objectName: String(ticket.path),
+      fileType: input.docKey || 'bodyshop_document',
+      regNumber: input.regNumber,
+    })
+    if (driveDirect.ok && driveDirect.driveUrl) {
+      result = {
+        ...result,
+        ok: true,
+        drivePending: false,
+        driveUrl: driveDirect.driveUrl,
+      }
+    }
+  }
+
+  return result
 }
 
 export async function customerRetryBodyshopDrive(input: {
@@ -140,7 +218,41 @@ export async function customerRetryBodyshopDrive(input: {
     resource_id: input.resourceId ?? null,
     doc_key: input.docKey || null,
   })
-  return asUploadResult(body)
+
+  let result = asUploadResult(body)
+
+  if (result.drivePending && input.resourceId) {
+    try {
+      const { data: docRow } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .select('id, storage_bucket, storage_path, doc_key, reg_number')
+        .eq('id', Number(input.resourceId))
+        .maybeSingle()
+
+      if (docRow?.storage_path) {
+        const driveDirect = await triggerDirectDriveUpload({
+          resourceType: 'bodyshop_document',
+          resourceId: docRow.id,
+          bucketId: docRow.storage_bucket || 'autodoc',
+          objectName: docRow.storage_path,
+          fileType: docRow.doc_key || input.docKey || 'bodyshop_document',
+          regNumber: docRow.reg_number || input.regNumber,
+        })
+        if (driveDirect.ok && driveDirect.driveUrl) {
+          result = {
+            ...result,
+            ok: true,
+            drivePending: false,
+            driveUrl: driveDirect.driveUrl,
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[CustomerUpload] Direct Drive retry error:', err)
+    }
+  }
+
+  return result
 }
 
 export async function customerListBodyshopAssets(
