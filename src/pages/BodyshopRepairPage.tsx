@@ -3188,13 +3188,13 @@ export default function BodyshopRepairPage() {
         resource_id: row.id,
         bucket_id: AUTODOC_BUCKET,
         object_name: storagePath,
-        file_type: docKey,
+        file_type: (docKey === 'doc_job_card' || docKey === 'job_card') ? 'doc_estimate' : docKey,
         file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
         registration_no: regNo,
       }, 35000)
 
-      const driveUrl = drivePayload?.drive_url || drivePayload?.link || drivePayload?.result?.driveUrl || null
-      const driveFileId = drivePayload?.drive_file_id || drivePayload?.result?.fileId || null
+      const driveUrl = drivePayload?.drive_url || drivePayload?.link || drivePayload?.result?.driveUrl || ((drivePayload as any)?.fileId ? `https://drive.google.com/file/d/${(drivePayload as any).fileId}/view` : null)
+      const driveFileId = drivePayload?.drive_file_id || drivePayload?.result?.fileId || (drivePayload as any)?.fileId || null
 
       if (driveUrl) {
         console.log('[BodyshopDocUpload] universal drive sync success', {
@@ -3284,18 +3284,19 @@ export default function BodyshopRepairPage() {
 
   const autoSyncingDocKeysRef = useRef<Set<string>>(new Set())
 
-  async function autoSyncBodyshopDocToDriveDirect(docRow: BodyshopRepairCardDocumentRow, regNoHint?: string): Promise<boolean> {
+  async function autoSyncBodyshopDocToDriveDirect(docRow: BodyshopRepairCardDocumentRow, regNoHint?: string): Promise<string | null> {
     const docKey = docRow.doc_key
-    if (!docRow.id || !docRow.storage_path || docRow.drive_url) return true
+    if (docRow.drive_url) return docRow.drive_url
+    if (!docRow.id || !docRow.storage_path) return null
     const syncKey = `${docRow.id}_${docKey}`
-    if (autoSyncingDocKeysRef.current.has(syncKey)) return false
+    if (autoSyncingDocKeysRef.current.has(syncKey)) return null
 
     autoSyncingDocKeysRef.current.add(syncKey)
     try {
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       const sessionRes = await supabase.auth.getSession()
       const token = sessionRes.data.session?.access_token
-      if (!supabaseUrl) return false
+      if (!supabaseUrl) return null
 
       const regNo = String(docRow.reg_number || regNoHint || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
 
@@ -3304,17 +3305,18 @@ export default function BodyshopRepairPage() {
         resource_id: docRow.id,
         bucket_id: docRow.storage_bucket || AUTODOC_BUCKET,
         object_name: docRow.storage_path,
-        file_type: docKey,
+        file_type: (docKey === 'doc_job_card' || docKey === 'job_card') ? 'doc_estimate' : docKey,
         file_size_mb: docRow.file_size_bytes ? Number((docRow.file_size_bytes / (1024 * 1024)).toFixed(3)) : undefined,
         registration_no: regNo,
       }, 35000)
 
       if (!res.ok || body?.error || body?.ok === false) {
-        return false
+        console.warn(`[BodyshopDocs] Auto-sync to Drive failed for ${docKey}:`, body?.error || `HTTP ${res.status}`)
+        return null
       }
 
-      const driveUrl = body.drive_url || body.link || body.result?.driveUrl || null
-      const driveFileId = body.drive_file_id || body.result?.fileId || null
+      const driveUrl = body.drive_url || body.link || body.result?.driveUrl || ((body as any)?.fileId ? `https://drive.google.com/file/d/${(body as any).fileId}/view` : null)
+      const driveFileId = body.drive_file_id || body.result?.fileId || (body as any)?.fileId || null
 
       if (driveUrl) {
         setBodyshopDocsByKey((prev) => ({
@@ -3353,12 +3355,12 @@ export default function BodyshopRepairPage() {
           })
           .eq('id', docRow.id)
 
-        return true
+        return driveUrl
       }
-      return false
+      return null
     } catch (e) {
       console.warn(`[BodyshopDocs] Auto-sync to Drive error for ${docKey}:`, (e as Error)?.message)
-      return false
+      return null
     } finally {
       autoSyncingDocKeysRef.current.delete(syncKey)
     }
@@ -3662,23 +3664,45 @@ export default function BodyshopRepairPage() {
       return
     }
 
-    const info = await getDirectDocViewInfo(row)
-    const targetUrl = info.driveUrl || info.displayUrl
-    if (!targetUrl) {
-      if (row.storage_path && !row.drive_url) {
-        const regNo = String(row.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
-        void autoSyncBodyshopDocToDriveDirect(row, regNo)
-      }
-      toast_('Unable to load file URL. Syncing to Google Drive in background...', false)
+    const regNo = String(row.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+
+    // 1. If Google Drive link is already available, open Google Drive directly!
+    if (row.drive_url) {
+      window.open(row.drive_url, '_blank', 'noopener,noreferrer')
       return
     }
 
-    if (!info.driveUrl && row.storage_path) {
-      const regNo = String(row.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
-      void autoSyncBodyshopDocToDriveDirect(row, regNo)
+    // 2. If not yet on Drive, sync to Google Drive immediately and open the Drive link!
+    if (row.storage_path) {
+      toast_('Opening Google Drive... Syncing document to Drive...', true)
+      const syncedDriveUrl = await autoSyncBodyshopDocToDriveDirect(row, regNo)
+      if (syncedDriveUrl) {
+        window.open(syncedDriveUrl, '_blank', 'noopener,noreferrer')
+        return
+      }
+
+      if (row.id) {
+        const { data: dbRow } = await supabase
+          .from('bodyshop_repair_card_documents')
+          .select('drive_url')
+          .eq('id', row.id)
+          .maybeSingle()
+        if (dbRow?.drive_url) {
+          window.open(dbRow.drive_url, '_blank', 'noopener,noreferrer')
+          return
+        }
+      }
     }
 
-    window.open(targetUrl, '_blank', 'noopener,noreferrer')
+    // 3. Fallback to storage URL only if Google Drive sync completely failed
+    const info = await getDirectDocViewInfo(row)
+    const targetUrl = info.driveUrl || info.displayUrl
+    if (targetUrl) {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    toast_('Unable to load file URL', false)
   }
 
   async function getLatestRtoInsuranceRow(regNumber: string): Promise<RtoInsuranceCacheRow | null> {
