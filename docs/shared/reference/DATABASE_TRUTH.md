@@ -98,17 +98,32 @@ scripts/backup-full-db.sh
 
 ## Migration History Policy (Post-Rebaseline)
 
-*Added 2026-09-29 as part of the Migration Rebaseline audit.*
+*Added 2026-09-29 as part of the Migration Rebaseline audit. Cutover executed 2026-09-29.*
 
-After the rebaseline cutover is authorized and executed:
+**Rebaseline Cutover Status: COMPLETE**
+
+Key facts:
+- Production schema was NOT rebuilt. The baseline SQL was never executed against production.
+- `supabase/baseline_candidate/20260929152000_production_schema_baseline.sql` captures
+  production truth as of 2026-09-29 10:22 IST (SHA256 of candidate:
+  5a2f9baa0e1979c81553767f6a06a3b849cd56c428798aa5fb5df7052678e7d9).
+- The baseline was promoted to `supabase/migrations/` and marked applied in remote migration
+  history via `supabase migration repair --linked --status applied 20260929152000` — no SQL
+  execution occurred.
+- The pre-baseline migration chain (24 production versions 20260709090000–20260928123035) was
+  retired from remote history via `supabase migration repair --linked --status reverted`.
+  All historical migration SQL files are preserved in Git history under tag
+  `database-rebaseline-pre-cutover-2026-09-29` (commit ae5bad09).
+- `20260929160000_customer_set_customer_type.sql` is the first future incremental migration.
+  It is NOT yet applied to production and must be deployed via normal DB_CHANGE_PROTOCOL.
 
 1. **`supabase/backups/full_metadata.sql` remains the primary schema truth.**
    It is regenerated after every production schema change. It is never replaced by
    a migration file.
 
 2. **`supabase/migrations/` contains only:**
-   - The single canonical baseline migration (timestamp `20260929152000` or the
-     version promoted at cutover time)
+   - `20260929152000_production_schema_baseline.sql` — the canonical baseline (stays here
+     permanently; unlike incremental migrations, it is NOT moved to exec_success_migrations)
    - Future incremental migrations created AFTER the baseline
 
 3. **SQL Editor is not the normal path for schema changes.**
@@ -124,7 +139,8 @@ After the rebaseline cutover is authorized and executed:
    Current database state is proven by full_metadata.sql, not by migration file presence.
 
 6. **Historical pre-baseline migrations are archive/evidence only.**
-   They must not re-enter the active migration execution path. Git history preserves them.
+   They must not re-enter the active migration execution path. Git history and the
+   preservation tag `database-rebaseline-pre-cutover-2026-09-29` are the archive.
 
 ## Related Process Docs (Operational Detail, Not Authority)
 
@@ -134,4 +150,4 @@ These remain valid for their specific workflows; they defer to this file for "wh
 - `docs/shared/reference/DB_CHANGE_PROTOCOL.md` — required workflow for proposing/applying/verifying schema changes.
 - `docs/shared/reference/DB_CHANGE_LEDGER.md` — change log of schema/RLS/function/view/index changes.
 - `supabase/evidence/authoritative_dump_manifest.json` / `authoritative_metadata_manifest.json` — sha256/size/timestamp evidence for the two dumps, written automatically by the regeneration scripts.
-- `supabase/baseline_candidate/` — holds the rebaseline candidate (not yet in active migrations; requires explicit user authorization to promote).
+- `supabase/baseline_candidate/` — holds pre-cutover evidence and the reviewed baseline candidate. Cutover is complete; the candidate was promoted to `supabase/migrations/20260929152000_production_schema_baseline.sql` on 2026-09-29.

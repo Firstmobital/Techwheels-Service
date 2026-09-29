@@ -47,3 +47,6 @@ mobile/play-service-account.json
 *.zip
 Techwheels-Service/
 .agents/plugins/
+
+# Supabase CLI local-state artifacts (branch tracking, not project config)
+supabase/.branches/
