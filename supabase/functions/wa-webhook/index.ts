@@ -410,7 +410,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url)
 
   const { data: cfgArr } = await sb.from('wa_agent_config').select('*').eq('id', 1).limit(1)
-  const config = cfgArr?.[0] as Record<string, unknown> | undefined
+  const config: Record<string, unknown> = (cfgArr?.[0] as Record<string, unknown>) ?? {}
 
   // ── Webhook verification ───────────────────────────────────────────────────
   if (req.method === 'GET') {

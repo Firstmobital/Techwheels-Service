@@ -125,7 +125,6 @@ function buildCachePayload(registrationNo: string, apiResponse: unknown, ttlHour
     api_rc_vehicle_sleeper_capacity: pickString(root.api_rc_vehicle_sleeper_capacity, root.vehicle_sleeper_capacity, root.vehicleSleeperCapacity),
     api_rc_vehicle_standing_capacity: pickString(root.api_rc_vehicle_standing_capacity, root.vehicle_standing_capacity, root.vehicleStandingCapacity),
     api_rc_wheelbase: pickString(root.api_rc_wheelbase, root.wheelbase),
-    api_rc_vehicle_number: pickString(root.api_rc_vehicle_number, root.vehicle_number, root.vehicleNumber),
     api_rc_pucc_number: pickString(root.api_rc_pucc_number, root.pucc_number, root.puccNumber),
     api_rc_pucc_upto: pickString(root.api_rc_pucc_upto, root.pucc_upto, root.puccUpto),
     api_rc_blacklist_status: pickString(root.api_rc_blacklist_status, root.blacklist_status, root.blacklistStatus),

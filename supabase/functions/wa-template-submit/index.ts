@@ -218,6 +218,7 @@ serve(async (req) => {
         const { count } = await supabase.from('wa_templates')
           .update(updateData)
           .eq('name', mt.name)
+          // @ts-ignore select count options
           .select('*', { count: 'exact', head: true })
         
         if ((count ?? 0) > 0) synced++

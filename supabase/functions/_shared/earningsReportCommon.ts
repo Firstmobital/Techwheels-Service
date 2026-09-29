@@ -1,4 +1,6 @@
-import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = { from: (table: string) => any }
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5'
 import {
   buildBankPayoutWorksheetRows,
@@ -96,7 +98,7 @@ export function parseReportDateRange(body: {
 
 /** Resolve bank rows keyed by payout row employeeCode only. */
 export async function fetchBankForPayoutRows(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   rows: BankPayoutInputRow[],
 ): Promise<Map<string, EmployeeBankRow>> {
   const bankByRowCode = new Map<string, EmployeeBankRow>()
@@ -115,7 +117,8 @@ export async function fetchBankForPayoutRows(
       throw new Error(bankRes.error.message)
     }
 
-    ;(bankRes.data ?? []).forEach((row) => {
+    // deno-lint-ignore no-explicit-any
+    ;(bankRes.data ?? []).forEach((row: any) => {
       const typed = row as EmployeeBankRow
       const code = normalizeCode(typed.employee_code)
       if (!code) return
@@ -127,7 +130,7 @@ export async function fetchBankForPayoutRows(
 }
 
 export async function fetchBankByCodeMap(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   employeeCodes: string[],
 ): Promise<Map<string, EmployeeBankRow>> {
   return fetchBankForPayoutRows(
@@ -186,7 +189,7 @@ export async function uploadWorkbookAndSendEmail(input: {
         'x-upsert': 'true',
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       },
-      body: input.fileBytes,
+      body: input.fileBytes.buffer as ArrayBuffer,
     },
   )
 
@@ -251,7 +254,7 @@ export function aggregateBankPayoutRows(
   return Array.from(map.values()).sort((a, b) => b.earnings - a.earnings)
 }
 
-export function createServiceClient(): { supabase: SupabaseClient; supabaseUrl: string; serviceRoleKey: string } {
+export function createServiceClient(): { supabase: ReturnType<typeof createClient>; supabaseUrl: string; serviceRoleKey: string } {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   if (!supabaseUrl || !serviceRoleKey) {

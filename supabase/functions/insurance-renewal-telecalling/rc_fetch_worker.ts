@@ -2,7 +2,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
-type SupabaseClient = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type SupabaseClient = { from: (table: string) => any; rpc: (fn: string, args?: any) => any };
 
 /** Must match invoke_insurance_renewal_rc_fetch_worker() pg_net header (migration). */
 export const RC_FETCH_PG_CRON_SECRET =

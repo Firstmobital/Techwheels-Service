@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = { from: (table: string) => any }
 
 type SourceBookingRow = {
   id: string
@@ -206,7 +208,7 @@ Deno.serve(async (req) => {
   }
 })
 
-async function getSyncState(target: ReturnType<typeof createClient>): Promise<SyncStateRow | null> {
+async function getSyncState(target: AnySupabaseClient): Promise<SyncStateRow | null> {
   const { data, error } = await target
     .from('integration_sync_state')
     .select('sync_name, last_source_cursor_id, last_source_updated_at, updated_at, metadata')
@@ -221,7 +223,7 @@ async function getSyncState(target: ReturnType<typeof createClient>): Promise<Sy
 }
 
 async function fetchSourceRows(
-  source: ReturnType<typeof createClient>,
+  source: AnySupabaseClient,
   lastSourceUpdatedAt: string | null,
   lastSourceCursorId: string | null,
   batchSize: number,

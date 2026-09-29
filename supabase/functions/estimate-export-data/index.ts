@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         jc: jcData,
-        rows: (estData ?? []) as EstimateRow[],
+        rows: (estData ?? []) as unknown as EstimateRow[],
       }),
       { status: 200, headers }
     )

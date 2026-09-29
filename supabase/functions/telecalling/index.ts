@@ -131,8 +131,10 @@ export default async function handler(req: Request) {
       if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
         const today = new Date().toISOString().split('T')[0]
         const expiry_to = new Date(Date.now() + warranty_expiry_days * 86400000).toISOString().split('T')[0]
+        // @ts-ignore deep Supabase query chain
         query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', today).lte('extended_warranty_end_date', expiry_to)
       } else {
+        // @ts-ignore deep Supabase query chain
         query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', date_from).lte('assumed_next_service_date', date_to)
       }
 
@@ -437,9 +439,6 @@ export default async function handler(req: Request) {
 
       // Prefer retry leads over fresh leads
       const rows = (retryRows && retryRows.length > 0) ? retryRows : (freshRows || [])
-      const selErr = null
-
-      if (selErr) throw new Error(`Select failed: ${selErr.message}`)
       if (!rows || rows.length === 0) {
         return new Response(JSON.stringify({ success: true, assignment: null, debug: { campaign_id, userEmail, msg: 'no pending rows found' } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }

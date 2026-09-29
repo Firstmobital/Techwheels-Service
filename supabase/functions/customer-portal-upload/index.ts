@@ -12,6 +12,8 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.5'
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = { from: (table: string) => any; rpc: (fn: string, args?: any) => any; storage: any }
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -77,7 +79,7 @@ function safeFileName(value: string) {
 }
 
 async function resolveContext(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AnySupabaseClient,
   sessionToken: string,
   regNumber: string
 ) {
@@ -150,7 +152,7 @@ async function resolveContext(
 }
 
 async function setRepairCardDocFlag(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AnySupabaseClient,
   repairCardId: number,
   docKey: string,
   value: boolean
@@ -165,7 +167,7 @@ async function setRepairCardDocFlag(
 
 /** Customer upload is not advisor approval. Clear approval and any earlier rejection. */
 async function markDocAwaitingAdvisor(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AnySupabaseClient,
   repairCardId: number,
   docKey: string
 ) {
@@ -177,7 +179,7 @@ async function markDocAwaitingAdvisor(
     .maybeSingle()
   if (readError) throw new Error(readError.message)
   const current = Array.isArray(data?.doc_rejected_keys) ? data.doc_rejected_keys.map(String) : []
-  const nextRejected = current.filter((key) => key !== docKey)
+  const nextRejected = current.filter((key: string) => key !== docKey)
   const patch: Record<string, unknown> = {
     doc_rejected_keys: nextRejected,
     updated_at: new Date().toISOString(),
@@ -243,7 +245,7 @@ function presentDocument(row: Record<string, unknown>) {
 }
 
 async function signAsset(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AnySupabaseClient,
   row: Record<string, unknown>,
   kind: 'document' | 'photo'
 ) {
@@ -493,7 +495,7 @@ Deno.serve(async (req) => {
       objectName: text(row.storage_path),
       docKey: text(row.doc_key),
       fileSizeBytes: Number(row.file_size_bytes || 0),
-      regNumber: text(row.reg_number) || ctx.regNumber,
+      regNumber: text((row as Record<string, unknown>).reg_number as string) || ctx.regNumber,
     })
 
     const bucket = text(row.storage_bucket) || BUCKET

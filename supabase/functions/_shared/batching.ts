@@ -2,7 +2,8 @@
  * Reusable utility for chunking arrays and performing high-performance bulk database writes.
  */
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = { from: (table: string) => any }
 
 export function chunkArray<T>(items: T[], chunkSize = 200): T[][] {
   if (!items || items.length === 0) return []
@@ -20,7 +21,7 @@ export interface BatchWriteOptions {
 }
 
 export async function bulkUpsert<T extends Record<string, unknown>>(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   table: string,
   records: T[],
   options?: BatchWriteOptions,
@@ -56,7 +57,7 @@ export async function bulkUpsert<T extends Record<string, unknown>>(
 }
 
 export async function bulkInsert<T extends Record<string, unknown>>(
-  supabase: SupabaseClient,
+  supabase: AnySupabaseClient,
   table: string,
   records: T[],
   chunkSize = 250,

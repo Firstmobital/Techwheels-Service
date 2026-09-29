@@ -386,11 +386,12 @@ function driveViewUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${fileId}/view`
 }
 
+// deno-lint-ignore no-explicit-any
 async function logPendingUpload(
-  supabase: ReturnType<typeof createClient>,
+  supabase: { from: (table: string) => any },
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await supabase.from('pending_drive_uploads').insert(payload)
+  const { error } = await supabase.from('pending_drive_uploads').insert(payload as any)
   if (error) {
     console.warn('[universal-drive-upload] pending log write failed:', error.message)
   }

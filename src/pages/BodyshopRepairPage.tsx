@@ -3147,8 +3147,8 @@ export default function BodyshopRepairPage() {
         registration_no: regNo,
       }, 35000)
 
-      const driveUrl = drivePayload?.drive_url || drivePayload?.link || (drivePayload?.result as any)?.driveUrl || null
-      const driveFileId = drivePayload?.drive_file_id || (drivePayload?.result as any)?.fileId || null
+      const driveUrl = drivePayload?.drive_url || drivePayload?.link || drivePayload?.result?.driveUrl || null
+      const driveFileId = drivePayload?.drive_file_id || drivePayload?.result?.fileId || null
 
       if (driveUrl) {
         setBodyshopDocsByKey((prev) => ({
@@ -3238,8 +3238,8 @@ export default function BodyshopRepairPage() {
         return false
       }
 
-      const driveUrl = body.drive_url || body.link || (body.result as any)?.driveUrl || null
-      const driveFileId = body.drive_file_id || (body.result as any)?.fileId || null
+      const driveUrl = body.drive_url || body.link || body.result?.driveUrl || null
+      const driveFileId = body.drive_file_id || body.result?.fileId || null
 
       if (driveUrl) {
         setBodyshopDocsByKey((prev) => ({
@@ -3265,8 +3265,8 @@ export default function BodyshopRepairPage() {
         return true
       }
       return false
-    } catch (e: any) {
-      console.warn(`[BodyshopDocs] Auto-sync to Drive error for ${docKey}:`, e?.message)
+    } catch (e) {
+      console.warn(`[BodyshopDocs] Auto-sync to Drive error for ${docKey}:`, (e as Error)?.message)
       return false
     } finally {
       autoSyncingDocKeysRef.current.delete(docKey)

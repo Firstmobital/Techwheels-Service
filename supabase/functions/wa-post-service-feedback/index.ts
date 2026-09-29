@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: false, error: queryErr.message }, { status: 500, headers: corsHeaders })
   }
 
-  const rows = (jobCardRows || []) as Array<Record<string, unknown>>
+  const rows = (jobCardRows || []) as unknown as Array<Record<string, unknown>>
   console.log(`PSF: found ${rows.length} candidate rows for closed_date ${targetDate}`)
 
   const stats = { processed: 0, sent: 0, skipped_duplicate: 0, skipped_invalid_phone: 0, failed: 0, dry_run: dryRun }

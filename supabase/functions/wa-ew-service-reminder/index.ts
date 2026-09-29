@@ -257,7 +257,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: false, error: queryErr.message }, { status: 500, headers: corsHeaders })
   }
 
-  const rows = (serviceRows || []) as Array<Record<string, unknown>>
+  const rows = (serviceRows || []) as unknown as Array<Record<string, unknown>>
   console.log(`ESR: found ${rows.length} candidate rows for dates ${date15}/${date30}`)
 
   const stats = { processed: 0, sent: 0, skipped_duplicate: 0, skipped_booked: 0, skipped_invalid_phone: 0, failed: 0, dry_run: dryRun }
