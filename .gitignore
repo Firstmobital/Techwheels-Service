@@ -50,3 +50,5 @@ Techwheels-Service/
 
 # Supabase CLI local-state artifacts (branch tracking, not project config)
 supabase/.branches/
+android/
+ios/

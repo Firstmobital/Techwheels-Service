@@ -1,36 +1,8 @@
--- Migration: Add doc_job_card to bodyshop_repair_card_documents constraint
--- and expose job_card_document in customer_get_repair_card RPC
+-- Migration: Fix customer_get_repair_card stage label and projection functions
+-- Corrects function call from public.bodyshop_repair_stage_label to public.customer_bodyshop_stage_label
 
 begin;
 
--- 1. Update check constraint on bodyshop_repair_card_documents
-alter table public.bodyshop_repair_card_documents
-  drop constraint if exists bodyshop_repair_card_documents_doc_key_check;
-
-alter table public.bodyshop_repair_card_documents
-  add constraint bodyshop_repair_card_documents_doc_key_check
-  check (doc_key = any (array[
-    'doc_claim_form'::text,
-    'doc_rc'::text,
-    'doc_rc_back'::text,
-    'doc_insurance'::text,
-    'doc_dl'::text,
-    'doc_dl_back'::text,
-    'doc_aadhaar'::text,
-    'doc_aadhaar_back'::text,
-    'doc_pan'::text,
-    'doc_kyc'::text,
-    'doc_gst'::text,
-    'doc_company_pan'::text,
-    'doc_bank_detail'::text,
-    'doc_tp_affidavit'::text,
-    'doc_estimate'::text,
-    'doc_survey_approval'::text,
-    'doc_job_card'::text,
-    'job_card'::text
-  ]));
-
--- 2. Update customer_get_repair_card to include job_card_document
 create or replace function public.customer_get_repair_card(p_session_token text, p_reg_number text default null::text)
 returns jsonb
 language plpgsql
