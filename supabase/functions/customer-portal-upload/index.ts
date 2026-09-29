@@ -199,6 +199,8 @@ async function offloadBodyshopDocument(
   serviceRoleKey: string,
   input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number; regNumber?: string }
 ): Promise<{ ok: true; drive_url: string } | { ok: false; error: string }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 9000)
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
       method: 'POST',
@@ -216,6 +218,7 @@ async function offloadBodyshopDocument(
         file_size_mb: Number(((input.fileSizeBytes || 0) / (1024 * 1024)).toFixed(3)),
         registration_no: input.regNumber || undefined,
       }),
+      signal: controller.signal,
     })
     const payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
     const driveUrl = text(payload.drive_url || payload.link)
@@ -224,7 +227,10 @@ async function offloadBodyshopDocument(
     }
     return { ok: true, drive_url: driveUrl }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Drive upload failed' }
+    const message = error instanceof Error ? error.message : 'Drive upload failed'
+    return { ok: false, error: controller.signal.aborted ? 'Drive upload timed out' : message }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -434,6 +440,7 @@ Deno.serve(async (req) => {
 
       try {
         await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
+        await setRepairCardDocFlag(supabase, ctx.repairCardId, docKey, true)
       } catch (flagError) {
         return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
       }
@@ -514,6 +521,7 @@ Deno.serve(async (req) => {
 
     try {
       await markDocAwaitingAdvisor(supabase, ctx.repairCardId, text(row.doc_key))
+      await setRepairCardDocFlag(supabase, ctx.repairCardId, text(row.doc_key), true)
     } catch (flagError) {
       return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
     }

@@ -724,8 +724,14 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
       const entryTime = entry ? new Date(entry.invoice_done_at || entry.created_at || 0).getTime() : 0
       const bsTime = bsCard ? new Date(String(bsCard.updated_at || bsCard.created_at || 0)).getTime() : 0
 
-      // Use bodyshop path only when there is no mechanical service entry OR the entry is bodyshop type
-      const useBodyshopPath = bsCard && (!entry || !entryIsMechanical) && bsTime > 0
+      // Use bodyshop path only when there is no mechanical service entry OR the entry is bodyshop type,
+      // and the repair card is not already delivered/closed (prevents old completed repairs from
+      // overriding a new mechanical visit when no service entry exists yet).
+      const useBodyshopPath =
+        bsCard &&
+        (!entry || !entryIsMechanical) &&
+        bsTime > 0 &&
+        String(bsCard.overall_status || '').toLowerCase() !== 'delivered'
 
       // If Bodyshop is the active case
       if (useBodyshopPath && bsCard) {
@@ -746,7 +752,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
 
         const doAmount = Number(bsSettle?.do_amount ?? 0)
         const isCashCase = doAmount === 0 && (bsCard.customer_type === 'cash' || !bsCard.insurance_company)
-        const isInsuranceClaim = !isCashCase && (doAmount > 0 || Boolean(bsCard.insurance_company) || Boolean(bsCard.claim_intimation_no) || true)
+        const isInsuranceClaim = !isCashCase && (doAmount > 0 || Boolean(bsCard.insurance_company) || Boolean(bsCard.claim_intimation_no))
         const billed = Number(bsSettle?.invoice_amount ?? bsCard.expected_invoice_amount ?? (rpcResult?.total_billed ?? rpcResult?.billed_amount ?? 0))
         const doRemaining = Number(bsSettle?.insurance_due_amount ?? doAmount)
         const diffAmount = Number(bsSettle?.customer_diff_amount ?? (doAmount > 0 ? Math.max(0, billed - doAmount) : billed))
