@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict hrnlXMduU607cblfCvJd4RnRHEzy6AWkIMfqTIlZ8tf5QwbLrofdWH35xaoISeQ
+\restrict zSGsUQDzZPgaUMJX6GDgZROwgDSwzabdYBET6G1BPgWxBfK3t2j3QT3CEmFgjja
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-09-29 09:28:23 IST
+-- Started on 2026-09-29 10:20:58 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -11808,15 +11808,33 @@ CREATE FUNCTION public.invoke_insurance_renewal_rc_fetch_worker() RETURNS bigint
     SET search_path TO 'public'
     AS $$
 DECLARE
-  v_request_id bigint;
+  v_cron_secret text;
+  v_request_id  bigint;
 BEGIN
+  -- Fetch the rotated cron secret by stable name from Supabase Vault.
+  -- vault.decrypted_secrets is a view that decrypts on read; the value is
+  -- never stored in an unencrypted column and is not logged or returned here.
+  SELECT decrypted_secret
+  INTO   v_cron_secret
+  FROM   vault.decrypted_secrets
+  WHERE  name = 'telecalling_cron_secret'
+  LIMIT  1;
+
+  -- Fail closed: do not send an empty or absent header.
+  IF v_cron_secret IS NULL OR v_cron_secret = '' THEN
+    RAISE EXCEPTION
+      'invoke_insurance_renewal_rc_fetch_worker: Vault secret '
+      '''telecalling_cron_secret'' not found or empty. '
+      'Configure the secret before scheduling this function.';
+  END IF;
+
   SELECT net.http_post(
-    url := 'https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/insurance-renewal-telecalling',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret', 'd4738d9a19012e96922a7e9d53959c0b8169ba573743e08f5609a9a601986511'
-    ),
-    body := '{"action":"process_rc_fetch_jobs","max_lookups":4}'::jsonb,
+    url                  := 'https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/insurance-renewal-telecalling',
+    headers              := jsonb_build_object(
+                              'Content-Type',   'application/json',
+                              'x-cron-secret',  v_cron_secret
+                            ),
+    body                 := '{"action":"process_rc_fetch_jobs","max_lookups":4}'::jsonb,
     timeout_milliseconds := 120000
   )
   INTO v_request_id;
@@ -11832,7 +11850,7 @@ $$;
 -- Name: FUNCTION invoke_insurance_renewal_rc_fetch_worker(); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.invoke_insurance_renewal_rc_fetch_worker() IS 'pg_cron/pg_net wrapper: processes queued insurance renewal RC fetch jobs (2 min schedule).';
+COMMENT ON FUNCTION public.invoke_insurance_renewal_rc_fetch_worker() IS 'Triggers the insurance-renewal-telecalling edge function via pg_net. Authenticates using x-cron-secret read from Supabase Vault (telecalling_cron_secret). Fails closed if the Vault secret is absent.';
 
 
 --
@@ -73044,11 +73062,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-09-29 09:31:10 IST
+-- Completed on 2026-09-29 10:22:04 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict hrnlXMduU607cblfCvJd4RnRHEzy6AWkIMfqTIlZ8tf5QwbLrofdWH35xaoISeQ
+\unrestrict zSGsUQDzZPgaUMJX6GDgZROwgDSwzabdYBET6G1BPgWxBfK3t2j3QT3CEmFgjja
 
