@@ -5432,70 +5432,7 @@ export default function BodyshopRepairPage() {
                 <div className="brx-overview">
                   <div className="brx-overview-kv">
                     {[
-                      ['Job Card', (() => {
-                        const jcDoc = bodyshopDocsByKey['doc_job_card'] || bodyshopDocsByKey['job_card']
-                        return (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                            <span>{selected.job_card_no || '—'}</span>
-                            {jcDoc?.drive_url ? (
-                              <a
-                                href={jcDoc.drive_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: '#15803d',
-                                  fontWeight: '700',
-                                  textDecoration: 'none',
-                                  fontSize: '11px',
-                                  backgroundColor: '#f0fdf4',
-                                  border: '1px solid #bbf7d0',
-                                  borderRadius: '4px',
-                                  padding: '2px 6px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '2px',
-                                }}
-                                title="Open Job Card on Google Drive"
-                              >
-                                📁 Drive ↗
-                              </a>
-                            ) : jcDoc?.storage_path ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleViewBodyshopDoc('doc_job_card')}
-                                  style={{
-                                    color: '#2563eb',
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '11px',
-                                    textDecoration: 'underline',
-                                    padding: 0,
-                                  }}
-                                >
-                                  👁️ View
-                                </button>
-                                <span
-                                  style={{
-                                    backgroundColor: '#fef3c7',
-                                    color: '#92400e',
-                                    border: '1px solid #fde68a',
-                                    padding: '1px 5px',
-                                    borderRadius: '3px',
-                                    fontSize: '10px',
-                                    fontWeight: '600',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                  title="Job card is automatically syncing to Google Drive in the background"
-                                >
-                                  ⏳ Syncing Drive...
-                                </span>
-                              </span>
-                            ) : null}
-                          </span>
-                        )
-                      })()],
+                      ['Job Card', selected.job_card_no || '—'],
                       ['Reg No.', selected.reg_number ?? '—'],
                       ['Customer', selected.customer_name ?? '—'],
                       ['Phone', selected.customer_phone ?? '—'],
@@ -5878,49 +5815,7 @@ export default function BodyshopRepairPage() {
                                           >
                                             👁️ View
                                           </button>
-                                          {jcDoc.drive_url ? (
-                                            <a
-                                              href={jcDoc.drive_url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="btn brx-doc-btn"
-                                              style={{
-                                                backgroundColor: '#f0fdf4',
-                                                color: '#15803d',
-                                                borderColor: '#bbf7d0',
-                                                padding: '6px 10px',
-                                                fontSize: '12px',
-                                                fontWeight: '700',
-                                                whiteSpace: 'nowrap',
-                                                textDecoration: 'none',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '3px',
-                                              }}
-                                              title="Open Job Card on Google Drive"
-                                            >
-                                              📁 Drive ↗
-                                            </a>
-                                          ) : jcDoc.storage_path ? (
-                                            <span
-                                              style={{
-                                                backgroundColor: '#fef3c7',
-                                                color: '#92400e',
-                                                border: '1px solid #fde68a',
-                                                padding: '5px 8px',
-                                                borderRadius: '4px',
-                                                fontSize: '11px',
-                                                fontWeight: '600',
-                                                whiteSpace: 'nowrap',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '3px',
-                                              }}
-                                              title="Job card is automatically syncing to Google Drive in the background"
-                                            >
-                                              ⏳ Auto-saving Drive...
-                                            </span>
-                                          ) : null}
+
                                           <button
                                             type="button"
                                             className="btn brx-doc-btn"
