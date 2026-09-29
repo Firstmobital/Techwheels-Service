@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -44,6 +45,7 @@ export default function StaffChatScreen() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const scroller = useRef<ScrollView | null>(null)
 
   const loadThreads = useCallback(async () => {
     const rows = await listStaffAdvisorChats()
@@ -97,6 +99,20 @@ export default function StaffChatScreen() {
     }, [loadThreads, openId, openThread, params.chat]),
   )
 
+  useEffect(() => {
+    scroller.current?.scrollToEnd({ animated: true })
+  }, [messages.length])
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setTimeout(() => {
+        scroller.current?.scrollToEnd({ animated: true })
+      }, 80)
+    })
+    return () => showSub.remove()
+  }, [])
+
   const selected = threads.find((row) => row.id === openId) || null
 
   async function onSend() {
@@ -118,7 +134,11 @@ export default function StaffChatScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
           <TouchableOpacity
             accessibilityRole="button"
@@ -153,7 +173,14 @@ export default function StaffChatScreen() {
           </View>
         ) : openId && selected ? (
           <>
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 10 }}>
+            <ScrollView
+              ref={scroller}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
+              onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+            >
               {messages.map((message) => {
                 const mine = message.author_side === 'staff'
                 return (
@@ -174,7 +201,9 @@ export default function StaffChatScreen() {
                 value={draft}
                 onChangeText={setDraft}
                 placeholder="Message"
-                style={{ flex: 1, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 }}
+                multiline
+                maxLength={2000}
+                style={{ flex: 1, minHeight: 42, maxHeight: 110, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 }}
               />
               <TouchableOpacity onPress={() => void onSend()} disabled={sending || !draft.trim()} style={{ backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center', opacity: sending || !draft.trim() ? 0.5 : 1 }}>
                 <Text style={{ color: '#fff', fontWeight: '800' }}>Send</Text>
@@ -182,7 +211,7 @@ export default function StaffChatScreen() {
             </View>
           </>
         ) : (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 8 }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 8 }} keyboardShouldPersistTaps="handled">
             {threads.length === 0 ? (
               <Text style={{ color: '#64748b', textAlign: 'center', marginTop: 32 }}>No chats yet.</Text>
             ) : threads.map((row) => (
