@@ -65,6 +65,8 @@ const BODYSHOP_DOC_KEYS = new Set([
   'doc_tp_affidavit',
   'doc_estimate',
   'doc_survey_approval',
+  'doc_job_card',
+  'job_card',
 ])
 
 // Techwheels canonical Drive root: all registration subfolders must be created only under this folder.

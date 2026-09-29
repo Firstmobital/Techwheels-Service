@@ -62,7 +62,17 @@ export default function CustomerDocumentsScreen() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const { isMechanical, isBodyshop, repairCard, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
+  const {
+    isMechanical,
+    isBodyshop,
+    repairCard,
+    mechCase,
+    ready: visitReady,
+    refresh: refreshVisit,
+    job,
+    customerType,
+    setCustomerType,
+  } = useCustomerVisit()
   const [freshRepairCard, setFreshRepairCard] = useState<Record<string, unknown> | null>(null)
 
   const selected = useMemo(() => {
@@ -78,22 +88,17 @@ export default function CustomerDocumentsScreen() {
     !repairCard &&
     !isBodyshop
 
-  const [overrideCustomerType, setOverrideCustomerType] = useState<string | null>(null)
   const [updatingType, setUpdatingType] = useState(false)
 
-  const baseCard = freshRepairCard || repairCard
-  const activeCustomerType = (
-    overrideCustomerType ??
-    String(baseCard?.customer_type || '').trim().toLowerCase()
-  ) || 'individual'
+  const activeCustomerType = customerType || 'individual'
 
   const effectiveRepairCard = useMemo(() => {
-    if (!baseCard && !overrideCustomerType) return baseCard
+    const base = freshRepairCard || repairCard
     return {
-      ...(baseCard || {}),
+      ...(base || {}),
       customer_type: activeCustomerType,
     }
-  }, [baseCard, activeCustomerType])
+  }, [freshRepairCard, repairCard, activeCustomerType])
 
   const claimMode = claimModeFromRepairCard(effectiveRepairCard)
   const ownershipType = ownershipFromRepairCard(effectiveRepairCard)
@@ -106,13 +111,9 @@ export default function CustomerDocumentsScreen() {
 
   const handleSelectCustomerType = async (newType: string) => {
     if (newType === activeCustomerType || updatingType) return
-    setOverrideCustomerType(newType)
     setUpdatingType(true)
     try {
-      if (token && selectedReg) {
-        const cardId = Number(repairCard?.id) || undefined
-        await customerSetCustomerType(token, selectedReg, newType, cardId)
-      }
+      await setCustomerType(newType)
     } catch (err) {
       console.warn('Failed to update customer type:', err)
     } finally {
@@ -131,7 +132,7 @@ export default function CustomerDocumentsScreen() {
 
   const submittedCount = requiredSlots.filter((slot) => {
     const row = byKey.get(slot.docKey)
-    return Boolean(row && String(row.drive_url || '').trim() && !row.drive_pending)
+    return Boolean(row && (String(row.drive_url || '').trim() || String(row.view_url || '').trim()))
   }).length
   const progressPercent = requiredSlots.length
     ? Math.round((submittedCount / requiredSlots.length) * 100)
@@ -176,8 +177,8 @@ export default function CustomerDocumentsScreen() {
           const fresh = await fetchCustomerDocuments(token, selectedReg)
           applySnapshot(fresh)
         }
-      } catch {
-        setDocuments([])
+      } catch (err) {
+        console.warn('Customer documents load failed, retaining current state:', err)
       } finally {
         setLoading(false)
         setRefreshing(false)
