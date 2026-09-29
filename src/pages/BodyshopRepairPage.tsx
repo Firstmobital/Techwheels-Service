@@ -5898,14 +5898,14 @@ export default function BodyshopRepairPage() {
                                           {checked ? '✅ Approved' : rejected ? '✕ Rejected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
                                         </div>
                                       </div>
-                                      <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                       <div className="brx-doc-actions">
                                         {checked ? (
                                           attachedDoc ? (
-                                            <>
+                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                                               <button
                                                 type="button"
                                                 className="btn brx-doc-btn"
-                                                style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
+                                                style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
                                                 onClick={() => void handleViewBodyshopDoc(k)}
                                               >
                                                 👁️ View
@@ -5913,14 +5913,14 @@ export default function BodyshopRepairPage() {
                                               <button
                                                 type="button"
                                                 className="btn brx-doc-btn"
-                                                style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }}
+                                                style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
                                                 onClick={() => startBodyshopDocUpload(k, 'replace')}
                                                 disabled={busy}
                                                 title="Reupload or replace this document"
                                               >
                                                 {busy ? 'Uploading…' : '🔄 Reupload'}
                                               </button>
-                                            </>
+                                            </div>
                                           ) : (
                                             <button
                                               type="button"
@@ -5932,46 +5932,50 @@ export default function BodyshopRepairPage() {
                                             </button>
                                           )
                                         ) : attachedDoc ? (
-                                          <>
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
-                                              onClick={() => void handleViewBodyshopDoc(k)}
-                                            >
-                                              👁️ View
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }}
-                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
-                                              disabled={busy}
-                                              title="Reupload or replace this document"
-                                            >
-                                              {busy ? 'Uploading…' : '🔄 Reupload'}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              style={{ backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}
-                                              onClick={() => approveDoc(k)}
-                                              title="Approve this document"
-                                              disabled={busy}
-                                            >
-                                              ✓ Approve
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
-                                              onClick={() => rejectDoc(k)}
-                                              title="Reject this document"
-                                              disabled={busy}
-                                            >
-                                              ✕ Reject
-                                            </button>
-                                          </>
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                              <button
+                                                type="button"
+                                                className="btn brx-doc-btn"
+                                                style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
+                                                onClick={() => void handleViewBodyshopDoc(k)}
+                                              >
+                                                👁️ View
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btn brx-doc-btn"
+                                                style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
+                                                onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                                disabled={busy}
+                                                title="Reupload or replace this document"
+                                              >
+                                                {busy ? 'Uploading…' : '🔄 Reupload'}
+                                              </button>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                              <button
+                                                type="button"
+                                                className="btn brx-doc-btn"
+                                                style={{ backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
+                                                onClick={() => approveDoc(k)}
+                                                title="Approve this document"
+                                                disabled={busy}
+                                              >
+                                                ✓ Approve
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btn brx-doc-btn"
+                                                style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
+                                                onClick={() => rejectDoc(k)}
+                                                title="Reject this document"
+                                                disabled={busy}
+                                              >
+                                                ✕ Reject
+                                              </button>
+                                            </div>
+                                          </div>
                                         ) : (
                                           <button
                                             type="button"
