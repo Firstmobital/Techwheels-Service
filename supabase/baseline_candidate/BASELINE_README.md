@@ -1,6 +1,6 @@
 # Baseline Candidate — Pre-Cutover
 
-**Status:** CANDIDATE — Real executable SQL. Requires local recreate test + user authorization before promotion.
+**Status:** PRE-CUTOVER-VERIFIED — Supabase-compatible recreate PASS (2026-09-29). Awaiting cutover authorization.
 
 **Generated:** 2026-09-29
 **Source:** `supabase/backups/full_metadata.sql` + pg_dump --schema=public (PostgreSQL 17.6)
@@ -63,17 +63,25 @@ Verified: 877 rows, last id = 877, sequence setval included, no hardcoded creden
 
 ## Local Recreate Status
 
-**BLOCKED** — Docker daemon unresponsive due to containerd metadata.db corruption from prior disk-full event.
-`docker system prune --volumes` was attempted but Docker daemon hung (bolt meta.db deadlock).
+**PASS — Supabase-compatible recreate verified 2026-09-29**
 
-**Requires user action:** Restart Docker Desktop from the macOS menu bar → Docker icon → Restart.
-After restart:
-1. Run `docker system prune --volumes --force` to clear corrupted layers
-2. Re-pull Supabase images: `supabase start` (requires ~5GB free disk space; currently 5.1Gi available)
-3. Apply baseline: `psql -h localhost -p 54322 -U postgres -d postgres -f 20260929152000_production_schema_baseline.sql`
-4. Verify object counts: 164 tables, 408 functions, 10 views, 4 enums, 118+ triggers, 483+ policies
-5. Apply seed: `psql -h localhost -p 54322 -U postgres -d postgres -f seed_settings_service_parts_pricing.sql`
-6. Verify: `SELECT count(*) FROM public.settings_service_parts_pricing;` → expect 877
+- **Environment:** Supabase CLI v2.101.0, Docker Desktop 4.49.0, PostgreSQL 17.6 (aarch64)
+- **Method:** Clean `supabase start` (migrations dir moved aside), applied as `supabase_admin` with `ON_ERROR_STOP=1`
+- **BASELINE_SQL_ERRORS:** 0 (PSQL_EXIT:0, fail-closed)
+- **Source correction:** Line 78 changed `CREATE SCHEMA public;` → `CREATE SCHEMA IF NOT EXISTS public;` (Supabase pre-creates public schema; pg_dump artifact)
+- **Object counts verified:**
+  - Tables: 164 ✓ | Functions: 408 ✓ | Views: 10 ✓ | Enums: 4 ✓
+  - Public triggers: 118 ✓ | Auth trigger (on_auth_user_created): 1 ✓
+  - Policies (public): 483 ✓ | Storage.objects policies: 5 ✓
+- **Definition-level comparison vs full_metadata.sql:** UNEXPLAINED_APPLICATION_DIFFERENCE = 0
+  - Function names: 402 unique — exact match ✓
+  - View names: 10 — exact match ✓
+  - Enum names: 4 — exact match ✓
+  - Policy count: 483 — exact match ✓
+  - Table count: 164 — exact match ✓
+- **Seed:** 877 rows, min=1, max=877, duplicates=0, sequence=877 — PASS ✓
+- **Security scan:** No hardcoded credentials in baseline or seed ✓
+- **Production:** READ-ONLY, untouched; last production migration `20260929120000`, baseline `20260929152000` not in production history ✓
 
 ## Cutover Authorization Required
 
