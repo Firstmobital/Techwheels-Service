@@ -114,6 +114,8 @@ const DOC_LABELS: Record<string, string> = {
   doc_estimate: 'Estimate',
   doc_survey_approval: 'Survey approval',
   doc_tp_affidavit: 'T/P Affidavit (PDF)',
+  doc_job_card: 'Job Card',
+  job_card: 'Job Card',
 }
 
 type StatusFilter = 'all' | 'pending' | 'partial' | 'not_received' | 'received'

@@ -899,6 +899,7 @@ type BodyshopDocKey =
   | 'doc_estimate'
   | 'doc_survey_approval'
   | 'doc_job_card'
+  | 'job_card'
 
 type BodyshopRepairCardDocumentRow = {
   id: number
@@ -969,7 +970,7 @@ async function postUniversalDriveWithRetry(
   return { res, body }
 }
 
-const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card'>; label: string; mandatoryFor: CustomerType[] }[] = [
+const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card' | 'job_card'>; label: string; mandatoryFor: CustomerType[] }[] = [
   { k: 'doc_claim_form', label: 'Claim Form (PDF)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc', label: 'RC (Front)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc_back', label: 'RC (Back)', mandatoryFor: ['individual', 'firm'] },
@@ -986,8 +987,8 @@ const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_a
   { k: 'doc_tp_affidavit', label: 'T/P Affidavit (PDF)', mandatoryFor: [] },
 ]
 
-const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card'> => (
-  docKey !== 'doc_estimate' && docKey !== 'doc_survey_approval' && docKey !== 'doc_job_card'
+const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card' | 'job_card'> => (
+  docKey !== 'doc_estimate' && docKey !== 'doc_survey_approval' && docKey !== 'doc_job_card' && docKey !== 'job_card'
 )
 
 // ── component ──────────────────────────────────────────────────────────────────
@@ -1425,8 +1426,8 @@ export default function BodyshopRepairPage() {
       return
     }
 
-    void loadBodyshopDocuments(selected.id, selected.reception_entry_id)
-  }, [selected?.id, selected?.reception_entry_id])
+    void loadBodyshopDocuments(selected.id, selected.reception_entry_id, selected.reg_number)
+  }, [selected?.id, selected?.reception_entry_id, selected?.reg_number])
 
   useEffect(() => {
     if (!selected?.id || selected.current_stage !== 5 || autoAdvanceDocsLockRef.current) return
@@ -2942,7 +2943,7 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  async function loadBodyshopDocuments(repairCardId: number, receptionEntryId?: number | null) {
+  async function loadBodyshopDocuments(repairCardId: number, receptionEntryId?: number | null, regNumberHint?: string | null) {
     const { data, error } = await supabase
       .from('bodyshop_repair_card_documents')
       .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
@@ -2959,7 +2960,7 @@ export default function BodyshopRepairPage() {
     })
 
     const normalizedReceptionId = Number(receptionEntryId)
-    if ((data?.length ?? 0) === 0 && Number.isFinite(normalizedReceptionId) && normalizedReceptionId > 0) {
+    if (Number.isFinite(normalizedReceptionId) && normalizedReceptionId > 0) {
       const byReception = await supabase
         .from('bodyshop_repair_card_documents')
         .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
@@ -2972,12 +2973,18 @@ export default function BodyshopRepairPage() {
       }
     }
 
+    if (nextMap['job_card'] && !nextMap['doc_job_card']) {
+      nextMap['doc_job_card'] = nextMap['job_card']
+    } else if (nextMap['doc_job_card'] && !nextMap['job_card']) {
+      nextMap['job_card'] = nextMap['doc_job_card']
+    }
+
     setBodyshopDocsLoadError(null)
     setBodyshopDocsByKey(nextMap)
 
     const loadedDocs = Object.values(nextMap).filter((d): d is BodyshopRepairCardDocumentRow => Boolean(d && d.id && d.storage_path && !d.drive_url))
     if (loadedDocs.length > 0) {
-      const regHint = String(selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+      const regHint = String(regNumberHint || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
       triggerDirectDriveSync(loadedDocs, regHint)
     }
   }
@@ -3264,9 +3271,10 @@ export default function BodyshopRepairPage() {
   async function autoSyncBodyshopDocToDriveDirect(docRow: BodyshopRepairCardDocumentRow, regNoHint?: string): Promise<boolean> {
     const docKey = docRow.doc_key
     if (!docRow.id || !docRow.storage_path || docRow.drive_url) return true
-    if (autoSyncingDocKeysRef.current.has(docKey)) return false
+    const syncKey = `${docRow.id}_${docKey}`
+    if (autoSyncingDocKeysRef.current.has(syncKey)) return false
 
-    autoSyncingDocKeysRef.current.add(docKey)
+    autoSyncingDocKeysRef.current.add(syncKey)
     try {
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       const sessionRes = await supabase.auth.getSession()
@@ -3301,6 +3309,22 @@ export default function BodyshopRepairPage() {
             drive_url: driveUrl,
             drive_file_id: driveFileId,
           },
+          ...(docKey === 'doc_job_card' ? {
+            job_card: {
+              ...docRow,
+              reg_number: regNo || docRow.reg_number,
+              drive_url: driveUrl,
+              drive_file_id: driveFileId,
+            }
+          } : {}),
+          ...(docKey === 'job_card' ? {
+            doc_job_card: {
+              ...docRow,
+              reg_number: regNo || docRow.reg_number,
+              drive_url: driveUrl,
+              drive_file_id: driveFileId,
+            }
+          } : {})
         }))
 
         await supabase
@@ -3320,7 +3344,7 @@ export default function BodyshopRepairPage() {
       console.warn(`[BodyshopDocs] Auto-sync to Drive error for ${docKey}:`, (e as Error)?.message)
       return false
     } finally {
-      autoSyncingDocKeysRef.current.delete(docKey)
+      autoSyncingDocKeysRef.current.delete(syncKey)
     }
   }
 
@@ -3330,6 +3354,57 @@ export default function BodyshopRepairPage() {
       void autoSyncBodyshopDocToDriveDirect(doc, regNoHint)
     }
   }
+
+  // Auto-sync any previously uploaded job cards in Supabase that are missing Drive links
+  useEffect(() => {
+    if (!userScopeResolved) return
+    let cancelled = false
+
+    const backfillJobCardsToDrive = async () => {
+      try {
+        const { data: unsyncedJobDocs, error: queryErr } = await supabase
+          .from('bodyshop_repair_card_documents')
+          .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
+          .in('doc_key', ['doc_job_card', 'job_card'])
+          .is('drive_url', null)
+          .not('storage_path', 'is', null)
+          .limit(100)
+
+        if (cancelled || queryErr || !unsyncedJobDocs || unsyncedJobDocs.length === 0) return
+
+        console.log(`[BodyshopSA] Found ${unsyncedJobDocs.length} unsynced job cards in Supabase. Syncing to Google Drive...`)
+
+        for (const doc of unsyncedJobDocs as BodyshopRepairCardDocumentRow[]) {
+          if (cancelled) break
+          let regNo = String(doc.reg_number ?? '').trim().toUpperCase()
+          if (!regNo && doc.repair_card_id) {
+            const { data: card } = await supabase
+              .from('bodyshop_repair_cards')
+              .select('reg_number')
+              .eq('id', doc.repair_card_id)
+              .maybeSingle()
+            regNo = String(card?.reg_number ?? '').trim().toUpperCase()
+          }
+          if (!regNo && doc.reception_entry_id) {
+            const { data: rec } = await supabase
+              .from('service_reception_entries')
+              .select('reg_number')
+              .eq('id', doc.reception_entry_id)
+              .maybeSingle()
+            regNo = String(rec?.reg_number ?? '').trim().toUpperCase()
+          }
+          await autoSyncBodyshopDocToDriveDirect(doc, regNo)
+        }
+      } catch (err) {
+        console.warn('[BodyshopSA] Backfill job cards to Drive error:', err)
+      }
+    }
+
+    void backfillJobCardsToDrive()
+    return () => {
+      cancelled = true
+    }
+  }, [userScopeResolved])
 
   const PAIR_DOC_NAMES: Record<string, { frontKey: BodyshopDocKey; backKey: BodyshopDocKey; name: string }> = {
     doc_aadhaar: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
@@ -3550,7 +3625,7 @@ export default function BodyshopRepairPage() {
       }
     }
 
-    const row = bodyshopDocsByKey[docKey]
+    const row = bodyshopDocsByKey[docKey] || (docKey === 'doc_job_card' ? bodyshopDocsByKey['job_card'] : null) || (docKey === 'job_card' ? bodyshopDocsByKey['doc_job_card'] : null)
     if (!row) {
       toast_('No uploaded file found for this document', false)
       return
@@ -5326,7 +5401,53 @@ export default function BodyshopRepairPage() {
                 <div className="brx-overview">
                   <div className="brx-overview-kv">
                     {[
-                      ['Job Card', selected.job_card_no],
+                      ['Job Card', (() => {
+                        const jcDoc = bodyshopDocsByKey['doc_job_card'] || bodyshopDocsByKey['job_card']
+                        return (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                            <span>{selected.job_card_no || '—'}</span>
+                            {jcDoc?.drive_url ? (
+                              <a
+                                href={jcDoc.drive_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: '#15803d',
+                                  fontWeight: '700',
+                                  textDecoration: 'none',
+                                  fontSize: '11px',
+                                  backgroundColor: '#f0fdf4',
+                                  border: '1px solid #bbf7d0',
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                }}
+                                title="Open Job Card on Google Drive"
+                              >
+                                📁 Drive ↗
+                              </a>
+                            ) : jcDoc?.storage_path ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleViewBodyshopDoc('doc_job_card')}
+                                style={{
+                                  color: '#2563eb',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontSize: '11px',
+                                  textDecoration: 'underline',
+                                  padding: 0,
+                                }}
+                              >
+                                👁️ View
+                              </button>
+                            ) : null}
+                          </span>
+                        )
+                      })()],
                       ['Reg No.', selected.reg_number ?? '—'],
                       ['Customer', selected.customer_name ?? '—'],
                       ['Phone', selected.customer_phone ?? '—'],
@@ -5334,8 +5455,8 @@ export default function BodyshopRepairPage() {
                       ['SA', selected.sa_name ?? '—'],
                       ['Received', fmt(selected.received_at)],
                       ['Status', selected.overall_status],
-                    ].map(([l, v]) => (
-                      <div key={l} className="brx-overview-kv-item">
+                    ].map(([l, v], idx) => (
+                      <div key={idx} className="brx-overview-kv-item">
                         <div className="brx-overview-k">{l}</div>
                         <div className="brx-overview-v">{v}</div>
                       </div>
@@ -5682,7 +5803,7 @@ export default function BodyshopRepairPage() {
                             <div className="brx-sa-grid-3">
                               <div className="brx-sa-box">
                                 <div className="brx-sa-box-k">Job Card</div>
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                   <input
                                     className="inp"
                                     type="text"
@@ -5693,42 +5814,97 @@ export default function BodyshopRepairPage() {
                                     }}
                                     placeholder="Enter Job Card"
                                     autoComplete="off"
-                                    style={{ flex: 1 }}
+                                    style={{ flex: 1, minWidth: '130px' }}
                                   />
-                                  {bodyshopDocsByKey['doc_job_card'] ? (
-                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                  {(() => {
+                                    const jcDoc = bodyshopDocsByKey['doc_job_card'] || bodyshopDocsByKey['job_card']
+                                    if (jcDoc) {
+                                      return (
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                          <button
+                                            type="button"
+                                            className="btn brx-doc-btn"
+                                            style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '6px 10px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
+                                            onClick={() => void handleViewBodyshopDoc('doc_job_card')}
+                                            title="View uploaded Job Card"
+                                          >
+                                            👁️ View
+                                          </button>
+                                          {jcDoc.drive_url ? (
+                                            <a
+                                              href={jcDoc.drive_url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="btn brx-doc-btn"
+                                              style={{
+                                                backgroundColor: '#f0fdf4',
+                                                color: '#15803d',
+                                                borderColor: '#bbf7d0',
+                                                padding: '6px 10px',
+                                                fontSize: '12px',
+                                                fontWeight: '700',
+                                                whiteSpace: 'nowrap',
+                                                textDecoration: 'none',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px',
+                                              }}
+                                              title="Open Job Card on Google Drive"
+                                            >
+                                              📁 Drive ↗
+                                            </a>
+                                          ) : jcDoc.storage_path ? (
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
+                                              style={{
+                                                backgroundColor: '#fffbeb',
+                                                color: '#b45309',
+                                                borderColor: '#fde68a',
+                                                padding: '6px 10px',
+                                                fontSize: '12px',
+                                                fontWeight: '700',
+                                                whiteSpace: 'nowrap',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px',
+                                              }}
+                                              onClick={() => {
+                                                const regNo = String(jcDoc.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+                                                toast_('Syncing Job Card to Google Drive...', true)
+                                                void autoSyncBodyshopDocToDriveDirect(jcDoc, regNo)
+                                              }}
+                                              title="Saved in Supabase. Click to save to Google Drive"
+                                            >
+                                              ☁️ Save to Drive
+                                            </button>
+                                          ) : null}
+                                          <button
+                                            type="button"
+                                            className="btn brx-doc-btn"
+                                            style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '6px 10px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
+                                            onClick={() => startBodyshopDocUpload('doc_job_card', 'replace')}
+                                            disabled={uploadingDocKey === 'doc_job_card' || uploadingDocKey === 'job_card'}
+                                            title="Reupload or replace Job Card file"
+                                          >
+                                            {uploadingDocKey === 'doc_job_card' || uploadingDocKey === 'job_card' ? 'Uploading…' : '🔄 Reupload'}
+                                          </button>
+                                        </div>
+                                      )
+                                    }
+                                    return (
                                       <button
                                         type="button"
-                                        className="btn brx-doc-btn"
-                                        style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '6px 10px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
-                                        onClick={() => void handleViewBodyshopDoc('doc_job_card')}
-                                        title="View uploaded Job Card"
+                                        className="btn btn--primary brx-doc-btn"
+                                        style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
+                                        onClick={() => startBodyshopDocUpload('doc_job_card', 'upload')}
+                                        disabled={uploadingDocKey === 'doc_job_card' || uploadingDocKey === 'job_card'}
+                                        title="Upload Job Card PDF or photo"
                                       >
-                                        👁️ View
+                                        {uploadingDocKey === 'doc_job_card' || uploadingDocKey === 'job_card' ? 'Uploading…' : '📤 Upload'}
                                       </button>
-                                      <button
-                                        type="button"
-                                        className="btn brx-doc-btn"
-                                        style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '6px 10px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
-                                        onClick={() => startBodyshopDocUpload('doc_job_card', 'replace')}
-                                        disabled={uploadingDocKey === 'doc_job_card'}
-                                        title="Reupload or replace Job Card file"
-                                      >
-                                        {uploadingDocKey === 'doc_job_card' ? 'Uploading…' : '🔄 Reupload'}
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="btn btn--primary brx-doc-btn"
-                                      style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}
-                                      onClick={() => startBodyshopDocUpload('doc_job_card', 'upload')}
-                                      disabled={uploadingDocKey === 'doc_job_card'}
-                                      title="Upload Job Card PDF or photo"
-                                    >
-                                      {uploadingDocKey === 'doc_job_card' ? 'Uploading…' : '📤 Upload'}
-                                    </button>
-                                  )}
+                                    )
+                                  })()}
                                 </div>
                               </div>
                               {[
