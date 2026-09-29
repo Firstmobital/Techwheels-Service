@@ -63,6 +63,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true)
+    let resolved = false
     try {
       const ctx = await customerGetVisitContext(token, selectedReg)
       if (seq !== loadSeq.current) return 'other'
@@ -74,6 +75,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
       setKind(resolvedKind)
       setMechCase((ctx.mechanical_case as MechanicalCasePayload | null) ?? null)
       setRepairCard(card)
+      resolved = true
       return resolvedKind
     } catch {
       if (seq !== loadSeq.current) return 'other'
@@ -85,7 +87,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     } finally {
       if (seq === loadSeq.current) {
         setLoading(false)
-        setReady(true)
+        if (resolved) setReady(true)
       }
     }
   }, [token, selectedReg])

@@ -24,7 +24,7 @@ export function isDriveDocumentComplete(
 ): boolean {
   if (!driveDocuments?.length) return false
   const row = driveDocuments.find((d) => String(d.doc_key || '').trim() === docKey)
-  return Boolean(row && (String(row.drive_url || '').trim() || String(row.view_url || '').trim()))
+  return Boolean(row && String(row.drive_url || '').trim())
 }
 
 export function isClaimDocComplete(

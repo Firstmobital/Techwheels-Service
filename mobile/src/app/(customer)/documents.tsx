@@ -47,7 +47,6 @@ function isImageName(name?: string | null, contentType?: string | null) {
 
 export default function CustomerDocumentsScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
-  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
   const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>([])
   const [estimates, setEstimates] = useState<EstimateView[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +55,7 @@ export default function CustomerDocumentsScreen() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const { isMechanical, isBodyshop, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
+  const { isMechanical, isBodyshop, repairCard, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
 
   const selected = useMemo(() => {
     const norm = (selectedReg || '').trim().toUpperCase()
@@ -99,7 +98,6 @@ export default function CustomerDocumentsScreen() {
 
   const applySnapshot = useCallback(
     (snapshot: { repairCard: Record<string, unknown> | null; documents: CustomerBodyshopAsset[] }) => {
-      setRepairCard(snapshot.repairCard)
       setDocuments(snapshot.documents)
     },
     []
@@ -108,7 +106,6 @@ export default function CustomerDocumentsScreen() {
   const load = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
       if (!token || !selectedReg) {
-        setRepairCard(null)
         setDocuments([])
         setEstimates([])
         setLoading(false)
@@ -129,15 +126,13 @@ export default function CustomerDocumentsScreen() {
         ])
         setEstimates((estList || []).map(parseEstimate))
         const currentServiceType = String(job?.service_type || selected?.service_type || '')
-        if (activeKind === 'mechanical' || isMechanical || isMechanicalServiceType(currentServiceType)) {
-          setRepairCard(null)
+        if (activeKind === 'mechanical' || isMechanicalServiceType(currentServiceType)) {
           setDocuments([])
         } else {
           const fresh = await fetchCustomerDocuments(token, selectedReg)
           applySnapshot(fresh)
         }
       } catch {
-        setRepairCard(null)
         setDocuments([])
       } finally {
         setLoading(false)
@@ -215,7 +210,11 @@ export default function CustomerDocumentsScreen() {
         contentType,
       })
       await load('refresh')
-      setNotice(`${slot.title} uploaded successfully. Waiting for the advisor to approve it.`)
+      setNotice(
+        result.drivePending
+          ? `${slot.title} uploaded. Syncing to Drive — your advisor will be notified once complete.`
+          : `${slot.title} uploaded successfully. Waiting for the advisor to approve it.`
+      )
     } catch (error) {
       Alert.alert('Upload failed', error instanceof Error ? error.message : 'Unable to upload this document.')
     } finally {

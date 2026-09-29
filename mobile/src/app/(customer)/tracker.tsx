@@ -249,7 +249,7 @@ export default function CustomerTrackerScreen() {
     })
   }, [selectedBodyshopStage, card, job?.jc_number, selected?.jc_number, advisor, techInfo])
 
-  const isAccident = isBodyshop || Boolean(card)
+  const isAccident = isBodyshop
   const isEffectiveMechanical = !isAccident && isMechanicalVisit
 
   // Same pointer as workshop web: bodyshop_repair_cards.current_stage

@@ -113,23 +113,13 @@ export default function CustomerInvoicesScreen() {
         reference: 'Accounts Desk Clearance',
       }] : [])
 
-  const isAccidentalCase = Boolean(
-    payment?.is_insurance_claim ||
-    payment?.is_bodyshop ||
-    String(payment?.service_type || '').toLowerCase().includes('accident') ||
-    String(payment?.service_type || '').toLowerCase().includes('bodyshop') ||
-    String(selected?.service_type || '').toLowerCase().includes('accident') ||
-    String(selected?.service_type || '').toLowerCase().includes('bodyshop') ||
-    Boolean(payment?.insurance_company) ||
-    Number(payment?.do_amount ?? 0) > 0
-  )
   const insuranceCompany = payment?.insurance_company ? String(payment.insurance_company) : null
   const insurancePolicyNo = payment?.insurance_policy_no ? String(payment.insurance_policy_no) : null
   const claimIntimationNo = payment?.claim_intimation_no ? String(payment.claim_intimation_no) : null
   const billedTotal = Number(payment?.total_billed ?? pay.billed ?? 0)
   const doAmount = Number(payment?.do_amount ?? 0)
   const doRemaining = Number(payment?.do_remaining ?? doAmount)
-  const isCashAccident = isAccidentalCase && doAmount === 0 && !insuranceCompany
+  const isCashAccident = isBodyshop && doAmount === 0 && !insuranceCompany
   const customerDiff = Number(payment?.customer_diff_amount ?? (doAmount > 0 ? Math.max(0, billedTotal - doAmount) : billedTotal))
   const customerReceived = Number(payment?.customer_posted_amount ?? pay.received ?? 0)
   const customerRemaining = Number(payment?.customer_remaining_amount ?? Math.max(0, customerDiff - customerReceived))
@@ -149,9 +139,9 @@ export default function CustomerInvoicesScreen() {
         invoiceNo: effectiveInvoiceNo || undefined,
         invoiceDate: effectiveInvoiceDate || undefined,
         billedAmount: billedTotal || (pay.billed ?? 0),
-        receivedAmount: isAccidentalCase ? (customerReceived + Math.max(0, doAmount - doRemaining)) : (pay.received ?? 0),
-        remainingAmount: isAccidentalCase ? (doRemaining + customerRemaining) : (pay.remaining ?? 0),
-        isBodyshop: isAccidentalCase,
+        receivedAmount: isBodyshop ? (customerReceived + Math.max(0, doAmount - doRemaining)) : (pay.received ?? 0),
+        remainingAmount: isBodyshop ? (doRemaining + customerRemaining) : (pay.remaining ?? 0),
+        isBodyshop: isBodyshop,
         insuranceCompany: insuranceCompany || undefined,
         doAmount: doAmount,
         doRemaining: doRemaining,
@@ -187,7 +177,7 @@ export default function CustomerInvoicesScreen() {
         <ActivityIndicator color="#2563eb" />
       ) : (
         <>
-          {visitReady && isMechanicalVisit && !isBodyshop && !repairCard ? (
+          {visitReady && isMechanicalVisit && !isBodyshop ? (
             mechCase ? (
               <MechanicalInvoicesContent
                 mechCase={mechCase}
@@ -197,12 +187,12 @@ export default function CustomerInvoicesScreen() {
               <CustomerCard>
                 <Text className="text-slate-800 font-bold">Service billing</Text>
                 <Text className="text-slate-600 text-[12px] mt-2 leading-5">
-                  Billing details will appear after the workshop database update is applied (`customer_get_mechanical_case`).
+                  Billing details will appear once your job card is updated in the system.
                 </Text>
               </CustomerCard>
             )
           ) : null}
-          {!isMechanicalVisit && isAccidentalCase ? (
+          {isBodyshop ? (
             /* ── DEDICATED BODYSHOP & INSURANCE CLAIM SETTLEMENT CARD ── */
             <CustomerCard>
               <View className="flex-row items-start justify-between mb-3">
