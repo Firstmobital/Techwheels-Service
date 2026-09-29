@@ -3210,6 +3210,22 @@ export default function BodyshopRepairPage() {
             drive_url: driveUrl,
             drive_file_id: driveFileId,
           },
+          ...(docKey === 'doc_job_card' ? {
+            job_card: {
+              ...row,
+              reg_number: regNo,
+              drive_url: driveUrl,
+              drive_file_id: driveFileId,
+            }
+          } : {}),
+          ...(docKey === 'job_card' ? {
+            doc_job_card: {
+              ...row,
+              reg_number: regNo,
+              drive_url: driveUrl,
+              drive_file_id: driveFileId,
+            }
+          } : {}),
         }))
         await supabase
           .from('bodyshop_repair_card_documents')
@@ -3355,45 +3371,55 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  // Auto-sync any previously uploaded job cards in Supabase that are missing Drive links
+  // Automatically sync all previously uploaded job cards from Supabase to Google Drive in the background
   useEffect(() => {
     if (!userScopeResolved) return
     let cancelled = false
 
     const backfillJobCardsToDrive = async () => {
       try {
-        const { data: unsyncedJobDocs, error: queryErr } = await supabase
-          .from('bodyshop_repair_card_documents')
-          .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
-          .in('doc_key', ['doc_job_card', 'job_card'])
-          .is('drive_url', null)
-          .not('storage_path', 'is', null)
-          .limit(100)
+        let hasMore = true
+        while (hasMore && !cancelled) {
+          const { data: unsyncedJobDocs, error: queryErr } = await supabase
+            .from('bodyshop_repair_card_documents')
+            .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
+            .in('doc_key', ['doc_job_card', 'job_card'])
+            .is('drive_url', null)
+            .not('storage_path', 'is', null)
+            .limit(50)
 
-        if (cancelled || queryErr || !unsyncedJobDocs || unsyncedJobDocs.length === 0) return
-
-        console.log(`[BodyshopSA] Found ${unsyncedJobDocs.length} unsynced job cards in Supabase. Syncing to Google Drive...`)
-
-        for (const doc of unsyncedJobDocs as BodyshopRepairCardDocumentRow[]) {
-          if (cancelled) break
-          let regNo = String(doc.reg_number ?? '').trim().toUpperCase()
-          if (!regNo && doc.repair_card_id) {
-            const { data: card } = await supabase
-              .from('bodyshop_repair_cards')
-              .select('reg_number')
-              .eq('id', doc.repair_card_id)
-              .maybeSingle()
-            regNo = String(card?.reg_number ?? '').trim().toUpperCase()
+          if (cancelled || queryErr || !unsyncedJobDocs || unsyncedJobDocs.length === 0) {
+            hasMore = false
+            break
           }
-          if (!regNo && doc.reception_entry_id) {
-            const { data: rec } = await supabase
-              .from('service_reception_entries')
-              .select('reg_number')
-              .eq('id', doc.reception_entry_id)
-              .maybeSingle()
-            regNo = String(rec?.reg_number ?? '').trim().toUpperCase()
+
+          console.log(`[BodyshopSA] Auto-syncing ${unsyncedJobDocs.length} unsynced job cards to Google Drive in background...`)
+
+          for (const doc of unsyncedJobDocs as BodyshopRepairCardDocumentRow[]) {
+            if (cancelled) break
+            let regNo = String(doc.reg_number ?? '').trim().toUpperCase()
+            if (!regNo && doc.repair_card_id) {
+              const { data: card } = await supabase
+                .from('bodyshop_repair_cards')
+                .select('reg_number')
+                .eq('id', doc.repair_card_id)
+                .maybeSingle()
+              regNo = String(card?.reg_number ?? '').trim().toUpperCase()
+            }
+            if (!regNo && doc.reception_entry_id) {
+              const { data: rec } = await supabase
+                .from('service_reception_entries')
+                .select('reg_number')
+                .eq('id', doc.reception_entry_id)
+                .maybeSingle()
+              regNo = String(rec?.reg_number ?? '').trim().toUpperCase()
+            }
+            await autoSyncBodyshopDocToDriveDirect(doc, regNo)
           }
-          await autoSyncBodyshopDocToDriveDirect(doc, regNo)
+
+          if (unsyncedJobDocs.length < 50) {
+            hasMore = false
+          }
         }
       } catch (err) {
         console.warn('[BodyshopSA] Backfill job cards to Drive error:', err)
@@ -3401,8 +3427,13 @@ export default function BodyshopRepairPage() {
     }
 
     void backfillJobCardsToDrive()
+    const intervalId = setInterval(() => {
+      void backfillJobCardsToDrive()
+    }, 45000)
+
     return () => {
       cancelled = true
+      clearInterval(intervalId)
     }
   }, [userScopeResolved])
 
@@ -5429,21 +5460,38 @@ export default function BodyshopRepairPage() {
                                 📁 Drive ↗
                               </a>
                             ) : jcDoc?.storage_path ? (
-                              <button
-                                type="button"
-                                onClick={() => void handleViewBodyshopDoc('doc_job_card')}
-                                style={{
-                                  color: '#2563eb',
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontSize: '11px',
-                                  textDecoration: 'underline',
-                                  padding: 0,
-                                }}
-                              >
-                                👁️ View
-                              </button>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleViewBodyshopDoc('doc_job_card')}
+                                  style={{
+                                    color: '#2563eb',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '11px',
+                                    textDecoration: 'underline',
+                                    padding: 0,
+                                  }}
+                                >
+                                  👁️ View
+                                </button>
+                                <span
+                                  style={{
+                                    backgroundColor: '#fef3c7',
+                                    color: '#92400e',
+                                    border: '1px solid #fde68a',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                    fontSize: '10px',
+                                    fontWeight: '600',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title="Job card is automatically syncing to Google Drive in the background"
+                                >
+                                  ⏳ Syncing Drive...
+                                </span>
+                              </span>
                             ) : null}
                           </span>
                         )
@@ -5854,30 +5902,24 @@ export default function BodyshopRepairPage() {
                                               📁 Drive ↗
                                             </a>
                                           ) : jcDoc.storage_path ? (
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
+                                            <span
                                               style={{
-                                                backgroundColor: '#fffbeb',
-                                                color: '#b45309',
-                                                borderColor: '#fde68a',
-                                                padding: '6px 10px',
-                                                fontSize: '12px',
-                                                fontWeight: '700',
+                                                backgroundColor: '#fef3c7',
+                                                color: '#92400e',
+                                                border: '1px solid #fde68a',
+                                                padding: '5px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '11px',
+                                                fontWeight: '600',
                                                 whiteSpace: 'nowrap',
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
                                                 gap: '3px',
                                               }}
-                                              onClick={() => {
-                                                const regNo = String(jcDoc.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
-                                                toast_('Syncing Job Card to Google Drive...', true)
-                                                void autoSyncBodyshopDocToDriveDirect(jcDoc, regNo)
-                                              }}
-                                              title="Saved in Supabase. Click to save to Google Drive"
+                                              title="Job card is automatically syncing to Google Drive in the background"
                                             >
-                                              ☁️ Save to Drive
-                                            </button>
+                                              ⏳ Auto-saving Drive...
+                                            </span>
                                           ) : null}
                                           <button
                                             type="button"
