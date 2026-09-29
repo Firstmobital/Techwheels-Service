@@ -87,6 +87,7 @@ export interface RepairCard {
   doc_rejected_keys?: string[] | null
   doc_tp_affidavit?: boolean
   doc_survey_approval: boolean | null
+  doc_job_card?: boolean
   // survey
   survey_date: string | null
   survey_status: string | null

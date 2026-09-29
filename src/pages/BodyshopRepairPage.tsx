@@ -952,7 +952,7 @@ async function postUniversalDriveWithRetry(
   return { res, body }
 }
 
-const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'>; label: string; mandatoryFor: CustomerType[] }[] = [
+const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card'>; label: string; mandatoryFor: CustomerType[] }[] = [
   { k: 'doc_claim_form', label: 'Claim Form (PDF)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc', label: 'RC (Front)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc_back', label: 'RC (Back)', mandatoryFor: ['individual', 'firm'] },
