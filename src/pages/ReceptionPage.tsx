@@ -7,10 +7,12 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
+  getMyReceptionScope,
   getReceptionRevisitContext,
   getReceptionUpdationContext,
   isFloorInchargeServiceType,
   listReceptionEntriesByDateRange,
+  normalizeReceptionLocation,
   searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
   lookupVehicleByRegNumber,
@@ -21,6 +23,7 @@ import {
   type ReceptionEntryPageCursor,
   type ReceptionRevisitContext,
   type ReceptionUpdationContext,
+  type ReceptionUserScope,
   type VehicleLookupResult,
   updateReceptionEntry,
 } from '../lib/api'
@@ -351,6 +354,8 @@ export default function ReceptionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
   const [employeeOptions, setEmployeeOptions] = useState<ReceptionEmployeeOption[]>([])
+  const [receptionScope, setReceptionScope] = useState<ReceptionUserScope | null>(null)
+  const [receptionScopeError, setReceptionScopeError] = useState<string | null>(null)
   const [modelOptions, setModelOptions] = useState<string[]>([...DEFAULT_MODEL_OPTIONS])
   const [canImport, setCanImport] = useState(false)
   const [canDelete, setCanDelete] = useState(false)
@@ -540,6 +545,18 @@ export default function ReceptionPage() {
     })
   }, [serviceTypeCounts])
 
+  const scopedEmployeeOptions = useMemo(() => {
+    if (receptionScope?.isAdmin) return employeeOptions
+    if (!receptionScope || receptionScope.isAdmin) return []
+
+    const scopeLocation = normalizeReceptionLocation(receptionScope.location)
+    if (!scopeLocation) return []
+
+    return employeeOptions.filter(
+      (employee) => normalizeReceptionLocation(employee.location) === scopeLocation,
+    )
+  }, [employeeOptions, receptionScope])
+
   const sortedEmployeeOptions = useMemo(() => {
     // Business rule (source of truth):
     // 1) Department: SERVICE (default for all reception entries).
@@ -554,13 +571,9 @@ export default function ReceptionPage() {
     // Tertiary: infer from model name
     const requiredFuelType = form.fuel_type || vehicleInfo?.vehicle_type || inferRequiredFuelTypeFromModel(form.model)
 
-    const values = employeeOptions.filter((employee) => {
+    const values = scopedEmployeeOptions.filter((employee) => {
       const employeeDepartment = normalizeDepartment(employee.department)
       if (employeeDepartment !== requiredDepartment) return false
-
-      // Only show Sitapura location SAs
-      const empLocation = String(employee.location ?? '').trim().toLowerCase()
-      if (empLocation !== 'sitapura') return false
 
       if (!useFuelFilter) return true
 
@@ -570,7 +583,7 @@ export default function ReceptionPage() {
 
     values.sort((a, b) => a.employee_name.localeCompare(b.employee_name))
     return values
-  }, [employeeOptions, form.model, form.fuel_type, form.service_type, vehicleInfo])
+  }, [scopedEmployeeOptions, form.model, form.fuel_type, form.service_type, vehicleInfo])
 
   const entryLookupById = useMemo(() => {
     const merged = [...entries, ...globalSearchEntries]
@@ -746,9 +759,10 @@ export default function ReceptionPage() {
     // Period preset probes removed: each fired a separate RLS scan on
     // service_reception_entries and contributed to 57014 on page load.
 
-    const [entriesRes, employeeRes, authRes] = await Promise.all([
+    const [entriesRes, employeeRes, scopeRes, authRes] = await Promise.all([
       listReceptionEntriesByDateRange(dateRange),
       listReceptionEmployees(),
+      getMyReceptionScope(),
       supabase.auth.getSession(),
     ])
 
@@ -761,6 +775,16 @@ export default function ReceptionPage() {
 
     if (!employeeRes.error) {
       setEmployeeOptions(employeeRes.data ?? [])
+    } else {
+      setEmployeeOptions([])
+    }
+
+    if (scopeRes.error || !scopeRes.data) {
+      setReceptionScope(null)
+      setReceptionScopeError(scopeRes.error ?? 'Reception setup could not be resolved.')
+    } else {
+      setReceptionScope(scopeRes.data)
+      setReceptionScopeError(null)
     }
 
     const userId = authRes.data.session?.user?.id
@@ -923,7 +947,7 @@ export default function ReceptionPage() {
 
     if (result.data.is_revisit && result.data.prior_entry?.sa_employee_code) {
       const priorCode = result.data.prior_entry.sa_employee_code.trim().toUpperCase()
-      const existsInMaster = employeeOptions.some(
+      const existsInMaster = scopedEmployeeOptions.some(
         (employee) => String(employee.employee_code ?? '').trim().toUpperCase() === priorCode,
       )
 
@@ -1037,7 +1061,7 @@ export default function ReceptionPage() {
         } else {
           const suggested = await suggestAdvisorForVehicle(
             info.vehicle_type,
-            employeeOptions,
+            scopedEmployeeOptions,
             entries,
           )
           if (suggested) {
@@ -1065,6 +1089,11 @@ export default function ReceptionPage() {
     event.preventDefault()
     setNotice(null)
     setError(null)
+
+    if (receptionScopeError || !receptionScope) {
+      setError(receptionScopeError ?? 'Reception setup is still loading. Please try again.')
+      return
+    }
 
     if (!form.reg_number.trim() || !form.model.trim() || !form.fuel_type.trim() || !form.sa_employee_code.trim() || !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
       setError('Please fill all required fields: Registration No, Model, Fuel Type (EV/PV), SA Name, Owner Name, Owner Phone, Source')
@@ -1161,7 +1190,7 @@ export default function ReceptionPage() {
   function startEdit(entry: ReceptionEntryRow) {
     const entryCode = String(entry.sa_employee_code ?? '').trim().toUpperCase()
     const byCode = entryCode
-      ? employeeOptions.find((employee) => String(employee.employee_code ?? '').trim().toUpperCase() === entryCode)
+      ? scopedEmployeeOptions.find((employee) => String(employee.employee_code ?? '').trim().toUpperCase() === entryCode)
       : undefined
 
     const entryNames = new Set([
@@ -1169,7 +1198,7 @@ export default function ReceptionPage() {
       normalizeName(entry.sa_display_name),
     ].filter(Boolean))
 
-    const byName = employeeOptions.find((employee) => entryNames.has(normalizeName(employee.employee_name)))
+    const byName = scopedEmployeeOptions.find((employee) => entryNames.has(normalizeName(employee.employee_name)))
 
     const resolvedEmployeeCode = byCode?.employee_code ?? byName?.employee_code ?? entryCode
 
@@ -1323,6 +1352,16 @@ export default function ReceptionPage() {
         )}
       </div>
 
+      {receptionScopeError && (
+        <div className="alert alert--err mb-gap" style={{ marginBottom: '0.5rem' }}>
+          {receptionScopeError}
+        </div>
+      )}
+      {!receptionScopeError && receptionScope && !receptionScope.isAdmin && (
+        <div className="alert alert--ok mb-gap" style={{ marginBottom: '0.5rem' }}>
+          Reception location scope: {receptionScope.location}
+        </div>
+      )}
       {error && <div className="alert alert--err mb-gap" style={{ marginBottom: '0.5rem' }}>{error}</div>}
       {notice && <div className="alert alert--ok mb-gap" style={{ marginBottom: '0.5rem' }}>{notice}</div>}
 
