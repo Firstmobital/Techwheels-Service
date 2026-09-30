@@ -1368,7 +1368,33 @@ export async function getMyReceptionScope(): Promise<ApiResult<ReceptionUserScop
   if (error) return fail(error)
 
   const linkedRows = (data ?? []) as LinkedEmployeeScopeRow[]
-  const receptionRows = linkedRows.filter((row) => isReceptionBusinessRole(row.role))
+  const linkedCodes = Array.from(
+    new Set(
+      linkedRows
+        .map((row) => String(row.employee_code ?? '').trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
+
+  if (linkedCodes.length === 0) {
+    return fail(
+      'Reception setup required: ask an administrator to create an active user-to-employee mapping for your login.',
+    )
+  }
+
+  // The shared scope RPC does not expose employee_master.is_active.
+  // Reception requires an active identity, so verify the linked Employee
+  // Master rows through the same table already used by the Reception SA list.
+  const { data: activeEmployees, error: activeEmployeeError } = await supabase
+    .from('employee_master')
+    .select('employee_code, role, location, is_active')
+    .in('employee_code', linkedCodes)
+    .eq('is_active', true)
+
+  if (activeEmployeeError) return fail(activeEmployeeError)
+
+  const receptionRows = ((activeEmployees ?? []) as LinkedEmployeeScopeRow[])
+    .filter((row) => isReceptionBusinessRole(row.role))
 
   if (receptionRows.length === 0) {
     return fail(
@@ -1397,9 +1423,11 @@ export async function getMyReceptionScope(): Promise<ApiResult<ReceptionUserScop
   }
 
   const [locationKey, location] = Array.from(locationKeys.entries())[0]
-  const scopedRow = rowsWithLocation.find(
-    (row) => normalizeReceptionLocation(row.location) === locationKey,
-  )
+  const scopedRow = [...rowsWithLocation]
+    .filter((row) => normalizeReceptionLocation(row.location) === locationKey)
+    .sort((a, b) =>
+      String(a.employee_code ?? '').localeCompare(String(b.employee_code ?? '')),
+    )[0]
 
   const employeeCode = String(scopedRow?.employee_code ?? '').trim().toUpperCase()
   if (!employeeCode) {
