@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** Implementation + CI Complete - deployed UAT pending  
+**Status:** UAT Remediation In Progress - DBL-0088 proposed  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -500,6 +500,25 @@ No new auth table, employee-location table, module-permission table, or Receptio
 
 ---
 
+## 12.1) 2026-09-30 Production UAT Finding — Existing Reception History
+
+Production UAT after PR #25 confirmed the receptionist identity itself resolves correctly (for example, Sitapura scope is displayed), but dedicated Reception users can see 0 historical entries while admin sees the full Reception population.
+
+**Root cause (repository + authoritative DB audit):**
+- `list_reception_entries_page()` treats any non-admin user with an active employee mapping as an assigned-SA user before its generic Reception dealer branch.
+- A receptionist mapped to `Recep_001` / `Recep_002` therefore gets rows where `service_reception_entries.sa_employee_code = receptionist employee code`; historical rows are assigned to Service Advisors instead, so the result is empty.
+- Historical Reception rows already contain stable SA identity in `sa_employee_code`. Existing DB logic and Employee Master data can resolve SA operational location. Legacy fallback is unambiguous for the known codes: `3001440` = Ajmer Road, `3000840` / `500A840` = Sitapura.
+- This is a DB read-scope/history-classification defect, not a missing receptionist mapping and not a need to rewrite dealer tenancy.
+
+**Remediation owned by DBL-0088:**
+- add SA→Reception location helper (Employee Master location first, legacy code fallback second);
+- add fail-closed authenticated Reception location-scope helper;
+- update the existing paginated Reception list and recent-registration RPC branches so dedicated Reception identities use location scope before own-SA mapping logic;
+- backfill only missing `branch` / `location` / `branch_label` display fields for resolvable historical rows;
+- do **not** rewrite `dealer_code`;
+- preserve admin, Service Advisor, Floor Incharge, and Bodyshop branches;
+- require governed migration apply + paired read-only verification before production sign-off.
+
 ## 13) Activity Summary
 
 - DONE: 17
@@ -510,4 +529,4 @@ No new auth table, employee-location table, module-permission table, or Receptio
 
 **Validation evidence:** trusted MCP CI run `36690358015` passed Root/web lint + build + docs validation, Mobile/Expo validation, and Supabase validation. The first validation attempt exposed one pre-existing `no-explicit-any` error in `CustomerPortalPage.tsx` already present on the base commit; it was repaired with a type-safe object projection without runtime behavior change before the passing run.
 
-**Next action:** merge/deploy the reviewed change, configure the intended receptionist Employee Master mappings/permissions, then execute the production UAT matrix before archive/sign-off.
+**Next action:** review/merge DBL-0088, manually apply the governed migration to production, run the paired read-only SQL checks, refresh authoritative metadata, then repeat Sitapura/Ajmer Road Reception UAT before archive/sign-off.
