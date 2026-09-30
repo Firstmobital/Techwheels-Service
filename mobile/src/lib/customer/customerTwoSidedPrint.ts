@@ -127,6 +127,43 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       border-radius: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.06);
     }
+    .mid-sign-area {
+      margin: 14px auto;
+      padding: 10px 16px;
+      background: #f8fafc;
+      border: 1.5px dashed #94a3b8;
+      border-radius: 8px;
+      width: 96%;
+      box-sizing: border-box;
+    }
+    .mid-sign-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .mid-sign-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .mid-sign-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mid-sign-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: #1e293b;
+    }
+    .mid-sign-line {
+      font-family: monospace;
+      color: #0f172a;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+    }
     @media print {
       @page {
         size: A4 portrait;
@@ -167,7 +204,7 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
         flex: 0 0 auto !important;
         font-size: 13px !important;
         font-weight: 900 !important;
-        margin: 0 0 2mm 0 !important;
+        margin: 0 0 1.5mm 0 !important;
         padding: 0 0 1.5mm 0 !important;
         border-bottom: 1.5px solid #0f172a !important;
         text-align: center !important;
@@ -175,7 +212,7 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       .side-block {
         flex: 1 1 0 !important;
         min-height: 0 !important;
-        margin: 0 0 2mm 0 !important;
+        margin: 0 0 1.5mm 0 !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -191,12 +228,12 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
         flex: 0 0 auto !important;
         font-size: 10px !important;
         font-weight: 800 !important;
-        margin: 0 0 1.5mm 0 !important;
+        margin: 0 0 1mm 0 !important;
         color: #1e293b !important;
         text-align: center !important;
       }
       .side-img {
-        max-height: 134mm !important;
+        max-height: 116mm !important;
         max-width: 100% !important;
         width: auto !important;
         height: auto !important;
@@ -206,6 +243,55 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
         box-shadow: none !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+      }
+      .mid-sign-area {
+        flex: 0 0 auto !important;
+        margin: 2mm auto !important;
+        padding: 2.5mm 4mm !important;
+        border: 1.5px dashed #334155 !important;
+        border-radius: 4px !important;
+        background: transparent !important;
+        width: 96% !important;
+        max-width: 96% !important;
+        min-height: 18mm !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .mid-sign-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: flex-end !important;
+        width: 100% !important;
+      }
+      .mid-sign-tag {
+        font-size: 10px !important;
+        font-weight: 700 !important;
+        color: #334155 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+      }
+      .mid-sign-box {
+        display: flex !important;
+        align-items: flex-end !important;
+        gap: 6px !important;
+      }
+      .mid-sign-label {
+        font-size: 11px !important;
+        font-weight: 800 !important;
+        color: #0f172a !important;
+        white-space: nowrap !important;
+      }
+      .mid-sign-line {
+        display: inline-block !important;
+        min-width: 220px !important;
+        border-bottom: 1.5px solid #0f172a !important;
+        height: 16px !important;
+        font-family: monospace !important;
+        letter-spacing: 1px !important;
       }
     }
   </style>
@@ -223,6 +309,15 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
     <div class="side-block">
       <div class="side-title">FRONT SIDE</div>
       <img src="${safeFrontUrl}" class="side-img" />
+    </div>
+    <div class="mid-sign-area">
+      <div class="mid-sign-row">
+        <span class="mid-sign-tag">✓ Self-Attested Document</span>
+        <div class="mid-sign-box">
+          <span class="mid-sign-label">Customer Signature / ग्राहक हस्ताक्षर:</span>
+          <span class="mid-sign-line">____________________________________</span>
+        </div>
+      </div>
     </div>
     <div class="side-block">
       <div class="side-title">BACK SIDE</div>
