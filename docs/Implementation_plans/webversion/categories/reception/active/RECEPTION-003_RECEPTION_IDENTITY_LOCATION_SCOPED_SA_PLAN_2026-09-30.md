@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** UAT Remediation In Progress - DBL-0088 proposed  
+**Status:** UAT Remediation In Progress - DBL-0089 proposed  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -519,6 +519,32 @@ Production UAT after PR #25 confirmed the receptionist identity itself resolves 
 - preserve admin, Service Advisor, Floor Incharge, and Bodyshop branches;
 - require governed migration apply + paired read-only verification before production sign-off.
 
+## 12.2) 2026-09-30 Production UAT Finding — DBL-0088 Statement Timeout
+
+The operator applied DBL-0088 and supplied its read-only check output. The database objects and historical backfill are present and internally consistent:
+
+- required SECURITY DEFINER functions exist;
+- known SA-code fallback resolves correctly;
+- both Reception list RPC definitions contain the location scope;
+- 7,023 historical rows are resolvable to Sitapura/Ajmer Road;
+- 0 resolvable rows remain without persisted display location;
+- 0 stored/resolved location mismatches were reported.
+
+Runtime UAT then produced PostgreSQL SQLSTATE `57014` (`canceling statement due to statement timeout`) on `list_reception_entries_page`.
+
+Postgres context identifies the expensive path as:
+
+`list_reception_entries_page -> user_has_reception_location_scope_for_sa_code -> employee_has_business_role -> normalize_business_role_token`
+
+The DBL-0088 implementation invokes that authenticated scope helper for each candidate Reception row. That repeats user/employee mapping and Business Role parsing thousands of times and is the direct cause of the timeout.
+
+**DBL-0089 remediation:**
+- resolve the signed-in receptionist's unique active RECEPTION Employee Master location once per RPC invocation;
+- use the already-persisted `service_reception_entries.location` / `branch` values populated/backfilled by DBL-0088 for row filtering;
+- remove per-row calls to `user_has_reception_location_scope_for_sa_code(r.sa_employee_code)` from the two list RPCs;
+- preserve the existing admin, Service Advisor, Floor Incharge, Bodyshop, and dealer-fallback branches;
+- perform no additional historical data rewrite.
+
 ## 13) Activity Summary
 
 - DONE: 17
@@ -529,4 +555,4 @@ Production UAT after PR #25 confirmed the receptionist identity itself resolves 
 
 **Validation evidence:** trusted MCP CI run `36690358015` passed Root/web lint + build + docs validation, Mobile/Expo validation, and Supabase validation. The first validation attempt exposed one pre-existing `no-explicit-any` error in `CustomerPortalPage.tsx` already present on the base commit; it was repaired with a type-safe object projection without runtime behavior change before the passing run.
 
-**Next action:** review/merge DBL-0088, manually apply the governed migration to production, run the paired read-only SQL checks, refresh authoritative metadata, then repeat Sitapura/Ajmer Road Reception UAT before archive/sign-off.
+**Next action:** review/merge DBL-0089, manually apply the timeout-fix migration, run its paired read-only checks, then repeat Sitapura/Ajmer Road Reception UAT and refresh authoritative metadata before archive/sign-off.
