@@ -5,6 +5,15 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-30
 
 - Date: 2026-09-30
+- Change summary: Implemented RECEPTION-003 web receptionist identity and location-scoped Service Advisor selection. Employee Master now accepts canonical Business Role `RECEPTION`; non-admin Reception users resolve their operational location from the existing active user-to-employee mapping and active Employee Master identity, and the SA dropdown/round-robin/revisit assignment paths are constrained to active SA-role employees in that location before existing department and EV/PV rules. Admin remains operationally unscoped. Missing or ambiguous receptionist identity/location fails closed instead of falling back to Sitapura.
+- Impacted files: `src/lib/businessRoles.ts`, `src/lib/api/reception.ts`, `src/pages/ReceptionPage.tsx`, RECEPTION-003 plan/tracker/index, shared Reception truth docs.
+- Business logic change: Yes — Reception SA eligibility is now mapped-location-aware instead of hard-coded to Sitapura.
+- Function-level contract change: Yes — added web helper `isReceptionBusinessRole()`, `normalizeReceptionLocation()`, and API resolver `getMyReceptionScope()`.
+- RBAC/RLS change: No — existing module permission and dealer/RLS boundaries remain unchanged; the existing SECURITY DEFINER employee-scope RPC is reused.
+- Data/schema change: No — authoritative SQL Business Role normalization already accepts `RECEPTION`; no migration or DB ledger entry is required.
+- Docs updated by: RECEPTION-003 implementation transaction.
+
+- Date: 2026-09-30
 - Change summary: Hardened database-truth freshness handling for AI/MCP workflows. `DATABASE_TRUTH.md` now requires the generated metadata manifest to be checked before DB-dependent advice, requires relevant schema definitions to be re-read from `full_metadata.sql`, defines composite-truth handling when production changes post-date the dump, and removes manually duplicated current dump timestamp/hash/size metadata from prose to prevent documentation drift.
 - Impacted files: `docs/shared/reference/DATABASE_TRUTH.md`, `docs/shared/active/CHANGE_LOG.md`
 - Business logic change: No
