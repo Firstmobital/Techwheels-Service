@@ -5,6 +5,15 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-30
 
 - Date: 2026-09-30
+- Change summary: Repaired a pre-existing CI lint blocker in `CustomerPortalPage.tsx` found while validating RECEPTION-003. Replaced the `vehicle as any` argument to `getDirectAdvisorOrWorkshopPhone()` with a typed object containing the same advisor-name fields used by that lookup.
+- Impacted files: `src/pages/CustomerPortalPage.tsx`
+- Business logic change: No — advisor/workshop phone resolution behavior is unchanged for the CustomerVehicle fields available at that call site.
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: RECEPTION-003 validation prerequisite repair.
+
+- Date: 2026-09-30
 - Change summary: Implemented RECEPTION-003 web receptionist identity and location-scoped Service Advisor selection. Employee Master now accepts canonical Business Role `RECEPTION`; non-admin Reception users resolve their operational location from the existing active user-to-employee mapping and active Employee Master identity, and the SA dropdown/round-robin/revisit assignment paths are constrained to active SA-role employees in that location before existing department and EV/PV rules. Admin remains operationally unscoped. Missing or ambiguous receptionist identity/location fails closed instead of falling back to Sitapura.
 - Impacted files: `src/lib/businessRoles.ts`, `src/lib/api/reception.ts`, `src/pages/ReceptionPage.tsx`, RECEPTION-003 plan/tracker/index, shared Reception truth docs.
 - Business logic change: Yes — Reception SA eligibility is now mapped-location-aware instead of hard-coded to Sitapura.
