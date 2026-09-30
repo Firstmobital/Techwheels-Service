@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-09-25
+Last Updated: 2026-09-30
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -42,6 +42,7 @@ Legend:
 | RBAC-002 | rbac | Bodyshop standalone reception RBAC decoupling | NS | RBAC Team + Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC-002_BODYSHOP_STANDALONE_RECEPTION_RBAC_PLAN_2026-06-20.md | 2026-06-20 |
 | RBAC-003 | rbac | Employee Master multi Business Role CSV (Option B) | NS | RBAC Team + Platform Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC-003_EMPLOYEE_MASTER_MULTI_BUSINESS_ROLE_CSV_PLAN_2026-07-18.md | 2026-07-18 |
 | RECEPTION-001 | reception | Reception module plan | IP | Reception Team | docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-001_RECEPTION_MODULE_PLAN.md | 2026-06-18 |
+| RECEPTION-003 | reception | Reception identity + location-scoped SA dropdown | NS | Reception Team + RBAC Team + Platform Team | docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-003_RECEPTION_IDENTITY_LOCATION_SCOPED_SA_PLAN_2026-09-30.md | 2026-09-30 |
 | RECEPTION-002 | reception | Revisit detection (30-day floor SR types) | IP | Reception Team + Platform Team | docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-002_REVISIT_DETECTION_PLAN_2026-08-06.md | 2026-08-06 |
 | VEHICLE-PICKUP-001 | reception | Vehicle Pickup module (Driver Pickup workflow) | NS | Reception Team + Operations Team + Platform Team | docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md | 2026-08-06 |
 | WEBREDESIGN-MASTER | redesign | Web redesign master tracker | IP | Web UX Team | docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md | 2026-06-18 |
