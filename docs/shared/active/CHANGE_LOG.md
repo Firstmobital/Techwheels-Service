@@ -5,6 +5,16 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-30
 
 - Date: 2026-09-30
+- Change summary: Hardened database-truth freshness handling for AI/MCP workflows. `DATABASE_TRUTH.md` now requires the generated metadata manifest to be checked before DB-dependent advice, requires relevant schema definitions to be re-read from `full_metadata.sql`, defines composite-truth handling when production changes post-date the dump, and removes manually duplicated current dump timestamp/hash/size metadata from prose to prevent documentation drift.
+- Impacted files: `docs/shared/reference/DATABASE_TRUTH.md`, `docs/shared/active/CHANGE_LOG.md`
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: DB truth no-drift hardening via authorized MCP change.
+
+
+- Date: 2026-09-30
 - Change summary: CI lint baseline repair — added `DriveUploadResponse` type in `BodyshopRepairPage.tsx` to represent the `universal-drive-upload` edge function response shape (including top-level `fileId?`), replacing 6 `as any` casts that caused `@typescript-eslint/no-explicit-any` ESLint errors. Zero errors in `src/` after fix.
 - Impacted files: `src/pages/BodyshopRepairPage.tsx` (type definition + 4 cast removals only)
 - Business logic change: No — pure type-contract change. Runtime JS behavior of Drive sync is identical; all response variants (`drive_url`, `link`, `result.driveUrl`, `result.fileId`, top-level `fileId`, `drive_file_id`) are preserved.
