@@ -52,3 +52,5 @@ Techwheels-Service/
 supabase/.branches/
 android/
 ios/
+.temp_components_old/
+.temp/

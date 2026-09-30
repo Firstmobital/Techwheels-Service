@@ -6,7 +6,7 @@
  */
 import { useCallback, useMemo, useState } from 'react'
 import {
-  ActivityIndicator, Alert, FlatList, RefreshControl,
+  ActivityIndicator, Alert, FlatList, Linking, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
@@ -53,6 +53,7 @@ interface RepairCard {
   doc_bank_detail: boolean
   doc_tp_affidavit?: boolean
   doc_survey_approval: boolean | null
+  doc_rejected_keys?: string[] | null
   survey_date: string | null
   survey_status: string | null
   survay_info_by: string | null
@@ -296,11 +297,86 @@ export default function BodyshopRepairScreen() {
     setTimeout(() => setToast(null), 3500)
   }
 
+  const [uploadedDocsByKey, setUploadedDocsByKey] = useState<Record<string, { id: number; file_name: string; storage_path: string; drive_url?: string | null }>>({})
+  const [loadingDocs, setLoadingDocs] = useState(false)
+
+  const loadUploadedDocs = useCallback(async (cardId: number) => {
+    setLoadingDocs(true)
+    try {
+      const { data, error } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .select('id, doc_key, file_name, storage_path, drive_url, created_at')
+        .eq('repair_card_id', cardId)
+      if (!error && data) {
+        const map: Record<string, any> = {}
+        data.forEach((r: any) => {
+          if (r.doc_key) map[r.doc_key] = r
+        })
+        setUploadedDocsByKey(map)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingDocs(false)
+    }
+  }, [])
+
   function openDetail(card: RepairCard) {
     setSelectedCard(card)
     setActiveTab('overview')
     setPatch({})
     setQcOtherOpen(false)
+    void loadUploadedDocs(card.id)
+  }
+
+  async function saveDocDecision(docKey: string, approved: boolean) {
+    if (!selectedCard) return
+    const currentRejected = Array.isArray(selectedCard.doc_rejected_keys)
+      ? selectedCard.doc_rejected_keys.map(String)
+      : []
+    const nextRejected = approved
+      ? currentRejected.filter((k) => k !== docKey)
+      : [...new Set([...currentRejected, docKey])]
+    
+    const updatePayload = {
+      [docKey]: approved,
+      doc_rejected_keys: nextRejected,
+    } as Partial<RepairCard>
+
+    const merged = { ...selectedCard, ...updatePayload }
+    setSelectedCard(merged)
+    setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('bodyshop_repair_cards')
+        .update(updatePayload)
+        .eq('id', selectedCard.id)
+      if (error) throw error
+      showToast(approved ? 'Document Approved ✓' : 'Document Rejected ✕', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Decision update failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function openUploadedDoc(docKey: string) {
+    const doc = uploadedDocsByKey[docKey]
+    if (!doc) return
+    if (doc.drive_url) {
+      const ok = await Linking.canOpenURL(doc.drive_url)
+      if (ok) await Linking.openURL(doc.drive_url)
+      return
+    }
+    if (doc.storage_path) {
+      const { data } = await supabase.storage.from('autodoc').createSignedUrl(doc.storage_path, 3600)
+      if (data?.signedUrl) {
+        const ok = await Linking.canOpenURL(data.signedUrl)
+        if (ok) await Linking.openURL(data.signedUrl)
+      }
+    }
   }
 
   function applyPatch(update: Partial<RepairCard>) {
@@ -596,18 +672,62 @@ export default function BodyshopRepairScreen() {
                   </View>
                   <View style={S.formCard}>
                     {mandatoryDocs.map((doc, i) => {
-                      const checked = Boolean(card[doc.key])
+                      const approved = Boolean(card[doc.key])
+                      const rejectedKeys = Array.isArray(card.doc_rejected_keys) ? card.doc_rejected_keys.map(String) : []
+                      const rejected = !approved && rejectedKeys.includes(String(doc.key))
+                      const uploaded = uploadedDocsByKey[String(doc.key)]
                       return (
-                        <TouchableOpacity key={doc.key} style={[S.docRow, i < mandatoryDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }]}
-                          onPress={() => applyPatch({ [doc.key]: !checked } as Partial<RepairCard>)}>
-                          <View style={[S.checkbox, checked && S.checkboxChecked]}>
-                            {checked && <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>✓</Text>}
+                        <View key={doc.key} style={[S.docRow, i < mandatoryDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '500' }}>{doc.label}</Text>
+                              {approved ? (
+                                <View style={[S.statusPill, { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1c8f63' }}>Approved ✓</Text>
+                                </View>
+                              ) : rejected ? (
+                                <View style={[S.statusPill, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#b91c1c' }}>Rejected ✕</Text>
+                                </View>
+                              ) : uploaded ? (
+                                <View style={[S.statusPill, { backgroundColor: '#eff6ff', borderColor: '#3b82f6' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1d4ed8' }}>Uploaded 📄</Text>
+                                </View>
+                              ) : (
+                                <View style={[S.statusPill, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#92400e' }}>Pending ⏳</Text>
+                                </View>
+                              )}
+                            </View>
+                            {uploaded?.file_name ? (
+                              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
+                                📎 {uploaded.file_name}
+                              </Text>
+                            ) : null}
                           </View>
-                          <Text style={{ fontSize: 13, color: checked ? '#1a1b21' : '#82858f', fontWeight: checked ? '600' : '400', flex: 1 }}>{doc.label}</Text>
-                          <View style={[S.statusPill, { backgroundColor: checked ? '#e4f4ec' : '#f6f4ee', borderColor: checked ? '#1c8f63' : '#d9d4c7' }]}>
-                            <Text style={{ fontSize: 10, fontWeight: '700', color: checked ? '#1c8f63' : '#a7a99f' }}>{checked ? 'Collected' : 'Pending'}</Text>
+                          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                            {uploaded ? (
+                              <TouchableOpacity
+                                onPress={() => void openUploadedDoc(String(doc.key))}
+                                style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>👁️ View</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity
+                              onPress={() => void saveDocDecision(String(doc.key), true)}
+                              style={{ backgroundColor: approved ? '#dcfce7' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                            >
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803d' }}>{approved ? '✓ Approved' : '✓ Approve'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => void saveDocDecision(String(doc.key), false)}
+                              style={{ backgroundColor: rejected ? '#fee2e2' : '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                            >
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>{rejected ? '✕ Rejected' : '✕ Reject'}</Text>
+                            </TouchableOpacity>
                           </View>
-                        </TouchableOpacity>
+                        </View>
                       )
                     })}
                   </View>
@@ -620,18 +740,62 @@ export default function BodyshopRepairScreen() {
                   <Text style={[S.sectionTitle, { marginTop: 16 }]}>Optional Documents</Text>
                   <View style={S.formCard}>
                     {optionalDocs.map((doc, i) => {
-                      const checked = Boolean(card[doc.key])
+                      const approved = Boolean(card[doc.key])
+                      const rejectedKeys = Array.isArray(card.doc_rejected_keys) ? card.doc_rejected_keys.map(String) : []
+                      const rejected = !approved && rejectedKeys.includes(String(doc.key))
+                      const uploaded = uploadedDocsByKey[String(doc.key)]
                       return (
-                        <TouchableOpacity key={doc.key} style={[S.docRow, i < optionalDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }]}
-                          onPress={() => applyPatch({ [doc.key]: !checked } as Partial<RepairCard>)}>
-                          <View style={[S.checkbox, checked && S.checkboxChecked]}>
-                            {checked && <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>✓</Text>}
+                        <View key={doc.key} style={[S.docRow, i < optionalDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '400' }}>{doc.label}</Text>
+                              {approved ? (
+                                <View style={[S.statusPill, { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1c8f63' }}>Approved ✓</Text>
+                                </View>
+                              ) : rejected ? (
+                                <View style={[S.statusPill, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#b91c1c' }}>Rejected ✕</Text>
+                                </View>
+                              ) : uploaded ? (
+                                <View style={[S.statusPill, { backgroundColor: '#eff6ff', borderColor: '#3b82f6' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1d4ed8' }}>Uploaded 📄</Text>
+                                </View>
+                              ) : (
+                                <View style={[S.statusPill, { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#a7a99f' }}>—</Text>
+                                </View>
+                              )}
+                            </View>
+                            {uploaded?.file_name ? (
+                              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
+                                📎 {uploaded.file_name}
+                              </Text>
+                            ) : null}
                           </View>
-                          <Text style={{ fontSize: 13, color: checked ? '#1a1b21' : '#82858f', fontWeight: checked ? '600' : '400', flex: 1 }}>{doc.label}</Text>
-                          <View style={[S.statusPill, { backgroundColor: checked ? '#e4f4ec' : '#f6f4ee', borderColor: checked ? '#1c8f63' : '#d9d4c7' }]}>
-                            <Text style={{ fontSize: 10, fontWeight: '700', color: checked ? '#1c8f63' : '#a7a99f' }}>{checked ? 'Collected' : '—'}</Text>
+                          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                            {uploaded ? (
+                              <TouchableOpacity
+                                onPress={() => void openUploadedDoc(String(doc.key))}
+                                style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>👁️ View</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity
+                              onPress={() => void saveDocDecision(String(doc.key), true)}
+                              style={{ backgroundColor: approved ? '#dcfce7' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                            >
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803d' }}>{approved ? '✓ Approved' : '✓ Approve'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => void saveDocDecision(String(doc.key), false)}
+                              style={{ backgroundColor: rejected ? '#fee2e2' : '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                            >
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>{rejected ? '✕ Rejected' : '✕ Reject'}</Text>
+                            </TouchableOpacity>
                           </View>
-                        </TouchableOpacity>
+                        </View>
                       )
                     })}
                   </View>

@@ -42,32 +42,38 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Merged 1-Page Print · ${docName} - ${regNumber}</title>
   <style>
     @page {
       size: A4 portrait;
-      margin: 4mm 6mm;
+      margin: 4mm 5mm;
     }
-    * { box-sizing: border-box; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: #f8fafc;
       margin: 0;
-      padding: 12px 16px;
+      padding: 10px 14px;
       color: #0f172a;
       text-align: center;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .print-actions {
       display: flex;
       justify-content: center;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
     }
     .btn {
       background: #2563eb;
       color: #ffffff;
       border: none;
-      padding: 9px 16px;
+      padding: 9px 18px;
       font-weight: 800;
       border-radius: 8px;
       cursor: pointer;
@@ -77,65 +83,72 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       background: #64748b;
     }
     .page-box {
-      max-width: 920px;
-      width: 98%;
+      max-width: 900px;
+      width: 100%;
       margin: 0 auto;
       border: 1.5px solid #cbd5e1;
-      padding: 14px 18px;
-      border-radius: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
       background: #ffffff;
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     .doc-header {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 900;
-      color: #1e293b;
-      margin-bottom: 8px;
+      color: #0f172a;
+      margin: 0;
       padding-bottom: 6px;
-      border-bottom: 2px solid #e2e8f0;
+      border-bottom: 2px solid #0f172a;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
     .doc-sub {
       font-size: 10px;
+      font-weight: 600;
       color: #64748b;
       margin-top: 2px;
     }
     .side-block {
-      margin-bottom: 12px;
-      text-align: center;
-    }
-    .side-block:last-child {
-      margin-bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 0;
     }
     .side-title {
       font-size: 11px;
       font-weight: 800;
-      color: #475569;
+      color: #334155;
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
+    .img-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 0;
+    }
     .side-img {
       max-width: 100%;
-      max-height: 45vh;
-      min-height: 250px;
+      max-height: 44vh;
       width: auto;
       height: auto;
       object-fit: contain;
-      border: 1px solid #94a3b8;
+      border: 1.5px solid #94a3b8;
       border-radius: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.06);
     }
-    .mid-gap {
-      height: 50px;
-      min-height: 50px;
-      width: 100%;
-    }
+    .mid-gap { display: none; }
     @media print {
       @page {
         size: A4 portrait;
-        margin: 3mm 5mm;
+        margin: 3mm 4mm;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
@@ -143,22 +156,22 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       html, body {
         height: 100% !important;
         max-height: 100% !important;
+        width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #fff !important;
         overflow: hidden !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
       }
       .print-actions { display: none !important; }
       .page-box {
         border: none !important;
+        border-radius: 0 !important;
         padding: 0 !important;
-        margin: 0 auto !important;
+        margin: 0 !important;
         max-width: 100% !important;
         width: 100% !important;
         box-shadow: none !important;
-        height: 100% !important;
+        height: 100vh !important;
         max-height: 100vh !important;
         display: flex !important;
         flex-direction: column !important;
@@ -167,20 +180,30 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
         break-inside: avoid !important;
         page-break-after: avoid !important;
         break-after: avoid !important;
+        overflow: hidden !important;
       }
       .doc-header {
         flex: 0 0 auto !important;
         font-size: 13px !important;
         font-weight: 900 !important;
-        margin: 0 0 1.5mm 0 !important;
-        padding: 0 0 1.5mm 0 !important;
+        margin: 0 0 1mm 0 !important;
+        padding: 0 0 1mm 0 !important;
         border-bottom: 1.5px solid #0f172a !important;
         text-align: center !important;
+      }
+      .doc-sub {
+        font-size: 8.5px !important;
+        color: #64748b !important;
+        margin-top: 1px !important;
       }
       .side-block {
         flex: 1 1 0 !important;
         min-height: 0 !important;
+        height: calc(50vh - 12mm) !important;
+        max-height: calc(50vh - 12mm) !important;
+        width: 100% !important;
         margin: 0 !important;
+        padding: 0.5mm 0 !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -189,38 +212,37 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
         break-inside: avoid !important;
         overflow: hidden !important;
       }
-      .side-block:last-child {
-        margin-bottom: 0 !important;
-      }
       .side-title {
         flex: 0 0 auto !important;
-        font-size: 10px !important;
-        font-weight: 800 !important;
+        font-size: 10.5px !important;
+        font-weight: 900 !important;
         margin: 0 0 1mm 0 !important;
-        color: #1e293b !important;
+        color: #0f172a !important;
         text-align: center !important;
       }
+      .img-container {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+      }
       .side-img {
-        max-height: 108mm !important;
+        max-height: 100% !important;
         max-width: 100% !important;
         width: auto !important;
         height: auto !important;
         object-fit: contain !important;
-        border: 1px solid #cbd5e1 !important;
+        border: 1px solid #94a3b8 !important;
         border-radius: 4px !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
-      .mid-gap {
-        flex: 0 0 auto !important;
-        height: 38mm !important;
-        min-height: 38mm !important;
-        width: 100% !important;
-        display: block !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
+      .mid-gap { display: none !important; }
     }
   </style>
 </head>
@@ -236,12 +258,15 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
     </div>
     <div class="side-block">
       <div class="side-title">FRONT SIDE</div>
-      <img src="${safeFrontUrl}" class="side-img" />
+      <div class="img-container">
+        <img src="${safeFrontUrl}" class="side-img" alt="FRONT SIDE" />
+      </div>
     </div>
-    <div class="mid-gap"></div>
     <div class="side-block">
       <div class="side-title">BACK SIDE</div>
-      <img src="${safeBackUrl}" class="side-img" />
+      <div class="img-container">
+        <img src="${safeBackUrl}" class="side-img" alt="BACK SIDE" />
+      </div>
     </div>
   </div>
 </body>

@@ -25,9 +25,9 @@ import {
   customerUploadBodyshopAsset,
   type CustomerBodyshopAsset,
 } from '../../lib/api/customerBodyshopUploads'
-import { fetchCustomerDocuments } from '../../lib/customer/customerDocumentsCache'
+import { fetchCustomerDocuments, resetCustomerDocumentsInflight } from '../../lib/customer/customerDocumentsCache'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
-import { customerListEstimates, customerSetCustomerType } from '../../lib/api/customerPortal'
+import { clearCustomerPortalCache, customerListEstimates, customerSetCustomerType } from '../../lib/api/customerPortal'
 
 const CUSTOMER_TYPE_OPTIONS = [
   { key: 'individual', label: '👤 Individual', desc: 'Personal Insurance' },
@@ -173,8 +173,12 @@ export default function CustomerDocumentsScreen() {
       }
 
       try {
+        if (mode === 'refresh') {
+          clearCustomerPortalCache()
+          resetCustomerDocumentsInflight()
+        }
         const [activeKind, estList] = await Promise.all([
-          refreshVisit(),
+          refreshVisit({ bypassCache: mode === 'refresh' }),
           customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
         ])
         setEstimates((estList || []).map(parseEstimate))
@@ -216,7 +220,7 @@ export default function CustomerDocumentsScreen() {
     if (!token || !selectedReg) return
     const timer = setInterval(() => {
       void load('refresh')
-    }, 60000) // 1 minute auto-refresh
+    }, 180000) // 3 minutes auto-refresh
     return () => clearInterval(timer)
   }, [token, selectedReg, load])
 
@@ -272,6 +276,8 @@ export default function CustomerDocumentsScreen() {
       })
       // Clear reupload open state once upload finishes
       setReuploadingKeys((prev) => ({ ...prev, [slot.docKey]: false }))
+      clearCustomerPortalCache()
+      resetCustomerDocumentsInflight()
       await load('refresh')
       setNotice(
         result.drivePending

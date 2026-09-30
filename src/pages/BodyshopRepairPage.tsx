@@ -3530,6 +3530,15 @@ export default function BodyshopRepairPage() {
           const frontDriveId = extractDriveFileId(frontInfo.driveUrl)
           const backDriveId = extractDriveFileId(backInfo.driveUrl)
 
+          const printedDate = new Date().toLocaleString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Asia/Kolkata',
+          })
+
           const renderSideHtml = (title: string, info: typeof frontInfo, driveId: string | null) => {
             if (info.isPdf) {
               return `
@@ -3568,27 +3577,32 @@ export default function BodyshopRepairPage() {
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Merged 1-Page Print · ${pair.name} - ${regNo}</title>
   <style>
     @page {
       size: A4 portrait;
-      margin: 4mm 6mm;
+      margin: 4mm 5mm;
     }
-    * { box-sizing: border-box; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
     body {
-      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #f8fafc;
       margin: 0;
-      padding: 12px 16px;
+      padding: 10px 14px;
       color: #0f172a;
       text-align: center;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .print-actions {
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 10px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       flex-wrap: wrap;
     }
     .btn {
@@ -3611,36 +3625,46 @@ export default function BodyshopRepairPage() {
     .btn-close { background: #64748b; }
     .btn-sm { font-size: 11px; padding: 5px 10px; }
     .page-box {
-      max-width: 920px;
-      width: 98%;
+      max-width: 900px;
+      width: 100%;
       margin: 0 auto;
       border: 1.5px solid #cbd5e1;
-      padding: 14px 18px;
-      border-radius: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
       background: #fff;
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     .doc-header {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 900;
-      color: #1e293b;
-      margin-bottom: 8px;
+      color: #0f172a;
+      margin: 0;
       padding-bottom: 6px;
-      border-bottom: 2px solid #e2e8f0;
+      border-bottom: 2px solid #0f172a;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .side-block {
-      margin-bottom: 12px;
-      text-align: center;
+    .doc-sub {
+      font-size: 10px;
+      font-weight: 600;
+      color: #64748b;
+      margin-top: 2px;
     }
-    .side-block:last-child {
-      margin-bottom: 0;
+    .side-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 0;
     }
     .side-title {
       font-size: 11px;
       font-weight: 800;
-      color: #475569;
+      color: #334155;
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -3650,23 +3674,22 @@ export default function BodyshopRepairPage() {
       align-items: center;
       justify-content: center;
       width: 100%;
+      min-height: 0;
     }
     .side-img {
       max-width: 100%;
-      max-height: 45vh;
-      min-height: 250px;
+      max-height: 44vh;
       width: auto;
       height: auto;
       object-fit: contain;
-      border: 1px solid #94a3b8;
+      border: 1.5px solid #94a3b8;
       border-radius: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.06);
     }
     .side-frame {
       width: 100%;
-      height: 45vh;
-      min-height: 350px;
-      border: 1px solid #94a3b8;
+      height: 44vh;
+      border: 1.5px solid #94a3b8;
       border-radius: 6px;
     }
     .side-meta {
@@ -3675,15 +3698,11 @@ export default function BodyshopRepairPage() {
     }
     .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
     .img-fallback { padding: 12px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; }
-    .mid-gap {
-      height: 50px;
-      min-height: 50px;
-      width: 100%;
-    }
+    .mid-gap { display: none; }
     @media print {
       @page {
         size: A4 portrait;
-        margin: 3mm 5mm;
+        margin: 3mm 4mm;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
@@ -3691,24 +3710,24 @@ export default function BodyshopRepairPage() {
       html, body {
         height: 100% !important;
         max-height: 100% !important;
+        width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #fff !important;
         overflow: hidden !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
       }
       .print-actions, .side-meta {
         display: none !important;
       }
       .page-box {
         border: none !important;
+        border-radius: 0 !important;
         padding: 0 !important;
-        margin: 0 auto !important;
+        margin: 0 !important;
         max-width: 100% !important;
         width: 100% !important;
         box-shadow: none !important;
-        height: 100% !important;
+        height: 100vh !important;
         max-height: 100vh !important;
         display: flex !important;
         flex-direction: column !important;
@@ -3717,20 +3736,30 @@ export default function BodyshopRepairPage() {
         break-inside: avoid !important;
         page-break-after: avoid !important;
         break-after: avoid !important;
+        overflow: hidden !important;
       }
       .doc-header {
         flex: 0 0 auto !important;
         font-size: 13px !important;
         font-weight: 900 !important;
-        margin: 0 0 1.5mm 0 !important;
-        padding: 0 0 1.5mm 0 !important;
+        margin: 0 0 1mm 0 !important;
+        padding: 0 0 1mm 0 !important;
         border-bottom: 1.5px solid #0f172a !important;
         text-align: center !important;
+      }
+      .doc-sub {
+        font-size: 8.5px !important;
+        color: #64748b !important;
+        margin-top: 1px !important;
       }
       .side-block {
         flex: 1 1 0 !important;
         min-height: 0 !important;
+        height: calc(50vh - 12mm) !important;
+        max-height: calc(50vh - 12mm) !important;
+        width: 100% !important;
         margin: 0 !important;
+        padding: 0.5mm 0 !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -3739,15 +3768,12 @@ export default function BodyshopRepairPage() {
         break-inside: avoid !important;
         overflow: hidden !important;
       }
-      .side-block:last-child {
-        margin-bottom: 0 !important;
-      }
       .side-title {
         flex: 0 0 auto !important;
-        font-size: 10px !important;
-        font-weight: 800 !important;
+        font-size: 10.5px !important;
+        font-weight: 900 !important;
         margin: 0 0 1mm 0 !important;
-        color: #1e293b !important;
+        color: #0f172a !important;
         text-align: center !important;
       }
       .img-container {
@@ -3758,34 +3784,29 @@ export default function BodyshopRepairPage() {
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        overflow: hidden !important;
       }
       .side-img {
-        max-height: 108mm !important;
+        max-height: 100% !important;
         max-width: 100% !important;
         width: auto !important;
         height: auto !important;
         object-fit: contain !important;
-        border: 1px solid #cbd5e1 !important;
+        border: 1px solid #94a3b8 !important;
         border-radius: 4px !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
       .side-frame {
-        height: 108mm !important;
+        height: 100% !important;
         width: 100% !important;
-        border: 1px solid #cbd5e1 !important;
+        border: 1px solid #94a3b8 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
       .mid-gap {
-        flex: 0 0 auto !important;
-        height: 38mm !important;
-        min-height: 38mm !important;
-        width: 100% !important;
-        display: block !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+        display: none !important;
       }
     }
   </style>
@@ -3798,13 +3819,13 @@ export default function BodyshopRepairPage() {
     <button class="btn btn-close" onclick="window.close()">✕ Close</button>
   </div>
   <div class="page-box">
-    <div class="doc-header">${pair.name} — ${regNo}</div>
+    <div class="doc-header">
+      ${pair.name} — ${regNo}
+      <div class="doc-sub">Techwheels Service · Merged 1-Page Document · Printed ${printedDate}</div>
+    </div>
     ${renderSideHtml('FRONT SIDE', frontInfo, frontDriveId)}
-    <div class="mid-gap"></div>
     ${renderSideHtml('BACK SIDE', backInfo, backDriveId)}
   </div>
-</body>
-</html>`)
           previewTab.document.close()
           return
         }
@@ -4239,8 +4260,10 @@ export default function BodyshopRepairPage() {
 
   async function saveDocDecision(key: keyof RepairCard, approved: boolean) {
     if (!selected) return
-    if (approved && advisorVerifiedDoc(selected, String(key))) return
-    if (!approved && advisorVerifiedDoc(selected, String(key))) return
+    const isCurrentlyApproved = advisorVerifiedDoc(selected, String(key))
+    const isCurrentlyRejected = rejectedDocKeys(selected).includes(String(key))
+    if (approved && isCurrentlyApproved && !isCurrentlyRejected) return
+    if (!approved && !isCurrentlyApproved && isCurrentlyRejected) return
     const nextRejected = approved
       ? rejectedDocKeys(selected).filter((item) => item !== key)
       : [...new Set([...rejectedDocKeys(selected), String(key)])]
@@ -6270,10 +6293,10 @@ export default function BodyshopRepairPage() {
                                     <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
                                       <button
                                         type="button"
-                                        onClick={() => { if (!checked) approveDoc(k) }}
+                                        onClick={() => { if (checked) { rejectDoc(k) } else { approveDoc(k) } }}
                                         className={`brx-doc-check ${checked ? 'is-checked' : 'is-required'}`}
-                                        title={checked ? 'Approved — cannot be changed' : 'Approve this document'}
-                                        disabled={checked}
+                                        title={checked ? 'Approved — click to reject' : 'Approve this document'}
+                                        disabled={busy}
                                       >
                                         {checked ? <span className="brx-doc-check-mark">✓</span> : <span style={{ color: '#94a3b8', fontSize: '11px' }}>○</span>}
                                       </button>
@@ -6285,8 +6308,8 @@ export default function BodyshopRepairPage() {
                                       </div>
                                        <div className="brx-doc-actions">
                                         {checked ? (
-                                          attachedDoc ? (
-                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            {attachedDoc && (
                                               <button
                                                 type="button"
                                                 className="btn brx-doc-btn"
@@ -6295,27 +6318,28 @@ export default function BodyshopRepairPage() {
                                               >
                                                 👁️ View
                                               </button>
-                                              <button
-                                                type="button"
-                                                className="btn brx-doc-btn"
-                                                style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
-                                                onClick={() => startBodyshopDocUpload(k, 'replace')}
-                                                disabled={busy}
-                                                title="Reupload or replace this document"
-                                              >
-                                                {busy ? 'Uploading…' : '🔄 Reupload'}
-                                              </button>
-                                            </div>
-                                          ) : (
+                                            )}
                                             <button
                                               type="button"
-                                              className="btn btn--primary brx-doc-btn"
-                                              onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                              className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
+                                              onClick={() => rejectDoc(k)}
                                               disabled={busy}
+                                              title="Reject this document"
                                             >
-                                              {busy ? 'Uploading…' : '📤 Upload'}
+                                              ✕ Reject
                                             </button>
-                                          )
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
+                                              onClick={() => startBodyshopDocUpload(k, attachedDoc ? 'replace' : 'upload')}
+                                              disabled={busy}
+                                              title="Reupload or replace this document"
+                                            >
+                                              {busy ? 'Uploading…' : (attachedDoc ? '🔄 Reupload' : '📤 Upload')}
+                                            </button>
+                                          </div>
                                         ) : attachedDoc ? (
                                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                                             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>

@@ -25,7 +25,7 @@ type CustomerVisitContextValue = {
   isBodyshop: boolean
   customerType: string
   setCustomerType: (type: string) => Promise<void>
-  refresh: () => Promise<CustomerVisitKind>
+  refresh: (opts?: { bypassCache?: boolean }) => Promise<CustomerVisitKind>
 }
 
 const defaultValue: CustomerVisitContextValue = {
@@ -39,7 +39,7 @@ const defaultValue: CustomerVisitContextValue = {
   isBodyshop: false,
   customerType: 'individual',
   setCustomerType: async () => {},
-  refresh: async () => 'other' as CustomerVisitKind,
+  refresh: async (_opts?: { bypassCache?: boolean }) => 'other' as CustomerVisitKind,
 }
 
 const CustomerVisitContext = createContext<CustomerVisitContextValue>(defaultValue)
@@ -104,7 +104,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     [normReg, token, selectedReg, repairCard?.id]
   )
 
-  const refresh = useCallback(async (): Promise<CustomerVisitKind> => {
+  const refresh = useCallback(async (opts?: { bypassCache?: boolean }): Promise<CustomerVisitKind> => {
     const seq = ++loadSeq.current
     if (!token || !selectedReg) {
       setJob(null)
@@ -122,7 +122,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const ctx = await customerGetVisitContext(token, selectedReg)
+      const ctx = await customerGetVisitContext(token, selectedReg, { bypassCache: opts?.bypassCache ?? true })
       if (seq !== loadSeq.current) return 'other'
 
       const rawCard = (ctx.repair_card as Record<string, unknown> | null) ?? null

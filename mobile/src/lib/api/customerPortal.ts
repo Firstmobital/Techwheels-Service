@@ -111,7 +111,8 @@ export type CustomerVisitContextPayload = {
 
 export async function customerGetVisitContext(
   sessionToken: string,
-  regNumber: string
+  regNumber: string,
+  opts?: { bypassCache?: boolean }
 ): Promise<CustomerVisitContextPayload> {
   const reg = String(regNumber).trim()
   if (!reg) {
@@ -125,6 +126,7 @@ export async function customerGetVisitContext(
   }
 
   const cacheKey = `visit_ctx_${sessionToken}_${reg}`
+  if (opts?.bypassCache) apiCache.delete(cacheKey)
   const cached = getCached<CustomerVisitContextPayload>(cacheKey)
   if (cached) return cached
 
