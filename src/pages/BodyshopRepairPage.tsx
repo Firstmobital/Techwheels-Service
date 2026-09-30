@@ -940,6 +940,16 @@ function rejectedDocKeys(card: { doc_rejected_keys?: string[] | null } | null | 
   return Array.isArray(card?.doc_rejected_keys) ? card.doc_rejected_keys : []
 }
 
+type DriveUploadResponse = {
+  error?: string
+  ok?: boolean
+  drive_url?: string
+  drive_file_id?: string
+  link?: string
+  fileId?: string
+  result?: { fileId?: string; driveUrl?: string }
+}
+
 async function postUniversalDriveWithRetry(
   supabaseUrl: string,
   token: string,
@@ -962,10 +972,10 @@ async function postUniversalDriveWithRetry(
     signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
   })
   let res = await send()
-  let body = await res.json().catch(() => ({} as { error?: string; ok?: boolean; drive_url?: string; drive_file_id?: string; link?: string; result?: { fileId?: string; driveUrl?: string } }))
+  let body: DriveUploadResponse = await res.json().catch(() => ({}) as DriveUploadResponse)
   if (!res.ok || body?.error || body?.ok === false) {
     res = await send()
-    body = await res.json().catch(() => ({} as { error?: string; ok?: boolean; drive_url?: string; drive_file_id?: string; link?: string; result?: { fileId?: string; driveUrl?: string } }))
+    body = await res.json().catch(() => ({}) as DriveUploadResponse)
   }
   return { res, body }
 }
@@ -3193,8 +3203,8 @@ export default function BodyshopRepairPage() {
         registration_no: regNo,
       }, 35000)
 
-      const driveUrl = drivePayload?.drive_url || drivePayload?.link || drivePayload?.result?.driveUrl || ((drivePayload as any)?.fileId ? `https://drive.google.com/file/d/${(drivePayload as any).fileId}/view` : null)
-      const driveFileId = drivePayload?.drive_file_id || drivePayload?.result?.fileId || (drivePayload as any)?.fileId || null
+      const driveUrl = drivePayload?.drive_url || drivePayload?.link || drivePayload?.result?.driveUrl || (drivePayload?.fileId ? `https://drive.google.com/file/d/${drivePayload.fileId}/view` : null)
+      const driveFileId = drivePayload?.drive_file_id || drivePayload?.result?.fileId || drivePayload?.fileId || null
 
       if (driveUrl) {
         console.log('[BodyshopDocUpload] universal drive sync success', {
@@ -3315,8 +3325,8 @@ export default function BodyshopRepairPage() {
         return null
       }
 
-      const driveUrl = body.drive_url || body.link || body.result?.driveUrl || ((body as any)?.fileId ? `https://drive.google.com/file/d/${(body as any).fileId}/view` : null)
-      const driveFileId = body.drive_file_id || body.result?.fileId || (body as any)?.fileId || null
+      const driveUrl = body.drive_url || body.link || body.result?.driveUrl || (body?.fileId ? `https://drive.google.com/file/d/${body.fileId}/view` : null)
+      const driveFileId = body.drive_file_id || body.result?.fileId || body?.fileId || null
 
       if (driveUrl) {
         setBodyshopDocsByKey((prev) => ({

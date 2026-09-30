@@ -2,6 +2,17 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-30
+
+- Date: 2026-09-30
+- Change summary: CI lint baseline repair — added `DriveUploadResponse` type in `BodyshopRepairPage.tsx` to represent the `universal-drive-upload` edge function response shape (including top-level `fileId?`), replacing 6 `as any` casts that caused `@typescript-eslint/no-explicit-any` ESLint errors. Zero errors in `src/` after fix.
+- Impacted files: `src/pages/BodyshopRepairPage.tsx` (type definition + 4 cast removals only)
+- Business logic change: No — pure type-contract change. Runtime JS behavior of Drive sync is identical; all response variants (`drive_url`, `link`, `result.driveUrl`, `result.fileId`, top-level `fileId`, `drive_file_id`) are preserved.
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated: `docs/shared/active/CHANGE_LOG.md`
+
 ## 2026-09-28
 
 - Date: 2026-09-28

@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-29T07:27:19.393Z",
-  "scanned_files": 80,
+  "generated_at_utc": "2026-09-30T07:19:11.413Z",
+  "scanned_files": 82,
   "violations": 0,
   "scanned": [
     {
@@ -629,6 +629,22 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-004_IDSPAY_RC_ADVANCE_VERIFICATION_EDGE_FUNCTION_PLAN_2026-07-22.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-005_GET_PERMISSIONS_ANON_SECURITY_FIX_2026-09-30.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-006_PERFORMANCE_CACHING_AUDIT_PLAN_2026-09-30.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

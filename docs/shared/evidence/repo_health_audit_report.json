@@ -1,20 +1,23 @@
 {
-  "generated_at_utc": "2026-09-11T08:29:49.702Z",
+  "generated_at_utc": "2026-09-30T07:19:11.643Z",
   "advisory_only": true,
-  "governance_docs_scanned": 35,
+  "governance_docs_scanned": 36,
   "checks": {
-    "broken_or_stale_links": [
-      {
-        "file": "docs/shared/reference/MODULE_ROUTE_CONTRACT.md",
-        "link_target": "../../../local_folder/backups/full_database.sql",
-        "resolved_path": "local_folder/backups/full_database.sql",
-        "possible_moved_to": null
-      }
-    ],
+    "broken_or_stale_links": [],
     "root_level_doc_violations": [
+      {
+        "scope": "repo-root",
+        "file": "workflow-log.txt",
+        "rule": "STRUCTURE_GUIDE.md Section 2.0 — only README.md (and the AI contract .instructions.md / CONTRIBUTING.md) belong at repo root"
+      },
       {
         "scope": "docs-root",
         "file": "docs/META_WHATSAPP_TEMPLATES.md",
+        "rule": "STRUCTURE_GUIDE.md Section 2.1 — docs/ root reserved for governance anchors only"
+      },
+      {
+        "scope": "docs-root",
+        "file": "docs/test.md",
         "rule": "STRUCTURE_GUIDE.md Section 2.1 — docs/ root reserved for governance anchors only"
       }
     ],
@@ -33,5 +36,5 @@
       }
     ]
   },
-  "total_issues": 3
+  "total_issues": 4
 }
