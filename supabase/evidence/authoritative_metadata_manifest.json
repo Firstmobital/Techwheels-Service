@@ -1,8 +1,8 @@
 {
   "authoritative_metadata_path": "supabase/backups/full_metadata.sql",
-  "created_at_utc": "2026-09-29T08:49:06Z",
-  "sha256": "fffde2ff27cca3d5725eb05dd50138e04aae98fbfec3084ac723255e0480f48f",
-  "size_bytes": 2574445,
+  "created_at_utc": "2026-09-29T10:02:42Z",
+  "sha256": "58d4da896a472294d7189b1dc46ef409b982c3e88927a17b15463e64ce3ae03a",
+  "size_bytes": 2578493,
   "host": "aws-1-ap-south-1.pooler.supabase.com",
   "port": "5432",
   "database": "postgres",

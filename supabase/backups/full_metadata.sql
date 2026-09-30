@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict Ujn57bxG1VMfrYr7XGosjr2w94lTKfv1OHac5coTRZO9Vky7oX4X699waDlBvO3
+\restrict X3gDRlxDaWgRFcpzuNIB8bGLz3fIwEJtuyhBiIkuqB6J41r3IQNps0wMTINyhy6
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-09-29 14:18:02 IST
+-- Started on 2026-09-29 15:31:36 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -5664,32 +5664,82 @@ $$;
 
 CREATE FUNCTION public.customer_get_gate_pass(p_session_token text, p_reg_number text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'extensions'
+    SET search_path TO 'public'
     AS $$
 declare
-  v_sess record;
-  v_reg text;
-  v_regs text[];
-  v_text text;
-  v_payload jsonb;
+  v_sess             record;
+  v_reg              text;
+  v_regs             text[];
+  v_entry_issued     boolean;
+  v_gp_no            text;
+  v_text             text;
+  v_payload          jsonb;
 begin
   select * into v_sess from public.customer_require_session(p_session_token);
   v_regs := public.customer_my_reg_keys(v_sess.phone);
+
   if p_reg_number is not null and btrim(p_reg_number) <> '' then
     v_reg := public.customer_assert_reg(p_session_token, p_reg_number);
   end if;
 
-  select b.feedback_text
-  into v_text
-  from public.post_feedback_bot_data b
-  where b.mode = 'customer_gatepass_payload'
-    and (
-      public.customer_last10_digits(b.mobile_number) = v_sess.phone
-      or public.customer_norm_reg(b.vehicle_registration_number) = any(v_regs)
-    )
-    and (v_reg is null or public.customer_norm_reg(b.vehicle_registration_number) = v_reg)
-  order by b.created_at desc
+  -- Step 1: check the most recent reception entry for this vehicle.
+  -- This tells us whether a gate pass has been issued for the CURRENT visit.
+  select e.gate_pass_issued, e.gate_pass_number
+  into v_entry_issued, v_gp_no
+  from public.service_reception_entries e
+  where (
+    public.customer_last10_digits(e.owner_phone) = v_sess.phone
+    or public.customer_norm_reg(e.reg_number) = any(v_regs)
+  )
+  and (v_reg is null or public.customer_norm_reg(e.reg_number) = v_reg)
+  order by e.created_at desc
   limit 1;
+
+  if found then
+    -- A reception entry exists for this vehicle.
+    -- If the current entry has NOT issued a gate pass, return null so that
+    -- the portal does not display a stale gate pass from a previous visit.
+    if not coalesce(v_entry_issued, false) then
+      return null;
+    end if;
+
+    -- Gate pass issued for current entry — look up the payload by gate pass number.
+    -- service_type is stored as 'Gate Pass #<gp_no>' by issue_accounts_mechanical_gatepass.
+    if nullif(btrim(coalesce(v_gp_no, '')), '') is not null then
+      select b.feedback_text into v_text
+      from public.post_feedback_bot_data b
+      where b.mode = 'customer_gatepass_payload'
+        and b.service_type = 'Gate Pass #' || v_gp_no
+        and (
+          public.customer_last10_digits(b.mobile_number) = v_sess.phone
+          or public.customer_norm_reg(b.vehicle_registration_number) = any(v_regs)
+        )
+        and (v_reg is null or public.customer_norm_reg(b.vehicle_registration_number) = v_reg)
+      order by b.created_at desc
+      limit 1;
+    end if;
+  end if;
+
+  -- Step 2: fall back to original created_at-desc approach when:
+  --   a) no service_reception_entry found for this vehicle (edge case), or
+  --   b) entry has gate_pass_issued=true but the anchored lookup above found nothing
+  --      (e.g. historical rows stored before this fix was deployed).
+  if v_text is null then
+    -- Only fall back if either no entry was found OR entry confirmed gate pass issued.
+    -- (If entry found and gate pass NOT issued we already returned null above.)
+    if not found or coalesce(v_entry_issued, false) then
+      select b.feedback_text into v_text
+      from public.post_feedback_bot_data b
+      where b.mode = 'customer_gatepass_payload'
+        and (
+          public.customer_last10_digits(b.mobile_number) = v_sess.phone
+          or public.customer_norm_reg(b.vehicle_registration_number) = any(v_regs)
+        )
+        and (v_reg is null or public.customer_norm_reg(b.vehicle_registration_number) = v_reg)
+      order by b.created_at desc
+      limit 1;
+    end if;
+  end if;
 
   if v_text is not null then
     begin
@@ -5697,7 +5747,9 @@ begin
     exception when others then
       v_payload := null;
     end;
-    if v_payload is not null and nullif(btrim(coalesce(v_payload->>'gate_pass_no', '')), '') is not null then
+    if v_payload is not null
+      and nullif(btrim(coalesce(v_payload->>'gate_pass_no', '')), '') is not null
+    then
       return v_payload;
     end if;
   end if;
@@ -5849,26 +5901,77 @@ COMMENT ON FUNCTION public.customer_get_mechanical_case(p_session_token text, p_
 CREATE FUNCTION public.customer_get_repair_card(p_session_token text, p_reg_number text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions'
+    SET row_security TO 'off'
     AS $$
 declare
   v_sess record;
   v_reg text;
   v_regs text[];
   v_row jsonb;
+  v_card public.bodyshop_repair_cards%rowtype;
+  v_effective integer;
+  v_display integer;
 begin
   select * into v_sess from public.customer_require_session(p_session_token);
   v_regs := public.customer_my_reg_keys(v_sess.phone);
-  v_reg := public.customer_assert_reg(p_session_token, p_reg_number);
+  if p_reg_number is not null and btrim(p_reg_number) <> '' then
+    v_reg := public.customer_assert_reg(p_session_token, p_reg_number);
+  end if;
+
+  select b.*
+  into v_card
+  from public.bodyshop_repair_cards b
+  where public.customer_norm_reg(b.reg_number) = any(v_regs)
+    and (v_reg is null or public.customer_norm_reg(b.reg_number) = v_reg)
+  order by b.created_at desc
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  v_effective := public.customer_bodyshop_effective_stage(v_card);
+
+  select coalesce(max(p.stage_no), v_effective)
+  into v_display
+  from public.bodyshop_stage_worklist_projection p
+  where p.repair_card_id = v_card.id
+    and p.is_pending = true;
 
   select
-    to_jsonb(b) ||
-    jsonb_build_object(
-      'current_stage_label', public.bodyshop_repair_stage_label(b.current_stage),
-      'current_stage_worklist_active', public.bodyshop_repair_stage_worklist_active(b.id, b.current_stage),
-      'current_stage_worklist_total', public.bodyshop_repair_stage_worklist_total(b.id, b.current_stage),
-      'current_stage_worklist_pending', public.bodyshop_repair_stage_worklist_pending(b.id, b.current_stage),
-      'current_stage_pending_stages', public.bodyshop_repair_stage_pending_stages(b.id),
-      'effective_current_stage', public.customer_repair_card_effective_stage(b.id),
+    (to_jsonb(b) - 'sa_employee_code' - 'created_by')
+    || jsonb_build_object(
+      'customer_effective_stage', v_effective,
+      'customer_effective_stage_name', public.customer_bodyshop_stage_label(v_effective),
+      'customer_display_stage', v_display,
+      'customer_display_stage_name', public.customer_bodyshop_stage_label(v_display),
+      'pending_worklist_stages',
+      coalesce(
+        (
+          select jsonb_agg(p.stage_no order by p.stage_no)
+          from public.bodyshop_stage_worklist_projection p
+          where p.repair_card_id = b.id
+            and p.is_pending = true
+        ),
+        '[]'::jsonb
+      ),
+      'worklist_stages',
+      coalesce(
+        (
+          select jsonb_agg(
+            jsonb_build_object(
+              'stage_no', p.stage_no,
+              'is_done', p.is_done,
+              'is_pending', p.is_pending,
+              'is_ready', p.is_ready
+            )
+            order by p.stage_no
+          )
+          from public.bodyshop_stage_worklist_projection p
+          where p.repair_card_id = b.id
+        ),
+        '[]'::jsonb
+      ),
       'estimate_document',
       (
         select jsonb_build_object(
@@ -5929,14 +6032,28 @@ begin
         from public.bodyshop_intake_vehicle_photos p
         where p.repair_card_id = b.id
            or (b.reception_entry_id is not null and p.reception_entry_id = b.reception_entry_id)
+      ),
+      'settlement',
+      (
+        select jsonb_build_object(
+          'invoice_number', s.invoice_number,
+          'invoice_date', s.invoice_date,
+          'invoice_amount', s.invoice_amount,
+          'do_amount', s.do_amount,
+          'insurance_due_amount', s.insurance_due_amount,
+          'customer_diff_amount', s.customer_diff_amount,
+          'customer_remaining_amount', s.customer_remaining_amount,
+          'do_payment_status', s.do_payment_status,
+          'derived_payment_status', s.derived_payment_status
+        )
+        from public.bodyshop_settlements s
+        where s.repair_card_id = b.id
+        limit 1
       )
     )
   into v_row
   from public.bodyshop_repair_cards b
-  where public.customer_norm_reg(b.reg_number) = any(v_regs)
-    and public.customer_norm_reg(b.reg_number) = v_reg
-  order by b.created_at desc
-  limit 1;
+  where b.id = v_card.id;
 
   return v_row;
 end;
@@ -73002,11 +73119,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-09-29 14:19:06 IST
+-- Completed on 2026-09-29 15:32:42 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Ujn57bxG1VMfrYr7XGosjr2w94lTKfv1OHac5coTRZO9Vky7oX4X699waDlBvO3
+\unrestrict X3gDRlxDaWgRFcpzuNIB8bGLz3fIwEJtuyhBiIkuqB6J41r3IQNps0wMTINyhy6
 
