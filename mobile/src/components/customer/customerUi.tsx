@@ -40,8 +40,62 @@ export function formatWhen(value: unknown): string | null {
   return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+export const BODYSHOP_ADVISOR_PHONES: Record<string, string> = {
+  'gautam jangid': '7891495330',
+  'pankaj meena': '9875767177',
+  'aman gupta': '8824885029',
+  'deepesh swami': '9660596396',
+  'raju saini': '9024943537',
+}
+
+export function findAdvisorPhoneByName(name: unknown): string | null {
+  if (!name || typeof name !== 'string') return null
+  const clean = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!clean) return null
+
+  // 1. Exact or substring match on registered Bodyshop Advisors
+  for (const [advisorKey, phone] of Object.entries(BODYSHOP_ADVISOR_PHONES)) {
+    if (clean === advisorKey || clean.includes(advisorKey) || advisorKey.includes(clean)) {
+      return phone
+    }
+    const words = advisorKey.split(' ')
+    if (words.length >= 2 && words.every((w) => clean.includes(w))) {
+      return phone
+    }
+  }
+
+  // 2. Specific distinctive name matches
+  if (clean.includes('gautam')) return BODYSHOP_ADVISOR_PHONES['gautam jangid']
+  if (clean.includes('pankaj')) return BODYSHOP_ADVISOR_PHONES['pankaj meena']
+  if (clean.includes('deepesh')) return BODYSHOP_ADVISOR_PHONES['deepesh swami']
+  if (clean.includes('raju')) return BODYSHOP_ADVISOR_PHONES['raju saini']
+  if (/\baman\b/.test(clean)) return BODYSHOP_ADVISOR_PHONES['aman gupta']
+
+  return null
+}
+
 export function pickAdvisorPhone(record: Record<string, unknown> | null | undefined): string | null {
   if (!record) return null
+
+  // 1. Check if record contains a known Bodyshop Advisor name
+  const nameCandidates = [
+    record.sa_name,
+    record.sa_display_name,
+    record.service_advisor_name,
+    record.advisor_name,
+    record.advisor,
+    record.service_advisor,
+  ]
+  for (const candidate of nameCandidates) {
+    const matched = findAdvisorPhoneByName(candidate)
+    if (matched) return matched
+  }
+
+  // 2. Direct phone fields on record
   const raw =
     record.sa_phone ??
     record.advisor_phone ??
@@ -54,7 +108,14 @@ export function pickAdvisorPhone(record: Record<string, unknown> | null | undefi
   return null
 }
 
-export function getDirectAdvisorOrWorkshopPhone(record: Record<string, unknown> | null | undefined): string {
+export function getDirectAdvisorOrWorkshopPhone(
+  record: Record<string, unknown> | null | undefined,
+  fallbackName?: string | null
+): string {
+  if (fallbackName) {
+    const matched = findAdvisorPhoneByName(fallbackName)
+    if (matched) return matched
+  }
   const phone = pickAdvisorPhone(record)
   return phone || '9116667274'
 }

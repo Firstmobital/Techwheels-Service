@@ -25,6 +25,7 @@ import {
 import {
   fetchVehicleServiceHistory,
   cleanAdvisorPersonName,
+  getDirectAdvisorOrWorkshopPhone,
   extractKmFromFeedback,
   type CustomerVehicle,
   type PastServiceRecord,
@@ -2065,22 +2066,29 @@ export default function CustomerPortalPage({
 
               {/* 1-Tap Direct WhatsApp & Phone Call Buttons */}
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <a
-                  href={`https://wa.me/91${(vehicle.owner_phone || '').replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(`Hello, I am tracking my Tata vehicle ${vehicle.reg_number} (Job Card: ${vehicle.jc_number || 'Active'}). Please update on current status.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="tap-bounce py-2.5 px-3 rounded-2xl bg-[#00D2C4]/15 hover:bg-[#00D2C4]/25 text-[#00D2C4] border border-[#00D2C4]/35 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center"
-                >
-                  <span>💬</span>
-                  <span>WhatsApp</span>
-                </a>
-                <a
-                  href={`tel:${vehicle.owner_phone || ''}`}
-                  className="tap-bounce py-2.5 px-3 rounded-2xl bg-[#003366] hover:bg-[#002B49] text-white border border-[#00D2C4]/30 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center shadow-md"
-                >
-                  <span>📞</span>
-                  <span>Direct Call</span>
-                </a>
+                {(() => {
+                  const saPhone = getDirectAdvisorOrWorkshopPhone(vehicle as any, cleanAdvisorPersonName(vehicle.sa_display_name || vehicle.sa_name))
+                  return (
+                    <>
+                      <a
+                        href={`https://wa.me/91${saPhone}?text=${encodeURIComponent(`Hello, I am tracking my Tata vehicle ${vehicle.reg_number} (Job Card: ${vehicle.jc_number || 'Active'}). Please update on current status.`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tap-bounce py-2.5 px-3 rounded-2xl bg-[#00D2C4]/15 hover:bg-[#00D2C4]/25 text-[#00D2C4] border border-[#00D2C4]/35 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center"
+                      >
+                        <span>💬</span>
+                        <span>WhatsApp</span>
+                      </a>
+                      <a
+                        href={`tel:${saPhone}`}
+                        className="tap-bounce py-2.5 px-3 rounded-2xl bg-[#003366] hover:bg-[#002B49] text-white border border-[#00D2C4]/30 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center shadow-md"
+                      >
+                        <span>📞</span>
+                        <span>Direct Call</span>
+                      </a>
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </div>

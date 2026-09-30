@@ -277,7 +277,7 @@ export default function CustomerDashboardScreen() {
                 <Text style={{ color: CustomerTheme.primary, fontSize: 12.5, fontWeight: '800' }}>Chat</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => void Linking.openURL(`tel:${getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))}`)}
+                onPress={() => void Linking.openURL(`tel:${getDirectAdvisorOrWorkshopPhone({ ...(repairCard || {}), ...(job || {}), ...(selected as unknown as Record<string, unknown> || {}), sa_name: advisor, advisor }, advisor)}`)}
                 activeOpacity={0.85}
                 style={{
                   flex: 1,

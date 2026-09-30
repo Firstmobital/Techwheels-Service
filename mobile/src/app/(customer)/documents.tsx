@@ -216,7 +216,7 @@ export default function CustomerDocumentsScreen() {
     if (!token || !selectedReg) return
     const timer = setInterval(() => {
       void load('refresh')
-    }, 12000)
+    }, 60000) // 1 minute auto-refresh
     return () => clearInterval(timer)
   }, [token, selectedReg, load])
 
