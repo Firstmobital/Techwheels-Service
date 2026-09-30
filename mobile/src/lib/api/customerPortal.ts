@@ -1315,7 +1315,7 @@ async function resolveLatestRepairCardRow(
 
       const best = candidates[0] as Record<string, unknown>
 
-      // Prefer rpcCard if present and active or matching the best card id
+      // If rpcCard exists and matches the best card or is active, merge computed fields but let best take precedence for table columns (doc_* flags, doc_rejected_keys)
       if (rpcCard) {
         const rpcId = Number(rpcCard.id || 0)
         const dbId = Number(best.id || 0)
@@ -1323,10 +1323,10 @@ async function resolveLatestRepairCardRow(
         const dbActive = String(best.overall_status ?? '').toLowerCase() === 'active'
 
         if (rpcId === dbId || (rpcActive && !dbActive)) {
-          return { ...best, ...rpcCard }
+          return { ...rpcCard, ...best }
         }
       }
-      return rpcCard ? { ...best, ...rpcCard } : best
+      return rpcCard ? { ...rpcCard, ...best } : best
     }
   } catch (err) {
     console.warn('resolveLatestRepairCardRow error:', err)

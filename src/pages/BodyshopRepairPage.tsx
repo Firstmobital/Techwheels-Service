@@ -4264,6 +4264,10 @@ export default function BodyshopRepairPage() {
     if (!selected) return
     const isCurrentlyApproved = advisorVerifiedDoc(selected, String(key))
     const isCurrentlyRejected = rejectedDocKeys(selected).includes(String(key))
+    if (!approved && isCurrentlyApproved) {
+      toast_('Once approved, a document cannot be rejected. You can re-upload if needed.', false)
+      return
+    }
     if (approved && isCurrentlyApproved && !isCurrentlyRejected) return
     if (!approved && !isCurrentlyApproved && isCurrentlyRejected) return
     const nextRejected = approved
@@ -6295,10 +6299,10 @@ export default function BodyshopRepairPage() {
                                     <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
                                       <button
                                         type="button"
-                                        onClick={() => { if (checked) { rejectDoc(k) } else { approveDoc(k) } }}
+                                        onClick={() => { if (!checked) { approveDoc(k) } }}
                                         className={`brx-doc-check ${checked ? 'is-checked' : 'is-required'}`}
-                                        title={checked ? 'Approved — click to reject' : 'Approve this document'}
-                                        disabled={busy}
+                                        title={checked ? 'Approved (verified)' : 'Approve this document'}
+                                        disabled={busy || checked}
                                       >
                                         {checked ? <span className="brx-doc-check-mark">✓</span> : <span style={{ color: '#94a3b8', fontSize: '11px' }}>○</span>}
                                       </button>
@@ -6321,16 +6325,6 @@ export default function BodyshopRepairPage() {
                                                 👁️ View
                                               </button>
                                             )}
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
-                                              onClick={() => rejectDoc(k)}
-                                              disabled={busy}
-                                              title="Reject this document"
-                                            >
-                                              ✕ Reject
-                                            </button>
                                             <button
                                               type="button"
                                               className="btn brx-doc-btn"

@@ -52,6 +52,25 @@ function isImageName(name?: string | null, contentType?: string | null) {
   return type.startsWith('image/') || /\.(jpg|jpeg|png|webp|heic)$/.test(file)
 }
 
+function parseRejectedDocKeys(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String)
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (!trimmed) return []
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) return parsed.map(String)
+    } catch {
+      return trimmed
+        .replace(/^\{|\}$/g, '')
+        .split(',')
+        .map((s) => s.trim().replace(/^"|"$/g, ''))
+        .filter(Boolean)
+    }
+  }
+  return []
+}
+
 export default function CustomerDocumentsScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
   const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>([])
@@ -361,7 +380,7 @@ export default function CustomerDocumentsScreen() {
     const base = freshRepairCard || repairCard
     const rawApproved = base?.[slot.docKey]
     const approved = Boolean(rawApproved === true || rawApproved === 'true' || rawApproved === 1)
-    const rejectedKeys = Array.isArray(base?.doc_rejected_keys) ? base.doc_rejected_keys.map(String) : []
+    const rejectedKeys = parseRejectedDocKeys(base?.doc_rejected_keys)
     const rejected = !approved && rejectedKeys.includes(slot.docKey)
     const busy = busyKey === slot.docKey
     const isReuploading = Boolean(reuploadingKeys[slot.docKey])
