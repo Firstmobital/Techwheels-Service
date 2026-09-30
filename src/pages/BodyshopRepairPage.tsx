@@ -3676,8 +3676,8 @@ export default function BodyshopRepairPage() {
     .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
     .img-fallback { padding: 12px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; }
     .mid-gap {
-      height: 24px;
-      min-height: 24px;
+      height: 50px;
+      min-height: 50px;
       width: 100%;
     }
     @media print {
@@ -3730,7 +3730,7 @@ export default function BodyshopRepairPage() {
       .side-block {
         flex: 1 1 0 !important;
         min-height: 0 !important;
-        margin: 0 0 1.5mm 0 !important;
+        margin: 0 !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -3760,7 +3760,7 @@ export default function BodyshopRepairPage() {
         justify-content: center !important;
       }
       .side-img {
-        max-height: 116mm !important;
+        max-height: 108mm !important;
         max-width: 100% !important;
         width: auto !important;
         height: auto !important;
@@ -3772,7 +3772,7 @@ export default function BodyshopRepairPage() {
         break-inside: avoid !important;
       }
       .side-frame {
-        height: 116mm !important;
+        height: 108mm !important;
         width: 100% !important;
         border: 1px solid #cbd5e1 !important;
         page-break-inside: avoid !important;
@@ -3780,8 +3780,8 @@ export default function BodyshopRepairPage() {
       }
       .mid-gap {
         flex: 0 0 auto !important;
-        height: 18mm !important;
-        min-height: 18mm !important;
+        height: 38mm !important;
+        min-height: 38mm !important;
         width: 100% !important;
         display: block !important;
         page-break-inside: avoid !important;

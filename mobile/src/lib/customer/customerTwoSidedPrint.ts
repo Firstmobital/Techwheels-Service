@@ -128,8 +128,8 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       box-shadow: 0 2px 4px rgba(0,0,0,0.06);
     }
     .mid-gap {
-      height: 24px;
-      min-height: 24px;
+      height: 50px;
+      min-height: 50px;
       width: 100%;
     }
     @media print {
@@ -180,7 +180,7 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       .side-block {
         flex: 1 1 0 !important;
         min-height: 0 !important;
-        margin: 0 0 1.5mm 0 !important;
+        margin: 0 !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -201,7 +201,7 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
         text-align: center !important;
       }
       .side-img {
-        max-height: 116mm !important;
+        max-height: 108mm !important;
         max-width: 100% !important;
         width: auto !important;
         height: auto !important;
@@ -214,8 +214,8 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       }
       .mid-gap {
         flex: 0 0 auto !important;
-        height: 18mm !important;
-        min-height: 18mm !important;
+        height: 38mm !important;
+        min-height: 38mm !important;
         width: 100% !important;
         display: block !important;
         page-break-inside: avoid !important;
