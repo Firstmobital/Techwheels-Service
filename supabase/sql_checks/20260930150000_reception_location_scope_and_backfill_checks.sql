@@ -65,38 +65,29 @@ FROM resolved;
 
 -- Expected: resolvable_rows_still_missing_display_location = 0.
 
--- 5) Backfill must not manufacture an unsupported location for known legacy dealer codes.
+-- 5) Stored historical display location must agree with the same resolver used for Reception access.
 SELECT
-  count(*) AS legacy_code_location_mismatches
+  count(*) AS resolved_location_mismatches
 FROM public.service_reception_entries r
 WHERE NULLIF(btrim(coalesce(r.sa_employee_code, '')), '') IS NOT NULL
-  AND (
-    (
-      upper(r.sa_employee_code) LIKE '%3001440%'
-      AND public.normalize_employee_location_key(COALESCE(NULLIF(btrim(r.location), ''), NULLIF(btrim(r.branch), ''))) IS DISTINCT FROM 'AJMER ROAD'
-    )
-    OR
-    (
-      (upper(r.sa_employee_code) LIKE '%3000840%' OR upper(r.sa_employee_code) LIKE '%500A840%')
-      AND public.normalize_employee_location_key(COALESCE(NULLIF(btrim(r.location), ''), NULLIF(btrim(r.branch), ''))) IS DISTINCT FROM 'SITAPURA'
-    )
-  );
+  AND public.reception_sa_location_key(r.sa_employee_code) IS NOT NULL
+  AND public.normalize_employee_location_key(
+        COALESCE(NULLIF(btrim(r.location), ''), NULLIF(btrim(r.branch), ''))
+      ) IS DISTINCT FROM public.reception_sa_location_key(r.sa_employee_code);
 
--- Expected: 0, except where Employee Master intentionally overrides a legacy-code fallback.
--- If non-zero, inspect those employees before treating as failure:
+-- Expected: 0.
+-- Any non-zero row means stored display location and access-scope resolver disagree.
 SELECT
   r.id,
   r.sa_employee_code,
   r.branch,
   r.location,
-  em.employee_code,
-  em.location AS employee_master_location
+  public.reception_sa_location_key(r.sa_employee_code) AS resolved_location
 FROM public.service_reception_entries r
-LEFT JOIN public.employee_master em
-  ON upper(btrim(em.employee_code)) = upper(btrim(r.sa_employee_code))
 WHERE NULLIF(btrim(coalesce(r.sa_employee_code, '')), '') IS NOT NULL
   AND public.reception_sa_location_key(r.sa_employee_code) IS NOT NULL
-  AND public.normalize_employee_location_key(COALESCE(NULLIF(btrim(r.location), ''), NULLIF(btrim(r.branch), '')))
-      IS DISTINCT FROM public.reception_sa_location_key(r.sa_employee_code)
+  AND public.normalize_employee_location_key(
+        COALESCE(NULLIF(btrim(r.location), ''), NULLIF(btrim(r.branch), ''))
+      ) IS DISTINCT FROM public.reception_sa_location_key(r.sa_employee_code)
 ORDER BY r.id
 LIMIT 100;
