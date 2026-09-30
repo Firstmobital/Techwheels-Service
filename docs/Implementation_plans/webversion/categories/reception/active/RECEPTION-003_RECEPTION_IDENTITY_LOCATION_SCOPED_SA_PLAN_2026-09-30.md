@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** Not Started  
+**Status:** Implementation Complete - CI + deployed UAT pending  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -335,37 +335,37 @@ For the currently discussed users, the implementation/UAT should configure each 
 
 | ID | Task | Status | Acceptance |
 |---|---|---|---|
-| R3-001 | Re-read current `businessRoles.ts`, Reception page/API, auth/module gate, mapping API | PENDING | Current implementation reconfirmed before edits |
-| R3-002 | Inspect authoritative metadata for Employee Master, user mapping, role helper parity, relevant RLS/RPC | PENDING | No DB objects assumed |
-| R3-003 | Confirm no active plan already implements Reception location identity scope | PENDING | No duplicate architecture |
+| R3-001 | Re-read current `businessRoles.ts`, Reception page/API, auth/module gate, mapping API | DONE | Current implementation reconfirmed before edits |
+| R3-002 | Inspect authoritative metadata for Employee Master, user mapping, role helper parity, relevant RLS/RPC | DONE | Fresh manifest + `full_metadata.sql` inspected; no DB objects assumed |
+| R3-003 | Confirm no active plan already implements Reception location identity scope | DONE | RECEPTION-003 confirmed as the existing owner; no duplicate plan created |
 
 ### Phase 1 - Business Role support
 
 | ID | Task | Status | Acceptance |
 |---|---|---|---|
-| R3-101 | Add canonical `RECEPTION` role + alias to web Business Role contract | PENDING | Settings add/edit/import accepts Reception and stores canonical token |
-| R3-102 | Mirror role catalog to mobile if current architecture requires parity | PENDING | Web/mobile catalogs stay aligned |
-| R3-103 | Verify SQL Business Role helper parity | PENDING | Evidence says migration required or not required |
-| R3-104 | If required, add migration + SQL checks + DB ledger entry | PENDING | SQL helper recognizes RECEPTION; checks pass; no unrelated DB change |
+| R3-101 | Add canonical `RECEPTION` role + alias to web Business Role contract | DONE | Web Settings add/edit/import now accepts Reception and stores canonical `RECEPTION` |
+| R3-102 | Mirror role catalog to mobile if current architecture requires parity | DEFERRED | Current request/runtime is web Reception; mobile has no Reception-identity consumer requiring this token in this change. MCP authorization also excludes `mobile/**`; revisit when mobile adopts this identity contract. |
+| R3-103 | Verify SQL Business Role helper parity | DONE | Authoritative SQL normalizer accepts open-ended uppercase tokens through its `ELSE` branch; `RECEPTION` requires no SQL change |
+| R3-104 | If required, add migration + SQL checks + DB ledger entry | N/A | No schema/function/RLS change required, so no migration/ledger work manufactured |
 
 ### Phase 2 - Logged-in Reception identity scope
 
 | ID | Task | Status | Acceptance |
 |---|---|---|---|
-| R3-201 | Add reusable current-user Reception scope resolver | PENDING | Admin bypass + deterministic non-admin location |
-| R3-202 | Resolve only active mappings and active employees | PENDING | Inactive identity cannot grant scope |
-| R3-203 | Require RECEPTION role and non-empty location for non-admin | PENDING | Invalid setup fails closed with useful message |
-| R3-204 | Handle multiple mappings deterministically/ambiguously | PENDING | No arbitrary location selection |
+| R3-201 | Add reusable current-user Reception scope resolver | DONE | `getMyReceptionScope()` provides admin bypass + deterministic non-admin location |
+| R3-202 | Resolve only active mappings and active employees | DONE | Existing SECURITY DEFINER mapping scope is reused, then linked Employee Master rows are rechecked with `is_active=true` |
+| R3-203 | Require RECEPTION role and non-empty location for non-admin | DONE | Missing mapping/role/location fails closed with explicit setup guidance |
+| R3-204 | Handle multiple mappings deterministically/ambiguously | DONE | Same-location mappings are deterministic; different normalized locations fail closed instead of picking one |
 
 ### Phase 3 - Location-scoped SA dropdown
 
 | ID | Task | Status | Acceptance |
 |---|---|---|---|
-| R3-301 | Remove hard-coded Sitapura filter | PENDING | No fixed branch/location in ReceptionPage |
-| R3-302 | Apply receptionist location scope to active SA options | PENDING | Jagatpura user sees Jagatpura SAs only; Ajmer Road user sees Ajmer Road SAs only |
-| R3-303 | Preserve department filter | PENDING | Existing service-type department behavior unchanged |
-| R3-304 | Preserve EV/PV fuel filter | PENDING | Existing fuel behavior unchanged |
-| R3-305 | Preserve admin unscoped behavior | PENDING | Admin can select across locations |
+| R3-301 | Remove hard-coded Sitapura filter | DONE | No fixed reception location remains in the SA-option filter |
+| R3-302 | Apply receptionist location scope to active SA options | DONE | Non-admin candidates are filtered by normalized mapped Employee Master location before advisor eligibility |
+| R3-303 | Preserve department filter | DONE | Existing service-type department behavior remains after location scoping |
+| R3-304 | Preserve EV/PV fuel filter | DONE | Existing fuel behavior remains after location scoping |
+| R3-305 | Preserve admin unscoped behavior | DONE | Admin bypass returns all otherwise-eligible SA locations |
 
 ### Phase 4 - User setup and production-safe UAT
 
@@ -385,9 +385,9 @@ For the currently discussed users, the implementation/UAT should configure each 
 |---|---|---|---|
 | R3-501 | Run repository code validation | PENDING | CI/build/type checks pass |
 | R3-502 | Run docs validation | PENDING | Plan/index/tracker remain valid |
-| R3-503 | Run DB checks only if a migration is required | PENDING | SQL checks pass |
-| R3-504 | Practical verification in deployed environment | PENDING | Intended logged-in behavior demonstrated |
-| R3-505 | Update truth docs/change log after implementation | PENDING | Completed behavior promoted per SYNC_PROTOCOL |
+| R3-503 | Run DB checks only if a migration is required | N/A | DB audit proved no migration is required |
+| R3-504 | Practical verification in deployed environment | PENDING | Requires merged/deployed build plus configured receptionist identities |
+| R3-505 | Update truth docs/change log after implementation | DONE | `CURRENT_STATE.md`, shared README, and change log updated in this transaction |
 | R3-506 | Archive plan after verified sign-off | PENDING | Active tracker no longer carries completed work |
 
 ---
@@ -416,7 +416,7 @@ For the currently discussed users, the implementation/UAT should configure each 
 | Adding RECEPTION only in TypeScript but not SQL role helper | Future RBAC drift | Mandatory SQL parity audit before implementation completion |
 | Treating location as tenancy security | Cross-tenant security regression | Keep dealer/RLS contract unchanged |
 | Hard-coding Jagatpura/Ajmer Road | Future branch drift | Resolve location from mapped Employee Master identity |
-| Multiple user mappings produce nondeterministic scope | Wrong branch dropdown | Primary preference + ambiguity fail-closed rule |
+| Multiple user mappings produce nondeterministic scope | Wrong branch dropdown | Normalize all linked RECEPTION locations; allow one unique location and fail closed when locations differ |
 | Admin accidentally scoped like staff | Operational regression | Explicit admin bypass test |
 | Reception change breaks SA department/fuel rules | Wrong advisor choices | Preserve existing filters and test combinations |
 | Frontend-only filtering exposes unnecessary employee data | Data minimization concern | Scope query in API layer where current RLS/API permits |
@@ -480,7 +480,9 @@ No new auth table, employee-location table, module-permission table, or Receptio
 | 2026-09-30 | Dealer code remains tenancy/security scope, not SA dropdown location | Keeps security and operational dimensions separate |
 | 2026-09-30 | Existing module permissions remain access authority | Avoids parallel authorization |
 | 2026-09-30 | Admin bypasses receptionist identity/location scope | Matches current admin architecture |
-| 2026-09-30 | No schema change assumed | Existing tables already represent user mapping, role, and location; SQL parity is verified before proposing DB work |
+| 2026-09-30 | No schema change required | Fresh authoritative metadata proves SQL Business Role normalization accepts `RECEPTION` as an open-ended canonical token; existing mapping/table/RLS objects are sufficient |
+| 2026-09-30 | Reuse `get_my_bodyshop_employee_scope()` for Reception identity resolution | Existing SECURITY DEFINER mapping path already returns current-user Employee Master scope in dealer context; avoids a parallel auth/mapping mechanism |
+| 2026-09-30 | Multiple mapped receptionist rows are location-deterministic, not primary-driven | Existing shared scope RPC does not expose `is_primary`; one normalized location is accepted, multiple locations fail closed |
 
 ---
 
@@ -500,9 +502,10 @@ No new auth table, employee-location table, module-permission table, or Receptio
 
 ## 13) Activity Summary
 
-- PENDING: 22
-- IN PROGRESS: 0
+- DONE: 15
+- PENDING: 10 (production user setup/UAT, formal validation, practical verification, archive)
+- DEFERRED: 1 (mobile catalog parity; not required by current web runtime)
+- N/A: 2 (DB migration/check path not required)
 - BLOCKED: 0
-- DONE: 0
 
-**Next action:** implement Phase 0 audit first, then the smallest verified Phase 1/2 change. Do not start with database changes unless authoritative metadata proves they are required.
+**Next action:** complete trusted CI, merge/deploy the reviewed change, configure the intended receptionist Employee Master mappings/permissions, then execute the production UAT matrix before archive/sign-off.
