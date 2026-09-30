@@ -15,6 +15,7 @@ export const KNOWN_BUSINESS_ROLES = new Set([
   'FLOOR_INCHARGE',
   'CRE',
   'DRIVER',
+  'RECEPTION',
   'EDP',
   'SURVEY',
   'DENTOR',
@@ -40,6 +41,7 @@ const ALIAS_TO_CANONICAL: Record<string, string> = {
   FLOOR_INCHARGE: 'FLOOR_INCHARGE',
   CRE: 'CRE',
   DRIVER: 'DRIVER',
+  RECEPTION: 'RECEPTION',
   EDP: 'EDP',
   SSA: 'EDP',
   'SENIOR SERVICE ADVISOR': 'EDP',
@@ -206,6 +208,10 @@ export function isTechnicianBusinessRole(value: string | null | undefined): bool
 
 export function isCrmBusinessRole(value: string | null | undefined): boolean {
   return hasBusinessRole(value, 'CRM')
+}
+
+export function isReceptionBusinessRole(value: string | null | undefined): boolean {
+  return hasBusinessRole(value, 'RECEPTION')
 }
 
 export function isManagerBusinessRole(value: string | null | undefined): boolean {
