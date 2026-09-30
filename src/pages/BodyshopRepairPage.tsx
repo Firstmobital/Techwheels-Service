@@ -3826,6 +3826,8 @@ export default function BodyshopRepairPage() {
     ${renderSideHtml('FRONT SIDE', frontInfo, frontDriveId)}
     ${renderSideHtml('BACK SIDE', backInfo, backDriveId)}
   </div>
+</body>
+</html>`)
           previewTab.document.close()
           return
         }
