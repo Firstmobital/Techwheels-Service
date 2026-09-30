@@ -3562,76 +3562,204 @@ export default function BodyshopRepairPage() {
   <style>
     @page {
       size: A4 portrait;
-      margin: 8mm 10mm;
+      margin: 4mm 6mm;
     }
     * { box-sizing: border-box; }
-    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #f8fafc; margin: 16px; color: #0f172a; text-align: center; }
-    .print-actions { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-    .btn { background: #2563eb; color: #fff; border: none; padding: 9px 18px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: #f8fafc;
+      margin: 0;
+      padding: 12px 16px;
+      color: #0f172a;
+      text-align: center;
+    }
+    .print-actions {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 9px 18px;
+      font-weight: 800;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
     .btn:hover { background: #1d4ed8; }
     .btn-secondary { background: #475569; }
     .btn-secondary:hover { background: #334155; }
     .btn-close { background: #64748b; }
     .btn-sm { font-size: 11px; padding: 5px 10px; }
-    .page-box { max-width: 680px; margin: 0 auto; border: 1.5px solid #cbd5e1; padding: 16px 20px; border-radius: 12px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .doc-header { font-size: 17px; font-weight: 900; color: #1e293b; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
-    .side-block { margin-bottom: 10px; text-align: center; }
-    .side-title { font-size: 11px; font-weight: 800; color: #475569; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .img-container { min-height: 80px; display: flex; align-items: center; justify-content: center; }
-    .side-img { max-width: 100%; max-height: 290px; object-fit: contain; border: 1px solid #94a3b8; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
-    .side-frame { width: 100%; height: 290px; border: 1px solid #94a3b8; border-radius: 6px; }
-    .side-meta { margin-top: 4px; font-size: 11px; }
+    .page-box {
+      max-width: 920px;
+      width: 98%;
+      margin: 0 auto;
+      border: 1.5px solid #cbd5e1;
+      padding: 14px 18px;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+    .doc-header {
+      font-size: 16px;
+      font-weight: 900;
+      color: #1e293b;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e2e8f0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .side-block {
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .side-block:last-child {
+      margin-bottom: 0;
+    }
+    .side-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #475569;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .img-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .side-img {
+      max-width: 100%;
+      max-height: 45vh;
+      min-height: 250px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    }
+    .side-frame {
+      width: 100%;
+      height: 45vh;
+      min-height: 350px;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+    }
+    .side-meta {
+      margin-top: 4px;
+      font-size: 11px;
+    }
     .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
     .img-fallback { padding: 12px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; }
     @media print {
       @page {
         size: A4 portrait;
-        margin: 6mm 8mm;
+        margin: 3mm 5mm;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box !important;
       }
       html, body {
         height: 100% !important;
+        max-height: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #fff !important;
         overflow: hidden !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
-      .print-actions, .side-meta { display: none !important; }
+      .print-actions, .side-meta {
+        display: none !important;
+      }
       .page-box {
         border: none !important;
         padding: 0 !important;
+        margin: 0 auto !important;
         max-width: 100% !important;
+        width: 100% !important;
+        box-shadow: none !important;
+        height: 100% !important;
+        max-height: 100vh !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      .doc-header {
+        flex: 0 0 auto !important;
+        font-size: 13px !important;
+        font-weight: 900 !important;
+        margin: 0 0 2mm 0 !important;
+        padding: 0 0 1.5mm 0 !important;
+        border-bottom: 1.5px solid #0f172a !important;
+        text-align: center !important;
+      }
+      .side-block {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        margin: 0 0 2mm 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        overflow: hidden !important;
+      }
+      .side-block:last-child {
+        margin-bottom: 0 !important;
+      }
+      .side-title {
+        flex: 0 0 auto !important;
+        font-size: 10px !important;
+        font-weight: 800 !important;
+        margin: 0 0 1.5mm 0 !important;
+        color: #1e293b !important;
+        text-align: center !important;
+      }
+      .img-container {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+      .side-img {
+        max-height: 134mm !important;
+        max-width: 100% !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 4px !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
-      .doc-header {
-        font-size: 15px !important;
-        margin-bottom: 6px !important;
-        padding-bottom: 4px !important;
-        border-bottom: 1.5px solid #cbd5e1 !important;
-      }
-      .side-block {
-        margin-bottom: 6px !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-      .side-title {
-        font-size: 10px !important;
-        margin-bottom: 3px !important;
-        font-weight: 800 !important;
-      }
-      .img-container {
-        min-height: auto !important;
-      }
-      .side-img {
-        max-height: 290px !important;
-        max-width: 96% !important;
-        object-fit: contain !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
       .side-frame {
-        height: 290px !important;
+        height: 134mm !important;
+        width: 100% !important;
+        border: 1px solid #cbd5e1 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
