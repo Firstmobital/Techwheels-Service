@@ -1293,38 +1293,40 @@ async function resolveLatestRepairCardRow(
 
     if (!error && rows && rows.length > 0) {
       const candidates = [...rows].sort((a, b) => {
-        const stageA = Number(a.current_stage || 0)
-        const stageB = Number(b.current_stage || 0)
-        if (stageA !== stageB) return stageB - stageA
+        // 1. Active cards win over non-active/delivered cards
+        const aActive = String(a.overall_status ?? '').toLowerCase() === 'active' ? 1 : 0
+        const bActive = String(b.overall_status ?? '').toLowerCase() === 'active' ? 1 : 0
+        if (aActive !== bActive) return bActive - aActive
+
+        // 2. Exact JC matches win
+        if (normJc) {
+          const aJcMatch = String(a.job_card_no ?? '').trim().toUpperCase() === normJc ? 1 : 0
+          const bJcMatch = String(b.job_card_no ?? '').trim().toUpperCase() === normJc ? 1 : 0
+          if (aJcMatch !== bJcMatch) return bJcMatch - aJcMatch
+        }
+
+        // 3. Most recently updated/created card wins (never sort by stage number)
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime()
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime()
+        if (timeA !== timeB) return timeB - timeA
+
         return Number(b.id || 0) - Number(a.id || 0)
       })
 
-      let best = candidates[0] as Record<string, unknown>
-      if (normJc) {
-        const exactMatches = candidates.filter(
-          (r) => String(r.job_card_no ?? '').trim().toUpperCase() === normJc
-        )
-        if (exactMatches.length > 0) {
-          best = exactMatches[0] as Record<string, unknown>
-        }
-      }
+      const best = candidates[0] as Record<string, unknown>
 
+      // Prefer rpcCard if present and active or matching the best card id
       if (rpcCard) {
         const rpcId = Number(rpcCard.id || 0)
         const dbId = Number(best.id || 0)
-        const rpcStage = Number(rpcCard.current_stage || 0)
-        const dbStage = Number(best.current_stage || 0)
+        const rpcActive = String(rpcCard.overall_status ?? '').toLowerCase() === 'active'
+        const dbActive = String(best.overall_status ?? '').toLowerCase() === 'active'
 
-        const rpcJc = String(rpcCard.job_card_no ?? '').trim().toUpperCase()
-        if (normJc && rpcJc === normJc && rpcStage >= dbStage) {
-          return rpcCard
-        }
-
-        if (rpcId > dbId || (rpcId === dbId && rpcStage > dbStage)) {
-          return rpcCard
+        if (rpcId === dbId || (rpcActive && !dbActive)) {
+          return { ...best, ...rpcCard }
         }
       }
-      return best
+      return rpcCard ? { ...best, ...rpcCard } : best
     }
   } catch (err) {
     console.warn('resolveLatestRepairCardRow error:', err)

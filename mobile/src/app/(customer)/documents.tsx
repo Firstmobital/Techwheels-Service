@@ -137,7 +137,10 @@ export default function CustomerDocumentsScreen() {
   }, [documents])
 
   const baseCard = freshRepairCard || repairCard
-  const approvedCount = requiredSlots.filter((slot) => baseCard?.[slot.docKey] === true).length
+  const approvedCount = requiredSlots.filter((slot) => {
+    const val = baseCard?.[slot.docKey]
+    return val === true || val === 'true' || val === 1
+  }).length
   const submittedCount = requiredSlots.filter((slot) => {
     const row = byKey.get(slot.docKey)
     return Boolean(row && (String(row.drive_url || '').trim() || String(row.view_url || '').trim() || String(row.file_name || '').trim()))
@@ -177,17 +180,17 @@ export default function CustomerDocumentsScreen() {
           clearCustomerPortalCache()
           resetCustomerDocumentsInflight()
         }
-        const [activeKind, estList] = await Promise.all([
+        const [activeKind, estList, freshDocs] = await Promise.all([
           refreshVisit({ bypassCache: mode === 'refresh' }),
           customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+          fetchCustomerDocuments(token, selectedReg).catch(() => null),
         ])
         setEstimates((estList || []).map(parseEstimate))
         const currentServiceType = String(job?.service_type || selected?.service_type || '')
         if (activeKind === 'mechanical' || isMechanicalServiceType(currentServiceType)) {
           setDocuments([])
-        } else {
-          const fresh = await fetchCustomerDocuments(token, selectedReg)
-          applySnapshot(fresh)
+        } else if (freshDocs) {
+          applySnapshot(freshDocs)
         }
       } catch (err) {
         console.warn('Customer documents load failed, retaining current state:', err)
@@ -356,7 +359,8 @@ export default function CustomerDocumentsScreen() {
     const driveSynced = Boolean(row && driveUrl && !row.drive_pending)
     const submitted = fileAvailable
     const base = freshRepairCard || repairCard
-    const approved = base?.[slot.docKey] === true
+    const rawApproved = base?.[slot.docKey]
+    const approved = Boolean(rawApproved === true || rawApproved === 'true' || rawApproved === 1)
     const rejectedKeys = Array.isArray(base?.doc_rejected_keys) ? base.doc_rejected_keys.map(String) : []
     const rejected = !approved && rejectedKeys.includes(slot.docKey)
     const busy = busyKey === slot.docKey
