@@ -93,6 +93,15 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `wa_agent`
 - `busy`
 
+### Reception Operational Identity and SA Scope
+
+- `/reception` remains protected by the existing `reception` module permission in the app shell.
+- Employee Master Business Role `RECEPTION` is the web receptionist identity token.
+- Non-admin Reception scope resolves through the existing authenticated user -> active `user_employee_links` -> active `employee_master` relationship in current dealer context. The receptionist identity must resolve to exactly one normalized non-empty Employee Master location.
+- Reception advisor candidates are active SA-role Employee Master rows in the same location, followed by the existing service-department and EV/PV filters. Vehicle round-robin suggestions and revisit advisor retention use the same scoped candidate set, so hidden cross-location assignments are not accepted.
+- Admin users bypass the receptionist identity/location operational filter. Existing dealer-code/RLS enforcement remains unchanged and is not replaced by location filtering.
+- Missing mapping, missing `RECEPTION` role, inactive Employee Master identity, missing location, or multiple mapped Reception locations fail closed with explicit setup guidance.
+
 ## Mobile Version (Audited)
 
 ### Stack and Runtime

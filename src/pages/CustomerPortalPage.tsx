@@ -2067,7 +2067,13 @@ export default function CustomerPortalPage({
               {/* 1-Tap Direct WhatsApp & Phone Call Buttons */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 {(() => {
-                  const saPhone = getDirectAdvisorOrWorkshopPhone(vehicle as any, cleanAdvisorPersonName(vehicle.sa_display_name || vehicle.sa_name))
+                  const saPhone = getDirectAdvisorOrWorkshopPhone(
+                    {
+                      sa_name: vehicle.sa_name,
+                      sa_display_name: vehicle.sa_display_name,
+                    },
+                    cleanAdvisorPersonName(vehicle.sa_display_name || vehicle.sa_name),
+                  )
                   return (
                     <>
                       <a

@@ -1,6 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
-import { isServiceAdvisorRole } from '../businessRoles'
+import { isReceptionBusinessRole, isServiceAdvisorRole } from '../businessRoles'
 import { getDealerContext } from './auth'
 import { fail, ok, type ApiResult } from './types'
 
@@ -73,6 +73,26 @@ export interface ReceptionEmployeeOption {
   department: string | null
   fuel_type: string | null
   location: string | null
+}
+
+export type ReceptionUserScope =
+  | { isAdmin: true; location: null }
+  | {
+      isAdmin: false
+      employeeCode: string
+      location: string
+    }
+
+type LinkedEmployeeScopeRow = {
+  employee_code?: string | null
+  department?: string | null
+  role?: string | null
+  location?: string | null
+  fuel_type?: string | null
+}
+
+export function normalizeReceptionLocation(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 export type ReceptionRevisitPriorEntry = {
@@ -1314,6 +1334,111 @@ export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): P
 
   if (error) return fail(error)
   return ok(Number(data ?? 0))
+}
+
+export async function getMyReceptionScope(): Promise<ApiResult<ReceptionUserScope>> {
+  const sessionRes = await supabase.auth.getSession()
+  const userId = sessionRes.data.session?.user?.id ?? null
+  if (!userId) return fail('Reception setup unavailable: no active signed-in user.')
+
+  const { data: profile, error: profileError } = await supabase
+    .from('users')
+    .select('role, is_active')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profileError) return fail(profileError)
+  if (!profile || profile.is_active !== true) {
+    return fail('Reception setup unavailable: your user account is inactive.')
+  }
+
+  const platformRole = String(profile.role ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[_\s]+/g, ' ')
+
+  if (platformRole === 'ADMIN' || platformRole === 'SUPER ADMIN') {
+    return ok({ isAdmin: true, location: null })
+  }
+
+  // Reuse the existing SECURITY DEFINER employee-scope RPC rather than
+  // adding a parallel mapping path. Despite its legacy name, the RPC
+  // returns active linked Employee Master rows for the current user.
+  const { data, error } = await supabase.rpc('get_my_bodyshop_employee_scope')
+  if (error) return fail(error)
+
+  const linkedRows = (data ?? []) as LinkedEmployeeScopeRow[]
+  const linkedCodes = Array.from(
+    new Set(
+      linkedRows
+        .map((row) => String(row.employee_code ?? '').trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
+
+  if (linkedCodes.length === 0) {
+    return fail(
+      'Reception setup required: ask an administrator to create an active user-to-employee mapping for your login.',
+    )
+  }
+
+  // The shared scope RPC does not expose employee_master.is_active.
+  // Reception requires an active identity, so verify the linked Employee
+  // Master rows through the same table already used by the Reception SA list.
+  const { data: activeEmployees, error: activeEmployeeError } = await supabase
+    .from('employee_master')
+    .select('employee_code, role, location, is_active')
+    .in('employee_code', linkedCodes)
+    .eq('is_active', true)
+
+  if (activeEmployeeError) return fail(activeEmployeeError)
+
+  const receptionRows = ((activeEmployees ?? []) as LinkedEmployeeScopeRow[])
+    .filter((row) => isReceptionBusinessRole(row.role))
+
+  if (receptionRows.length === 0) {
+    return fail(
+      'Reception setup required: ask an administrator to link your login to an active Employee Master row with Business Role RECEPTION.',
+    )
+  }
+
+  const rowsWithLocation = receptionRows.filter((row) => normalizeReceptionLocation(row.location).length > 0)
+  if (rowsWithLocation.length === 0) {
+    return fail(
+      'Reception setup required: your linked RECEPTION Employee Master row must have a Location.',
+    )
+  }
+
+  const locationKeys = new Map<string, string>()
+  for (const row of rowsWithLocation) {
+    const displayLocation = String(row.location ?? '').trim().replace(/\s+/g, ' ')
+    const key = normalizeReceptionLocation(displayLocation)
+    if (key && !locationKeys.has(key)) locationKeys.set(key, displayLocation)
+  }
+
+  if (locationKeys.size !== 1) {
+    return fail(
+      'Reception setup is ambiguous: your linked RECEPTION Employee Master rows resolve to multiple Locations. Ask an administrator to correct the mappings.',
+    )
+  }
+
+  const [locationKey, location] = Array.from(locationKeys.entries())[0]
+  const scopedRow = [...rowsWithLocation]
+    .filter((row) => normalizeReceptionLocation(row.location) === locationKey)
+    .sort((a, b) =>
+      String(a.employee_code ?? '').localeCompare(String(b.employee_code ?? '')),
+    )[0]
+
+  const employeeCode = String(scopedRow?.employee_code ?? '').trim().toUpperCase()
+  if (!employeeCode) {
+    return fail('Reception setup required: linked RECEPTION Employee Master row has no Employee Code.')
+  }
+
+  return ok({
+    isAdmin: false,
+    employeeCode,
+    location,
+  })
 }
 
 export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmployeeOption[]>> {

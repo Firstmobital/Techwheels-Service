@@ -192,6 +192,24 @@ Migration references:
 - `supabase/migrations/002_add_dealer_code_to_users.sql`
 - `supabase/migrations/20260521163400_auto_confirm_on_activate.sql`
 
+## 5.5 Reception Domain
+
+Main files:
+
+- `src/pages/ReceptionPage.tsx`
+- `src/lib/api/reception.ts`
+- `src/lib/businessRoles.ts`
+
+Current identity and advisor-selection contract:
+
+- Route/module access remains controlled by the existing `reception` module permission; no Reception-specific parallel permission system exists.
+- Employee Master accepts canonical Business Role `RECEPTION`.
+- For non-admin Reception users, operational location is resolved from the current user's active `user_employee_links`-backed Employee Master scope. The linked Employee Master identity must be active, contain Business Role `RECEPTION`, and have exactly one normalized non-empty location.
+- The Service Advisor dropdown is scoped to active SA-role employees in that Reception location, then applies the existing department and EV/PV eligibility rules.
+- Admin users bypass the receptionist identity/location restriction and retain cross-location operational selection.
+- Dealer code remains the tenancy/RLS dimension. Reception location scoping controls advisor selection and does not replace or weaken dealer-scoped database access.
+- Missing, inactive, or ambiguous receptionist mappings fail closed with setup guidance; the UI does not fall back to Sitapura or another default location.
+
 ## 6. Access Control Model (RBAC + RLS)
 
 ## 6.1 What exists
