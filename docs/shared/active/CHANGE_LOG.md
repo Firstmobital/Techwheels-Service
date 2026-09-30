@@ -2,6 +2,17 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-30
+
+- Date: 2026-09-30
+- Change summary: Hardened database-truth freshness handling for AI/MCP workflows. `DATABASE_TRUTH.md` now requires the generated metadata manifest to be checked before DB-dependent advice, requires relevant schema definitions to be re-read from `full_metadata.sql`, defines composite-truth handling when production changes post-date the dump, and removes manually duplicated current dump timestamp/hash/size metadata from prose to prevent documentation drift.
+- Impacted files: `docs/shared/reference/DATABASE_TRUTH.md`, `docs/shared/active/CHANGE_LOG.md`
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: DB truth no-drift hardening via authorized MCP change.
+
 ## 2026-09-28
 
 - Date: 2026-09-28
