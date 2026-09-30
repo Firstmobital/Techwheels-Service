@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** Implementation Complete - CI + deployed UAT pending  
+**Status:** Implementation + CI Complete - deployed UAT pending  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -383,8 +383,8 @@ For the currently discussed users, the implementation/UAT should configure each 
 
 | ID | Task | Status | Acceptance |
 |---|---|---|---|
-| R3-501 | Run repository code validation | PENDING | CI/build/type checks pass |
-| R3-502 | Run docs validation | PENDING | Plan/index/tracker remain valid |
+| R3-501 | Run repository code validation | DONE | Trusted MCP CI: web lint/build, mobile TypeScript/native compatibility, and Supabase validation all pass |
+| R3-502 | Run docs validation | DONE | `docs:validate` passes in trusted MCP CI |
 | R3-503 | Run DB checks only if a migration is required | N/A | DB audit proved no migration is required |
 | R3-504 | Practical verification in deployed environment | PENDING | Requires merged/deployed build plus configured receptionist identities |
 | R3-505 | Update truth docs/change log after implementation | DONE | `CURRENT_STATE.md`, shared README, and change log updated in this transaction |
@@ -502,10 +502,12 @@ No new auth table, employee-location table, module-permission table, or Receptio
 
 ## 13) Activity Summary
 
-- DONE: 15
-- PENDING: 10 (production user setup/UAT, formal validation, practical verification, archive)
+- DONE: 17
+- PENDING: 9 (production user setup/UAT, practical verification, archive)
 - DEFERRED: 1 (mobile catalog parity; not required by current web runtime)
 - N/A: 2 (DB migration/check path not required)
 - BLOCKED: 0
 
-**Next action:** complete trusted CI, merge/deploy the reviewed change, configure the intended receptionist Employee Master mappings/permissions, then execute the production UAT matrix before archive/sign-off.
+**Validation evidence:** trusted MCP CI run `36690358015` passed Root/web lint + build + docs validation, Mobile/Expo validation, and Supabase validation. The first validation attempt exposed one pre-existing `no-explicit-any` error in `CustomerPortalPage.tsx` already present on the base commit; it was repaired with a type-safe object projection without runtime behavior change before the passing run.
+
+**Next action:** merge/deploy the reviewed change, configure the intended receptionist Employee Master mappings/permissions, then execute the production UAT matrix before archive/sign-off.
