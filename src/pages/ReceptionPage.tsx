@@ -562,7 +562,9 @@ export default function ReceptionPage() {
     // 1) Department: SERVICE (default for all reception entries).
     // 2) Fuel Type: Determined from vehicleInfo.vehicle_type (primary) or model name (fallback).
     //    EV vehicles => only EV advisors, PV vehicles => only PV advisors.
-    // 3) SA dropdown shows employee_master rows matching BOTH department and fuel_type.
+    // 3) Non-admin Reception users are scoped to the Location resolved from
+    //    their linked RECEPTION Employee Master identity; admins are unscoped.
+    // 4) SA dropdown then applies department + fuel type within that location.
     // Keep this rule in sync with Settings > Employee Master to avoid behavior drift.
     const requiredDepartment = getRequiredDepartmentForServiceType(form.service_type)
     const useFuelFilter = shouldApplyFuelFilter(form.service_type)
@@ -612,7 +614,6 @@ export default function ReceptionPage() {
     if (editingId !== null) return
     if (!form.sa_employee_code) return
     if (hasSelectedSaInOptions) return
-    if (revisitContext?.is_revisit) return
     setForm((prev) => ({ ...prev, sa_employee_code: '' }))
   }, [editingId, form.sa_employee_code, hasSelectedSaInOptions, revisitContext?.is_revisit])
 
@@ -1097,6 +1098,15 @@ export default function ReceptionPage() {
 
     if (!form.reg_number.trim() || !form.model.trim() || !form.fuel_type.trim() || !form.sa_employee_code.trim() || !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
       setError('Please fill all required fields: Registration No, Model, Fuel Type (EV/PV), SA Name, Owner Name, Owner Phone, Source')
+      return
+    }
+
+    if (!hasSelectedSaInOptions) {
+      setError(
+        receptionScope.isAdmin
+          ? 'Please select an eligible Service Advisor for the current department/fuel filters.'
+          : `Please select an eligible Service Advisor for ${receptionScope.location} and the current department/fuel filters.`,
+      )
       return
     }
 
