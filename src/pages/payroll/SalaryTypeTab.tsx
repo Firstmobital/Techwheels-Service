@@ -140,13 +140,20 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   const [savingCode, setSavingCode] = useState<string | null>(null)
   const [lifecycleCode, setLifecycleCode] = useState<string | null>(null)
 
+  const [unlocked, setUnlocked] = useState(false)
+  const [codeInput, setCodeInput] = useState('')
+  const [codeError, setCodeError] = useState<string | null>(null)
+
   const reload = useCallback(async () => {
     const [emps, comp] = await Promise.all([fetchPayrollEmployees(), fetchCompensationMap()])
     setEmployees(emps)
     setCompMap(comp)
   }, [])
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => {
+    if (!unlocked) return
+    void reload()
+  }, [reload, unlocked])
 
   useEffect(() => {
     if (!showAdd) return
@@ -415,6 +422,39 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   }
 
   const showActions = isAdmin || canModify
+
+  function handleUnlock() {
+    if (codeInput === '041118') {
+      setUnlocked(true)
+      setCodeError(null)
+      setCodeInput('')
+    } else {
+      setCodeError('Incorrect security code.')
+    }
+  }
+
+  if (!unlocked) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: '400px', margin: '2rem auto', textAlign: 'center', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+        <h3 style={{ marginTop: 0 }}>Salary Type — restricted</h3>
+        <p style={{ marginBottom: '1rem' }}>Enter the security code to view or edit salary details.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <input
+            type="password"
+            placeholder="Security code"
+            value={codeInput}
+            onChange={(ev) => setCodeInput(ev.target.value)}
+            onKeyDown={(ev) => { if (ev.key === 'Enter') handleUnlock() }}
+            autoFocus
+          />
+          {codeError && <div className="toast error" style={{ margin: 0 }}>{codeError}</div>}
+          <button type="button" className="btn btn--primary" onClick={handleUnlock}>
+            Unlock
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
