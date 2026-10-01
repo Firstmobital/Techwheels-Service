@@ -307,21 +307,11 @@ export default function PayrollProcessingTab({
 
   const bodyshopHint = useMemo(() => {
     if (!bodyshopStakeholder) return undefined
-    if (bodyshopScope.includeUnmapped) {
-      const show = bodyshopScope.unmappedInScope > 0
-        || Math.abs(bodyshopScope.displayedTotal - payableBodyshopInScope) > 0.009
-      if (!show) return undefined
-      return (
-        <div className="kpi__hint">
-          Payable in payroll {formatCurrency(payableBodyshopInScope)}
-          {bodyshopScope.unmappedInScope > 0 ? ` · Unmapped ${formatCurrency(bodyshopScope.unmappedInScope)}` : ''}
-        </div>
-      )
-    }
     if (Math.abs(bodyshopScope.displayedTotal - payableBodyshopInScope) <= 0.009) return undefined
     return (
-      <div className="kpi__hint">
-        Mapped to payroll {formatCurrency(payableBodyshopInScope)}
+      <div className="kpi__hint" title="Total derived from Bodyshop Tracker prior to payroll mapping">
+        Tracker total {formatCurrency(bodyshopScope.displayedTotal)}
+        {bodyshopScope.includeUnmapped && bodyshopScope.unmappedInScope > 0 ? ` · Unmapped ${formatCurrency(bodyshopScope.unmappedInScope)}` : ''}
       </div>
     )
   }, [bodyshopStakeholder, bodyshopScope, payableBodyshopInScope])
@@ -597,7 +587,7 @@ export default function PayrollProcessingTab({
         <PayrollSummaryCard
           tone="bodyshop"
           icon="truck"
-          value={formatCurrency(bodyshopScope.displayedTotal)}
+          value={formatCurrency(payableBodyshopInScope)}
           label="Bodyshop Variable Total"
           employeeCount={totals.employeeCount}
           onExport={exportBodyshopBankPayout}
