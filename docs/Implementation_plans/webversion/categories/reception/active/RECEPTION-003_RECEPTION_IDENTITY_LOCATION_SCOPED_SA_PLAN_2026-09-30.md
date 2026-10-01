@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** UAT Remediation In Progress - DBL-0091 proposed  
+**Status:** UAT Remediation In Progress - DBL-0091 applied; practical edit UAT pending  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -565,6 +565,20 @@ Production UAT confirmed the location-scoped Reception list is now loading corre
 - non-dedicated Reception-capable users preserve the prior dealer-code authorization path;
 - no table, RLS policy, grant, or historical data rewrite.
 
+### DBL-0091 production apply evidence — 2026-10-01
+
+The operator merged PR #28, applied the DBL-0091 migration, and supplied the paired structural check output. The live function evidence confirms:
+
+- `update_reception_entry` remains SECURITY DEFINER;
+- dedicated Reception edit scope is present;
+- existing-entry location authorization is present;
+- selected-SA location authorization is present;
+- dealer-scoped fallback is preserved;
+- helper functions required by the contract exist with expected security posture;
+- Reception MODIFY remains mandatory.
+
+This proves the production function contract was applied. It does not yet prove practical end-user edit behavior; DBL-0091 remains APPLIED until same-location/cross-location UAT is completed.
+
 ## 13) Activity Summary
 
 - DONE: 17
@@ -575,4 +589,4 @@ Production UAT confirmed the location-scoped Reception list is now loading corre
 
 **Validation evidence:** trusted MCP CI run `36690358015` passed Root/web lint + build + docs validation, Mobile/Expo validation, and Supabase validation. The first validation attempt exposed one pre-existing `no-explicit-any` error in `CustomerPortalPage.tsx` already present on the base commit; it was repaired with a type-safe object projection without runtime behavior change before the passing run.
 
-**Next action:** review/merge DBL-0091, manually apply the edit-scope migration, run its paired read-only checks, then repeat same-location edit UAT for Sitapura and Ajmer Road plus a negative cross-location reassignment test before archive/sign-off.
+**Next action:** run practical edit UAT: Sitapura same-location edit across 3000840/500A840, Ajmer Road same-location edit for 3001440, and negative cross-location SA reassignment. If all pass, refresh authoritative metadata, mark DBL-0091 VERIFIED, and complete/archive RECEPTION-003.
