@@ -21,7 +21,6 @@ CREATE OR REPLACE FUNCTION public.update_reception_entry(p_reception_entry_id bi
     AS $_$
 DECLARE
   v_dealer_code                  text;
-  v_existing_sa_employee_code    text;
   v_existing_location_key        text;
   v_reception_location_key       text;
   v_is_admin                     boolean;
@@ -33,7 +32,6 @@ DECLARE
 BEGIN
   SELECT
       sre.dealer_code,
-      sre.sa_employee_code,
       COALESCE(
         public.normalize_employee_location_key(sre.location),
         public.normalize_employee_location_key(sre.branch),
@@ -41,7 +39,6 @@ BEGIN
       )
     INTO
       v_dealer_code,
-      v_existing_sa_employee_code,
       v_existing_location_key
     FROM public.service_reception_entries sre
    WHERE sre.id = p_reception_entry_id;
