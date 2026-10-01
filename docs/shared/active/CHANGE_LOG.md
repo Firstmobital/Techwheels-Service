@@ -3,6 +3,15 @@
 ## 2026-10-01
 
 - Date: 2026-10-01
+- Change summary: DBL-0091 production apply evidence recorded after PR #28 merge. Paired structural checks confirm the live `update_reception_entry` function is SECURITY DEFINER, contains dedicated Reception location authorization for the existing entry and selected SA, preserves dealer-scoped fallback, and still requires Reception MODIFY. Practical edit UAT remains pending before VERIFIED.
+- Impacted files: DB change ledger, RECEPTION-003 plan/index/tracker.
+- Business logic change: No new logic in this documentation-only transaction; records production application of the already-merged DBL-0091 function change.
+- Function-level contract change: No new change; applied contract verified structurally.
+- RBAC/RLS change: No new change.
+- Data/schema change: No new change.
+- Docs updated by: RECEPTION-003 DBL-0091 production evidence intake.
+
+- Date: 2026-10-01
 - Change summary: Proposed DBL-0091 to align Reception edit authorization with RECEPTION-003 location-scoped visibility. Dedicated receptionist identities with Reception MODIFY may edit only rows in their single active Employee Master location and may assign only Service Advisors resolving to that same location. Admin bypass and the existing dealer-scoped fallback for non-dedicated Reception-capable users are preserved.
 - Impacted files: `supabase/migrations/20261001133000_reception_location_scoped_edit.sql`, paired SQL checks, RECEPTION-003 plan/index/tracker, DB ledger, shared Reception truth docs.
 - Business logic change: Yes — dedicated Reception edit scope changes from row dealer-code authorization to the already-established Reception location contract.
