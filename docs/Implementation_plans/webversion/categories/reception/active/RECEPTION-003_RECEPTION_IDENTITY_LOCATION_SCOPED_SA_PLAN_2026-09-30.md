@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** UAT Remediation In Progress - DBL-0090 proposed  
+**Status:** UAT Remediation In Progress - DBL-0091 proposed  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -556,7 +556,7 @@ Production UAT confirmed the location-scoped Reception list is now loading corre
 - Sitapura legitimately spans `3000840` and `500A840`, so a Sitapura receptionist can see a same-location historical row that is outside the login's single dealer-code scope and then be denied on save;
 - the module permission is therefore present and correct; the inconsistency is between Reception read scope and Reception update scope.
 
-**DBL-0090 remediation contract:**
+**DBL-0091 remediation contract:**
 - admin remains unrestricted;
 - a dedicated non-admin RECEPTION identity still requires Reception MODIFY;
 - resolve exactly one active RECEPTION Employee Master location using the same identity criteria as DBL-0089;
@@ -575,4 +575,4 @@ Production UAT confirmed the location-scoped Reception list is now loading corre
 
 **Validation evidence:** trusted MCP CI run `36690358015` passed Root/web lint + build + docs validation, Mobile/Expo validation, and Supabase validation. The first validation attempt exposed one pre-existing `no-explicit-any` error in `CustomerPortalPage.tsx` already present on the base commit; it was repaired with a type-safe object projection without runtime behavior change before the passing run.
 
-**Next action:** review/merge DBL-0090, manually apply the edit-scope migration, run its paired read-only checks, then repeat same-location edit UAT for Sitapura and Ajmer Road plus a negative cross-location reassignment test before archive/sign-off.
+**Next action:** review/merge DBL-0091, manually apply the edit-scope migration, run its paired read-only checks, then repeat same-location edit UAT for Sitapura and Ajmer Road plus a negative cross-location reassignment test before archive/sign-off.
