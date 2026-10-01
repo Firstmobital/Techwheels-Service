@@ -1,4 +1,4 @@
--- RECEPTION-003 / DBL-0090
+-- RECEPTION-003 / DBL-0091
 -- Read-only verification for 20261001133000_reception_location_scoped_edit.sql.
 
 -- 1) update_reception_entry must retain SECURITY DEFINER and contain the
@@ -50,6 +50,6 @@ SELECT
 
 -- Expected: true.
 
--- 4) No data/schema/table/policy mutation is part of DBL-0090.
+-- 4) No data/schema/table/policy mutation is part of DBL-0091.
 -- Manual repository review should confirm the migration only replaces
 -- update_reception_entry() and its COMMENT.
