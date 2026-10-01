@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-10-01
+
+- Date: 2026-10-01
+- Change summary: Proposed DBL-0091 to align Reception edit authorization with RECEPTION-003 location-scoped visibility. Dedicated receptionist identities with Reception MODIFY may edit only rows in their single active Employee Master location and may assign only Service Advisors resolving to that same location. Admin bypass and the existing dealer-scoped fallback for non-dedicated Reception-capable users are preserved.
+- Impacted files: `supabase/migrations/20261001133000_reception_location_scoped_edit.sql`, paired SQL checks, RECEPTION-003 plan/index/tracker, DB ledger, shared Reception truth docs.
+- Business logic change: Yes — dedicated Reception edit scope changes from row dealer-code authorization to the already-established Reception location contract.
+- Function-level contract change: Yes — `update_reception_entry()` gains dedicated Reception location authorization.
+- RBAC/RLS change: Function-level authorization change only; module MODIFY remains required, admin bypass remains, and no table RLS policy/grant is changed.
+- Data/schema change: Function replacement only; no table/column/index/data rewrite.
+- Docs updated by: RECEPTION-003 DBL-0091 remediation.
+
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
 ## 2026-09-30

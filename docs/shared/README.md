@@ -207,7 +207,8 @@ Current identity and advisor-selection contract:
 - For non-admin Reception users, operational location is resolved from the current user's active `user_employee_links`-backed Employee Master scope. The linked Employee Master identity must be active, contain Business Role `RECEPTION`, and have exactly one normalized non-empty location.
 - The Service Advisor dropdown is scoped to active SA-role employees in that Reception location, then applies the existing department and EV/PV eligibility rules.
 - Admin users bypass the receptionist identity/location restriction and retain cross-location operational selection.
-- Dealer code remains the tenancy/RLS dimension. Reception location scoping controls advisor selection and does not replace or weaken dealer-scoped database access.
+- Dealer code remains the tenancy/RLS dimension for the broader platform. Dedicated Reception read/edit operations use the receptionist's single active Employee Master location for Reception operational scope; non-dedicated Reception-capable users retain the existing dealer-scoped update path.
+- Reception edit authorization requires Reception MODIFY, requires the existing entry to resolve to the receptionist's location, and requires the newly selected SA to resolve to that same location; admin bypass remains unchanged.
 - Missing, inactive, or ambiguous receptionist mappings fail closed with setup guidance; the UI does not fall back to Sitapura or another default location.
 
 ## 6. Access Control Model (RBAC + RLS)

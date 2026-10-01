@@ -1,7 +1,7 @@
 # RECEPTION-003 Reception Identity + Location-Scoped SA Dropdown Plan
 
 **Plan ID:** RECEPTION-003  
-**Status:** UAT Remediation In Progress - DBL-0089 proposed  
+**Status:** UAT Remediation In Progress - DBL-0091 proposed  
 **Platform:** Web  
 **Category:** reception  
 **Owner:** Reception Team + RBAC Team + Platform Team  
@@ -545,6 +545,26 @@ The DBL-0088 implementation invokes that authenticated scope helper for each can
 - preserve the existing admin, Service Advisor, Floor Incharge, Bodyshop, and dealer-fallback branches;
 - perform no additional historical data rewrite.
 
+## 12.3) 2026-10-01 Production UAT Finding — Reception Edit Scope
+
+Production UAT confirmed the location-scoped Reception list is now loading correctly after DBL-0089, but a dedicated receptionist with Reception VIEW + MODIFY can still receive HTTP 403 when saving an edit to a visible same-location historical entry.
+
+**Root cause (current authoritative metadata + application call path):**
+- web edit calls the existing SECURITY DEFINER `update_reception_entry()` RPC;
+- the RPC currently authorizes non-admin Reception edits only with `dealer_code_in_scope(existing_row.dealer_code)`;
+- DBL-0089 visibility intentionally uses the receptionist's Employee Master location instead of historical row dealer code;
+- Sitapura legitimately spans `3000840` and `500A840`, so a Sitapura receptionist can see a same-location historical row that is outside the login's single dealer-code scope and then be denied on save;
+- the module permission is therefore present and correct; the inconsistency is between Reception read scope and Reception update scope.
+
+**DBL-0091 remediation contract:**
+- admin remains unrestricted;
+- a dedicated non-admin RECEPTION identity still requires Reception MODIFY;
+- resolve exactly one active RECEPTION Employee Master location using the same identity criteria as DBL-0089;
+- allow edit only when the existing entry resolves to that same location;
+- also require the newly selected Service Advisor to resolve to that same location, preventing cross-location reassignment during edit;
+- non-dedicated Reception-capable users preserve the prior dealer-code authorization path;
+- no table, RLS policy, grant, or historical data rewrite.
+
 ## 13) Activity Summary
 
 - DONE: 17
@@ -555,4 +575,4 @@ The DBL-0088 implementation invokes that authenticated scope helper for each can
 
 **Validation evidence:** trusted MCP CI run `36690358015` passed Root/web lint + build + docs validation, Mobile/Expo validation, and Supabase validation. The first validation attempt exposed one pre-existing `no-explicit-any` error in `CustomerPortalPage.tsx` already present on the base commit; it was repaired with a type-safe object projection without runtime behavior change before the passing run.
 
-**Next action:** review/merge DBL-0089, manually apply the timeout-fix migration, run its paired read-only checks, then repeat Sitapura/Ajmer Road Reception UAT and refresh authoritative metadata before archive/sign-off.
+**Next action:** review/merge DBL-0091, manually apply the edit-scope migration, run its paired read-only checks, then repeat same-location edit UAT for Sitapura and Ajmer Road plus a negative cross-location reassignment test before archive/sign-off.
