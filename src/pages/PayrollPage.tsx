@@ -31,7 +31,10 @@ const TAB_DESCRIPTIONS: Record<TabId, string> = {
 
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<TabId>('attendance')
-  const [payrollMonth, setPayrollMonth] = useState(() => formatPayrollMonth(new Date()))
+  const [payrollMonth, setPayrollMonth] = useState(() => {
+    const now = new Date()
+    return formatPayrollMonth(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+  })
   const [permissions, setPermissions] = useState({ canView: false, canModify: false, canDelete: false, isAdmin: false })
   const [loadingPerms, setLoadingPerms] = useState(true)
 
