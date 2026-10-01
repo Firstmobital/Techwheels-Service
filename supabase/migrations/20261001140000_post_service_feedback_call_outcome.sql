@@ -1,0 +1,92 @@
+ALTER TABLE public.post_service_feedback_remarks ADD COLUMN IF NOT EXISTS call_outcome text DEFAULT 'contacted' NOT NULL;
+ALTER TABLE public.post_service_feedback_messages ADD COLUMN IF NOT EXISTS latest_call_outcome text DEFAULT 'contacted' NOT NULL;
+
+DROP FUNCTION IF EXISTS public.psf_add_remark(bigint, text, date, boolean);
+
+CREATE FUNCTION public.psf_add_remark(
+    p_feedback_id bigint, 
+    p_remark text, 
+    p_next_follow_up_date date DEFAULT NULL::date, 
+    p_set_next_follow_up_date boolean DEFAULT false,
+    p_call_outcome text DEFAULT 'contacted'
+) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_actor_name text;
+begin
+  if not (public.is_admin() or public.has_module_modify('post_service_feedback_cre')) then
+    raise exception 'Insufficient permissions';
+  end if;
+
+  if p_remark is null or btrim(p_remark) = '' then
+    raise exception 'Remark cannot be empty';
+  end if;
+
+  select coalesce(u.full_name, auth.jwt()->>'email')
+  into v_actor_name
+  from public.users u
+  where u.id = auth.uid();
+
+  if v_actor_name is null then
+    v_actor_name := coalesce(auth.jwt()->>'email', 'Unknown');
+  end if;
+
+  insert into public.post_service_feedback_remarks
+    (feedback_id, remark, created_by_id, created_by_name, is_resolution, call_outcome)
+  values
+    (p_feedback_id, btrim(p_remark), auth.uid(), v_actor_name, false, p_call_outcome);
+
+  update public.post_service_feedback_messages
+  set cre_status = case when cre_status = 'open' then 'in_progress' else cre_status end,
+      next_follow_up_date = case
+        when p_set_next_follow_up_date then p_next_follow_up_date
+        else next_follow_up_date
+      end,
+      remarked_at = now(),
+      latest_call_outcome = p_call_outcome,
+      updated_at = now()
+  where id = p_feedback_id;
+
+  if not found then
+    raise exception 'Feedback row not found: %', p_feedback_id;
+  end if;
+
+  return jsonb_build_object('ok', true, 'actor_name', v_actor_name);
+end;
+$$;
+
+GRANT ALL ON FUNCTION public.psf_add_remark(bigint, text, date, boolean, text) TO anon;
+GRANT ALL ON FUNCTION public.psf_add_remark(bigint, text, date, boolean, text) TO authenticated;
+GRANT ALL ON FUNCTION public.psf_add_remark(bigint, text, date, boolean, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.psf_get_today_productivity() RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_today_start timestamptz;
+  v_today_end timestamptz;
+  v_res jsonb;
+begin
+  v_today_start := (timezone('Asia/Kolkata', now())::date)::timestamp at time zone 'Asia/Kolkata';
+  v_today_end := v_today_start + interval '1 day' - interval '1 microsecond';
+
+  select jsonb_build_object(
+    'positive', count(*) filter (where rating_at >= v_today_start and rating_at <= v_today_end and effective_rating >= 4),
+    'needsFollowup', count(*) filter (where rating_at >= v_today_start and rating_at <= v_today_end and effective_rating <= 3),
+    'inProgress', count(*) filter (where remarked_at >= v_today_start and remarked_at <= v_today_end and cre_status = 'in_progress' and latest_call_outcome != 'call_not_picked'),
+    'callNotPicked', count(*) filter (where remarked_at >= v_today_start and remarked_at <= v_today_end and cre_status = 'in_progress' and latest_call_outcome = 'call_not_picked'),
+    'resolved', count(*) filter (where resolved_at >= v_today_start and resolved_at <= v_today_end and cre_status = 'resolved'),
+    'total', count(*) filter (where
+      (remarked_at >= v_today_start and remarked_at <= v_today_end)
+      or (rating_at >= v_today_start and rating_at <= v_today_end)
+      or (resolved_at >= v_today_start and resolved_at <= v_today_end)
+    )
+  ) into v_res
+  from public.post_service_feedback_messages;
+
+  return coalesce(v_res, '{"positive": 0, "needsFollowup": 0, "inProgress": 0, "callNotPicked": 0, "resolved": 0, "total": 0}'::jsonb);
+end;
+$$;

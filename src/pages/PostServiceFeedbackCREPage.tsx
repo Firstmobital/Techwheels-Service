@@ -59,6 +59,7 @@ interface TodayProductivity {
   positive: number
   needsFollowup: number
   inProgress: number
+  callNotPicked: number
   resolved: number
   total: number
   waSent: number
@@ -270,6 +271,7 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
   const [remarks, setRemarks] = useState<RemarkRow[]>([])
   const [loading, setLoading] = useState(showActions)
   const [draft, setDraft] = useState('')
+  const [callNotPicked, setCallNotPicked] = useState(false)
   const [followUpDate, setFollowUpDate] = useState(row.next_follow_up_date ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [savingRating, setSavingRating] = useState(false)
@@ -317,9 +319,11 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
         p_remark: draft.trim(),
         p_next_follow_up_date: followUpDate || null,
         p_set_next_follow_up_date: true,
+        p_call_outcome: callNotPicked ? 'call_not_picked' : 'contacted'
       })
       if (e) throw e
       setDraft('')
+      setCallNotPicked(false)
       await fetchRemarks()
       onUpdated()
     } catch (e: unknown) {
@@ -416,13 +420,27 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
       {showActions && row.cre_status !== 'resolved' && (
         <div className="space-y-2">
           <div className="flex flex-col md:flex-row gap-2 md:items-end">
-            <textarea
-              className="w-full flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
-              rows={2}
-              placeholder="Add a call remark…"
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-            />
+            <div className="flex-1 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={callNotPicked}
+                  onChange={e => {
+                    setCallNotPicked(e.target.checked)
+                    if (e.target.checked) setDraft('Call Not Picked')
+                  }}
+                />
+                <span className="text-sm font-medium text-gray-700">Call Not Picked</span>
+              </label>
+              <textarea
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                rows={2}
+                placeholder="Add a call remark…"
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+              />
+            </div>
             <label className="md:w-52 shrink-0">
               <span className="block text-xs text-gray-500 mb-1">Next Follow-up Date</span>
               <input
@@ -493,7 +511,7 @@ export default function PostServiceFeedbackCREPage() {
     total: 0, open: 0, in_progress: 0, resolved: 0,
   })
   const [todayProductivity, setTodayProductivity] = useState<TodayProductivity>({
-    positive: 0, needsFollowup: 0, inProgress: 0, resolved: 0, total: 0, waSent: 0,
+    positive: 0, needsFollowup: 0, inProgress: 0, callNotPicked: 0, resolved: 0, total: 0, waSent: 0,
   })
   const [filteredTotal, setFilteredTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -589,7 +607,7 @@ export default function PostServiceFeedbackCREPage() {
     if (pageRes.error) throw pageRes.error
     if (prodRes.error) throw prodRes.error
 
-    const prod = prodRes.data as { positive: number, needsFollowup: number, inProgress: number, resolved: number, total: number } || { positive: 0, needsFollowup: 0, inProgress: 0, resolved: 0, total: 0 }
+    const prod = prodRes.data as { positive: number, needsFollowup: number, inProgress: number, callNotPicked: number, resolved: number, total: number } || { positive: 0, needsFollowup: 0, inProgress: 0, callNotPicked: 0, resolved: 0, total: 0 }
 
     return {
       overview: { totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount },
@@ -603,6 +621,7 @@ export default function PostServiceFeedbackCREPage() {
         positive: prod.positive,
         needsFollowup: prod.needsFollowup,
         inProgress: prod.inProgress,
+        callNotPicked: prod.callNotPicked,
         resolved: prod.resolved,
         total: prod.total,
         waSent: todayWaSentCount,
@@ -737,10 +756,11 @@ export default function PostServiceFeedbackCREPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         <StatCard label="Today's 4★ & Above" value={todayProductivity.positive} color="text-green-700" />
         <StatCard label="Today's 3★ & Below" value={todayProductivity.needsFollowup} color="text-red-700" />
         <StatCard label="Today's In Progress" value={todayProductivity.inProgress} color="text-yellow-700" />
+        <StatCard label="Today's Call Not Picked" value={todayProductivity.callNotPicked} color="text-orange-700" />
         <StatCard label="Today's Resolved" value={todayProductivity.resolved} color="text-green-700" />
         <StatCard label="Today's Total Unique Calls" value={todayProductivity.total} color="text-blue-700" />
         <StatCard label="Today's WA Sent" value={todayProductivity.waSent} color="text-purple-700" />
