@@ -1,4 +1,4 @@
--- DBL-0090 / RECEPTION-003
+-- DBL-0091 / RECEPTION-003
 -- Align Reception edit authorization with the location-scoped visibility contract.
 --
 -- Problem found in production UAT:
@@ -166,4 +166,4 @@ $_$;
 COMMENT ON FUNCTION public.update_reception_entry(
   bigint, text, text, text, text, text, text, text, integer, text, text, text
 ) IS
-  'DBL-0090 / RECEPTION-003: Reception update RPC. Admin bypasses. Dedicated RECEPTION identities with modify permission authorize by their single active Employee Master location for both existing entry and selected SA; other Reception-capable users retain dealer-code scope.';
+  'DBL-0091 / RECEPTION-003: Reception update RPC. Admin bypasses. Dedicated RECEPTION identities with modify permission authorize by their single active Employee Master location for both existing entry and selected SA; other Reception-capable users retain dealer-code scope.';
