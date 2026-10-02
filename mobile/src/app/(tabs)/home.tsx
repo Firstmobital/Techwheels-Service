@@ -16,7 +16,7 @@ type ModuleRow = {
   icon: IconName
   iconBg: string
   description: string
-  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling' | '/(tabs)/bodyshop-repair' | '/(tabs)/bodyshop-floor' | '/(tabs)/driver-tasks'
+  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling' | '/(tabs)/bodyshop-repair' | '/(tabs)/bodyshop-floor' | '/(tabs)/bodyshop-floor-work' | '/(tabs)/driver-tasks'
 }
 
 const MODULES: ModuleRow[] = [
@@ -31,6 +31,7 @@ const MODULES: ModuleRow[] = [
   { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
   { key: 'bodyshop-repair', label: 'Bodyshop Repair', icon: 'package', iconBg: 'bg-violet-100', description: '18-stage accident repair pipeline', route: '/(tabs)/bodyshop-repair' },
   { key: 'bodyshop-floor', label: 'Bodyshop Floor', icon: 'sliders', iconBg: 'bg-rose-100', description: '9-role floor assignment · QC · approvals', route: '/(tabs)/bodyshop-floor' },
+  { key: 'bodyshop-floor-work', label: 'Floor Work', icon: 'edit', iconBg: 'bg-orange-100', description: 'Denter · Painter · Tech daily updates + photos', route: '/(tabs)/bodyshop-floor-work' },
 ]
 
 const DEFAULT_METRICS: HomeDashboardMetrics = {
@@ -95,7 +96,7 @@ export default function PlatformHomeScreen() {
 
         // Admins get everything
         if (userRole === 'admin') {
-          ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor','driver_tasks','driver_management','service_booking'].forEach(m => mods.add(m))
+          ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor','bodyshop_floor_work','driver_tasks','driver_management','service_booking'].forEach(m => mods.add(m))
         }
 
         // Driver role or permission aliases (driver_management, driver_tasks, driver)
@@ -173,6 +174,7 @@ export default function PlatformHomeScreen() {
     'telecalling':      ['telecalling'],
     'bodyshop-repair':  ['bodyshop_repair'],
     'bodyshop-floor':   ['bodyshop_floor'],
+    'bodyshop-floor-work': ['bodyshop_floor_work'],
     driver_tasks:       ['driver_tasks', 'driver_management', 'driver'],
   }
 

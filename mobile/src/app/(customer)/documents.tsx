@@ -144,7 +144,7 @@ export default function CustomerDocumentsScreen() {
     setUpdatingType(true)
     try {
       await setCustomerType(newType)
-    } catch (err) {
+      } catch (err) {
       console.warn('Failed to update customer type:', err)
     } finally {
       setUpdatingType(false)
@@ -285,10 +285,10 @@ export default function CustomerDocumentsScreen() {
         fileName = res.assets[0].fileName || `${slot.docKey}.jpg`
         contentType = res.assets[0].mimeType || 'image/jpeg'
       } else {
-        const res = await DocumentPicker.getDocumentAsync({
-          type: ['application/pdf', 'image/*'],
-          copyToCacheDirectory: true,
-        })
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+      })
         if (res.canceled || !res.assets?.[0]?.uri) return
         uri = res.assets[0].uri
         fileName = res.assets[0].name || `${slot.docKey}.pdf`
@@ -403,19 +403,19 @@ export default function CustomerDocumentsScreen() {
       >
         <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Take photo</Text>
       </TouchableOpacity>
-      <TouchableOpacity
+          <TouchableOpacity
         onPress={() => void uploadSlot(slot, 'gallery')}
         disabled={busyKey === slot.docKey}
         style={{ flex: 1, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 11, alignItems: 'center', borderWidth: 1.5, borderColor: CustomerTheme.border }}
       >
         <Text style={{ color: CustomerTheme.ink, fontWeight: '800', fontSize: 12 }}>Choose file</Text>
-      </TouchableOpacity>
+          </TouchableOpacity>
     </View>
   )
 
   const renderActions = (slot: CustomerClaimDocumentDef) => (
     <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-      <TouchableOpacity
+          <TouchableOpacity
         onPress={() => void uploadSlot(slot, 'camera')}
         disabled={busyKey === slot.docKey}
         style={{ flex: 1, backgroundColor: CustomerTheme.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
@@ -435,8 +435,8 @@ export default function CustomerDocumentsScreen() {
         style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5, borderColor: CustomerTheme.border }}
       >
         <Text style={{ color: CustomerTheme.ink, fontWeight: '800', fontSize: 12 }}>PDF</Text>
-      </TouchableOpacity>
-    </View>
+          </TouchableOpacity>
+        </View>
   )
 
   const renderTwoSidedSide = (sideLabel: 'Front' | 'Back', slot: CustomerClaimDocumentDef) => {
@@ -458,7 +458,7 @@ export default function CustomerDocumentsScreen() {
 
     return (
       <View
-        style={{
+              style={{
           marginTop: sideLabel === 'Front' ? 12 : 14,
           paddingTop: sideLabel === 'Back' ? 14 : 0,
           borderTopWidth: sideLabel === 'Back' ? 1 : 0,
@@ -479,7 +479,7 @@ export default function CustomerDocumentsScreen() {
           <TouchableOpacity onPress={() => void openRow(row)} style={{ marginTop: 8 }}>
             <Text style={{ color: CustomerTheme.primary, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
               View {sideLabel.toLowerCase()} file ↗
-            </Text>
+                </Text>
           </TouchableOpacity>
         ) : null}
 
@@ -529,15 +529,15 @@ export default function CustomerDocumentsScreen() {
           <View style={{ backgroundColor: badgeBg, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
             <Text style={{ fontSize: 11, fontWeight: '800', color: badgeColor }}>
               {badgeLabel}
-            </Text>
-          </View>
+                </Text>
+              </View>
         </View>
 
         {renderTwoSidedSide('Front', item.front)}
         {renderTwoSidedSide('Back', item.back)}
 
         {frontUrl && backUrl ? (
-          <TouchableOpacity
+            <TouchableOpacity
             onPress={() =>
               void printMergedTwoSidedDocument({
                 docName: item.title,
@@ -546,21 +546,21 @@ export default function CustomerDocumentsScreen() {
                 backUrl,
               })
             }
-            style={{
+              style={{
               marginTop: 14,
               backgroundColor: '#0284c7',
               borderRadius: 10,
               paddingVertical: 11,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
             }}
           >
             <Icon name="printer" size={16} color="#ffffff" />
             <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
               Print 1-Page Merged (Front + Back)
-            </Text>
+                </Text>
           </TouchableOpacity>
         ) : null}
       </CustomerCard>
@@ -613,9 +613,9 @@ export default function CustomerDocumentsScreen() {
           <View style={{ backgroundColor: badgeBg, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
             <Text style={{ fontSize: 11, fontWeight: '800', color: badgeColor }}>
               {badgeLabel}
-            </Text>
+                </Text>
+              </View>
           </View>
-        </View>
 
         {busy ? (
           <View style={{ marginTop: 12, padding: 10, backgroundColor: '#EFF6FF', borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -631,10 +631,10 @@ export default function CustomerDocumentsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={{ color: '#15803D', fontSize: 12, fontWeight: '800' }}>
                 Approved & Verified by Service Advisor
-              </Text>
+          </Text>
               <Text style={{ color: '#166534', fontSize: 11, marginTop: 1 }}>
                 This document is verified and locked.
-              </Text>
+                </Text>
             </View>
           </View>
         ) : null}
@@ -647,8 +647,8 @@ export default function CustomerDocumentsScreen() {
             </Text>
             <Text style={{ color: '#991B1B', fontSize: 11, marginTop: 2 }}>
               Please re-upload a clear and valid copy using the options below.
-            </Text>
-          </View>
+                </Text>
+              </View>
         ) : null}
 
         {/* 3. Uploaded / Awaiting Review State */}
@@ -661,9 +661,9 @@ export default function CustomerDocumentsScreen() {
                   File Uploaded · Awaiting Review
                 </Text>
               </View>
-              <TouchableOpacity
+            <TouchableOpacity
                 onPress={() => toggleReupload(slot.docKey)}
-                style={{
+              style={{
                   paddingHorizontal: 8,
                   paddingVertical: 4,
                   backgroundColor: isReuploading ? '#FEE2E2' : '#DBEAFE',
@@ -673,12 +673,12 @@ export default function CustomerDocumentsScreen() {
                 <Text style={{ color: isReuploading ? '#991B1B' : '#1E40AF', fontSize: 11, fontWeight: '800' }}>
                   {isReuploading ? '✕ Cancel' : '🔄 Replace File'}
                 </Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
+          </View>
             <Text style={{ color: '#2563EB', fontSize: 11, marginTop: 3 }}>
               Your file is uploaded. Waiting for the Service Advisor to approve or reject it.
             </Text>
-          </View>
+            </View>
         ) : null}
 
         {/* File Link Preview */}
@@ -700,14 +700,14 @@ export default function CustomerDocumentsScreen() {
           <View style={{ marginTop: 8, padding: 8, backgroundColor: '#FEF3C7', borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={{ color: '#92400E', fontSize: 11, flex: 1, marginRight: 8 }}>
               File is saved in app. Drive backup sync is pending.
-            </Text>
+                </Text>
             <TouchableOpacity
               onPress={() => void retrySlot(slot, row)}
               style={{ backgroundColor: CustomerTheme.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}
             >
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>Retry sync</Text>
             </TouchableOpacity>
-          </View>
+              </View>
         ) : null}
 
         {/* Upload Action Buttons */}
@@ -722,7 +722,7 @@ export default function CustomerDocumentsScreen() {
           </View>
         ) : null}
 
-      </CustomerCard>
+        </CustomerCard>
     )
   }
 
@@ -737,7 +737,7 @@ export default function CustomerDocumentsScreen() {
   }
 
   if (isEffectiveMechanical) {
-    return (
+            return (
       <CustomerScreen
         title="Documents"
         subtitle={`Workshop paperwork · ${selectedReg || 'your vehicle'}`}
@@ -768,19 +768,19 @@ export default function CustomerDocumentsScreen() {
             <Icon name="file-text" size={17} color={CustomerTheme.primary} />
             <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 14 }}>
               Customer & Claim Case Type
-            </Text>
+                          </Text>
           </View>
           {updatingType && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <ActivityIndicator size="small" color={CustomerTheme.primary} />
               <Text style={{ fontSize: 11, color: CustomerTheme.inkMuted }}>Saving…</Text>
-            </View>
-          )}
-        </View>
+                        </View>
+                      )}
+                    </View>
 
         <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, lineHeight: 17, marginBottom: 12 }}>
           Choose your claim type to upload the required documents. Updates live on the workshop portal.
-        </Text>
+                    </Text>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
           {CUSTOMER_TYPE_OPTIONS.map((opt) => {
@@ -790,7 +790,7 @@ export default function CustomerDocumentsScreen() {
                 key={opt.key}
                 onPress={() => void handleSelectCustomerType(opt.key)}
                 activeOpacity={0.7}
-                style={{
+                    style={{
                   flexBasis: '48%',
                   flexGrow: 1,
                   paddingVertical: 10,
@@ -802,32 +802,32 @@ export default function CustomerDocumentsScreen() {
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text
-                    style={{
+                    <Text
+                      style={{
                       fontSize: 13,
                       fontWeight: '800',
                       color: isSelected ? CustomerTheme.primary : CustomerTheme.ink,
                     }}
                   >
                     {opt.label}
-                  </Text>
+                    </Text>
                   {isSelected && (
-                    <View
-                      style={{
+                  <View
+                    style={{
                         width: 18,
                         height: 18,
                         borderRadius: 9,
                         backgroundColor: CustomerTheme.primary,
-                        alignItems: 'center',
+                      alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
                       <Icon name="check" size={12} color="#fff" />
-                    </View>
-                  )}
-                </View>
+                  </View>
+                )}
+                          </View>
                 <Text
-                  style={{
+                        style={{
                     fontSize: 11,
                     color: isSelected ? '#1E40AF' : CustomerTheme.inkMuted,
                     marginTop: 3,
@@ -835,8 +835,8 @@ export default function CustomerDocumentsScreen() {
                   }}
                 >
                   {opt.desc}
-                </Text>
-              </TouchableOpacity>
+                        </Text>
+                      </TouchableOpacity>
             )
           })}
         </View>
@@ -864,14 +864,14 @@ export default function CustomerDocumentsScreen() {
                 : activeCustomerType === 'foc'
                   ? '🎁 Free of Cost (FOC): No insurance claim documents required.'
                   : '💵 Cash Customer: Direct payment repair. No insurance claim documents required.'}
-          </Text>
-        </View>
+                </Text>
+              </View>
       </CustomerCard>
 
       {loading ? (
         <View style={{ paddingVertical: 24, alignItems: 'center' }}>
           <ActivityIndicator color={CustomerTheme.primary} />
-        </View>
+                </View>
       ) : null}
 
       {notice ? (
@@ -910,8 +910,8 @@ export default function CustomerDocumentsScreen() {
               >
                 {approvedCount}/{requiredSlots.length} Approved
               </Text>
-            </View>
-          </View>
+                </View>
+                </View>
           <View style={{ height: 8, borderRadius: 999, backgroundColor: '#E2E8F0', marginTop: 10, overflow: 'hidden' }}>
             <View
               style={{
@@ -920,7 +920,7 @@ export default function CustomerDocumentsScreen() {
                 backgroundColor: approvedCount === requiredSlots.length && requiredSlots.length > 0 ? CustomerTheme.success : CustomerTheme.primary,
               }}
             />
-          </View>
+            </View>
           <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, marginTop: 8, lineHeight: 17 }}>
             {approvedCount === requiredSlots.length && requiredSlots.length > 0
               ? '🎉 All required documents are approved by the Service Advisor.'
@@ -932,7 +932,7 @@ export default function CustomerDocumentsScreen() {
       {!loading && claimMode === 'insurance' ? requiredDisplay.map(renderDisplayItem) : null}
       {!loading && claimMode === 'insurance' && optionalSlots.length > 0 ? (
         <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900', marginBottom: 8 }}>Optional uploads</Text>
-      ) : null}
+          ) : null}
       {!loading && claimMode === 'insurance' ? optionalDisplay.map(renderDisplayItem) : null}
 
       <Modal visible={Boolean(previewUri)} transparent animationType="fade" onRequestClose={() => setPreviewUri(null)}>

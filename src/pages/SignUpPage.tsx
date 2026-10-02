@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AuthShell } from '../components/AuthShell'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
+import { STAFF_SIGNUP_ROLE_OPTIONS, staffSignupRoleLabel, type StaffSignupRoleId } from '../lib/staffSignUpRoles'
 
 interface Props {
   onSwitchToLogin: () => void
@@ -19,13 +20,6 @@ const PITCH = {
   },
 }
 
-const ROLE_OPTS = [
-  { id: 'reception',     label: 'Reception',      icon: 'reception',     desc: 'Vehicle intake & customer communication' },
-  { id: 'advisor',       label: 'Service Advisor', icon: 'tech',          desc: 'Job card management & labor tracking' },
-  { id: 'floor',         label: 'Floor Incharge',  icon: 'floor',         desc: 'Technician allocation & job progress' },
-  { id: 'admin',         label: 'Administrator',   icon: 'shield',        desc: 'System access control & user management' },
-]
-
 const PW_RULES = [
   { id: 'len', label: 'At least 12 characters', test: (pw: string) => pw.length >= 12 },
   { id: 'case', label: 'Both uppercase & lowercase', test: (pw: string) => /[a-z]/.test(pw) && /[A-Z]/.test(pw) },
@@ -37,7 +31,7 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [selectedRole, setSelectedRole] = useState<string | null>(null)
+  const [selectedRole, setSelectedRole] = useState<StaffSignupRoleId | null>(null)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -100,7 +94,7 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
         <div className="access-note" style={{ marginTop: 22, textAlign: 'left' }}>
           <span className="ic"><Icon name="shield" size={17} /></span>
           <div><b>Next: admin grants access</b>
-            <p>Until then you'll see a no-modules-assigned notice. We've flagged <b>{ROLE_OPTS.find((r) => r.id === selectedRole)?.label}</b> as your requested role.</p>
+            <p>Until then you'll see a no-modules-assigned notice. We've flagged <b>{staffSignupRoleLabel(selectedRole)}</b> as your requested role.</p>
           </div>
         </div>
 
@@ -173,12 +167,12 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
         <div className="field">
           <span className="label" style={{ display: 'block', marginBottom: 9 }}>Which role do you need?</span>
           <div className="roles">
-            {ROLE_OPTS.map(role => (
+            {STAFF_SIGNUP_ROLE_OPTIONS.map(role => (
               <button
                 key={role.id}
                 type="button"
                 className={`rolepick ${selectedRole === role.id ? 'sel' : ''}`}
-                onClick={() => setSelectedRole(role.id)}
+                onClick={() => setSelectedRole(role.id as StaffSignupRoleId)}
               >
                 <span className="ic"><Icon name={role.icon} size={16} /></span>
                 <span>

@@ -1,8 +1,17 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import { getStaffAuthRedirectUrl } from '../lib/authRedirect'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 
 const SIGN_IN_TIMEOUT_MS = 20000
+
+export type StaffSignUpInput = {
+  email: string
+  password: string
+  fullName: string
+  requestedRole: string
+  phone?: string | null
+}
 
 interface AuthContextType {
   session: Session | null
@@ -10,7 +19,7 @@ interface AuthContextType {
   loading: boolean
   signOut: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error?: Error }>
-  signUp: (email: string, password: string) => Promise<{ error?: Error }>
+  signUp: (input: StaffSignUpInput) => Promise<{ error?: Error }>
   refreshSession: () => Promise<void>
 }
 
@@ -20,7 +29,7 @@ const defaultAuthContext: AuthContextType = {
   loading: false,
   signOut: async () => {},
   signIn: async () => ({ error: new Error('Not initialized') }),
-  signUp: async () => ({ error: new Error('Not initialized') }),
+  signUp: async () => ({ error: new Error('Not initialized') }) as { error?: Error },
   refreshSession: async () => {},
 }
 
@@ -125,21 +134,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
-  const signUp = useCallback(
-    async (email: string, password: string) => {
-      try {
-        const { error } = await supabase.auth.signUp({ email, password })
-        if (error) {
-          return { error }
-        }
-
-        return { error: undefined }
-      } catch (error) {
-        return { error: error as Error }
-      }
-    },
-    []
-  )
+  const signUp = useCallback(async (input: StaffSignUpInput) => {
+    if (!hasSupabaseEnv) {
+      return { error: new Error('App configuration missing. Please contact support and retry after next update.') }
+    }
+    try {
+      const phoneDigits = String(input.phone ?? '').replace(/\D/g, '')
+      const { error } = await supabase.auth.signUp({
+        email: input.email.trim(),
+        password: input.password,
+        options: {
+          data: {
+            full_name: input.fullName.trim(),
+            role: input.requestedRole,
+            phone: phoneDigits.length === 10 ? phoneDigits : null,
+          },
+          emailRedirectTo: getStaffAuthRedirectUrl(),
+        },
+      })
+      if (error) return { error }
+      return { error: undefined }
+    } catch (error) {
+      return { error: error as Error }
+    }
+  }, [])
 
   return (
     <AuthContext.Provider

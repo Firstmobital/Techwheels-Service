@@ -12,6 +12,9 @@ import {
   isLiveOnFloorRepairCard,
   type BodyshopFloorVehicleListMode,
 } from '../lib/bodyshopFloorLive'
+import type { BodyshopFloorDailyUpdateRow } from '../lib/bodyshopFloorDailyUpdate'
+import { fetchBodyshopFloorDailyUpdatesForJcs } from '../lib/api/bodyshopFloorDailyUpdate'
+import BodyshopFloorDailyUpdatePanel, { bodyshopFloorDailySummary } from '../components/BodyshopFloorDailyUpdatePanel'
 import { parseBodyshopFloorRoles } from '../lib/businessRoles'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -790,6 +793,8 @@ export default function BodyshopFloorPage() {
 
   // Data
   const [cars, setCars]               = useState<AccidentCar[]>([])
+  const [dailyUpdatesByJc, setDailyUpdatesByJc] = useState<Record<string, BodyshopFloorDailyUpdateRow>>({})
+  const [repairCardIdByJc, setRepairCardIdByJc] = useState<Record<string, number>>({})
   const [employees, setEmployees]     = useState<Employee[]>([])
   // assignments keyed by JC_NUMBER (uppercase)  →  per-role map
   const [assignments, setAssignments] = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
@@ -960,6 +965,8 @@ export default function BodyshopFloorPage() {
 
       if (sentByJc.size === 0) {
         setCars([])
+        setRepairCardIdByJc({})
+        setDailyUpdatesByJc({})
       } else if (vehicleListMode === 'live_on_floor') {
         const entryIds = Array.from(new Set(
           Array.from(latestByJc.values())
@@ -1023,6 +1030,25 @@ export default function BodyshopFloorPage() {
           })
 
         setCars(carList)
+      }
+
+      if (sentByJc.size > 0) {
+        const idMap: Record<string, number> = {}
+        latestByJc.forEach((meta, jc) => {
+          if (meta.repairCardId != null) idMap[jc] = meta.repairCardId
+        })
+        setRepairCardIdByJc(idMap)
+        const dailyRes = await fetchBodyshopFloorDailyUpdatesForJcs(Array.from(latestByJc.keys()))
+        if (dailyRes.error) {
+          console.warn('bodyshop_floor_daily_updates:', dailyRes.error)
+          setDailyUpdatesByJc({})
+        } else {
+          const dMap: Record<string, BodyshopFloorDailyUpdateRow> = {}
+          for (const row of dailyRes.data ?? []) {
+            dMap[String(row.job_card_number).trim().toUpperCase()] = row
+          }
+          setDailyUpdatesByJc(dMap)
+        }
       }
 
       // 3. Bodyshop employees
@@ -2718,6 +2744,9 @@ export default function BodyshopFloorPage() {
                                 {additionalApproval.pendingCount > 0 ? 'Approval Pending' : additionalApprovalLabel}
                               </span>
                             )}
+                            {bodyshopFloorDailySummary(dailyUpdatesByJc[k]).pending ? (
+                              <span className="badge b-warn nodot">Today update pending</span>
+                            ) : null}
                           </div>
                           <span className="ts">Received {fmtDate(car.created_at)}</span>
                         </div>
@@ -2764,6 +2793,13 @@ export default function BodyshopFloorPage() {
                     </div>
                   ) : (
                     <>
+                      <BodyshopFloorDailyUpdatePanel
+                        jobCardNumber={k}
+                        repairCardId={repairCardIdByJc[k] ?? null}
+                        row={dailyUpdatesByJc[k] ?? null}
+                        onSaved={(row) => setDailyUpdatesByJc((prev) => ({ ...prev, [k]: row }))}
+                        canEdit
+                      />
                       <div className="bsf-lanes">
                         {ALL_ROLES.map((role) => {
                           const ass = carMap[role]

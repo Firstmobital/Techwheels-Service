@@ -11,6 +11,8 @@ import {
   type UserEmployeeLinkRow,
 } from '../lib/api/userEmployeeLinks'
 import { collectBusinessRolesFromMappings } from '../lib/businessRoles'
+import { grantSuggestedModulesFromSignupRole } from '../lib/admin/grantStaffModuleAccess'
+import { staffSignupAdminHint, staffSignupRoleLabel } from '../lib/staffSignUpRoles'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
@@ -27,6 +29,7 @@ interface AppUser {
   dealer_codes?: string[] | null
   is_active:   boolean
   created_at:  string
+  requested_access_role?: string | null
 }
 
 interface Module {
@@ -67,6 +70,7 @@ interface UsersWithPhoneResponse {
     dealer_codes?: string[] | null
     is_active: boolean
     created_at: string
+    requested_access_role?: string | null
   }>
   supportsDealerColumns?: boolean
 }
@@ -292,6 +296,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
             dealer_codes: normalizeDealerCodes(u.dealer_codes),
             is_active: u.is_active,
             created_at: u.created_at,
+            requested_access_role: u.requested_access_role ?? null,
           }))
         )
         return
@@ -321,6 +326,24 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
         dealer_name: null,
         dealer_codes: null,
       }))
+    )
+  }
+
+  async function applySignupSuggestedAccess(u: AppUser) {
+    if (!u.requested_access_role) {
+      showToastMsg('No signup role on this user', 'error')
+      return
+    }
+    setSaving(true)
+    const res = await grantSuggestedModulesFromSignupRole(u.id, u.requested_access_role)
+    setSaving(false)
+    if (res.error) {
+      showToastMsg(res.error, 'error')
+      return
+    }
+    const hint = staffSignupAdminHint(u.requested_access_role)
+    showToastMsg(
+      `Granted: ${(res.granted ?? []).join(', ')}${hint?.employeeMasterRole ? ` · Employee Master role hint: ${hint.employeeMasterRole}` : ''}`,
     )
   }
 
@@ -975,6 +998,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
                     <th>Phone</th>
                     <th>Dealer</th>
                     <th>Role</th>
+                    <th>Signup request</th>
                     <th>Status</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -1028,6 +1052,31 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
                         })()}
                       </td>
                       <td><span className={`badge badge--${u.role}`}>{u.role}</span></td>
+                      <td style={{ maxWidth: 200 }}>
+                        {u.requested_access_role ? (
+                          <>
+                            <div>{staffSignupRoleLabel(u.requested_access_role)}</div>
+                            {staffSignupAdminHint(u.requested_access_role)?.employeeMasterRole ? (
+                              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                                EM: {staffSignupAdminHint(u.requested_access_role)?.employeeMasterRole}
+                              </div>
+                            ) : null}
+                            {u.requested_access_role ? (
+                              <button
+                                type="button"
+                                className="btn btn--quiet btn--sm"
+                                style={{ marginTop: 6, padding: 0 }}
+                                disabled={saving}
+                                onClick={() => void applySignupSuggestedAccess(u)}
+                              >
+                                Grant suggested modules
+                              </button>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--muted)' }}>—</span>
+                        )}
+                      </td>
                       <td><span className={`badge badge--${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
                       <td>
                         <div className="tactions" style={{ justifyContent: 'flex-end' }}>

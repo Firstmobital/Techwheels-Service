@@ -21,6 +21,7 @@ import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
 import SATrackerPage from './pages/SATrackerPage'
 import BodyshopTrackerPage from './pages/BodyshopTrackerPage'
 import BodyshopFloorPage from './pages/BodyshopFloorPage'
+import BodyshopFloorWorkPage from './pages/BodyshopFloorWorkPage'
 import BodyshopRepairPage from './pages/BodyshopRepairPage'
 import BodyshopRecoveryPage from './pages/BodyshopRecoveryPage'
 import FloorInchargePage from './pages/FloorInchargePage'
@@ -124,6 +125,7 @@ type ModuleName =
   | 'sa_tracker'
   | 'bodyshop_tracker'
   | 'bodyshop_floor'
+  | 'bodyshop_floor_work'
   | 'technician'
   | 'payroll'
   | 'chat'
@@ -144,7 +146,7 @@ type ModuleName =
   | 'busy'
   | 'accounts'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/chat' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/driver-management' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/bodyshop-floor-work' | '/technician' | '/payroll' | '/chat' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/driver-management' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
 
 interface PermissionRow {
   module_name: string
@@ -162,6 +164,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/sa-tracker': ['sa_tracker'],
   '/bodyshop-tracker': ['bodyshop_tracker'],
   '/bodyshop-floor': ['bodyshop_floor'],
+  '/bodyshop-floor-work': ['bodyshop_floor_work'],
   '/technician': ['technician'],
   '/payroll': ['payroll'],
   '/chat': ['chat'],
@@ -498,6 +501,7 @@ function TopNav({
   const BODYSHOP_DROPDOWN_ITEMS: NavItem[] = ([
     { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor', key: 'bodyshop-repair' },
     { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor', key: 'bodyshop-floor' },
+    { to: '/bodyshop-floor-work', label: 'Floor Work', icon: 'floor', key: 'bodyshop-floor-work' },
     { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor', key: 'bodyshop-tracker' },
     { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports', key: 'bodyshop-recovery' },
   ] satisfies NavItem[]).filter((g) => visibleItems.some((v) => v.to === g.to))
@@ -954,6 +958,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
   if (pathname.startsWith('/sa-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker'])
   if (pathname.startsWith('/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-tracker'])
+  if (pathname.startsWith('/bodyshop-floor-work')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor-work'])
   if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/payroll')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/payroll'])
@@ -1582,6 +1587,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-floor']}>
                       <BodyshopFloorPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/bodyshop-floor-work"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-floor-work']}>
+                      <BodyshopFloorWorkPage />
                     </RequireAccess>
                   )}
                 />

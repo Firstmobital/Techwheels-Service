@@ -1,4 +1,4 @@
-﻿/**
+/**
  * mobile/src/app/(tabs)/bodyshop-floor.tsx
  * Mobile version of web BodyshopFloorPage.tsx
  * Business logic: 100% mirrors web (same DB tables, columns, rules).
@@ -20,6 +20,13 @@ import {
   isLiveOnFloorRepairCard,
   type BodyshopFloorVehicleListMode,
 } from '../../lib/bodyshopFloorLive'
+import type { BodyshopFloorDailyUpdateRow } from '../../lib/bodyshopFloorDailyUpdate'
+import {
+  dailyUpdateMapKey,
+  floorDailyUpdateSummary,
+} from '../../lib/bodyshopFloorDailyUpdate'
+import { fetchBodyshopFloorDailyUpdatesForJcs } from '../../lib/api/bodyshopFloorDailyUpdate'
+import { FloorDailyUpdatePanel } from '../../components/bodyshop/FloorDailyUpdatePanel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,6 +57,7 @@ interface FloorCar {
   overall_status: string
   sa_name: string | null
   model: string | null
+  customer_phone: string | null
   /** Repair card created — fallback when floor assignment row has no timestamp */
   created_at: string | null
 }
@@ -386,16 +394,23 @@ function calendarDaysSince(iso: string | null | undefined): number | null {
   return Math.max(0, Math.floor((today.getTime() - startDay.getTime()) / 86400000))
 }
 
-function unassignedAgeLabel(days: number): string {
-  if (days <= 0) return 'Unassigned today'
-  if (days === 1) return 'Unassigned 1 day'
-  return `Unassigned ${days} days`
-}
-
-function unassignedAgeColor(days: number): string {
+function floorAgeColor(days: number): string {
   if (days >= 5) return '#c33b53'
   if (days >= 3) return '#c9751b'
   return '#82858f'
+}
+
+function floorAgeLabel(days: number): string {
+  if (days <= 0) return 'On floor today'
+  if (days === 1) return 'On floor 1 day'
+  return `On floor ${days} days`
+}
+
+function resolveFloorSinceIso(
+  car: FloorCar,
+  enteredAt: string | null | undefined,
+): string | null {
+  return enteredAt ?? car.created_at ?? null
 }
 
 function parseQcNames(raw: string | null | undefined): string[] {
@@ -439,6 +454,7 @@ export default function BodyshopFloorScreen() {
 
   // Data
   const [cars,              setCars]              = useState<FloorCar[]>([])
+  const [dailyUpdatesByJc,  setDailyUpdatesByJc]  = useState<Record<string, BodyshopFloorDailyUpdateRow>>({})
   const [employees,         setEmployees]         = useState<Employee[]>([])
   const [assignments,       setAssignments]       = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
   const [supportAssignments,setSupportAssignments]= useState<Record<string, Record<SupportRole, SupportAssignment[]>>>({})
@@ -486,7 +502,7 @@ export default function BodyshopFloorScreen() {
       // 1. Repair cards (all active/floor vehicles)
       const { data: cardData, error: cardErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, job_card_no, reg_number, customer_name, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, overall_status, sa_name, reception_entry_id, created_at')
+        .select('id, job_card_no, reg_number, customer_name, customer_phone, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, overall_status, sa_name, reception_entry_id, created_at')
         .order('created_at', { ascending: false })
       if (cardErr) throw cardErr
 
@@ -499,18 +515,30 @@ export default function BodyshopFloorScreen() {
         reinspection_by: string | null; reinspection_at: string | null
         current_stage: number
         overall_status: string; sa_name: string | null; reception_entry_id: number | null
+        customer_phone: string | null
         created_at: string | null
       }>
 
-      // Fetch models from reception entries
-      const entryIds = rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null)
-      let modelMap: Record<number, string | null> = {}
-      if (entryIds.length > 0) {
-        const { data: entryData } = await supabase.rpc('get_reception_entries_by_ids', {
-          p_ids: entryIds,
+      // Reception meta (model, customer phone) — chunked for large floor lists
+      const entryIds = Array.from(new Set(
+        rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null && v > 0),
+      ))
+      type ReceptionRow = {
+        id: number
+        model: string | null
+        owner_phone: string | null
+        owner_name: string | null
+      }
+      const receptionByEntryId: Record<number, ReceptionRow> = {}
+      const chunkSize = 400
+      for (let i = 0; i < entryIds.length; i += chunkSize) {
+        const chunk = entryIds.slice(i, i + chunkSize)
+        const { data: entryData, error: entryErr } = await supabase.rpc('get_reception_entries_by_ids', {
+          p_ids: chunk,
         })
-        ;(entryData ?? []).forEach((r: { id: number; model: string | null }) => {
-          modelMap[r.id] = r.model
+        if (entryErr) throw entryErr
+        ;(entryData ?? []).forEach((r: ReceptionRow) => {
+          receptionByEntryId[r.id] = r
         })
       }
 
@@ -535,10 +563,25 @@ export default function BodyshopFloorScreen() {
           current_stage: c.current_stage,
           overall_status: c.overall_status,
           sa_name: c.sa_name,
-          model: c.reception_entry_id != null ? (modelMap[c.reception_entry_id] ?? null) : null,
+          model: c.reception_entry_id != null ? (receptionByEntryId[c.reception_entry_id]?.model ?? null) : null,
+          customer_phone: c.reception_entry_id != null
+            ? (receptionByEntryId[c.reception_entry_id]?.owner_phone ?? c.customer_phone ?? null)
+            : (c.customer_phone ?? null),
           created_at: c.created_at ?? null,
         }))
       setCars(carList)
+
+      try {
+        const dailyRows = await fetchBodyshopFloorDailyUpdatesForJcs(carList.map(c => c.job_card_no))
+        const dailyMap: Record<string, BodyshopFloorDailyUpdateRow> = {}
+        dailyRows.forEach(row => {
+          dailyMap[dailyUpdateMapKey(row.job_card_number)] = row
+        })
+        setDailyUpdatesByJc(dailyMap)
+      } catch (dailyErr) {
+        console.warn('bodyshop_floor_daily_updates:', dailyErr)
+        setDailyUpdatesByJc({})
+      }
 
       // QC + RI state
       const nextQc: Record<string, QcState> = {}
@@ -1075,13 +1118,10 @@ export default function BodyshopFloorScreen() {
     else if (assigned.length === ALL_ROLES.length) { statusLabel = 'In Process'; statusBg = '#e9f0fd'; statusColor = '#2f63cf' }
     else if (assigned.length > 0) { statusLabel = `Assigned`; statusBg = '#e9effe'; statusColor = '#2a4cd0' }
 
-    const fullyUnassigned = !bsComp && assigned.length === 0
-    const sinceIso = fullyUnassigned
-      ? (bsFloorStatus[k]?.enteredAt ?? car.created_at ?? null)
-      : null
-    const unassignedDays = sinceIso != null ? calendarDaysSince(sinceIso) : null
-    const unassignedAgeText = unassignedDays != null ? unassignedAgeLabel(unassignedDays) : null
-    const unassignedAgeTint = unassignedDays != null ? unassignedAgeColor(unassignedDays) : null
+    const sinceIso = resolveFloorSinceIso(car, bsFloorStatus[k]?.enteredAt)
+    const floorDays = sinceIso != null ? calendarDaysSince(sinceIso) : null
+    const floorAgeText = floorDays != null ? floorAgeLabel(floorDays) : null
+    const floorAgeTint = floorDays != null ? floorAgeColor(floorDays) : null
 
     return {
       assignedCount: assigned.length,
@@ -1089,8 +1129,8 @@ export default function BodyshopFloorScreen() {
       statusBg,
       statusColor,
       pendingApprovals: pending,
-      unassignedAgeText,
-      unassignedAgeTint,
+      floorAgeText,
+      floorAgeTint,
     }
   }
 
@@ -1137,6 +1177,7 @@ export default function BodyshopFloorScreen() {
     const showRiSection = qc.qc_status === 'pass' || assignmentView === 'ri'
     const approvalParts = parseAdditionalApprovalParts(car.additional_approval)
     const assignedCheckers = getAssignedCheckerNames(car)
+    const detailFloor = carSummary(car)
     const selectedCheckers = parseQcNames(qc.qc_checked_by)
     const otherNorm = qcOtherSearch.trim().toLowerCase()
     const otherNames = bodyshopEmployeeNames.filter(n => {
@@ -1230,10 +1271,18 @@ export default function BodyshopFloorScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={S.detailTitle} numberOfLines={1}>{car.job_card_no} — {car.reg_number ?? '—'}</Text>
-            <Text style={S.detailSub} numberOfLines={1}>{[
+            <Text style={S.detailSub} numberOfLines={2}>{[
               car.reg_number?.trim().toUpperCase() !== car.job_card_no?.trim().toUpperCase() ? car.reg_number : null,
               car.model, car.customer_name, car.branch,
             ].filter(Boolean).join(' · ')}</Text>
+            <Text style={S.detailSub} numberOfLines={1}>
+              Advisor: {String(car.sa_name ?? '').trim() || '—'} · Mob: {String(car.customer_phone ?? '').trim() || '—'}
+            </Text>
+            {detailFloor.floorAgeText ? (
+              <Text style={[S.cardFloorAge, { color: detailFloor.floorAgeTint ?? '#82858f', marginTop: 4 }]}>
+                {detailFloor.floorAgeText}
+              </Text>
+            ) : null}
           </View>
           {car.bodyshop_floor ? (
             <View style={S.floorBadge}><Text style={S.floorBadgeText}>{car.bodyshop_floor}</Text></View>
@@ -1241,6 +1290,13 @@ export default function BodyshopFloorScreen() {
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 80 }}>
+
+          <FloorDailyUpdatePanel
+            jobCardNumber={car.job_card_no}
+            repairCardId={car.id}
+            initialRow={dailyUpdatesByJc[k] ?? null}
+            onSaved={(row) => setDailyUpdatesByJc(prev => ({ ...prev, [k]: row }))}
+          />
 
           {/* Status banner */}
           {bsComp ? (
@@ -1696,8 +1752,12 @@ export default function BodyshopFloorScreen() {
         renderItem={({ item: car }) => {
           const {
             assignedCount, statusLabel, statusBg, statusColor, pendingApprovals,
-            unassignedAgeText, unassignedAgeTint,
+            floorAgeText, floorAgeTint,
           } = carSummary(car)
+          const advisorLabel = String(car.sa_name ?? '').trim() || '—'
+          const phoneLabel = String(car.customer_phone ?? '').trim() || '—'
+          const dailyRow = dailyUpdatesByJc[jcKey(car.job_card_no)] ?? null
+          const dailySummary = floorDailyUpdateSummary(dailyRow)
           return (
             <TouchableOpacity style={S.card} onPress={() => { setSelectedCar(car); setExpandedRole(null) }} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -1709,16 +1769,28 @@ export default function BodyshopFloorScreen() {
                 car.model,
                 car.customer_name,
               ].filter(Boolean).join(' · ')}</Text>
+              <Text style={S.cardMeta} numberOfLines={1}>
+                Advisor: <Text style={S.cardMetaStrong}>{advisorLabel}</Text>
+                {'  ·  '}
+                Mob: <Text style={S.cardMetaStrong}>{phoneLabel}</Text>
+              </Text>
+              {floorAgeText ? (
+                <Text style={[S.cardFloorAge, { color: floorAgeTint ?? '#82858f' }]} numberOfLines={2}>
+                  {floorAgeText}
+                </Text>
+              ) : null}
+              {dailySummary.pending ? (
+                <View style={[S.statusPill, { backgroundColor: '#fbefdd', borderColor: '#f1dcb8', marginTop: 6, alignSelf: 'flex-start' }]}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#c9751b' }}>Today&apos;s update pending</Text>
+                </View>
+              ) : dailySummary.preview ? (
+                <Text style={{ fontSize: 11, color: '#4b4e59', marginTop: 6 }} numberOfLines={2}>
+                  Today: {dailySummary.preview}
+                </Text>
+              ) : null}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap', gap: 6 }}>
-                  <View style={[S.statusPill, { backgroundColor: statusBg, borderColor: statusColor }]}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
-                  </View>
-                  {unassignedAgeText ? (
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: unassignedAgeTint ?? '#82858f' }} numberOfLines={1}>
-                      {unassignedAgeText}
-                    </Text>
-                  ) : null}
+                <View style={[S.statusPill, { backgroundColor: statusBg, borderColor: statusColor }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
                 </View>
                 <Text style={{ fontSize: 11, fontWeight: '600', color: '#82858f', marginLeft: 8 }}>{assignedCount}/9 roles</Text>
               </View>
@@ -1774,6 +1846,9 @@ const S = StyleSheet.create({
   card:             { backgroundColor: '#fff', borderRadius: 14, padding: 13, borderWidth: 1, borderColor: '#e7e3d9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   cardJc:           { fontSize: 14.5, fontWeight: '700', color: '#1a1b21' },
   cardReg:          { fontSize: 12.5, color: '#4b4e59', fontWeight: '500', marginTop: 2 },
+  cardMeta:         { fontSize: 11.5, color: '#82858f', marginTop: 6 },
+  cardMetaStrong:   { fontWeight: '700', color: '#4b4e59' },
+  cardFloorAge:     { fontSize: 11.5, fontWeight: '700', marginTop: 4 },
   statusPill:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1 },
   floorBadge:       { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, backgroundColor: '#e9eef3', borderWidth: 1, borderColor: '#c8d4e0' },
   floorBadgeText:   { fontSize: 10.5, fontWeight: '700', color: '#41617f' },

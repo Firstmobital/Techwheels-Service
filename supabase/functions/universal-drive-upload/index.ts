@@ -2,8 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.5'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6?target=deno'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
-  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_floor_work_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_floor_work_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -92,6 +92,8 @@ function normalizeBody(body: UploadBody) {
         ? 'reception_invoice'
         : rawResourceType === 'bodyshop_intake_photo'
           ? 'bodyshop_intake_photo'
+          : rawResourceType === 'bodyshop_floor_work_photo'
+            ? 'bodyshop_floor_work_photo'
           : rawResourceType === 'bodyshop_document'
             ? 'bodyshop_document'
             : rawResourceType === 'insurance_renewal_quote'
@@ -412,11 +414,12 @@ Deno.serve(async (req) => {
     const body = normalizeBody(await req.json() as UploadBody)
     const isReceptionUpload = body.resourceType === 'reception_estimate' || body.resourceType === 'reception_invoice'
     const isBodyshopIntakeUpload = body.resourceType === 'bodyshop_intake_photo'
+    const isBodyshopFloorWorkPhotoUpload = body.resourceType === 'bodyshop_floor_work_photo'
     const isBodyshopDocumentUpload = body.resourceType === 'bodyshop_document'
     const isInsuranceRenewalQuoteUpload = body.resourceType === 'insurance_renewal_quote'
     const isHelpTicketAttachmentUpload = body.resourceType === 'help_ticket_attachment'
 
-    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopDocumentUpload && !isInsuranceRenewalQuoteUpload && !isHelpTicketAttachmentUpload && !body.jobCardId) {
+    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopFloorWorkPhotoUpload && !isBodyshopDocumentUpload && !isInsuranceRenewalQuoteUpload && !isHelpTicketAttachmentUpload && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isReceptionUpload && !body.receptionEntryId) {
@@ -426,6 +429,9 @@ Deno.serve(async (req) => {
       return json(400, { ok: false, error: 'assignment_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isBodyshopIntakeUpload && !body.resourceId) {
+      return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
+    }
+    if (isBodyshopFloorWorkPhotoUpload && !body.resourceId) {
       return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isBodyshopDocumentUpload && !body.resourceId) {
@@ -640,6 +646,77 @@ Deno.serve(async (req) => {
       rowCreatedAt = intakeRow.created_at
       existingDriveFileId = String(intakeRow.drive_file_id ?? '').trim()
       effectiveFileType = body.fileType || 'bodyshop_intake_photo'
+    } else if (body.resourceType === 'bodyshop_floor_work_photo') {
+      const floorPhotoId = Number(body.resourceId)
+      if (!Number.isFinite(floorPhotoId)) {
+        return json(400, {
+          ok: false,
+          error: 'Invalid resource_id for bodyshop_floor_work_photo',
+          error_code: 'VALIDATION_ERROR',
+        })
+      }
+
+      const { data: floorPhotoRows, error: floorPhotoErr } = await supabase
+        .from('bodyshop_floor_role_daily_log_photos')
+        .select('id, created_at, reg_number, drive_file_id, log_id')
+        .eq('id', floorPhotoId)
+        .limit(1)
+
+      if (floorPhotoErr) {
+        return json(500, { ok: false, error: floorPhotoErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const floorPhotoRow = floorPhotoRows?.[0]
+      if (!floorPhotoRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Bodyshop floor work photo row not found for upload payload',
+          error_code: 'BODYSHOP_FLOOR_WORK_PHOTO_NOT_FOUND',
+        })
+      }
+
+      registrationNo = String(floorPhotoRow.reg_number ?? '').trim()
+      if (!registrationNo && body.registrationNoHint) {
+        registrationNo = body.registrationNoHint.trim()
+      }
+      if (!registrationNo && floorPhotoRow.log_id) {
+        const { data: logRow } = await supabase
+          .from('bodyshop_floor_role_daily_logs')
+          .select('job_card_number, repair_card_id')
+          .eq('id', floorPhotoRow.log_id)
+          .maybeSingle()
+        if (logRow?.repair_card_id) {
+          const { data: cardRow } = await supabase
+            .from('bodyshop_repair_cards')
+            .select('reg_number')
+            .eq('id', logRow.repair_card_id)
+            .maybeSingle()
+          registrationNo = String(cardRow?.reg_number ?? '').trim()
+        }
+        if (!registrationNo && logRow?.job_card_number) {
+          const { data: cardRow } = await supabase
+            .from('bodyshop_repair_cards')
+            .select('reg_number')
+            .eq('job_card_no', logRow.job_card_number)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          registrationNo = String(cardRow?.reg_number ?? '').trim()
+        }
+      }
+
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for bodyshop floor work photo row',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
+      rowId = String(floorPhotoRow.id)
+      rowCreatedAt = floorPhotoRow.created_at
+      existingDriveFileId = String(floorPhotoRow.drive_file_id ?? '').trim()
+      effectiveFileType = body.fileType || 'bodyshop_floor_work_photo'
     } else if (body.resourceType === 'bodyshop_document') {
       const bodyshopDocId = Number(body.resourceId)
       if (!Number.isFinite(bodyshopDocId)) {
@@ -887,6 +964,8 @@ Deno.serve(async (req) => {
         ? `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
         : body.resourceType === 'bodyshop_intake_photo'
           ? `${normalizedReg}_SA_BODYSHOP_PHOTO_${datePart}_${rowId}.${ext}`
+        : body.resourceType === 'bodyshop_floor_work_photo'
+          ? `${normalizedReg}_SA_BODYSHOP_FLOOR_WORK_${datePart}_${rowId}.${ext}`
         : body.resourceType === 'bodyshop_document'
           ? `${normalizedReg}_SA_BODYSHOP_DOC_${normalizedFileType}_${datePart}_${rowId}.${ext}`
         : body.resourceType === 'reception_invoice'
@@ -975,6 +1054,11 @@ Deno.serve(async (req) => {
               drive_url: driveUrl,
               drive_file_id: fileId,
             }
+        : body.resourceType === 'bodyshop_floor_work_photo'
+          ? {
+              drive_url: driveUrl,
+              drive_file_id: fileId,
+            }
         : body.resourceType === 'bodyshop_document'
           ? {
               drive_url: driveUrl,
@@ -1007,6 +1091,8 @@ Deno.serve(async (req) => {
         ? 'panel_photos'
         : body.resourceType === 'bodyshop_intake_photo'
           ? 'bodyshop_intake_vehicle_photos'
+        : body.resourceType === 'bodyshop_floor_work_photo'
+          ? 'bodyshop_floor_role_daily_log_photos'
         : body.resourceType === 'bodyshop_document'
           ? 'bodyshop_repair_card_documents'
         : body.resourceType === 'insurance_renewal_quote'

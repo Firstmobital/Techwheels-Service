@@ -100,6 +100,7 @@ Deno.serve(async (req) => {
     const dealerCodesByUserId = new Map<string, string[] | null>()
     const dealerCodeByUserId = new Map<string, string | null>()
     const dealerNameByUserId = new Map<string, string | null>()
+    const requestedAccessByUserId = new Map<string, string | null>()
     let authListFailedReason: string | null = null
 
     const ingestAuthUser = (u: {
@@ -110,9 +111,14 @@ Deno.serve(async (req) => {
         dealer_code?: string | null
         dealer_name?: string | null
         dealer_codes?: string[] | null
+        role?: string | null
       } | null
     }) => {
       if (u.id) phoneByUserId.set(u.id, u.phone ?? null)
+      if (u.id) {
+        const requested = String(u.user_metadata?.role ?? '').trim() || null
+        requestedAccessByUserId.set(u.id, requested)
+      }
       if (u.email) phoneByEmail.set((u.email ?? '').toLowerCase(), u.phone ?? null)
       if (u.id) {
         const metadataCodes = normalizeDealerCodes(u.user_metadata?.dealer_codes)
@@ -294,6 +300,7 @@ Deno.serve(async (req) => {
         dealer_code: dbDealerCode ?? dealerCodeByUserId.get(u.id) ?? null,
         dealer_name: dbDealerName ?? dealerNameByUserId.get(u.id) ?? null,
         dealer_codes: metaDealerCodes,
+        requested_access_role: requestedAccessByUserId.get(u.id) ?? null,
       }
     })
 

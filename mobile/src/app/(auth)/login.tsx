@@ -104,9 +104,13 @@ export default function LoginScreen() {
         )}
       </TouchableOpacity>
 
-      <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, textAlign: 'center', marginTop: 14, lineHeight: 18 }}>
-        Staff accounts are invite-only. Ask your workshop admin.
-      </Text>
+      <TouchableOpacity onPress={() => router.push('/(auth)/signup')} style={{ marginTop: 16, alignItems: 'center' }}>
+        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+          New employee?{' '}
+          <Text style={{ color: CustomerTheme.primary, fontWeight: '700' }}>Request access</Text>
+          {' '}(verify email, then admin assigns modules)
+        </Text>
+      </TouchableOpacity>
     </SimpleServiceLoginShell>
   )
 }
