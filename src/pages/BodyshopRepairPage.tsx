@@ -172,6 +172,33 @@ type RtoInsuranceCacheRow = {
   api_rc_vehicle_insurance_upto: string | null
 }
 
+function insurancePatchHasData(
+  patch: Pick<RepairCard, 'insurance_policy_no' | 'insurance_company' | 'insurance_valid_date'>,
+): boolean {
+  return Boolean(patch.insurance_policy_no || patch.insurance_company || patch.insurance_valid_date)
+}
+
+function rtoInsuranceRowFromSource(
+  regNo: string,
+  source: unknown,
+  cachedAt: string | null = null,
+): RtoInsuranceCacheRow | null {
+  const patch = extractInsurancePatchFromSource(source)
+  if (!insurancePatchHasData(patch)) return null
+
+  const row = (source && typeof source === 'object' && !Array.isArray(source))
+    ? source as Record<string, unknown>
+    : {}
+
+  return {
+    registration_no: regNo,
+    cached_at: cachedAt,
+    api_rc_vehicle_insurance_policy_number: patch.insurance_policy_no,
+    api_rc_vehicle_insurance_company_name: patch.insurance_company,
+    api_rc_vehicle_insurance_upto: String(row.api_rc_vehicle_insurance_upto ?? patch.insurance_valid_date ?? '').trim() || null,
+  }
+}
+
 const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
 
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
@@ -1038,7 +1065,6 @@ export default function BodyshopRepairPage() {
   const [savingReceiving, setSavingReceiving] = useState(false)
   const [receivingSaveError, setReceivingSaveError] = useState<string | null>(null)
   const [fetchingInsurance, setFetchingInsurance] = useState(false)
-  const [insuranceFetched, setInsuranceFetched] = useState(false)
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [bodyshopDocsLoadError, setBodyshopDocsLoadError] = useState<string | null>(null)
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
@@ -1432,7 +1458,6 @@ export default function BodyshopRepairPage() {
     if (!selected?.id) {
       setBodyshopDocsByKey({})
       setBodyshopDocsLoadError(null)
-      setInsuranceFetched(false)
       return
     }
 
@@ -3920,12 +3945,9 @@ export default function BodyshopRepairPage() {
       const cachedAtMs = cacheRow?.cached_at ? new Date(cacheRow.cached_at).getTime() : Number.NaN
       const cacheIsFresh = Number.isFinite(cachedAtMs) && (Date.now() - cachedAtMs) <= staleAfterMs
       let usedFreshCache = Boolean(cacheRow && cacheIsFresh)
-      const cacheInsurancePatch = cacheRow ? extractInsurancePatchFromSource(cacheRow) : null
-      const cacheHasInsuranceData = Boolean(
-        cacheInsurancePatch?.insurance_policy_no
-        || cacheInsurancePatch?.insurance_company
-        || cacheInsurancePatch?.insurance_valid_date,
-      )
+      const cacheHasInsuranceData = cacheRow
+        ? insurancePatchHasData(extractInsurancePatchFromSource(cacheRow))
+        : false
 
       if (!cacheRow || !cacheIsFresh || !cacheHasInsuranceData) {
         const rcLookupRes = await fetchVehicleFromRcLookup(regNo)
@@ -3945,14 +3967,12 @@ export default function BodyshopRepairPage() {
           // If read-back fails, fall through to payload/stale cache fallback.
         }
 
-        if (!cacheRow && rcLookupRes.data) {
-          cacheRow = {
-            registration_no: regNo,
-            cached_at: null,
-            api_rc_vehicle_insurance_policy_number: String((rcLookupRes.data as Record<string, unknown>).api_rc_vehicle_insurance_policy_number ?? '').trim() || null,
-            api_rc_vehicle_insurance_company_name: String((rcLookupRes.data as Record<string, unknown>).api_rc_vehicle_insurance_company_name ?? '').trim() || null,
-            api_rc_vehicle_insurance_upto: String((rcLookupRes.data as Record<string, unknown>).api_rc_vehicle_insurance_upto ?? '').trim() || null,
-          }
+        const rowHasInsurance = cacheRow
+          ? insurancePatchHasData(extractInsurancePatchFromSource(cacheRow))
+          : false
+        if (!rowHasInsurance && rcLookupRes.data) {
+          const fromPayload = rtoInsuranceRowFromSource(regNo, rcLookupRes.data, cacheRow?.cached_at ?? null)
+          if (fromPayload) cacheRow = fromPayload
         }
       }
 
@@ -3962,11 +3982,7 @@ export default function BodyshopRepairPage() {
       }
 
       const insurancePatch = extractInsurancePatchFromSource(cacheRow)
-      const hasInsuranceData = Boolean(
-        insurancePatch.insurance_policy_no
-        || insurancePatch.insurance_company
-        || insurancePatch.insurance_valid_date,
-      )
+      const hasInsuranceData = insurancePatchHasData(insurancePatch)
 
       if (!hasInsuranceData) {
         toast_('Insurance data is not present in RC lookup response', false)
@@ -3993,7 +4009,6 @@ export default function BodyshopRepairPage() {
         return next
       })
 
-      setInsuranceFetched(true)
       toast_(usedFreshCache ? 'Insurance details fetched from cache ✅' : 'Insurance details refreshed from RC API ✅')
     } catch (e) {
       toast_(e.message ?? 'Unable to fetch insurance details', false)
@@ -6219,13 +6234,13 @@ export default function BodyshopRepairPage() {
                                   🛡️ Insurance Details
                                 </div>
                                 <button
-                                  className={`btn btn--primary brx-docs-fetch ${fetchingInsurance || !insuranceRegNo || insuranceFetched ? 'is-disabled' : ''} ${insuranceFetched ? 'is-fetched' : ''} ${fetchingInsurance ? 'is-fetching' : ''}`}
+                                  className={`btn btn--primary brx-docs-fetch ${fetchingInsurance ? 'is-fetching' : ''}`}
                                   type="button"
                                   onClick={() => void handleFetchInsuranceDetails()}
-                                  disabled={fetchingInsurance || !insuranceRegNo || insuranceFetched}
-                                  title={insuranceFetched ? 'Insurance details already fetched' : (insuranceRegNo ? 'Fetch from RC cache/API' : 'Registration number required')}
+                                  disabled={fetchingInsurance}
+                                  title={insuranceRegNo ? 'Fetch policy details from RC cache/API using registration number' : 'Registration number required (from Receiving / reception)'}
                                 >
-                                  {fetchingInsurance ? 'Fetching...' : insuranceFetched ? 'Fetched ✓' : 'Fetch'}
+                                  {fetchingInsurance ? 'Fetching...' : 'Fetch'}
                                 </button>
                               </div>
                               <label className="brx-docs-field">

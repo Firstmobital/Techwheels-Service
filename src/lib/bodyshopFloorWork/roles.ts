@@ -39,6 +39,8 @@ export type BodyshopFloorWorkTask = {
   repairCardId: number | null
   dealerCode: string
   floorRole: BodyshopFloorWorkLogRole
+  /** Employee code for this assignment slot (used for logs; may differ from login when admin overview). */
+  assignedEmployeeCode: string
   employeeName: string | null
   isSupport: boolean
   supportAssignmentId?: number
@@ -46,6 +48,12 @@ export type BodyshopFloorWorkTask = {
 
 function normCode(raw: unknown): string {
   return String(raw ?? '').trim().toUpperCase()
+}
+
+export function workTaskEmployeeCode(task: BodyshopFloorWorkTask, loginEmployeeCode: string): string {
+  const slot = normCode(task.assignedEmployeeCode)
+  if (slot) return slot
+  return normCode(loginEmployeeCode)
 }
 
 function normJc(raw: unknown): string {
@@ -95,6 +103,7 @@ export function listWorkTasksForEmployee(
         repairCardId,
         dealerCode,
         floorRole: role,
+        assignedEmployeeCode: code,
         employeeName: String(row[cols.name] ?? '').trim() || null,
         isSupport: false,
       })
@@ -110,11 +119,13 @@ export function listWorkTasksForEmployee(
     const key = `${jc}|${roleRaw}|support|${row.id ?? ''}`
     if (seen.has(key)) continue
     seen.add(key)
+    const supportCode = normCode(row.employee_code)
     tasks.push({
       jobCardNumber: jc,
       repairCardId: null,
       dealerCode: String(row.dealer_code ?? '').trim(),
       floorRole: roleRaw as BodyshopFloorWorkLogRole,
+      assignedEmployeeCode: supportCode,
       employeeName: String(row.employee_name ?? '').trim() || null,
       isSupport: true,
       supportAssignmentId: typeof row.id === 'number' ? row.id : undefined,
@@ -122,6 +133,71 @@ export function listWorkTasksForEmployee(
   }
 
   return tasks.sort((a, b) => a.jobCardNumber.localeCompare(b.jobCardNumber))
+}
+
+/** All active floor work slots (admin / floor incharge overview). */
+export function listAllWorkTasksForAdmin(
+  primaryRows: AssignmentRow[],
+  supportRows: Array<{
+    id?: number
+    job_card_number?: string
+    support_role?: string
+    employee_code?: string
+    employee_name?: string | null
+    is_active?: boolean
+    dealer_code?: string
+  }>,
+): BodyshopFloorWorkTask[] {
+  const tasks: BodyshopFloorWorkTask[] = []
+  const seen = new Set<string>()
+
+  for (const row of primaryRows) {
+    const jc = normJc(row.job_card_number)
+    if (!jc) continue
+    const dealerCode = String(row.dealer_code ?? '').trim()
+    const repairCardId = typeof row.repair_card_id === 'number' ? row.repair_card_id : null
+
+    for (const role of BODYSHOP_FLOOR_WORK_LOG_ROLES) {
+      const cols = PRIMARY_ROLE_COLUMNS[role]
+      const code = normCode(row[cols.code])
+      if (!isActiveAssignmentCode(code)) continue
+      const key = `${jc}|${role}|primary|${code}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      tasks.push({
+        jobCardNumber: jc,
+        repairCardId,
+        dealerCode,
+        floorRole: role,
+        assignedEmployeeCode: code,
+        employeeName: String(row[cols.name] ?? '').trim() || null,
+        isSupport: false,
+      })
+    }
+  }
+
+  for (const row of supportRows) {
+    if (row.is_active === false) continue
+    const jc = normJc(row.job_card_number)
+    const roleRaw = String(row.support_role ?? '').trim().toUpperCase()
+    const supportCode = normCode(row.employee_code)
+    if (!jc || !supportCode || !BODYSHOP_FLOOR_WORK_LOG_ROLES.includes(roleRaw as BodyshopFloorWorkLogRole)) continue
+    const key = `${jc}|${roleRaw}|support|${row.id ?? supportCode}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    tasks.push({
+      jobCardNumber: jc,
+      repairCardId: null,
+      dealerCode: String(row.dealer_code ?? '').trim(),
+      floorRole: roleRaw as BodyshopFloorWorkLogRole,
+      assignedEmployeeCode: supportCode,
+      employeeName: String(row.employee_name ?? '').trim() || null,
+      isSupport: true,
+      supportAssignmentId: typeof row.id === 'number' ? row.id : undefined,
+    })
+  }
+
+  return tasks.sort((a, b) => a.jobCardNumber.localeCompare(b.jobCardNumber) || a.floorRole.localeCompare(b.floorRole))
 }
 
 export type BodyshopFloorWorkUiMode = 'worker' | 'edp'

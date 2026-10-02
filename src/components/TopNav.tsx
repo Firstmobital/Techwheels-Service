@@ -15,6 +15,7 @@ interface NavItem {
 const BODYSHOP_GROUP_ITEMS = [
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
   { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor' },
+  { to: '/bodyshop-floor-work', label: 'Floor Work', icon: 'floor' },
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
   { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports' },
 ]

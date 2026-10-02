@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -13,8 +13,21 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { getLinkedEmployeeContext } from '../../lib/api/bodyshopFloorWorkContext'
 import {
+  fetchBodyshopAssignmentsForEmployee,
+  fetchBodyshopSupportAssignmentsForEmployee,
+} from '../../lib/api/bodyshopFloorWorkAssignments'
+import { fetchRepairCardVehicleByJcs } from '../../lib/api/bodyshopFloorWorkVehicles'
+import {
+  floorWorkVehicleSubtitle,
+  floorWorkVehicleTitle,
+  sortFloorWorkTasksByVehicle,
+  type FloorWorkVehicleMeta,
+} from '../../lib/bodyshopFloorWork/display'
+import {
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
+  listAllWorkTasksForAdmin,
   listWorkTasksForEmployee,
+  workTaskEmployeeCode,
   type BodyshopFloorWorkTask,
 } from '../../lib/bodyshopFloorWork/roles'
 import {
@@ -43,38 +56,66 @@ export default function BodyshopFloorWorkScreen() {
   const [note, setNote] = useState('')
   const [photoUris, setPhotoUris] = useState<Array<{ uri: string; mime?: string }>>([])
   const [savedPhotos, setSavedPhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
-  const [regByJc, setRegByJc] = useState<Record<string, string | null>>({})
+  const [vehicleByJc, setVehicleByJc] = useState<Record<string, FloorWorkVehicleMeta>>({})
   const [saving, setSaving] = useState(false)
+  const [isAdminOverview, setIsAdminOverview] = useState(false)
+  const [vehicleSearch, setVehicleSearch] = useState('')
+
+  const sortedTasks = useMemo(
+    () => sortFloorWorkTasksByVehicle(tasks, vehicleByJc),
+    [tasks, vehicleByJc],
+  )
+
+  const visibleTasks = useMemo(() => {
+    const q = vehicleSearch.trim().toLowerCase()
+    if (!q) return sortedTasks
+    return sortedTasks.filter((t) => {
+      const meta = vehicleByJc[t.jobCardNumber]
+      const title = floorWorkVehicleTitle(meta, t.jobCardNumber).toLowerCase()
+      const sub = floorWorkVehicleSubtitle(meta, t.jobCardNumber).toLowerCase()
+      return title.includes(q) || sub.includes(q) || t.jobCardNumber.toLowerCase().includes(q)
+    })
+  }, [sortedTasks, vehicleByJc, vehicleSearch])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const ctx = await getLinkedEmployeeContext()
+      const adminOverview = Boolean(ctx.isAdminOverview)
+      setIsAdminOverview(adminOverview)
       setEmployeeCode(ctx.employeeCode)
       setEmployeeName(ctx.employeeName)
 
-      const { data: assRows, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
-      if (assErr) throw assErr
-      const { data: supportRows, error: supErr } = await supabase
-        .from('bodyshop_floor_support_assignments')
-        .select('*')
-        .eq('is_active', true)
-      if (supErr) throw supErr
-
-      setTasks(listWorkTasksForEmployee(ctx.employeeCode, assRows ?? [], supportRows ?? []))
-
-      const jcs = Array.from(new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)))
-      if (jcs.length > 0) {
-        const { data: cards } = await supabase.from('bodyshop_repair_cards').select('job_card_no, reg_number').in('job_card_no', jcs)
-        const map: Record<string, string | null> = {}
-        for (const c of cards ?? []) {
-          const k = String(c.job_card_no ?? '').trim().toUpperCase()
-          if (k) map[k] = c.reg_number ?? null
-        }
-        setRegByJc(map)
+      let assRows: Record<string, unknown>[] = []
+      let supportRows: Record<string, unknown>[] = []
+      if (adminOverview) {
+        const { data: assAll, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
+        if (assErr) throw assErr
+        const { data: supAll, error: supErr } = await supabase
+          .from('bodyshop_floor_support_assignments')
+          .select('*')
+          .eq('is_active', true)
+        if (supErr) throw supErr
+        assRows = assAll ?? []
+        supportRows = supAll ?? []
       } else {
-        setRegByJc({})
+        assRows = await fetchBodyshopAssignmentsForEmployee(ctx.employeeCode)
+        supportRows = await fetchBodyshopSupportAssignmentsForEmployee(ctx.employeeCode)
+      }
+
+      const taskList = adminOverview
+        ? listAllWorkTasksForAdmin(assRows, supportRows)
+        : listWorkTasksForEmployee(ctx.employeeCode, assRows, supportRows)
+      setTasks(taskList)
+
+      const jcs = adminOverview
+        ? Array.from(new Set(assRows.map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)))
+        : Array.from(new Set(taskList.map((t) => t.jobCardNumber)))
+      if (jcs.length > 0) {
+        setVehicleByJc(await fetchRepairCardVehicleByJcs(jcs))
+      } else {
+        setVehicleByJc({})
       }
       const logs = await fetchRoleDailyLogsForDate(today, jcs)
       const lmap: Record<string, BodyshopFloorRoleDailyLogRow> = {}
@@ -94,13 +135,20 @@ export default function BodyshopFloorWorkScreen() {
   }, [load])
 
   useEffect(() => {
-    if (!selected || !employeeCode) {
+    if (!selected) {
       setNote('')
       setPhotoUris([])
       setSavedPhotos([])
       return
     }
-    const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCode, selected.isSupport)
+    const slotCode = workTaskEmployeeCode(selected, employeeCode)
+    if (!slotCode) {
+      setNote('')
+      setPhotoUris([])
+      setSavedPhotos([])
+      return
+    }
+    const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, slotCode, selected.isSupport)
     setNote(String(logsByKey[key]?.note_text ?? ''))
     setPhotoUris([])
     const logId = logsByKey[key]?.id
@@ -125,7 +173,9 @@ export default function BodyshopFloorWorkScreen() {
   }
 
   async function save() {
-    if (!selected || !employeeCode) return
+    if (!selected) return
+    const slotCode = workTaskEmployeeCode(selected, employeeCode)
+    if (!slotCode) return
     const trimmed = note.trim()
     if (!trimmed) {
       Alert.alert('Update', 'Enter today\'s work description.')
@@ -144,8 +194,8 @@ export default function BodyshopFloorWorkScreen() {
         repairCardId: selected.repairCardId,
         dealerCode,
         floorRole: selected.floorRole,
-        employeeCode,
-        employeeName,
+        employeeCode: slotCode,
+        employeeName: selected.employeeName ?? employeeName,
         noteText: trimmed,
         isSupport: selected.isSupport,
         actorEmail: user?.email ?? null,
@@ -156,7 +206,7 @@ export default function BodyshopFloorWorkScreen() {
           logId: row.id,
           dealerCode,
           jobCardNumber: selected.jobCardNumber,
-          regNumber: regByJc[selected.jobCardNumber] ?? null,
+          regNumber: vehicleByJc[selected.jobCardNumber]?.reg ?? null,
           uri: photoUris[i].uri,
           mimeType: photoUris[i].mime,
           sortOrder: i,
@@ -164,7 +214,7 @@ export default function BodyshopFloorWorkScreen() {
         setSavedPhotos((prev) => [...prev, uploaded])
       }
 
-      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCode, selected.isSupport)
+      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, slotCode, selected.isSupport)
       setLogsByKey((prev) => ({ ...prev, [key]: row }))
       setPhotoUris([])
       Alert.alert('Saved', 'Today\'s update saved (IST).')
@@ -209,8 +259,15 @@ export default function BodyshopFloorWorkScreen() {
           <TouchableOpacity onPress={() => setSelected(null)}>
             <Text style={{ color: '#2a4cd0', fontWeight: '700', marginBottom: 8 }}>← Back to list</Text>
           </TouchableOpacity>
-          <Text style={{ fontWeight: '800' }}>{selected.jobCardNumber}</Text>
-          <Text style={{ fontSize: 12, color: '#82858f' }}>{BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}</Text>
+          <Text style={{ fontWeight: '800', fontSize: 18 }}>
+            {floorWorkVehicleTitle(vehicleByJc[selected.jobCardNumber], selected.jobCardNumber)}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#82858f', marginTop: 4 }}>
+            {floorWorkVehicleSubtitle(vehicleByJc[selected.jobCardNumber], selected.jobCardNumber)}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#82858f', marginTop: 4 }}>
+            {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}
+          </Text>
           <TextInput
             style={{
               marginTop: 12,
@@ -262,8 +319,26 @@ export default function BodyshopFloorWorkScreen() {
         </View>
       ) : null}
 
+      {!selected ? (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+          <TextInput
+            placeholder="Search reg no. / customer / JC…"
+            value={vehicleSearch}
+            onChangeText={setVehicleSearch}
+            style={{
+              backgroundColor: '#fff',
+              borderWidth: 1,
+              borderColor: '#e7e3d9',
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+            }}
+          />
+        </View>
+      ) : null}
+
       <FlatList
-        data={tasks}
+        data={visibleTasks}
         keyExtractor={(item) => `${item.jobCardNumber}-${item.floorRole}-${item.isSupport}`}
         contentContainerStyle={{ padding: 16 }}
         ListEmptyComponent={
@@ -272,8 +347,10 @@ export default function BodyshopFloorWorkScreen() {
           </Text>
         }
         renderItem={({ item }) => {
-          const key = workLogMapKey(item.jobCardNumber, item.floorRole, employeeCode, item.isSupport)
+          const slotCode = workTaskEmployeeCode(item, employeeCode)
+          const key = workLogMapKey(item.jobCardNumber, item.floorRole, slotCode, item.isSupport)
           const done = Boolean(logsByKey[key]?.note_text?.trim())
+          const meta = vehicleByJc[item.jobCardNumber]
           return (
             <TouchableOpacity
               onPress={() => setSelected(item)}
@@ -286,7 +363,12 @@ export default function BodyshopFloorWorkScreen() {
                 borderColor: done ? '#cadcf8' : '#f1dcb8',
               }}
             >
-              <Text style={{ fontWeight: '800', color: '#1a1b21' }}>{item.jobCardNumber}</Text>
+              <Text style={{ fontWeight: '800', color: '#1a1b21', fontSize: 17 }}>
+                {floorWorkVehicleTitle(meta, item.jobCardNumber)}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#82858f', marginTop: 4 }}>
+                {floorWorkVehicleSubtitle(meta, item.jobCardNumber)}
+              </Text>
               <Text style={{ fontSize: 12, color: '#82858f', marginTop: 4 }}>
                 {BODYSHOP_FLOOR_WORK_ROLE_LABELS[item.floorRole]}
                 {item.isSupport ? ' · support' : ''} · {done ? '✓ updated' : 'pending today'}

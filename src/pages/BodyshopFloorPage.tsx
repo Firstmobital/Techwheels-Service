@@ -844,6 +844,7 @@ export default function BodyshopFloorPage() {
 
   async function loadAll() {
     setLoading(true); setDataError(false)
+    let jcKeysForSecondary: string[] = []
     try {
       // 1. All vehicles active on the Bodyshop Repair pipeline — Stage 11 (Floor Assignment) is treated as active for every one, no stage/floor gating
       const { data: sentCards, error: sentErr } = await supabase
@@ -967,6 +968,7 @@ export default function BodyshopFloorPage() {
         setCars([])
         setRepairCardIdByJc({})
         setDailyUpdatesByJc({})
+        jcKeysForSecondary = []
       } else if (vehicleListMode === 'live_on_floor') {
         const entryIds = Array.from(new Set(
           Array.from(latestByJc.values())
@@ -1013,6 +1015,7 @@ export default function BodyshopFloorPage() {
           return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
         })
         setCars(carList)
+        jcKeysForSecondary = Array.from(latestByJc.keys())
       } else {
         // 2. Accident reception entries (restricted to sent vehicles only)
         const { data: recData, error: recErr } = await fetchAccidentCarsByDateRange(dateRange)
@@ -1030,6 +1033,7 @@ export default function BodyshopFloorPage() {
           })
 
         setCars(carList)
+        jcKeysForSecondary = Array.from(latestByJc.keys())
       }
 
       if (sentByJc.size > 0) {
@@ -1038,33 +1042,50 @@ export default function BodyshopFloorPage() {
           if (meta.repairCardId != null) idMap[jc] = meta.repairCardId
         })
         setRepairCardIdByJc(idMap)
-        const dailyRes = await fetchBodyshopFloorDailyUpdatesForJcs(Array.from(latestByJc.keys()))
-        if (dailyRes.error) {
-          console.warn('bodyshop_floor_daily_updates:', dailyRes.error)
-          setDailyUpdatesByJc({})
-        } else {
-          const dMap: Record<string, BodyshopFloorDailyUpdateRow> = {}
-          for (const row of dailyRes.data ?? []) {
-            dMap[String(row.job_card_number).trim().toUpperCase()] = row
-          }
-          setDailyUpdatesByJc(dMap)
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
+      jcKeysForSecondary = []
+    } finally {
+      // Show vehicle list as soon as cards/reception are loaded; assignments load in background.
+      setLoading(false)
+    }
+
+    if (jcKeysForSecondary.length === 0) return
+
+    try {
+      const dailyRes = await fetchBodyshopFloorDailyUpdatesForJcs(jcKeysForSecondary)
+      if (dailyRes.error) {
+        console.warn('bodyshop_floor_daily_updates:', dailyRes.error)
+        setDailyUpdatesByJc({})
+      } else {
+        const dMap: Record<string, BodyshopFloorDailyUpdateRow> = {}
+        for (const row of dailyRes.data ?? []) {
+          dMap[String(row.job_card_number).trim().toUpperCase()] = row
         }
+        setDailyUpdatesByJc(dMap)
       }
 
-      // 3. Bodyshop employees
-      const { data: empData } = await supabase
-        .from('employee_master')
-        .select('employee_code, employee_name, department, role')
-        .eq('is_active', true)
-        .limit(500)
-      setEmployees((empData ?? []) as Employee[])
+      const [{ data: empData }, { data: assData, error: assErr }, { data: supportData, error: supportErr }] =
+        await Promise.all([
+          supabase
+            .from('employee_master')
+            .select('employee_code, employee_name, department, role')
+            .eq('is_active', true)
+            .limit(500),
+          supabase
+            .from('bodyshop_assignments')
+            .select('*')
+            .eq('is_active', true)
+            .order('updated_at', { ascending: false }),
+          supabase
+            .from('bodyshop_floor_support_assignments')
+            .select('*')
+            .eq('is_active', true)
+            .order('assigned_at', { ascending: false }),
+        ])
 
-      // 4. Bodyshop assignments
-      const { data: assData, error: assErr } = await supabase
-        .from('bodyshop_assignments')
-        .select('*')
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
+      setEmployees((empData ?? []) as Employee[])
 
       if (assErr) {
         console.warn('bodyshop_assignments:', assErr.message)
@@ -1087,7 +1108,6 @@ export default function BodyshopFloorPage() {
         setAssignments(map)
         setBsFloorStatus(floorMap)
 
-        // Populate stage drafts from existing assignments
         const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
         for (const [k, roleMap] of Object.entries(map)) {
           drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
@@ -1102,13 +1122,6 @@ export default function BodyshopFloorPage() {
         setStageDrafts(drafts)
       }
 
-      // 5. Bodyshop floor support assignments
-      const { data: supportData, error: supportErr } = await supabase
-        .from('bodyshop_floor_support_assignments')
-        .select('*')
-        .eq('is_active', true)
-        .order('assigned_at', { ascending: false })
-
       if (supportErr) {
         console.warn('bodyshop_floor_support_assignments:', supportErr.message)
         setSupportAssignments({})
@@ -1120,7 +1133,6 @@ export default function BodyshopFloorPage() {
           if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
           supportMap[k][role].push(s)
         }
-        // Sort each role array by assigned_at DESC
         for (const roleMap of Object.values(supportMap)) {
           for (const supportList of Object.values(roleMap)) {
             supportList.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())
@@ -1129,9 +1141,7 @@ export default function BodyshopFloorPage() {
         setSupportAssignments(supportMap)
       }
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
-    } finally {
-      setLoading(false)
+      console.warn('bodyshop floor secondary load:', err)
     }
   }
 

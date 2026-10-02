@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getLinkedEmployeeContext } from '../lib/api/bodyshopFloorWorkContext'
 import {
   BODYSHOP_FLOOR_WORK_LOG_ROLES,
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
+  listAllWorkTasksForAdmin,
   listWorkTasksForEmployee,
   resolveBodyshopFloorWorkUiModes,
+  workTaskEmployeeCode,
   type BodyshopFloorWorkTask,
 } from '../lib/bodyshopFloorWork/roles'
 import {
@@ -23,6 +25,18 @@ import {
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../lib/bodyshopFloorRoleWorkLog'
 import { upsertBodyshopFloorDailyUpdate } from '../lib/api/bodyshopFloorDailyUpdate'
 import { getDealerContext } from '../lib/api'
+import {
+  fetchBodyshopAssignmentsForEmployee,
+  fetchBodyshopSupportAssignmentsForEmployee,
+} from '../lib/api/bodyshopFloorWorkAssignments'
+import { fetchRepairCardVehicleByJcs } from '../lib/api/bodyshopFloorWorkVehicles'
+import {
+  floorWorkVehicleSubtitle,
+  floorWorkVehicleTitle,
+  sortFloorWorkTasksByVehicle,
+  sortJobCardsByVehicle,
+  edpVehicleOptionLabel,
+} from '../lib/bodyshopFloorWork/display'
 
 export default function BodyshopFloorWorkPage() {
   const today = bodyshopFloorWorkTodayIstDate()
@@ -47,6 +61,29 @@ export default function BodyshopFloorWorkPage() {
   const [edpJc, setEdpJc] = useState<string | null>(null)
   const [edpNote, setEdpNote] = useState('')
   const [edpSaving, setEdpSaving] = useState(false)
+  const [isAdminOverview, setIsAdminOverview] = useState(false)
+  const [vehicleSearch, setVehicleSearch] = useState('')
+
+  const sortedTasks = useMemo(
+    () => sortFloorWorkTasksByVehicle(tasks, cardByJc),
+    [tasks, cardByJc],
+  )
+
+  const visibleTasks = useMemo(() => {
+    const q = vehicleSearch.trim().toLowerCase()
+    if (!q) return sortedTasks
+    return sortedTasks.filter((t) => {
+      const meta = cardByJc[t.jobCardNumber]
+      const title = floorWorkVehicleTitle(meta, t.jobCardNumber).toLowerCase()
+      const sub = floorWorkVehicleSubtitle(meta, t.jobCardNumber).toLowerCase()
+      return title.includes(q) || sub.includes(q) || t.jobCardNumber.toLowerCase().includes(q)
+    })
+  }, [sortedTasks, cardByJc, vehicleSearch])
+
+  const edpJobCardsSorted = useMemo(
+    () => sortJobCardsByVehicle(allFloorJcs, cardByJc),
+    [allFloorJcs, cardByJc],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -54,37 +91,50 @@ export default function BodyshopFloorWorkPage() {
     try {
       const ctx = await getLinkedEmployeeContext()
       if (ctx.error || !ctx.data) throw new Error(ctx.error ?? 'Employee link missing')
+      const adminOverview = Boolean(ctx.data.isAdminOverview)
+      setIsAdminOverview(adminOverview)
       setEmployeeCode(ctx.data.employeeCode)
       setEmployeeName(ctx.data.employeeName)
       setEmployeeRole(ctx.data.employeeRole)
-      const modes = resolveBodyshopFloorWorkUiModes(ctx.data.employeeRole)
-      setUiModes(modes)
+      const modes = adminOverview
+        ? (['worker', 'edp'] as const)
+        : resolveBodyshopFloorWorkUiModes(ctx.data.employeeRole)
+      setUiModes([...modes])
       setTab(modes.includes('worker') ? 'worker' : 'edp')
 
-      const { data: assRows, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
-      if (assErr) throw assErr
-      const { data: supportRows, error: supErr } = await supabase
-        .from('bodyshop_floor_support_assignments')
-        .select('*')
-        .eq('is_active', true)
-      if (supErr) throw supErr
+      let assRows: Record<string, unknown>[] = []
+      let supportRows: Record<string, unknown>[] = []
+      if (adminOverview) {
+        const { data: assAll, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
+        if (assErr) throw assErr
+        const { data: supAll, error: supErr } = await supabase
+          .from('bodyshop_floor_support_assignments')
+          .select('*')
+          .eq('is_active', true)
+        if (supErr) throw supErr
+        assRows = assAll ?? []
+        supportRows = supAll ?? []
+      } else {
+        const [assRes, supRes] = await Promise.all([
+          fetchBodyshopAssignmentsForEmployee(ctx.data.employeeCode),
+          fetchBodyshopSupportAssignmentsForEmployee(ctx.data.employeeCode),
+        ])
+        if (assRes.error) throw new Error(assRes.error)
+        if (supRes.error) throw new Error(supRes.error)
+        assRows = assRes.data ?? []
+        supportRows = supRes.data ?? []
+      }
 
-      const myTasks = listWorkTasksForEmployee(ctx.data.employeeCode, assRows ?? [], supportRows ?? [])
+      const myTasks = adminOverview
+        ? listAllWorkTasksForAdmin(assRows, supportRows)
+        : listWorkTasksForEmployee(ctx.data.employeeCode, assRows, supportRows)
       setTasks(myTasks)
 
-      const jcs = Array.from(new Set([...(assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase())].filter(Boolean)))
+      const jcs = adminOverview
+        ? Array.from(new Set(assRows.map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)))
+        : Array.from(new Set(myTasks.map((t) => t.jobCardNumber)))
       if (jcs.length > 0) {
-        const { data: cards } = await supabase
-          .from('bodyshop_repair_cards')
-          .select('job_card_no, reg_number, customer_name')
-          .in('job_card_no', jcs)
-        const map: Record<string, { reg: string | null; customer: string | null }> = {}
-        for (const c of cards ?? []) {
-          const k = String(c.job_card_no ?? '').trim().toUpperCase()
-          if (!k) continue
-          map[k] = { reg: c.reg_number ?? null, customer: c.customer_name ?? null }
-        }
-        setCardByJc(map)
+        setCardByJc(await fetchRepairCardVehicleByJcs(jcs))
       } else {
         setCardByJc({})
       }
@@ -112,15 +162,14 @@ export default function BodyshopFloorWorkPage() {
     void load()
   }, [load])
 
-  const edpJobCards = allFloorJcs
-
   useEffect(() => {
     if (!selected) {
       setNote('')
       setSavedPhotos([])
       return
     }
-    const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCode, selected.isSupport)
+    const slotCode = workTaskEmployeeCode(selected, employeeCode)
+    const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, slotCode, selected.isSupport)
     setNote(String(logsByKey[key]?.note_text ?? ''))
     setPendingPhotos([])
     const logId = logsByKey[key]?.id
@@ -143,7 +192,9 @@ export default function BodyshopFloorWorkPage() {
   }
 
   async function saveWorkerLog() {
-    if (!selected || !employeeCode) return
+    if (!selected) return
+    const slotCode = workTaskEmployeeCode(selected, employeeCode)
+    if (!slotCode) return
     const trimmed = note.trim()
     if (!trimmed) {
       alert('Enter today\'s work description.')
@@ -161,8 +212,8 @@ export default function BodyshopFloorWorkPage() {
         repairCardId: selected.repairCardId,
         dealerCode,
         floorRole: selected.floorRole,
-        employeeCode,
-        employeeName,
+        employeeCode: slotCode,
+        employeeName: selected.employeeName ?? employeeName,
         noteText: trimmed,
         isSupport: selected.isSupport,
         actorEmail: user?.email ?? null,
@@ -184,7 +235,7 @@ export default function BodyshopFloorWorkPage() {
       }
       setPendingPhotos([])
 
-      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCode, selected.isSupport)
+      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, slotCode, selected.isSupport)
       setLogsByKey((prev) => ({ ...prev, [key]: up.data! }))
       alert('Saved for today (IST).')
     } catch (e) {
@@ -248,7 +299,9 @@ export default function BodyshopFloorWorkPage() {
     <div className="page-pad">
       <h1>Bodyshop Floor Work</h1>
       <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
-        {employeeName ?? employeeCode} · IST date {today}
+        {(employeeName ?? employeeCode) || 'Admin'}
+        {isAdminOverview ? ' · Admin overview (all floor assignments)' : ''}
+        {' · IST date '}{today}
       </p>
 
       {uiModes.length > 1 ? (
@@ -269,13 +322,28 @@ export default function BodyshopFloorWorkPage() {
       {tab === 'worker' ? (
         <div className="grid-2">
           <div className="card">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>My assignments today</h2>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All floor work today' : 'My vehicles today'}</h2>
+            {tasks.length > 0 ? (
+              <input
+                className="inp"
+                type="search"
+                placeholder="Search reg no. / customer / JC…"
+                value={vehicleSearch}
+                onChange={(e) => setVehicleSearch(e.target.value)}
+                style={{ marginBottom: 12 }}
+              />
+            ) : null}
             {tasks.length === 0 ? (
-              <p style={{ color: 'var(--muted)' }}>No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.</p>
+              <p style={{ color: 'var(--muted)' }}>
+                {isAdminOverview
+                  ? 'No active bodyshop floor assignments yet.'
+                  : 'No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.'}
+              </p>
             ) : (
               <ul className="plain-list">
-                {tasks.map((t) => {
-                  const key = workLogMapKey(t.jobCardNumber, t.floorRole, employeeCode, t.isSupport)
+                {visibleTasks.map((t) => {
+                  const slotCode = workTaskEmployeeCode(t, employeeCode)
+                  const key = workLogMapKey(t.jobCardNumber, t.floorRole, slotCode, t.isSupport)
                   const hasLog = Boolean(logsByKey[key]?.note_text?.trim())
                   const card = cardByJc[t.jobCardNumber]
                   return (
@@ -286,11 +354,16 @@ export default function BodyshopFloorWorkPage() {
                         style={{ textAlign: 'left', marginBottom: 8 }}
                         onClick={() => setSelected(t)}
                       >
-                        <strong>{t.jobCardNumber}</strong>
-                        {card?.reg ? ` · ${card.reg}` : ''}
-                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        <strong>{floorWorkVehicleTitle(card, t.jobCardNumber)}</strong>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                          {floorWorkVehicleSubtitle(card, t.jobCardNumber)}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
                           {BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]}
                           {t.isSupport ? ' (support)' : ''}
+                          {isAdminOverview && (t.employeeName || slotCode)
+                            ? ` · ${t.employeeName ?? slotCode}`
+                            : ''}
                           {hasLog ? ' · ✓ update saved' : ' · pending today'}
                         </div>
                       </button>
@@ -304,11 +377,15 @@ export default function BodyshopFloorWorkPage() {
           <div className="card">
             <h2 style={{ fontSize: 16, marginTop: 0 }}>Today&apos;s update</h2>
             {!selected ? (
-              <p style={{ color: 'var(--muted)' }}>Select a job card from the list.</p>
+              <p style={{ color: 'var(--muted)' }}>Select a vehicle from the list.</p>
             ) : (
               <>
-                <p style={{ fontSize: 13 }}>
-                  <b>{selected.jobCardNumber}</b> — {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}
+                <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+                  {floorWorkVehicleTitle(cardByJc[selected.jobCardNumber], selected.jobCardNumber)}
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+                  {floorWorkVehicleSubtitle(cardByJc[selected.jobCardNumber], selected.jobCardNumber)}
+                  {' · '}{BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}
                 </p>
                 <textarea
                   className="inp"
@@ -354,11 +431,11 @@ export default function BodyshopFloorWorkPage() {
         <div className="card">
           <h2 style={{ fontSize: 16, marginTop: 0 }}>Publish daily floor line (EDP)</h2>
           <label className="field">
-            <span className="label">Job card</span>
+            <span className="label">Vehicle (reg no.)</span>
             <select className="sel" value={edpJc ?? ''} onChange={(e) => setEdpJc(e.target.value || null)}>
               <option value="">Select…</option>
-              {edpJobCards.map((jc) => (
-                <option key={jc} value={jc}>{jc}</option>
+              {edpJobCardsSorted.map((jc) => (
+                <option key={jc} value={jc}>{edpVehicleOptionLabel(jc, cardByJc[jc])}</option>
               ))}
             </select>
           </label>

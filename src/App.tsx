@@ -81,6 +81,7 @@ const NAV_ITEMS = [
   { to: '/sa-tracker', label: 'SA Tracker', icon: 'user' },
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
   { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor' },
+  { to: '/bodyshop-floor-work', label: 'Floor Work', icon: 'floor' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
   { to: '/payroll', label: 'Payroll', icon: 'reports' },
   { to: '/import', label: 'Imports', icon: 'import' },
@@ -187,7 +188,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
 }
 
 const BODYSHOP_GROUP_ROUTE = '__bodyshop-group__' as const
-const BODYSHOP_ROUTE_PATHS = ['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-repair', '/bodyshop-recovery'] as const
+const BODYSHOP_ROUTE_PATHS = ['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-floor-work', '/bodyshop-repair', '/bodyshop-recovery'] as const
 
 type NavItem = {
   to: AppRoute
@@ -266,6 +267,7 @@ type UnifiedNavNotification = {
 
 function TopNav({
   visibleItems,
+  allowedModules,
   pathname,
   onNavigate,
   onSignOut,
@@ -277,6 +279,7 @@ function TopNav({
   onStopImpersonating,
 }: {
   visibleItems: NavItem[]
+  allowedModules: Set<string>
   pathname: string
   onNavigate: (to: string) => void
   onSignOut: () => void
@@ -504,7 +507,11 @@ function TopNav({
     { to: '/bodyshop-floor-work', label: 'Floor Work', icon: 'floor', key: 'bodyshop-floor-work' },
     { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor', key: 'bodyshop-tracker' },
     { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports', key: 'bodyshop-recovery' },
-  ] satisfies NavItem[]).filter((g) => visibleItems.some((v) => v.to === g.to))
+  ] satisfies NavItem[]).filter(
+    (g) =>
+      visibleItems.some((v) => v.to === g.to)
+      || hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[g.to as AppRoute]),
+  )
 
   const collapsedItems: DisplayNavItem[] = []
   let bodyshopGroupInserted = false
@@ -1461,6 +1468,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
 
         <TopNav
           visibleItems={visibleNavItems}
+          allowedModules={allowedModules}
           pathname={location.pathname}
           onNavigate={(to) => navigate(to)}
           onSignOut={handleSignOut}

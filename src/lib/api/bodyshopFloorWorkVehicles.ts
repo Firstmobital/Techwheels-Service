@@ -1,0 +1,111 @@
+import { supabase } from '../supabase'
+import type { FloorWorkVehicleMeta } from '../bodyshopFloorWork/display'
+import {
+  inferRegistrationFromAssignmentKey,
+  isSystemJobCardKey,
+} from '../bodyshopFloorWork/display'
+import { listReceptionEntriesByJobCardNumbers } from './reception'
+
+const JC_CHUNK = 80
+
+function normKey(value: string): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function mergeMeta(
+  map: Record<string, FloorWorkVehicleMeta>,
+  assignmentKey: string,
+  patch: Partial<FloorWorkVehicleMeta>,
+): void {
+  const k = normKey(assignmentKey)
+  if (!k) return
+  const prev = map[k] ?? { reg: null, customer: null, model: null }
+  map[k] = {
+    reg: patch.reg ?? prev.reg,
+    customer: patch.customer ?? prev.customer,
+    model: patch.model ?? prev.model,
+  }
+}
+
+/** Resolve reg/customer for each assignment key (JC or plate-shaped key). */
+export async function fetchRepairCardVehicleByJcs(
+  assignmentKeys: string[],
+): Promise<Record<string, FloorWorkVehicleMeta>> {
+  const keys = Array.from(new Set(assignmentKeys.map(normKey).filter(Boolean)))
+  const map: Record<string, FloorWorkVehicleMeta> = {}
+  if (keys.length === 0) return map
+
+  for (const k of keys) {
+    map[k] = { reg: inferRegistrationFromAssignmentKey(k), customer: null, model: null }
+  }
+
+  for (let i = 0; i < keys.length; i += JC_CHUNK) {
+    const chunk = keys.slice(i, i + JC_CHUNK)
+    const { data, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .select('job_card_no, reg_number, customer_name')
+      .in('job_card_no', chunk)
+    if (error) throw new Error(error.message)
+    for (const c of data ?? []) {
+      const jc = normKey(String(c.job_card_no ?? ''))
+      if (!jc) continue
+      mergeMeta(map, jc, {
+        reg: c.reg_number ?? null,
+        customer: c.customer_name ?? null,
+      })
+    }
+  }
+
+  const regSearch = Array.from(
+    new Set([
+      ...keys.filter((k) => inferRegistrationFromAssignmentKey(k)),
+      ...keys.filter((k) => !isSystemJobCardKey(k)),
+    ].map(normKey)),
+  )
+
+  for (let i = 0; i < regSearch.length; i += JC_CHUNK) {
+    const chunk = regSearch.slice(i, i + JC_CHUNK)
+    const { data, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .select('job_card_no, reg_number, customer_name')
+      .in('reg_number', chunk)
+    if (error) throw new Error(error.message)
+    for (const c of data ?? []) {
+      const reg = normKey(String(c.reg_number ?? ''))
+      if (!reg) continue
+      for (const assignmentKey of keys) {
+        if (normKey(assignmentKey) === reg || inferRegistrationFromAssignmentKey(assignmentKey) === reg) {
+          mergeMeta(map, assignmentKey, {
+            reg: c.reg_number ?? null,
+            customer: c.customer_name ?? null,
+          })
+        }
+      }
+    }
+  }
+
+  const needReception = keys.filter((k) => !String(map[k]?.reg ?? '').trim() && isSystemJobCardKey(k))
+  if (needReception.length > 0) {
+    const recRes = await listReceptionEntriesByJobCardNumbers(needReception)
+    if (!recRes.error && recRes.data) {
+      for (const row of recRes.data) {
+        const jc = normKey(String(row.jc_number ?? ''))
+        if (!jc) continue
+        mergeMeta(map, jc, {
+          reg: row.reg_number ?? null,
+          customer: row.owner_name ?? null,
+          model: row.model ?? null,
+        })
+      }
+    }
+  }
+
+  for (const k of keys) {
+    if (!String(map[k]?.reg ?? '').trim()) {
+      const inferred = inferRegistrationFromAssignmentKey(k)
+      if (inferred) mergeMeta(map, k, { reg: inferred })
+    }
+  }
+
+  return map
+}
