@@ -964,7 +964,7 @@ export default function BodyshopFloorPage() {
         const entryIds = Array.from(new Set(
           Array.from(latestByJc.values())
             .map((row) => row.receptionEntryId)
-            .filter((id): id is number => Number.isFinite(id) && id > 0),
+            .filter((id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0),
         ))
 
         const recByJc = new Map<string, ReceptionEntryLite>()
