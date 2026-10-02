@@ -75,6 +75,7 @@ interface Props {
   allLookbackDays?: number
   /** Override the All option label. Defaults to `All (${allLookbackDays}d)`. */
   allLabel?: string
+  disabled?: boolean
 }
 
 export default function DateRangeFilter({
@@ -85,6 +86,7 @@ export default function DateRangeFilter({
   includeAll = false,
   allLookbackDays = 90,
   allLabel,
+  disabled = false,
 }: Props) {
   const [preset, setPreset] = useState<DateRangePreset | 'all'>(() => inferPresetFromRange(range))
   const [custom, setCustom] = useState<DateRange>(range)
@@ -129,6 +131,7 @@ export default function DateRangeFilter({
       <select
         className="cft__sel"
         value={preset}
+        disabled={disabled}
         onChange={(e) => handleSelect(e.target.value as DateRangePreset | 'all')}
       >
         {OPTIONS.map((o) => (
@@ -144,6 +147,7 @@ export default function DateRangeFilter({
             className="cft__sel"
             value={custom.from}
             style={{ width: 130 }}
+            disabled={disabled}
             onChange={(e) => {
               const next = { ...custom, from: e.target.value }
               setCustom(next)
@@ -156,6 +160,7 @@ export default function DateRangeFilter({
             className="cft__sel"
             value={custom.to}
             style={{ width: 130 }}
+            disabled={disabled}
             onChange={(e) => {
               const next = { ...custom, to: e.target.value }
               setCustom(next)

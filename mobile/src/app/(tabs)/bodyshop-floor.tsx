@@ -14,6 +14,12 @@ import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
+import {
+  BODYSHOP_FLOOR_LIVE_LIST_LABEL,
+  BODYSHOP_FLOOR_TOTAL_KPI_LABEL,
+  isLiveOnFloorRepairCard,
+  type BodyshopFloorVehicleListMode,
+} from '../../lib/bodyshopFloorLive'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +50,8 @@ interface FloorCar {
   overall_status: string
   sa_name: string | null
   model: string | null
+  /** Repair card created — fallback when floor assignment row has no timestamp */
+  created_at: string | null
 }
 
 interface Employee {
@@ -60,6 +68,7 @@ interface DBAssignmentRow {
   dealer_code: string
   is_active: boolean
   assigned_at: string
+  created_at: string
   assigned_by: string | null
   supervisor_employee_code: string | null
   supervisor_employee_name: string | null
@@ -365,6 +374,30 @@ function fmtTs(v: string | null | undefined): string {
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/** Calendar days since an ISO timestamp (local midnight), for unassigned ageing on floor */
+function calendarDaysSince(iso: string | null | undefined): number | null {
+  const raw = String(iso ?? '').trim()
+  if (!raw) return null
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return null
+  const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.max(0, Math.floor((today.getTime() - startDay.getTime()) / 86400000))
+}
+
+function unassignedAgeLabel(days: number): string {
+  if (days <= 0) return 'Unassigned today'
+  if (days === 1) return 'Unassigned 1 day'
+  return `Unassigned ${days} days`
+}
+
+function unassignedAgeColor(days: number): string {
+  if (days >= 5) return '#c33b53'
+  if (days >= 3) return '#c9751b'
+  return '#82858f'
+}
+
 function parseQcNames(raw: string | null | undefined): string[] {
   return String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
     .filter((v, i, a) => a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i)
@@ -409,12 +442,13 @@ export default function BodyshopFloorScreen() {
   const [employees,         setEmployees]         = useState<Employee[]>([])
   const [assignments,       setAssignments]       = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
   const [supportAssignments,setSupportAssignments]= useState<Record<string, Record<SupportRole, SupportAssignment[]>>>({})
-  const [bsFloorStatus,     setBsFloorStatus]     = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
+  const [bsFloorStatus,     setBsFloorStatus]     = useState<Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }>>({})
   const [qcByJc,            setQcByJc]            = useState<Record<string, QcState>>({})
   const [riByJc,            setRiByJc]            = useState<Record<string, RiState>>({})
 
   // List filters
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
+  const [vehicleListMode, setVehicleListMode] = useState<BodyshopFloorVehicleListMode>('live_on_floor')
   const [branchFilter,   setBranchFilter]   = useState('all')
   const [floorFilter,    setFloorFilter]    = useState('all')
   const [search,         setSearch]         = useState('')
@@ -452,7 +486,7 @@ export default function BodyshopFloorScreen() {
       // 1. Repair cards (all active/floor vehicles)
       const { data: cardData, error: cardErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, job_card_no, reg_number, customer_name, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, overall_status, sa_name, reception_entry_id')
+        .select('id, job_card_no, reg_number, customer_name, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, overall_status, sa_name, reception_entry_id, created_at')
         .order('created_at', { ascending: false })
       if (cardErr) throw cardErr
 
@@ -465,6 +499,7 @@ export default function BodyshopFloorScreen() {
         reinspection_by: string | null; reinspection_at: string | null
         current_stage: number
         overall_status: string; sa_name: string | null; reception_entry_id: number | null
+        created_at: string | null
       }>
 
       // Fetch models from reception entries
@@ -501,6 +536,7 @@ export default function BodyshopFloorScreen() {
           overall_status: c.overall_status,
           sa_name: c.sa_name,
           model: c.reception_entry_id != null ? (modelMap[c.reception_entry_id] ?? null) : null,
+          created_at: c.created_at ?? null,
         }))
       setCars(carList)
 
@@ -544,13 +580,17 @@ export default function BodyshopFloorScreen() {
       if (assErr) throw assErr
 
       const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
-      const floorMap: Record<string, { completedAt: string | null; completedBy: string | null }> = {}
+      const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
       const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
       for (const row of (assData ?? []) as DBAssignmentRow[]) {
         const k = jcKey(row.job_card_number)
         if (!assMap[k]) {
           assMap[k] = mapRowToRoleMap(row)
-          floorMap[k] = { completedAt: row.bs_floor_completed_at ?? null, completedBy: row.bs_floor_completed_by ?? null }
+          floorMap[k] = {
+            completedAt: row.bs_floor_completed_at ?? null,
+            completedBy: row.bs_floor_completed_by ?? null,
+            enteredAt: row.assigned_at ?? row.created_at ?? null,
+          }
           drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
           for (const role of ALL_ROLES) {
             const a = assMap[k][role]
@@ -639,21 +679,27 @@ export default function BodyshopFloorScreen() {
     return isBsCompleted(c) && isQcPassed(c) && !isRiCompleted(c)
   }
 
+  const scopeCars = useMemo(() => (
+    vehicleListMode === 'live_on_floor'
+      ? cars.filter(c => isLiveOnFloorRepairCard(c))
+      : cars
+  ), [cars, vehicleListMode])
+
   const counts = useMemo(() => ({
-    all:            cars.length,
-    unassigned:     cars.filter(c => !hasAnyAssignment(c)).length,
-    assigned:       cars.filter(c =>  hasAnyAssignment(c)).length,
-    work_inprocess: cars.filter(c => !isBsCompleted(c) && hasStatus(c, 'work_inprocess')).length,
-    hold:           cars.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold')).length,
-    completed:      cars.filter(c => isBsCompleted(c)).length,
-    qc:             cars.filter(c => isInQcQueue(c)).length,
-    ri:             cars.filter(c => isInRiQueue(c)).length,
-    approvals:      cars.filter(c => pendingApprovalCount(c.additional_approval) > 0).length,
+    all:            scopeCars.length,
+    unassigned:     scopeCars.filter(c => !hasAnyAssignment(c)).length,
+    assigned:       scopeCars.filter(c =>  hasAnyAssignment(c)).length,
+    work_inprocess: scopeCars.filter(c => !isBsCompleted(c) && hasStatus(c, 'work_inprocess')).length,
+    hold:           scopeCars.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold')).length,
+    completed:      scopeCars.filter(c => isBsCompleted(c)).length,
+    qc:             scopeCars.filter(c => isInQcQueue(c)).length,
+    ri:             scopeCars.filter(c => isInRiQueue(c)).length,
+    approvals:      scopeCars.filter(c => pendingApprovalCount(c.additional_approval) > 0).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus, qcByJc, riByJc])
+  }), [scopeCars, assignments, bsFloorStatus, qcByJc, riByJc])
 
   const filtered = useMemo(() => {
-    let list = [...cars]
+    let list = [...scopeCars]
     if (branchFilter !== 'all') list = list.filter(c => (c.branch ?? '') === branchFilter)
     if (floorFilter  !== 'all') list = list.filter(c => c.bodyshop_floor === floorFilter)
     if (search.trim()) {
@@ -676,10 +722,10 @@ export default function BodyshopFloorScreen() {
     if (assignmentView === 'approvals')      return list.filter(c => pendingApprovalCount(c.additional_approval) > 0)
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, search, assignmentView, assignments, bsFloorStatus, qcByJc])
+  }, [scopeCars, branchFilter, floorFilter, search, assignmentView, assignments, bsFloorStatus, qcByJc])
 
-  const branches = useMemo(() => Array.from(new Set(cars.map(c => c.branch ?? 'Unknown'))).sort(), [cars])
-  const floors   = useMemo(() => Array.from(new Set(cars.map(c => c.bodyshop_floor ?? '').filter(Boolean))).sort(), [cars])
+  const branches = useMemo(() => Array.from(new Set(scopeCars.map(c => c.branch ?? 'Unknown'))).sort(), [scopeCars])
+  const floors   = useMemo(() => Array.from(new Set(scopeCars.map(c => c.bodyshop_floor ?? '').filter(Boolean))).sort(), [scopeCars])
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -740,7 +786,14 @@ export default function BodyshopFloorScreen() {
       const updatedRow = result.data as DBAssignmentRow
       const newRoleMap = mapRowToRoleMap(updatedRow)
       setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
-      setBsFloorStatus(prev => ({ ...prev, [k]: { completedAt: updatedRow.bs_floor_completed_at ?? null, completedBy: updatedRow.bs_floor_completed_by ?? null } }))
+      setBsFloorStatus(prev => ({
+        ...prev,
+        [k]: {
+          completedAt: updatedRow.bs_floor_completed_at ?? null,
+          completedBy: updatedRow.bs_floor_completed_by ?? null,
+          enteredAt: prev[k]?.enteredAt ?? updatedRow.assigned_at ?? updatedRow.created_at ?? null,
+        },
+      }))
       setStageDrafts(prev => ({
         ...prev,
         [k]: { ...(prev[k] ?? {}), [role]: { work_status: newRoleMap[role]?.work_status ?? 'work_inprocess', remark: newRoleMap[role]?.remark ?? '' } },
@@ -777,7 +830,14 @@ export default function BodyshopFloorScreen() {
       const updatedRow = result.data as DBAssignmentRow
       const newRoleMap = mapRowToRoleMap(updatedRow)
       setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
-      setBsFloorStatus(prev => ({ ...prev, [k]: { completedAt: updatedRow.bs_floor_completed_at ?? null, completedBy: updatedRow.bs_floor_completed_by ?? null } }))
+      setBsFloorStatus(prev => ({
+        ...prev,
+        [k]: {
+          completedAt: updatedRow.bs_floor_completed_at ?? null,
+          completedBy: updatedRow.bs_floor_completed_by ?? null,
+          enteredAt: prev[k]?.enteredAt ?? updatedRow.assigned_at ?? updatedRow.created_at ?? null,
+        },
+      }))
       showToast('Stage saved', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save', 'error')
@@ -955,7 +1015,14 @@ export default function BodyshopFloorScreen() {
       const now = new Date().toISOString()
       const result = await supabase.from('bodyshop_assignments').update({ bs_floor_completed_at: now, bs_floor_completed_by: user?.email ?? null }).eq('id', rowId).select('bs_floor_completed_at, bs_floor_completed_by').single()
       if (result.error) throw result.error
-      setBsFloorStatus(prev => ({ ...prev, [k]: { completedAt: result.data?.bs_floor_completed_at ?? now, completedBy: result.data?.bs_floor_completed_by ?? null } }))
+      setBsFloorStatus(prev => ({
+        ...prev,
+        [k]: {
+          completedAt: result.data?.bs_floor_completed_at ?? now,
+          completedBy: result.data?.bs_floor_completed_by ?? null,
+          enteredAt: prev[k]?.enteredAt ?? null,
+        },
+      }))
       showToast('Floor work marked completed', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'error')
@@ -1008,7 +1075,23 @@ export default function BodyshopFloorScreen() {
     else if (assigned.length === ALL_ROLES.length) { statusLabel = 'In Process'; statusBg = '#e9f0fd'; statusColor = '#2f63cf' }
     else if (assigned.length > 0) { statusLabel = `Assigned`; statusBg = '#e9effe'; statusColor = '#2a4cd0' }
 
-    return { assignedCount: assigned.length, statusLabel, statusBg, statusColor, pendingApprovals: pending }
+    const fullyUnassigned = !bsComp && assigned.length === 0
+    const sinceIso = fullyUnassigned
+      ? (bsFloorStatus[k]?.enteredAt ?? car.created_at ?? null)
+      : null
+    const unassignedDays = sinceIso != null ? calendarDaysSince(sinceIso) : null
+    const unassignedAgeText = unassignedDays != null ? unassignedAgeLabel(unassignedDays) : null
+    const unassignedAgeTint = unassignedDays != null ? unassignedAgeColor(unassignedDays) : null
+
+    return {
+      assignedCount: assigned.length,
+      statusLabel,
+      statusBg,
+      statusColor,
+      pendingApprovals: pending,
+      unassignedAgeText,
+      unassignedAgeTint,
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1487,12 +1570,41 @@ export default function BodyshopFloorScreen() {
       <View style={S.topBar}>
         <View>
           <Text style={S.screenTitle}>Bodyshop Floor</Text>
-          <Text style={S.screenSubtitle}>{filtered.length} vehicles</Text>
+          <Text style={S.screenSubtitle}>
+            {vehicleListMode === 'live_on_floor'
+              ? `${filtered.length} · ${BODYSHOP_FLOOR_LIVE_LIST_LABEL}`
+              : `${filtered.length} vehicles (all pipeline)`}
+          </Text>
         </View>
         <TouchableOpacity onPress={() => loadAll(true)} style={S.refreshBtn}>
           <Text style={S.refreshBtnText}>↻</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Vehicle list scope */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
+        style={[S.filterScrollRow, { marginTop: 0 }]}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        {([
+          { key: 'live_on_floor' as const, label: BODYSHOP_FLOOR_LIVE_LIST_LABEL },
+          { key: 'intake_period' as const, label: 'All pipeline cards' },
+        ]).map(opt => {
+          const active = vehicleListMode === opt.key
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              onPress={() => setVehicleListMode(opt.key)}
+              style={[S.filterChip, active && S.filterChipBranchActive]}
+            >
+              <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{opt.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
 
       {/* Search */}
       <View style={{ paddingHorizontal: 14, paddingBottom: 8 }}>
@@ -1500,49 +1612,92 @@ export default function BodyshopFloorScreen() {
       </View>
 
       {/* Assignment view tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 14 }} contentContainerStyle={{ gap: 6, paddingBottom: 8 }}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        style={S.filterScrollRow}
+        contentContainerStyle={S.filterScrollContent}
+      >
         {VIEW_TABS.map(tab => {
           const active = assignmentView === tab.key
           const cnt = counts[tab.key]
+          const label = tab.key === 'all' && vehicleListMode === 'live_on_floor'
+            ? BODYSHOP_FLOOR_TOTAL_KPI_LABEL
+            : tab.label
           return (
             <TouchableOpacity key={tab.key} onPress={() => setAssignmentView(tab.key)} style={[S.viewTab, active && S.viewTabActive]}>
-              <Text style={[S.viewTabText, active && S.viewTabTextActive]}>{tab.label} {cnt}</Text>
+              <Text style={[S.viewTabText, active && S.viewTabTextActive]} numberOfLines={1}>
+                {label} {cnt}
+              </Text>
             </TouchableOpacity>
           )
         })}
       </ScrollView>
 
-      {/* Sub-filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 14 }} contentContainerStyle={{ gap: 6, paddingBottom: 10 }}>
+      {/* Branch filters */}
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        style={S.filterScrollRow}
+        contentContainerStyle={S.filterScrollContent}
+      >
         {['all', ...branches].map(b => {
           const active = branchFilter === b
           return (
             <TouchableOpacity key={b} onPress={() => setBranchFilter(b)}
-              style={[S.filterChip, active && { backgroundColor: '#1a1b21', borderColor: '#1a1b21' }]}>
-              <Text style={[S.filterChipText, active && { color: '#fff' }]}>{b === 'all' ? 'All Branches' : b}</Text>
-            </TouchableOpacity>
-          )
-        })}
-        {floors.map(f => {
-          const active = floorFilter === f
-          return (
-            <TouchableOpacity key={f} onPress={() => setFloorFilter(active ? 'all' : f)}
-              style={[S.filterChip, active && { backgroundColor: '#41617f', borderColor: '#41617f' }]}>
-              <Text style={[S.filterChipText, active && { color: '#fff' }]}>{f}</Text>
+              style={[S.filterChip, active && S.filterChipBranchActive]}>
+              <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>
+                {b === 'all' ? 'All Branches' : b}
+              </Text>
             </TouchableOpacity>
           )
         })}
       </ScrollView>
 
+      {/* Floor filters (separate row — avoids one overcrowded horizontal strip) */}
+      {floors.length > 0 ? (
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          style={[S.filterScrollRow, S.filterScrollRowLast]}
+          contentContainerStyle={S.filterScrollContent}
+        >
+          <TouchableOpacity
+            onPress={() => setFloorFilter('all')}
+            style={[S.filterChip, floorFilter === 'all' && S.filterChipFloorActive]}
+          >
+            <Text style={[S.filterChipText, floorFilter === 'all' && S.filterChipTextActive]} numberOfLines={1}>
+              All Floors
+            </Text>
+          </TouchableOpacity>
+          {floors.map(f => {
+            const active = floorFilter === f
+            return (
+              <TouchableOpacity key={f} onPress={() => setFloorFilter(active ? 'all' : f)}
+                style={[S.filterChip, active && S.filterChipFloorActive]}>
+                <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{f}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      ) : null}
+
       {/* List */}
       <FlatList
+        style={S.listFlex}
         data={filtered}
         keyExtractor={item => String(item.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} />}
         contentContainerStyle={{ padding: 14, paddingBottom: 80, gap: 10 }}
         ListEmptyComponent={<View style={S.empty}><Text style={S.emptyIcon}>🚗</Text><Text style={S.emptyText}>No vehicles found</Text></View>}
         renderItem={({ item: car }) => {
-          const { assignedCount, statusLabel, statusBg, statusColor, pendingApprovals } = carSummary(car)
+          const {
+            assignedCount, statusLabel, statusBg, statusColor, pendingApprovals,
+            unassignedAgeText, unassignedAgeTint,
+          } = carSummary(car)
           return (
             <TouchableOpacity style={S.card} onPress={() => { setSelectedCar(car); setExpandedRole(null) }} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -1555,10 +1710,17 @@ export default function BodyshopFloorScreen() {
                 car.customer_name,
               ].filter(Boolean).join(' · ')}</Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                <View style={[S.statusPill, { backgroundColor: statusBg, borderColor: statusColor }]}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap', gap: 6 }}>
+                  <View style={[S.statusPill, { backgroundColor: statusBg, borderColor: statusColor }]}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
+                  </View>
+                  {unassignedAgeText ? (
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: unassignedAgeTint ?? '#82858f' }} numberOfLines={1}>
+                      {unassignedAgeText}
+                    </Text>
+                  ) : null}
                 </View>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: '#82858f' }}>{assignedCount}/9 roles</Text>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#82858f', marginLeft: 8 }}>{assignedCount}/9 roles</Text>
               </View>
               {pendingApprovals > 0 && (
                 <View style={[S.statusPill, { backgroundColor: '#fbe9ec', borderColor: '#c33b53', marginTop: 6, alignSelf: 'flex-start' }]}>
@@ -1585,7 +1747,18 @@ const S = StyleSheet.create({
   refreshBtn:       { padding: 8 },
   refreshBtnText:   { fontSize: 20, color: '#2a4cd0' },
   searchInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13.5, color: '#1a1b21' },
-  viewTab:          { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e7e3d9', backgroundColor: '#fff' },
+  listFlex:         { flex: 1 },
+  filterScrollRow:  { flexGrow: 0, flexShrink: 0, marginBottom: 6 },
+  filterScrollRowLast: { marginBottom: 10 },
+  filterScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 14,
+    paddingRight: 28,
+    gap: 8,
+    paddingVertical: 2,
+  },
+  viewTab:          { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#e7e3d9', backgroundColor: '#fff', flexShrink: 0 },
   viewTabActive:    { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
   viewTabText:      { fontSize: 11.5, fontWeight: '700', color: '#4b4e59' },
   viewTabTextActive:{ color: '#fff' },
@@ -1593,8 +1766,11 @@ const S = StyleSheet.create({
   chipActive:       { backgroundColor: '#1a1b21', borderColor: '#1a1b21' },
   chipText:         { fontSize: 11.5, fontWeight: '700', color: '#4b4e59' },
   chipTextActive:   { color: '#fff' },
-  filterChip:       { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 14, backgroundColor: '#fbfaf6', borderWidth: 1, borderColor: '#e7e3d9' },
+  filterChip:       { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: '#fbfaf6', borderWidth: 1, borderColor: '#e7e3d9', flexShrink: 0 },
+  filterChipBranchActive: { backgroundColor: '#1a1b21', borderColor: '#1a1b21' },
+  filterChipFloorActive:  { backgroundColor: '#41617f', borderColor: '#41617f' },
   filterChipText:   { fontSize: 11.5, fontWeight: '600', color: '#4b4e59' },
+  filterChipTextActive: { color: '#fff', fontWeight: '700' },
   card:             { backgroundColor: '#fff', borderRadius: 14, padding: 13, borderWidth: 1, borderColor: '#e7e3d9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   cardJc:           { fontSize: 14.5, fontWeight: '700', color: '#1a1b21' },
   cardReg:          { fontSize: 12.5, color: '#4b4e59', fontWeight: '500', marginTop: 2 },

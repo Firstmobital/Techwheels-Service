@@ -140,7 +140,10 @@ export async function customerGetVisitContext(
       const legacy = await customerGetActiveJob(sessionToken, reg)
       const job = legacy.job ? { ...legacy.job } : null
       const jcNo = (job?.jc_number as string) || null
-      let repair_card = await resolveLatestRepairCardRow(reg, jcNo, null)
+      let repair_card =
+        (await customerGetRepairCard(sessionToken, reg, { bypassCache: opts?.bypassCache, jobCardNo: jcNo }).catch(
+          () => null
+        )) ?? (await resolveLatestRepairCardRow(reg, jcNo, null))
       if (repair_card) {
         repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
       }
@@ -176,9 +179,17 @@ export async function customerGetVisitContext(
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
   const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
-  repair_card = await resolveLatestRepairCardRow(reg, jcNo, repair_card)
+  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
+  const sessionCard = await customerGetRepairCard(sessionToken, reg, {
+    bypassCache: opts?.bypassCache,
+    jobCardNo: jcNo,
+  }).catch(() => null)
+  if (sessionCard) {
+    repair_card = sessionCard
+  } else {
+    repair_card = await resolveLatestRepairCardRow(reg, jcNo, repair_card)
+  }
   if (repair_card) {
     repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
   }
@@ -235,9 +246,11 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  const visit_kind = resolveCustomerVisitKind(job, res.visit_kind)
+  const jcForCard = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
+  const repair_card = await resolveLatestRepairCardRow(reg, jcForCard, null)
+  const visit_kind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
 
-  return setCache(cacheKey, { ...res, job, visit_kind })
+  return setCache(cacheKey, { ...res, job, visit_kind, repair_card })
 }
 
 export async function customerGetMechanicalCase(sessionToken: string, regNumber?: string | null) {

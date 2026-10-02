@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { AppState, type AppStateStatus } from 'react-native'
+import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../lib/customer/customerAdvisorPoll'
 import { customerGetVisitContext, customerSetCustomerType } from '../lib/api/customerPortal'
 import type { MechanicalCasePayload } from '../lib/customer/mechanicalCustomerUi'
 import { type CustomerVisitKind, resolveCustomerVisitKind } from '../lib/customer/mechanicalServiceType'
@@ -127,7 +129,6 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
 
       const rawCard = (ctx.repair_card as Record<string, unknown> | null) ?? null
       const jobObj = (ctx.job as Record<string, unknown> | null) ?? null
-      const resolvedKind = rawCard ? 'bodyshop' : resolveCustomerVisitKind(jobObj, ctx.visit_kind, rawCard)
 
       // Ensure customer_type is preserved from local memory if backend has not yet updated it
       let finalCard = rawCard
@@ -142,6 +143,8 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
           setCustomerTypeState(savedType)
         }
       }
+
+      const resolvedKind = resolveCustomerVisitKind(jobObj, ctx.visit_kind, finalCard)
 
       setJob(jobObj)
       setKind(resolvedKind)
@@ -165,6 +168,33 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     setReady(false)
     void refresh()
   }, [token, selectedReg]) // re-run only when session / selected reg changes
+
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+
+  // Keep advisor doc approvals / rejections in sync without force-killing the app.
+  useEffect(() => {
+    if (!token || !selectedReg) return
+
+    let cancelled = false
+    const tick = () => {
+      if (!cancelled && AppState.currentState === 'active') {
+        void refreshRef.current({ bypassCache: false })
+      }
+    }
+
+    const interval = setInterval(tick, CUSTOMER_VISIT_BACKGROUND_POLL_MS)
+    const onAppState = (state: AppStateStatus) => {
+      if (state === 'active') void refreshRef.current({ bypassCache: true })
+    }
+    const sub = AppState.addEventListener('change', onAppState)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      sub.remove()
+    }
+  }, [token, selectedReg])
 
   const value = useMemo(
     () => ({

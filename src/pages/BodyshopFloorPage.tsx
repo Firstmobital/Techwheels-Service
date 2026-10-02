@@ -4,7 +4,14 @@ import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
-import { getDealerContext, listAccidentReceptionEntriesByDateRange } from '../lib/api'
+import { getDealerContext, getReceptionEntriesByIds, listAccidentReceptionEntriesByDateRange } from '../lib/api'
+import type { ReceptionEntryLite } from '../lib/api/reception'
+import {
+  BODYSHOP_FLOOR_LIVE_LIST_LABEL,
+  BODYSHOP_FLOOR_TOTAL_KPI_LABEL,
+  isLiveOnFloorRepairCard,
+  type BodyshopFloorVehicleListMode,
+} from '../lib/bodyshopFloorLive'
 import { parseBodyshopFloorRoles } from '../lib/businessRoles'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -777,6 +784,7 @@ function getRoleMapRowId(roleMap: Record<BSRole, BSAssignment | undefined> | und
 export default function BodyshopFloorPage() {
   const [loading, setLoading]   = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [vehicleListMode, setVehicleListMode] = useState<BodyshopFloorVehicleListMode>('live_on_floor')
   const [dataError, setDataError] = useState(false)
   const [toast, setToast]       = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
@@ -835,7 +843,7 @@ export default function BodyshopFloorPage() {
       // 1. All vehicles active on the Bodyshop Repair pipeline — Stage 11 (Floor Assignment) is treated as active for every one, no stage/floor gating
       const { data: sentCards, error: sentErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, reception_entry_id, job_card_no, bodyshop_floor, current_stage, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at')
+        .select('id, reception_entry_id, job_card_no, reg_number, customer_name, branch, sa_name, bodyshop_floor, current_stage, overall_status, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at')
 
       if (sentErr) throw sentErr
 
@@ -843,6 +851,12 @@ export default function BodyshopFloorPage() {
       const additionalByJc: Record<string, AdditionalApprovalRowState> = {}
       const latestByJc = new Map<string, {
         repairCardId: number | null
+        receptionEntryId: number | null
+        cardCreatedAt: string | null
+        regNumber: string | null
+        customerName: string | null
+        branch: string | null
+        saName: string | null
         floor: 'Floor 2' | 'Floor 3' | null
         additionalApproval: string | null
         qcStatus: string | null
@@ -860,7 +874,13 @@ export default function BodyshopFloorPage() {
         id: number | null
         reception_entry_id: number | null
         job_card_no: string | null
+        reg_number: string | null
+        customer_name: string | null
+        branch: string | null
+        sa_name: string | null
         bodyshop_floor: 'Floor 2' | 'Floor 3' | null
+        current_stage: number | null
+        overall_status: string | null
         additional_approval: string | null
         qc_status: string | null
         qc_fail_reason: string | null
@@ -878,6 +898,8 @@ export default function BodyshopFloorPage() {
         const jc = String(row.job_card_no ?? '').trim().toUpperCase()
         if (!jc) return
 
+        if (vehicleListMode === 'live_on_floor' && !isLiveOnFloorRepairCard(row)) return
+
         const updatedAtMs = Number.isFinite(new Date(String(row.updated_at ?? '')).getTime())
           ? new Date(String(row.updated_at ?? '')).getTime()
           : (Number.isFinite(new Date(String(row.created_at ?? '')).getTime())
@@ -888,6 +910,12 @@ export default function BodyshopFloorPage() {
         if (!existing || updatedAtMs >= existing.updatedAtMs) {
           latestByJc.set(jc, {
             repairCardId: Number.isFinite(Number(row.id)) ? Number(row.id) : null,
+            receptionEntryId: Number.isFinite(Number(row.reception_entry_id)) ? Number(row.reception_entry_id) : null,
+            cardCreatedAt: row.created_at,
+            regNumber: row.reg_number,
+            customerName: row.customer_name,
+            branch: row.branch,
+            saName: row.sa_name,
             floor,
             additionalApproval: row.additional_approval,
             qcStatus: row.qc_status,
@@ -932,6 +960,52 @@ export default function BodyshopFloorPage() {
 
       if (sentByJc.size === 0) {
         setCars([])
+      } else if (vehicleListMode === 'live_on_floor') {
+        const entryIds = Array.from(new Set(
+          Array.from(latestByJc.values())
+            .map((row) => row.receptionEntryId)
+            .filter((id): id is number => Number.isFinite(id) && id > 0),
+        ))
+
+        const recByJc = new Map<string, ReceptionEntryLite>()
+        const chunkSize = 400
+        for (let i = 0; i < entryIds.length; i += chunkSize) {
+          const chunk = entryIds.slice(i, i + chunkSize)
+          const recRes = await getReceptionEntriesByIds(chunk)
+          if (recRes.error) throw recRes.error
+          for (const entry of recRes.data ?? []) {
+            const jc = String(entry.jc_number ?? '').trim().toUpperCase()
+            if (jc) recByJc.set(jc, entry)
+          }
+        }
+
+        const carList: AccidentCar[] = []
+        latestByJc.forEach((meta, jc) => {
+          const rec = recByJc.get(jc)
+          const floor = sentByJc.get(jc) ?? null
+          carList.push({
+            id: rec?.id ?? meta.repairCardId ?? 0,
+            jc_number: rec?.jc_number ?? jc,
+            sa_employee_code: null,
+            dealer_code: rec?.dealer_code ?? null,
+            reg_number: rec?.reg_number ?? meta.regNumber,
+            model: rec?.model ?? null,
+            owner_name: rec?.owner_name ?? meta.customerName,
+            owner_phone: rec?.owner_phone ?? null,
+            sa_name: meta.saName,
+            sa_display_name: meta.saName,
+            branch: rec?.branch ?? meta.branch,
+            created_at: rec?.created_at ?? meta.cardCreatedAt,
+            bodyshop_floor: floor,
+          })
+        })
+
+        carList.sort((a, b) => {
+          const ta = new Date(String(a.created_at ?? '')).getTime()
+          const tb = new Date(String(b.created_at ?? '')).getTime()
+          return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
+        })
+        setCars(carList)
       } else {
         // 2. Accident reception entries (restricted to sent vehicles only)
         const { data: recData, error: recErr } = await fetchAccidentCarsByDateRange(dateRange)
@@ -1035,7 +1109,7 @@ export default function BodyshopFloorPage() {
     }
   }
 
-  useEffect(() => { void loadAll() }, [dateRange])
+  useEffect(() => { void loadAll() }, [dateRange, vehicleListMode])
 
   // ── Employees by role ────────────────────────────────────────────────────
 
@@ -2156,10 +2230,31 @@ export default function BodyshopFloorPage() {
         <div>
           <div className="greet">Bodyshop · Floor Assignment</div>
           <h1>Bodyshop Floor</h1>
-          <p className="bsf-subline">{cars.length} accident vehicles active for floor assignment · live assignment and status.</p>
+          <p className="bsf-subline">
+            {vehicleListMode === 'live_on_floor'
+              ? `${cars.length} vehicles ${BODYSHOP_FLOOR_LIVE_LIST_LABEL.toLowerCase()} (all intake months) · assignment and status.`
+              : `${cars.length} accident vehicles in selected intake period · floor assignment and status.`}
+          </p>
         </div>
         <div className="bsf-top-actions">
-          <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" includeAll />
+          <label className="bsf-list-mode">
+            <span className="bsf-label">Vehicle list</span>
+            <select
+              className="sel sel--advisor-filter"
+              value={vehicleListMode}
+              onChange={(e) => setVehicleListMode(e.target.value as BodyshopFloorVehicleListMode)}
+            >
+              <option value="live_on_floor">{BODYSHOP_FLOOR_LIVE_LIST_LABEL}</option>
+              <option value="intake_period">Intake period</option>
+            </select>
+          </label>
+          <DateRangeFilter
+            range={dateRange}
+            onChange={setDateRange}
+            label="Period:"
+            includeAll
+            disabled={vehicleListMode === 'live_on_floor'}
+          />
           <button type="button" className="btn btn--ghost btn--sm"
             onClick={() => setExpandedCards(new Set(filtered.map((c) => jcKey(c))))}>
             Expand All
@@ -2179,7 +2274,7 @@ export default function BodyshopFloorPage() {
 
       <div className="bsf-kpis">
         {([
-          { key: 'all', label: 'On Floor', count: counts.all },
+          { key: 'all', label: vehicleListMode === 'live_on_floor' ? BODYSHOP_FLOOR_TOTAL_KPI_LABEL : 'On Floor', count: counts.all },
           { key: 'unassigned', label: 'Unassigned', count: counts.unassigned },
           { key: 'work_inprocess', label: 'In-Process', count: counts.work_inprocess },
           { key: 'hold', label: 'On Hold', count: counts.hold },

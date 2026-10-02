@@ -12,7 +12,7 @@ import {
   resolveMechanicalPrimaryAction,
 } from '../../lib/customer/customerPrimaryAction'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
-import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
+import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
@@ -22,10 +22,13 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
   const router = useRouter()
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const { ready: visitReady, isMechanical, mechCase, repairCard } = useCustomerVisit()
-  const isEffectiveMechanical =
-    isMechanical ||
-    isMechanicalServiceType(String(selected?.service_type || ''))
+  const { ready: visitReady, mechCase, repairCard, isBodyshop, kind } = useCustomerVisit()
+  const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
+    visitReady,
+    kind,
+    isBodyshop,
+    repairCard,
+  })
 
   const initialAction = useMemo(() => {
     if (isEffectiveMechanical) return resolveMechanicalPrimaryAction(mechCase)

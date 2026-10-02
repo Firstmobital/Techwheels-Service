@@ -9,7 +9,7 @@ import {
   type ClaimDocumentProgress,
 } from '../../lib/customer/claimDocumentProgress'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
-import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
+import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
@@ -17,10 +17,13 @@ export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | nul
   const router = useRouter()
   const { token, vehicles, selectedReg } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === (regNumber || selectedReg)) || vehicles[0]
-  const { isMechanical, repairCard, isBodyshop } = useCustomerVisit()
-  const isEffectiveMechanical =
-    isMechanical ||
-    isMechanicalServiceType(String(selected?.service_type || ''))
+  const { repairCard, isBodyshop, ready: visitReady, kind } = useCustomerVisit()
+  const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
+    visitReady,
+    kind,
+    isBodyshop,
+    repairCard,
+  })
 
   const initialProgress = useMemo(() => {
     if (isEffectiveMechanical || (!isBodyshop && !repairCard)) return null

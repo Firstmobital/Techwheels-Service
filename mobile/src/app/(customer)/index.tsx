@@ -21,7 +21,10 @@ import {
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetGatePass } from '../../lib/api/customerPortal'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
 import { mechanicalStatusLabel } from '../../lib/customer/mechanicalCustomerUi'
+import { AppState } from 'react-native'
+import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../../lib/customer/customerAdvisorPoll'
 import { Icon, IconName } from '../../components/ui/Icon'
 import { RemainingDocumentsCard } from '../../components/customer/RemainingDocumentsCard'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
@@ -37,43 +40,51 @@ export default function CustomerDashboardScreen() {
     job,
     repairCard,
     mechCase,
-    isMechanical,
     isBodyshop,
+    kind: visitKind,
     refresh: refreshVisit,
   } = useCustomerVisit()
   const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const loadGatePass = useCallback(async () => {
     if (!token || !selectedReg) return
     try {
       const passResult = await customerGetGatePass(token, selectedReg).catch(() => null)
       setGatePass(passResult)
       setError(null)
-      await refreshVisit()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load job.')
+      setError(err instanceof Error ? err.message : 'Unable to load gate pass.')
     }
-  }, [token, selectedReg, refreshVisit])
+  }, [token, selectedReg])
 
-  // Fast & smooth 3.5s background auto-refresh without UI flicker
   useFocusEffect(
     useCallback(() => {
-      void load()
-      const timer = setInterval(() => {
-        void load()
-      }, 3500)
-      return () => clearInterval(timer)
-    }, [load])
+      void loadGatePass()
+      void refreshVisit({ bypassCache: true })
+    }, [loadGatePass, refreshVisit])
   )
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!token || !selectedReg) return
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void loadGatePass()
+    }, CUSTOMER_VISIT_BACKGROUND_POLL_MS)
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void loadGatePass()
+        void refreshVisit({ bypassCache: true })
+      }
+    })
+    return () => {
+      clearInterval(timer)
+      sub.remove()
+    }
+  }, [token, selectedReg, loadGatePass, refreshVisit])
 
   const onPullRefresh = useCallback(async () => {
-    await load()
-  }, [load])
+    await Promise.all([loadGatePass(), refreshVisit({ bypassCache: true })])
+  }, [loadGatePass, refreshVisit])
   useCustomerScreenRefresh(onPullRefresh)
 
   const customerName =
@@ -116,7 +127,12 @@ export default function CustomerDashboardScreen() {
   const approvedEstimate =
     approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
-  const isEffectiveMechanical = isMechanical && !isBodyshop && !repairCard
+  const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
+    visitReady,
+    kind: visitKind,
+    isBodyshop,
+    repairCard,
+  })
   const mechanicalStatus = isEffectiveMechanical ? mechanicalStatusLabel(mechCase) : null
   const showBodyshopFields = visitReady && (isBodyshop || Boolean(repairCard))
   const homeContentReady = visitReady && Boolean(selected)

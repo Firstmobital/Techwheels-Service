@@ -31,16 +31,16 @@ export const CUSTOMER_CLAIM_DOCUMENTS: CustomerClaimDocumentDef[] = [
   },
   {
     docKey: 'doc_rc',
-    title: 'Registration Certificate / RC (Front)',
-    subtitle: 'Vehicle ownership proof - Front side',
+    title: 'Registration Certificate / RC',
+    subtitle: 'Vehicle ownership proof',
     required: true,
     mandatoryFor: ['individual', 'firm'],
     hint: 'Upload clear photo of RC Front side.',
   },
   {
     docKey: 'doc_rc_back',
-    title: 'Registration Certificate / RC (Back)',
-    subtitle: 'Vehicle ownership proof - Back side',
+    title: 'Registration Certificate / RC',
+    subtitle: 'Back side',
     required: true,
     mandatoryFor: ['individual', 'firm'],
     hint: 'Upload clear photo of RC Back side.',
@@ -55,32 +55,32 @@ export const CUSTOMER_CLAIM_DOCUMENTS: CustomerClaimDocumentDef[] = [
   },
   {
     docKey: 'doc_dl',
-    title: 'Driving Licence (Front)',
-    subtitle: 'Driver DL - Front side',
+    title: 'Driving Licence',
+    subtitle: 'Driver licence',
     required: true,
     mandatoryFor: ['individual', 'firm'],
     hint: 'Upload clear photo of DL Front side.',
   },
   {
     docKey: 'doc_dl_back',
-    title: 'Driving Licence (Back)',
-    subtitle: 'Driver DL - Back side',
+    title: 'Driving Licence',
+    subtitle: 'Back side',
     required: true,
     mandatoryFor: ['individual', 'firm'],
     hint: 'Upload clear photo of DL Back side.',
   },
   {
     docKey: 'doc_aadhaar',
-    title: 'Aadhaar Card (Front)',
-    subtitle: 'KYC photo ID - Front side',
+    title: 'Aadhaar Card',
+    subtitle: 'KYC photo ID',
     required: true,
     mandatoryFor: ['individual', 'firm'],
     hint: 'Upload clear photo of Aadhaar Front side.',
   },
   {
     docKey: 'doc_aadhaar_back',
-    title: 'Aadhaar Card (Back)',
-    subtitle: 'KYC address proof - Back side',
+    title: 'Aadhaar Card',
+    subtitle: 'Back side',
     required: true,
     mandatoryFor: ['individual', 'firm'],
     hint: 'Upload clear photo of Aadhaar Back side.',
@@ -163,6 +163,74 @@ export function claimModeFromRepairCard(card: Record<string, unknown> | null): C
   const ct = String(card.customer_type || '').trim().toLowerCase()
   if (ct === 'cash' || ct === 'foc' || ct === 'mechanical' || ct === 'paid') return 'cash'
   return 'insurance'
+}
+
+/** Front + back uploads shown as one card in the customer app. */
+export const CUSTOMER_TWO_SIDED_DOC_PAIRS = [
+  {
+    frontKey: 'doc_aadhaar',
+    backKey: 'doc_aadhaar_back',
+    title: 'Aadhaar Card',
+    hint: 'Upload clear photos of the front and back of your Aadhaar card.',
+  },
+  {
+    frontKey: 'doc_dl',
+    backKey: 'doc_dl_back',
+    title: 'Driving Licence',
+    hint: 'Upload clear photos of the front and back of your driving licence.',
+  },
+  {
+    frontKey: 'doc_rc',
+    backKey: 'doc_rc_back',
+    title: 'Registration Certificate (RC)',
+    hint: 'Upload clear photos of the front and back of your RC.',
+  },
+] as const
+
+export type CustomerDocumentDisplayItem =
+  | { kind: 'single'; slot: CustomerClaimDocumentDef }
+  | {
+      kind: 'two-sided'
+      title: string
+      hint: string
+      front: CustomerClaimDocumentDef
+      back: CustomerClaimDocumentDef
+    }
+
+/** Merge front/back doc keys into one UI row each, preserving list order. */
+export function buildCustomerDocumentDisplayList(
+  slots: CustomerClaimDocumentDef[]
+): CustomerDocumentDisplayItem[] {
+  const pairByFront = new Map<string, (typeof CUSTOMER_TWO_SIDED_DOC_PAIRS)[number]>(
+    CUSTOMER_TWO_SIDED_DOC_PAIRS.map((p) => [p.frontKey, p])
+  )
+  const backKeys = new Set<string>(CUSTOMER_TWO_SIDED_DOC_PAIRS.map((p) => p.backKey))
+  const slotByKey = new Map(slots.map((s) => [s.docKey, s]))
+  const used = new Set<string>()
+  const out: CustomerDocumentDisplayItem[] = []
+
+  for (const slot of slots) {
+    if (used.has(slot.docKey) || backKeys.has(slot.docKey)) continue
+
+    const pair = pairByFront.get(slot.docKey)
+    const backSlot = pair ? slotByKey.get(pair.backKey) : undefined
+    if (pair && backSlot) {
+      used.add(slot.docKey)
+      used.add(pair.backKey)
+      out.push({
+        kind: 'two-sided',
+        title: pair.title,
+        hint: pair.hint,
+        front: slot,
+        back: backSlot,
+      })
+      continue
+    }
+
+    out.push({ kind: 'single', slot })
+  }
+
+  return out
 }
 
 export function ownershipFromRepairCard(card: Record<string, unknown> | null): OwnershipType {

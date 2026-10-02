@@ -23,7 +23,7 @@ import { ClaimFormWidget } from '../ClaimFormWidget'
 import { matchInsuranceProviderId } from '../../config/insuranceProviders'
 import { customerGetRepairCard } from '../../lib/api/customerPortal'
 import { downloadTpAffidavitForm } from '../../lib/customer/downloadInsuranceClaimForm'
-import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
+import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
 import {
   CustomerScreenRefreshContext,
   type CustomerScreenRefreshFn,
@@ -89,7 +89,7 @@ export function CustomerScreen({
   }
 
   const selectedVehicle = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const { isMechanical, isBodyshop, ready: visitReady, job } = useCustomerVisit()
+  const { isMechanical, isBodyshop, ready: visitReady, job, kind, repairCard } = useCustomerVisit()
 
   // Determine if this screen is the root customer home screen
   const isHomeScreen =
@@ -176,10 +176,13 @@ export function CustomerScreen({
   }
 
   const activeServiceType = String(job?.service_type || selectedVehicle?.service_type || '')
-  const isEffectiveMechanical =
-    (isMechanical || isMechanicalServiceType(activeServiceType)) &&
-    !isBodyshop
-  const isAccident = isBodyshop || (!isEffectiveMechanical && activeServiceType.toLowerCase().includes('accident'))
+  const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
+    visitReady,
+    kind,
+    isBodyshop,
+    repairCard,
+  })
+  const isAccident = isBodyshop || Boolean(repairCard) || (!isEffectiveMechanical && activeServiceType.toLowerCase().includes('accident'))
 
   type CustomerMenuItem = {
     label: string

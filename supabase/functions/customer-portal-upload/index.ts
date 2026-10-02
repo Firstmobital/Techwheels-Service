@@ -202,7 +202,9 @@ async function offloadBodyshopDocument(
   input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number; regNumber?: string }
 ): Promise<{ ok: true; drive_url: string } | { ok: false; error: string }> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 35000)
+  // Background offload only — fail fast; customer already has Supabase copy; retry_drive can rerun.
+  const DRIVE_OFFLOAD_TIMEOUT_MS = 18_000
+  const timeout = setTimeout(() => controller.abort(), DRIVE_OFFLOAD_TIMEOUT_MS)
   try {
     const send = () => fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
       method: 'POST',
@@ -222,14 +224,9 @@ async function offloadBodyshopDocument(
       }),
       signal: controller.signal,
     })
-    let res = await send()
-    let payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
-    let driveUrl = text(payload.drive_url || payload.link)
-    if (!res.ok || payload.ok === false || !driveUrl) {
-      res = await send()
-      payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
-      driveUrl = text(payload.drive_url || payload.link)
-    }
+    const res = await send()
+    const payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
+    const driveUrl = text(payload.drive_url || payload.link)
     if (!driveUrl) {
       return { ok: false, error: text(payload.error) || `Drive upload failed (${res.status})` }
     }
@@ -422,30 +419,7 @@ Deno.serve(async (req) => {
         return json(500, { ok: false, error: upsertError?.message || 'Failed to save document' })
       }
 
-      const drive = await offloadBodyshopDocument(supabaseUrl, serviceRoleKey, {
-        resourceId: Number(upserted.id),
-        objectName: storagePath,
-        docKey,
-        fileSizeBytes: Number.isFinite(fileSize) ? fileSize : Number(upserted.file_size_bytes || 0),
-        regNumber: ctx.regNumber,
-      })
-
-      if (!drive.ok) {
-        try {
-          await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
-        } catch (flagError) {
-          return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
-        }
-        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
-        return json(200, {
-          ok: true,
-          drive_pending: true,
-          view_url: signed?.signedUrl || null,
-          resource_id: upserted.id,
-          doc_key: docKey,
-          error: drive.error,
-        })
-      }
+      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
 
       try {
         await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
@@ -453,10 +427,25 @@ Deno.serve(async (req) => {
         return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
       }
 
+      const drivePromise = offloadBodyshopDocument(supabaseUrl, serviceRoleKey, {
+        resourceId: Number(upserted.id),
+        objectName: storagePath,
+        docKey,
+        fileSizeBytes: Number.isFinite(fileSize) ? fileSize : Number(upserted.file_size_bytes || 0),
+        regNumber: ctx.regNumber,
+      })
+      try {
+        // @ts-ignore Supabase Edge runtime
+        EdgeRuntime.waitUntil(drivePromise)
+      } catch {
+        void drivePromise.catch(() => undefined)
+      }
+
       return json(200, {
         ok: true,
-        drive_url: drive.drive_url,
-        view_url: drive.drive_url,
+        storage_saved: true,
+        drive_pending: true,
+        view_url: signed?.signedUrl || null,
         resource_id: upserted.id,
         doc_key: docKey,
       })

@@ -21,6 +21,21 @@ export function isMechanicalServiceType(serviceType: string | null | undefined):
 
 export type CustomerVisitKind = 'mechanical' | 'bodyshop' | 'other'
 
+/**
+ * Mechanical customer UI only when visit context says mechanical — never from stale vehicle.service_type
+ * (e.g. last service was Paid Service but current visit is bodyshop).
+ */
+export function isEffectiveMechanicalCustomerVisit(params: {
+  visitReady: boolean
+  kind: CustomerVisitKind
+  isBodyshop: boolean
+  repairCard: Record<string, unknown> | null | undefined
+}): boolean {
+  if (!params.visitReady) return false
+  if (params.isBodyshop || params.kind === 'bodyshop' || params.repairCard) return false
+  return params.kind === 'mechanical'
+}
+
 /** Prefer `serverVisitKind` from `customer_get_active_job` / `customer_get_visit_context`. */
 export function resolveCustomerVisitKind(
   job: Record<string, unknown> | null | undefined,

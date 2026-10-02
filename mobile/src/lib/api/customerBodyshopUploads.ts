@@ -19,6 +19,7 @@ export type CustomerUploadResult = {
   ok: boolean
   drivePending: boolean
   driveUrl: string | null
+  viewUrl: string | null
   resourceId: number | string | null
   docKey: string | null
   error: string | null
@@ -66,10 +67,16 @@ async function callUploadBroker(
 }
 
 function asUploadResult(body: any): CustomerUploadResult {
+  const driveUrl = String(body?.drive_url || '').trim() || null
+  const storageSaved =
+    body?.ok === true &&
+    (body?.storage_saved === true || body?.resource_id != null || Boolean(String(body?.view_url || '').trim()))
+  const viewUrl = String(body?.view_url || driveUrl || '').trim() || null
   return {
-    ok: body?.ok === true && Boolean(String(body?.drive_url || '').trim()),
-    drivePending: body?.drive_pending === true || body?.ok !== true,
-    driveUrl: String(body?.drive_url || '').trim() || null,
+    ok: storageSaved,
+    drivePending: storageSaved && !driveUrl,
+    driveUrl,
+    viewUrl,
     resourceId: body?.resource_id ?? null,
     docKey: body?.doc_key ? String(body.doc_key) : null,
     error: body?.error ? String(body.error) : null,

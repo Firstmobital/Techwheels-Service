@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { CUSTOMER_DOCUMENTS_FULL_REFRESH_MS } from '../../lib/customer/customerAdvisorPoll'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
@@ -37,12 +38,14 @@ const CUSTOMER_TYPE_OPTIONS = [
 ] as const
 import { parseEstimate, type EstimateView } from '../../lib/customer/math'
 import { MechanicalDocumentsContent } from '../../components/customer/MechanicalDocumentsContent'
-import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
+import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
 import {
+  buildCustomerDocumentDisplayList,
   claimModeFromRepairCard,
   listClaimDocumentsForUpload,
   ownershipFromRepairCard,
   type CustomerClaimDocumentDef,
+  type CustomerDocumentDisplayItem,
 } from '../../lib/customer/customerClaimDocuments'
 import { printMergedTwoSidedDocument } from '../../lib/customer/customerTwoSidedPrint'
 
@@ -89,6 +92,7 @@ export default function CustomerDocumentsScreen() {
     ready: visitReady,
     refresh: refreshVisit,
     job,
+    kind: visitKind,
     customerType,
     setCustomerType,
   } = useCustomerVisit()
@@ -101,23 +105,28 @@ export default function CustomerDocumentsScreen() {
     ) || vehicles[0] || null
   }, [vehicles, selectedReg])
 
-  const activeServiceType = String(job?.service_type || selected?.service_type || '')
-  const isEffectiveMechanical =
-    (isMechanical || isMechanicalServiceType(activeServiceType)) &&
-    !repairCard &&
-    !isBodyshop
+  const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
+    visitReady,
+    kind: visitKind,
+    isBodyshop,
+    repairCard,
+  })
 
   const [updatingType, setUpdatingType] = useState(false)
 
   const activeCustomerType = customerType || 'individual'
 
+  /** Visit context repairCard wins on advisor flags (freshRepairCard can be stale after upload). */
+  const mergedRepairCard = useMemo(() => {
+    return { ...(freshRepairCard || {}), ...(repairCard || {}) }
+  }, [freshRepairCard, repairCard])
+
   const effectiveRepairCard = useMemo(() => {
-    const base = freshRepairCard || repairCard
     return {
-      ...(base || {}),
+      ...(mergedRepairCard || {}),
       customer_type: activeCustomerType,
     }
-  }, [freshRepairCard, repairCard, activeCustomerType])
+  }, [mergedRepairCard, activeCustomerType])
 
   const claimMode = claimModeFromRepairCard(effectiveRepairCard)
   const ownershipType = ownershipFromRepairCard(effectiveRepairCard)
@@ -127,6 +136,8 @@ export default function CustomerDocumentsScreen() {
   )
   const requiredSlots = slots.filter((slot) => slot.required)
   const optionalSlots = slots.filter((slot) => !slot.required)
+  const requiredDisplay = useMemo(() => buildCustomerDocumentDisplayList(requiredSlots), [requiredSlots])
+  const optionalDisplay = useMemo(() => buildCustomerDocumentDisplayList(optionalSlots), [optionalSlots])
 
   const handleSelectCustomerType = async (newType: string) => {
     if (newType === activeCustomerType || updatingType) return
@@ -155,7 +166,7 @@ export default function CustomerDocumentsScreen() {
     return map
   }, [documents])
 
-  const baseCard = freshRepairCard || repairCard
+  const baseCard = mergedRepairCard
   const approvedCount = requiredSlots.filter((slot) => {
     const val = baseCard?.[slot.docKey]
     return val === true || val === 'true' || val === 1
@@ -179,7 +190,7 @@ export default function CustomerDocumentsScreen() {
   )
 
   const load = useCallback(
-    async (mode: 'initial' | 'refresh' = 'initial') => {
+    async (mode: 'initial' | 'refresh' | 'silent' = 'initial') => {
       if (!token || !selectedReg) {
         setDocuments([])
         setEstimates([])
@@ -190,23 +201,22 @@ export default function CustomerDocumentsScreen() {
 
       if (mode === 'initial') {
         setLoading(true)
-      } else {
+      } else if (mode === 'refresh') {
         setRefreshing(true)
       }
 
       try {
-        if (mode === 'refresh') {
+        if (mode === 'refresh' || mode === 'silent') {
           clearCustomerPortalCache()
           resetCustomerDocumentsInflight()
         }
         const [activeKind, estList, freshDocs] = await Promise.all([
-          refreshVisit({ bypassCache: mode === 'refresh' }),
+          refreshVisit({ bypassCache: mode !== 'initial' }),
           customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
           fetchCustomerDocuments(token, selectedReg).catch(() => null),
         ])
         setEstimates((estList || []).map(parseEstimate))
-        const currentServiceType = String(job?.service_type || selected?.service_type || '')
-        if (activeKind === 'mechanical' || isMechanicalServiceType(currentServiceType)) {
+        if (activeKind === 'mechanical') {
           setDocuments([])
         } else if (freshDocs) {
           applySnapshot(freshDocs)
@@ -241,8 +251,8 @@ export default function CustomerDocumentsScreen() {
   useEffect(() => {
     if (!token || !selectedReg) return
     const timer = setInterval(() => {
-      void load('refresh')
-    }, 180000) // 3 minutes auto-refresh
+      void load('silent')
+    }, CUSTOMER_DOCUMENTS_FULL_REFRESH_MS)
     return () => clearInterval(timer)
   }, [token, selectedReg, load])
 
@@ -298,13 +308,30 @@ export default function CustomerDocumentsScreen() {
       })
       // Clear reupload open state once upload finishes
       setReuploadingKeys((prev) => ({ ...prev, [slot.docKey]: false }))
+      if (result.ok && result.resourceId) {
+        setDocuments((prev) => {
+          const row: CustomerBodyshopAsset = {
+            kind: 'document',
+            id: result.resourceId!,
+            doc_key: slot.docKey,
+            file_name: fileName,
+            content_type: contentType,
+            uploaded_at: new Date().toISOString(),
+            drive_url: result.driveUrl,
+            view_url: result.viewUrl,
+            drive_pending: result.drivePending,
+          }
+          const rest = prev.filter((d) => String(d.doc_key || '') !== slot.docKey)
+          return [...rest, row]
+        })
+      }
       clearCustomerPortalCache()
       resetCustomerDocumentsInflight()
-      await load('refresh')
+      void load('refresh')
       setNotice(
-        result.drivePending
-          ? `${slot.title} uploaded. Syncing to Drive — your advisor will be notified once complete.`
-          : `${slot.title} uploaded successfully. Waiting for the advisor to approve it.`
+        `${slot.title} uploaded successfully. Waiting for the advisor to approve it.${
+          result.drivePending ? ' (Google Drive sync continues in the background.)' : ''
+        }`
       )
     } catch (error) {
       Alert.alert('Upload failed', error instanceof Error ? error.message : 'Unable to upload this document.')
@@ -344,6 +371,48 @@ export default function CustomerDocumentsScreen() {
     if (supported) await Linking.openURL(url)
   }
 
+  const getSlotUi = (slot: CustomerClaimDocumentDef) => {
+    const row = byKey.get(slot.docKey)
+    const driveUrl = String(row?.drive_url || '').trim()
+    const viewUrl = String(row?.view_url || '').trim()
+    const fileAvailable = Boolean(row && (driveUrl || viewUrl || row.file_name))
+    const driveSynced = Boolean(row && driveUrl && !row.drive_pending)
+    const base = mergedRepairCard
+    const rawApproved = base?.[slot.docKey]
+    const approved = Boolean(rawApproved === true || rawApproved === 'true' || rawApproved === 1)
+    const rejectedKeys = parseRejectedDocKeys(base?.doc_rejected_keys)
+    const rejected = !approved && rejectedKeys.includes(slot.docKey)
+    return {
+      row,
+      fileAvailable,
+      driveSynced,
+      submitted: fileAvailable,
+      approved,
+      rejected,
+      busy: busyKey === slot.docKey,
+      isReuploading: Boolean(reuploadingKeys[slot.docKey]),
+    }
+  }
+
+  const renderSideActions = (slot: CustomerClaimDocumentDef) => (
+    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+      <TouchableOpacity
+        onPress={() => void uploadSlot(slot, 'camera')}
+        disabled={busyKey === slot.docKey}
+        style={{ flex: 1, backgroundColor: CustomerTheme.primary, borderRadius: 10, paddingVertical: 11, alignItems: 'center' }}
+      >
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Take photo</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => void uploadSlot(slot, 'gallery')}
+        disabled={busyKey === slot.docKey}
+        style={{ flex: 1, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 11, alignItems: 'center', borderWidth: 1.5, borderColor: CustomerTheme.border }}
+      >
+        <Text style={{ color: CustomerTheme.ink, fontWeight: '800', fontSize: 12 }}>Choose file</Text>
+      </TouchableOpacity>
+    </View>
+  )
+
   const renderActions = (slot: CustomerClaimDocumentDef) => (
     <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
       <TouchableOpacity
@@ -351,14 +420,14 @@ export default function CustomerDocumentsScreen() {
         disabled={busyKey === slot.docKey}
         style={{ flex: 1, backgroundColor: CustomerTheme.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
       >
-        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Photo</Text>
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Take photo</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => void uploadSlot(slot, 'gallery')}
         disabled={busyKey === slot.docKey}
         style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5, borderColor: CustomerTheme.border }}
       >
-        <Text style={{ color: CustomerTheme.ink, fontWeight: '800', fontSize: 12 }}>Gallery</Text>
+        <Text style={{ color: CustomerTheme.ink, fontWeight: '800', fontSize: 12 }}>Choose file</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => void uploadSlot(slot, 'file')}
@@ -370,20 +439,141 @@ export default function CustomerDocumentsScreen() {
     </View>
   )
 
+  const renderTwoSidedSide = (sideLabel: 'Front' | 'Back', slot: CustomerClaimDocumentDef) => {
+    const ui = getSlotUi(slot)
+    const { row, fileAvailable, driveSynced, submitted, approved, rejected, busy, isReuploading } = ui
+
+    let statusText = 'Not uploaded yet'
+    let statusColor: string = CustomerTheme.inkMuted
+    if (approved) {
+      statusText = 'Approved by advisor'
+      statusColor = '#15803D'
+    } else if (rejected) {
+      statusText = 'Rejected — please re-upload'
+      statusColor = '#B91C1C'
+    } else if (submitted) {
+      statusText = 'Uploaded · awaiting advisor review'
+      statusColor = '#1D4ED8'
+    }
+
+    return (
+      <View
+        style={{
+          marginTop: sideLabel === 'Front' ? 12 : 14,
+          paddingTop: sideLabel === 'Back' ? 14 : 0,
+          borderTopWidth: sideLabel === 'Back' ? 1 : 0,
+          borderTopColor: '#E2E8F0',
+        }}
+      >
+        <Text style={{ color: CustomerTheme.ink, fontSize: 14, fontWeight: '900' }}>{sideLabel}</Text>
+        <Text style={{ color: statusColor, fontSize: 12, marginTop: 4, fontWeight: '600' }}>{statusText}</Text>
+
+        {busy ? (
+          <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ActivityIndicator size="small" color={CustomerTheme.primary} />
+            <Text style={{ color: CustomerTheme.primary, fontSize: 12, fontWeight: '700' }}>Saving…</Text>
+          </View>
+        ) : null}
+
+        {fileAvailable && row && !busy ? (
+          <TouchableOpacity onPress={() => void openRow(row)} style={{ marginTop: 8 }}>
+            <Text style={{ color: CustomerTheme.primary, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
+              View {sideLabel.toLowerCase()} file ↗
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {fileAvailable && !driveSynced && row && !busy ? (
+          <TouchableOpacity
+            onPress={() => void retrySlot(slot, row)}
+            style={{ marginTop: 6, alignSelf: 'flex-start' }}
+          >
+            <Text style={{ color: '#92400E', fontSize: 11, fontWeight: '800' }}>Retry Drive sync</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {!busy && (!submitted || rejected || isReuploading) && !approved ? renderSideActions(slot) : null}
+      </View>
+    )
+  }
+
+  const renderTwoSidedCard = (item: Extract<CustomerDocumentDisplayItem, { kind: 'two-sided' }>) => {
+    const frontUi = getSlotUi(item.front)
+    const backUi = getSlotUi(item.back)
+    const bothApproved = frontUi.approved && backUi.approved
+    const anyRejected = frontUi.rejected || backUi.rejected
+    const bothSubmitted = frontUi.submitted && backUi.submitted
+
+    const badgeBg = bothApproved ? '#DEF7EC' : anyRejected ? '#FDE8E8' : bothSubmitted ? '#EFF6FF' : '#FEF3C7'
+    const badgeColor = bothApproved ? '#03543F' : anyRejected ? '#9B1C1C' : bothSubmitted ? '#1E40AF' : '#92400E'
+    const badgeLabel = bothApproved
+      ? '✓ Both approved'
+      : anyRejected
+        ? 'Action needed'
+        : bothSubmitted
+          ? 'Awaiting review'
+          : 'Required'
+
+    const frontRow = byKey.get(item.front.docKey)
+    const backRow = byKey.get(item.back.docKey)
+    const frontUrl = String(frontRow?.view_url || frontRow?.drive_url || '').trim()
+    const backUrl = String(backRow?.view_url || backRow?.drive_url || '').trim()
+
+    return (
+      <CustomerCard key={`pair-${item.front.docKey}`} style={{ marginBottom: 12, padding: 16 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900' }}>{item.title}</Text>
+            <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, marginTop: 4, lineHeight: 17 }}>{item.hint}</Text>
+          </View>
+          <View style={{ backgroundColor: badgeBg, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: badgeColor }}>
+              {badgeLabel}
+            </Text>
+          </View>
+        </View>
+
+        {renderTwoSidedSide('Front', item.front)}
+        {renderTwoSidedSide('Back', item.back)}
+
+        {frontUrl && backUrl ? (
+          <TouchableOpacity
+            onPress={() =>
+              void printMergedTwoSidedDocument({
+                docName: item.title,
+                regNumber: selectedReg || 'Vehicle',
+                frontUrl,
+                backUrl,
+              })
+            }
+            style={{
+              marginTop: 14,
+              backgroundColor: '#0284c7',
+              borderRadius: 10,
+              paddingVertical: 11,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            <Icon name="printer" size={16} color="#ffffff" />
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+              Print 1-Page Merged (Front + Back)
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </CustomerCard>
+    )
+  }
+
+  const renderDisplayItem = (item: CustomerDocumentDisplayItem) => {
+    if (item.kind === 'two-sided') return renderTwoSidedCard(item)
+    return renderSlot(item.slot)
+  }
+
   const renderSlot = (slot: CustomerClaimDocumentDef) => {
-    const row = byKey.get(slot.docKey)
-    const driveUrl = String(row?.drive_url || '').trim()
-    const viewUrl = String(row?.view_url || '').trim()
-    const fileAvailable = Boolean(row && (driveUrl || viewUrl || row.file_name))
-    const driveSynced = Boolean(row && driveUrl && !row.drive_pending)
-    const submitted = fileAvailable
-    const base = freshRepairCard || repairCard
-    const rawApproved = base?.[slot.docKey]
-    const approved = Boolean(rawApproved === true || rawApproved === 'true' || rawApproved === 1)
-    const rejectedKeys = parseRejectedDocKeys(base?.doc_rejected_keys)
-    const rejected = !approved && rejectedKeys.includes(slot.docKey)
-    const busy = busyKey === slot.docKey
-    const isReuploading = Boolean(reuploadingKeys[slot.docKey])
+    const { row, fileAvailable, driveSynced, submitted, approved, rejected, busy, isReuploading } = getSlotUi(slot)
 
     const badgeBg = approved
       ? '#DEF7EC'
@@ -532,81 +722,17 @@ export default function CustomerDocumentsScreen() {
           </View>
         ) : null}
 
-        {/* Two Sided Print section */}
-        {(() => {
-          const TWO_SIDED_PAIRS: Record<string, { frontKey: string; backKey: string; name: string }> = {
-            doc_aadhaar: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
-            doc_aadhaar_back: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
-            doc_dl: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
-            doc_dl_back: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
-            doc_rc: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
-            doc_rc_back: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
-          }
-
-          const pair = TWO_SIDED_PAIRS[slot.docKey]
-          if (!pair) return null
-
-          const frontRow = byKey.get(pair.frontKey)
-          const backRow = byKey.get(pair.backKey)
-          const frontUrl = String(frontRow?.view_url || frontRow?.drive_url || '').trim()
-          const backUrl = String(backRow?.view_url || backRow?.drive_url || '').trim()
-
-          if (frontUrl && backUrl) {
-            return (
-              <TouchableOpacity
-                onPress={() =>
-                  void printMergedTwoSidedDocument({
-                    docName: pair.name,
-                    regNumber: selectedReg || 'Vehicle',
-                    frontUrl,
-                    backUrl,
-                  })
-                }
-                style={{
-                  marginTop: 12,
-                  backgroundColor: '#0284c7',
-                  borderRadius: 10,
-                  paddingVertical: 11,
-                  paddingHorizontal: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
-              >
-                <Icon name="printer" size={16} color="#ffffff" />
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
-                  Print 1-Page Merged (Front + Back)
-                </Text>
-              </TouchableOpacity>
-            )
-          }
-
-          if (frontUrl || backUrl) {
-            const missingSide = frontUrl ? 'Back' : 'Front'
-            return (
-              <View
-                style={{
-                  marginTop: 10,
-                  padding: 8,
-                  backgroundColor: '#F1F5F9',
-                  borderRadius: 8,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <Icon name="info" size={14} color="#64748B" />
-                <Text style={{ color: '#475569', fontSize: 11, flex: 1 }}>
-                  Upload {missingSide} side as well to enable 1-Page Merged Print.
-                </Text>
-              </View>
-            )
-          }
-
-          return null
-        })()}
       </CustomerCard>
+    )
+  }
+
+  if (!visitReady) {
+    return (
+      <CustomerScreen title="Documents" subtitle={`Loading · ${selectedReg || 'your vehicle'}`}>
+        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+          <ActivityIndicator color={CustomerTheme.primary} />
+        </View>
+      </CustomerScreen>
     )
   }
 
@@ -616,7 +742,7 @@ export default function CustomerDocumentsScreen() {
         title="Documents"
         subtitle={`Workshop paperwork · ${selectedReg || 'your vehicle'}`}
       >
-        {loading && !visitReady ? (
+        {loading ? (
           <View style={{ paddingVertical: 24, alignItems: 'center' }}>
             <ActivityIndicator color={CustomerTheme.primary} />
           </View>
@@ -803,11 +929,11 @@ export default function CustomerDocumentsScreen() {
         </CustomerCard>
       ) : null}
 
-      {!loading && claimMode === 'insurance' ? requiredSlots.map(renderSlot) : null}
+      {!loading && claimMode === 'insurance' ? requiredDisplay.map(renderDisplayItem) : null}
       {!loading && claimMode === 'insurance' && optionalSlots.length > 0 ? (
         <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900', marginBottom: 8 }}>Optional uploads</Text>
       ) : null}
-      {!loading && claimMode === 'insurance' ? optionalSlots.map(renderSlot) : null}
+      {!loading && claimMode === 'insurance' ? optionalDisplay.map(renderDisplayItem) : null}
 
       <Modal visible={Boolean(previewUri)} transparent animationType="fade" onRequestClose={() => setPreviewUri(null)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 16 }}>

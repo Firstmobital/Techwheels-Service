@@ -22,7 +22,7 @@ import {
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
-import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
+import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
 import { openReceptionDocument } from '../../lib/customer/openReceptionDocument'
 import {
   customerGetRepairCard,
@@ -37,11 +37,13 @@ import { useCustomerScreenRefresh } from '../../components/customer/customerScre
 export default function CustomerEstimateScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const { isMechanical, isBodyshop, repairCard, mechCase } = useCustomerVisit()
-  const isEffectiveMechanical =
-    (isMechanical || isMechanicalServiceType(String(selected?.service_type || ''))) &&
-    !repairCard &&
-    !isBodyshop
+  const { isBodyshop, repairCard, mechCase, ready: visitReady, kind: visitKind } = useCustomerVisit()
+  const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
+    visitReady,
+    kind: visitKind,
+    isBodyshop,
+    repairCard,
+  })
   const [rows, setRows] = useState<EstimateView[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [loading, setLoading] = useState(true)
