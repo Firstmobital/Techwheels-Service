@@ -30,7 +30,7 @@ export default function BodyshopFloorWorkPage() {
   const [error, setError] = useState<string | null>(null)
   const [employeeCode, setEmployeeCode] = useState('')
   const [employeeName, setEmployeeName] = useState<string | null>(null)
-  const [employeeRole, setEmployeeRole] = useState<string | null>(null)
+  const [, setEmployeeRole] = useState<string | null>(null)
   const [uiModes, setUiModes] = useState<Array<'worker' | 'edp'>>(['worker'])
   const [tab, setTab] = useState<'worker' | 'edp'>('worker')
 
@@ -211,7 +211,6 @@ export default function BodyshopFloorWorkPage() {
       const dealerCtx = await getDealerContext()
       if (dealerCtx.error || !dealerCtx.data?.dealerCode) throw new Error(dealerCtx.error ?? 'Dealer missing')
       const { data: { user } } = await supabase.auth.getUser()
-      const card = cardByJc[edpJc]
       const res = await upsertBodyshopFloorDailyUpdate({
         jobCardNumber: edpJc,
         repairCardId: null,
