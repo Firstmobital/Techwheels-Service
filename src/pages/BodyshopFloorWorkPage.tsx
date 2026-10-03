@@ -26,6 +26,7 @@ import {
 } from '../lib/api/bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../lib/bodyshopFloorRoleWorkLog'
 import { BodyshopFloorWorkPhotoGallery } from '../components/BodyshopFloorWorkPhotoGallery'
+import Icon from '../components/Icon'
 import { upsertBodyshopFloorDailyUpdate } from '../lib/api/bodyshopFloorDailyUpdate'
 import { getDealerContext } from '../lib/api'
 import {
@@ -448,6 +449,12 @@ export default function BodyshopFloorWorkPage() {
   }, [load])
 
   useEffect(() => {
+    if (loading || displayedVehicleRows.length === 0) return
+    const jcs = displayedVehicleRows.map((r) => r.jobCardNumber)
+    void enrichVehicleMetaBatch(jcs)
+  }, [loading, displayedVehicleRows, enrichVehicleMetaBatch])
+
+  useEffect(() => {
     if (!selectedJc) return
     void loadPhotosForVehicle(selectedJc, cardByJc)
   }, [selectedJc, cardByJc, loadPhotosForVehicle])
@@ -617,56 +624,69 @@ export default function BodyshopFloorWorkPage() {
             <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My assigned vehicles'}</h2>
             {vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0 ? (
               <>
-                <input
-                  className="inp"
-                  type="search"
-                  placeholder="Search reg no. / customer / JC…"
-                  value={vehicleSearch}
-                  onChange={(e) => setVehicleSearch(e.target.value)}
-                  style={{ marginBottom: 10, maxWidth: 420 }}
-                />
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-                  <label className="field" style={{ margin: 0 }}>
-                    <span className="label" style={{ marginRight: 6 }}>Month on floor</span>
+                <div className="bsf-filterbar" style={{ marginBottom: 10 }}>
+                  <div className="bsf-search">
+                    <Icon name="search" size={16} />
+                    <input
+                      className="bsf-search__input"
+                      type="search"
+                      placeholder="Search reg / customer / JC…"
+                      value={vehicleSearch}
+                      onChange={(e) => setVehicleSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <span className="bsf-sep" aria-hidden />
+
+                  <div className="bsf-group">
+                    <span className="bsf-label">Month</span>
                     <select
-                      className="sel"
+                      className="sel sel--advisor-filter"
                       value={floorMonthFilter}
                       onChange={(e) => setFloorMonthFilter(e.target.value)}
-                      style={{ minWidth: 140 }}
+                      aria-label="Month on floor"
                     >
                       {monthFilterOptions.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
-                  </label>
+                  </div>
+
+                  <span className="bsf-sep" aria-hidden />
+
+                  <div className="bsf-group">
+                    <span className="bsf-label">On floor</span>
+                    {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
+                        onClick={() => setFloorDayFilter(key)}
+                      >
+                        {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}
+                        <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="bsf-sep" aria-hidden />
+
+                  <div className="bsf-group">
+                    <span className="bsf-label">Today</span>
+                    {(['all', 'pending', 'done'] as const).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
+                        onClick={() => setUpdateFilter(key)}
+                      >
+                        {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}
+                        <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                  {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`btn btn--sm ${floorDayFilter === key ? 'btn--primary' : 'btn--quiet'}`}
-                      onClick={() => setFloorDayFilter(key)}
-                    >
-                      {key === 'all' ? 'All days' : floorWorkFloorDayLabel(key)}
-                      {' '}({filterCounts.floorDay[key]})
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                  {(['all', 'pending', 'done'] as const).map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`btn btn--sm ${updateFilter === key ? 'btn--primary' : 'btn--quiet'}`}
-                      onClick={() => setUpdateFilter(key)}
-                    >
-                      {key === 'all' ? 'All updates' : key === 'pending' ? 'Pending today' : 'Updated today'}
-                      {' '}({filterCounts.updates[key]})
-                    </button>
-                  ))}
-                </div>
-                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 12 }}>
                   Sorted: on floor today → yesterday → longer wait
                   {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
                 </p>
