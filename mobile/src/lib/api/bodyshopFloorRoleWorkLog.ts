@@ -2,7 +2,6 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as Linking from 'expo-linking'
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
-import { getSupabaseBaseUrl } from '../env'
 import {
   bodyshopFloorWorkTodayIstDate,
   normalizeBodyshopFloorWorkJc,
@@ -10,6 +9,8 @@ import {
   type BodyshopFloorRoleDailyLogRow,
 } from '../bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorWorkLogRole } from '../bodyshopFloorWork/roles'
+import { inferRegistrationFromAssignmentKey } from '../bodyshopFloorWork/display'
+import { driveUrlFromUniversalResponse, postUniversalDriveWithRetry } from './postUniversalDriveUpload'
 
 const LOG_TABLE = 'bodyshop_floor_role_daily_logs'
 const PHOTO_TABLE = 'bodyshop_floor_role_daily_log_photos'
@@ -91,19 +92,7 @@ export async function upsertRoleDailyLog(input: {
   return data as BodyshopFloorRoleDailyLogRow
 }
 
-const DRIVE_UPLOAD_TIMEOUT_MS = 25_000
-
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-/** Best-effort Drive sync — must not block Save (edge function can hang without a timeout). */
+/** Best-effort Drive sync — must not block Save (same contract as web / bodyshop docs). */
 function syncFloorWorkPhotoToDrive(input: {
   photoId: number
   storagePath: string
@@ -111,41 +100,29 @@ function syncFloorWorkPhotoToDrive(input: {
   regNumber?: string | null
 }): void {
   void (async () => {
-    const supabaseUrl = getSupabaseBaseUrl()?.replace(/\/$/, '')
-    const sessionRes = await supabase.auth.getSession()
-    const token = sessionRes.data.session?.access_token
-    if (!supabaseUrl || !token) return
-
-    const payload = {
+    const reg = String(input.regNumber ?? '').trim().toUpperCase() || undefined
+    const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry({
       resource_type: 'bodyshop_floor_work_photo',
       resource_id: input.photoId,
       bucket_id: AUTODOC_BUCKET,
       object_name: input.storagePath,
       file_type: 'bodyshop_floor_work_photo',
       file_size_mb: Number((input.fileSizeBytes / (1024 * 1024)).toFixed(3)),
-      registration_no: String(input.regNumber ?? '').trim().toUpperCase() || undefined,
-    }
-
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      try {
-        const driveRes = await fetchWithTimeout(
-          `${supabaseUrl}/functions/v1/universal-drive-upload`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(payload),
-          },
-          DRIVE_UPLOAD_TIMEOUT_MS,
-        )
-        const drivePayload = await driveRes.json().catch(() => ({} as { ok?: boolean; error?: string }))
-        if (driveRes.ok && drivePayload?.ok !== false && !drivePayload?.error) return
-      } catch {
-        /* timeout or network — photo already in storage + DB */
+      registration_no: reg,
+    })
+    if (!driveRes.ok || drivePayload?.error || drivePayload?.ok === false) {
+      if (__DEV__) {
+        console.warn('[bodyshop-floor-work] Drive sync failed', drivePayload?.error ?? driveRes.status)
       }
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * attempt))
+      return
+    }
+    const driveUrl = driveUrlFromUniversalResponse(drivePayload)
+    const driveFileId = String(drivePayload.drive_file_id ?? drivePayload.fileId ?? '').trim() || null
+    if (driveUrl) {
+      await supabase
+        .from(PHOTO_TABLE)
+        .update({ drive_url: driveUrl, ...(driveFileId ? { drive_file_id: driveFileId } : {}) })
+        .eq('id', input.photoId)
     }
   })()
 }
@@ -179,7 +156,10 @@ export async function uploadRoleDailyLogPhotoFromUri(input: {
 }): Promise<BodyshopFloorRoleDailyLogPhotoRow> {
   const jc = normalizeBodyshopFloorWorkJc(input.jobCardNumber)
   const dealer = String(input.dealerCode ?? '').trim().toUpperCase()
-  const regNumber = String(input.regNumber ?? '').trim().toUpperCase() || null
+  const regNumber =
+    String(input.regNumber ?? '').trim().toUpperCase()
+    || inferRegistrationFromAssignmentKey(jc)
+    || null
   const ext = (input.mimeType ?? 'image/jpeg').includes('png') ? 'png' : 'jpg'
   const path = `${dealer}/bodyshop-floor-work/${jc}/${input.logId}/${Date.now()}-${input.sortOrder ?? 0}.${ext}`
 
@@ -215,6 +195,34 @@ export async function uploadRoleDailyLogPhotoFromUri(input: {
   })
 
   return data as BodyshopFloorRoleDailyLogPhotoRow
+}
+
+const LOG_JC_CHUNK = 40
+
+export async function fetchAllFloorWorkPhotosForJobCardKeys(
+  jobCardKeys: string[],
+): Promise<BodyshopFloorRoleDailyLogPhotoRow[]> {
+  const keys = Array.from(new Set(jobCardKeys.map((k) => normalizeBodyshopFloorWorkJc(k)).filter(Boolean)))
+  if (keys.length === 0) return []
+
+  const logIds: number[] = []
+  for (let i = 0; i < keys.length; i += LOG_JC_CHUNK) {
+    const chunk = keys.slice(i, i + LOG_JC_CHUNK)
+    const { data, error } = await supabase.from(LOG_TABLE).select('id').in('job_card_number', chunk)
+    if (error) throw new Error(error.message)
+    for (const row of data ?? []) {
+      if (typeof row.id === 'number') logIds.push(row.id)
+    }
+  }
+  if (logIds.length === 0) return []
+
+  const photos: BodyshopFloorRoleDailyLogPhotoRow[] = []
+  for (let i = 0; i < logIds.length; i += 80) {
+    const chunk = logIds.slice(i, i + 80)
+    const batch = await fetchRoleDailyLogPhotos(chunk)
+    photos.push(...batch)
+  }
+  return photos
 }
 
 export async function fetchRoleDailyLogPhotos(logIds: number[]): Promise<BodyshopFloorRoleDailyLogPhotoRow[]> {

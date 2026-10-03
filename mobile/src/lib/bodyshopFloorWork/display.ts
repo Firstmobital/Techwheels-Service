@@ -4,6 +4,7 @@ export type FloorWorkVehicleMeta = {
   reg: string | null
   customer: string | null
   model?: string | null
+  systemJobCardNo?: string | null
   floorSinceAt?: string | null
   bodyshopFloor?: string | null
 }
@@ -11,6 +12,24 @@ export type FloorWorkVehicleMeta = {
 export function isSystemJobCardKey(value: string): boolean {
   const v = String(value ?? '').trim().toUpperCase()
   return v.startsWith('JC-') || v.startsWith('JC_') || v.includes('-MBTPLT-')
+}
+
+export function normalizeFloorWorkAssignmentKey(raw: string | null | undefined): string {
+  return String(raw ?? '').trim().toUpperCase()
+}
+
+export function floorWorkJobCardLookupKeys(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+): string[] {
+  const keys = new Set<string>()
+  const primary = normalizeFloorWorkAssignmentKey(assignmentKey)
+  if (primary) keys.add(primary)
+  const reg = normalizeFloorWorkAssignmentKey(meta?.reg ?? inferRegistrationFromAssignmentKey(assignmentKey))
+  if (reg) keys.add(reg)
+  const sys = normalizeFloorWorkAssignmentKey(meta?.systemJobCardNo ?? '')
+  if (sys) keys.add(sys)
+  return [...keys]
 }
 
 export function inferRegistrationFromAssignmentKey(jobCardNumber: string): string | null {
@@ -30,6 +49,23 @@ export function resolveFloorWorkRegistration(
   const fromMeta = String(meta?.reg ?? '').trim()
   if (fromMeta) return fromMeta.toUpperCase()
   return inferRegistrationFromAssignmentKey(assignmentKey)
+}
+
+export function buildMinimalFloorWorkVehicleMeta(
+  assignmentKeys: string[],
+  assignmentCreatedAtByJc?: Record<string, string | null | undefined>,
+): Record<string, FloorWorkVehicleMeta> {
+  const map: Record<string, FloorWorkVehicleMeta> = {}
+  for (const raw of assignmentKeys) {
+    const jc = normalizeFloorWorkAssignmentKey(raw)
+    if (!jc) continue
+    map[jc] = {
+      reg: inferRegistrationFromAssignmentKey(jc),
+      customer: null,
+      floorSinceAt: String(assignmentCreatedAtByJc?.[jc] ?? '').trim() || null,
+    }
+  }
+  return map
 }
 
 export function floorWorkVehicleTitle(meta: FloorWorkVehicleMeta | undefined, assignmentKey: string): string {
@@ -130,6 +166,97 @@ function assignmentTimeMs(assignedAtIso: string | null | undefined): number | nu
   if (!assignedAtIso) return null
   const t = new Date(assignedAtIso).getTime()
   return Number.isNaN(t) ? null : t
+}
+
+function floorSinceMs(meta: FloorWorkVehicleMeta | undefined): number | null {
+  const iso = String(meta?.floorSinceAt ?? '').trim()
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  return Number.isNaN(t) ? null : t
+}
+
+export type FloorWorkFloorDayBucket = 'today' | 'yesterday' | 'older' | 'unknown'
+
+export function floorWorkFloorDayBucket(
+  floorSinceIso: string | null | undefined,
+  todayIst: string,
+): FloorWorkFloorDayBucket {
+  const day = istDateFromIso(floorSinceIso)
+  if (!day) return 'unknown'
+  if (day === todayIst) return 'today'
+  const yesterday = bodyshopFloorWorkYesterdayIstDate(todayIst)
+  if (day === yesterday) return 'yesterday'
+  if (day < yesterday) return 'older'
+  return 'unknown'
+}
+
+function floorDaySortRank(bucket: FloorWorkFloorDayBucket): number {
+  switch (bucket) {
+    case 'today':
+      return 0
+    case 'yesterday':
+      return 1
+    case 'older':
+      return 2
+    default:
+      return 3
+  }
+}
+
+/** Today / yesterday on floor first, then longer-waiting vehicles. */
+export function sortFloorWorkTasksByFloorDayRecency(
+  tasks: BodyshopFloorWorkTask[],
+  vehicleByJc: Record<string, FloorWorkVehicleMeta>,
+  todayIst: string,
+): BodyshopFloorWorkTask[] {
+  return [...tasks].sort((a, b) => {
+    const ba = floorWorkFloorDayBucket(vehicleByJc[a.jobCardNumber]?.floorSinceAt, todayIst)
+    const bb = floorWorkFloorDayBucket(vehicleByJc[b.jobCardNumber]?.floorSinceAt, todayIst)
+    const ra = floorDaySortRank(ba)
+    const rb = floorDaySortRank(bb)
+    if (ra !== rb) return ra - rb
+
+    const ta = floorSinceMs(vehicleByJc[a.jobCardNumber])
+    const tb = floorSinceMs(vehicleByJc[b.jobCardNumber])
+    const regA = sortKeyReg(vehicleByJc[a.jobCardNumber], a.jobCardNumber)
+    const regB = sortKeyReg(vehicleByJc[b.jobCardNumber], b.jobCardNumber)
+
+    if (ba === 'today' || ba === 'yesterday') {
+      if (ta === null && tb === null) return regA.localeCompare(regB, 'en')
+      if (ta === null) return 1
+      if (tb === null) return -1
+      return tb - ta
+    }
+
+    if (ta === null && tb === null) return regA.localeCompare(regB, 'en')
+    if (ta === null) return 1
+    if (tb === null) return -1
+    if (ta !== tb) return ta - tb
+    return regA.localeCompare(regB, 'en')
+  })
+}
+
+/** Longest on floor first (earliest floorSinceAt). */
+export function sortFloorWorkTasksByFloorSinceAsc(
+  tasks: BodyshopFloorWorkTask[],
+  vehicleByJc: Record<string, FloorWorkVehicleMeta>,
+): BodyshopFloorWorkTask[] {
+  return [...tasks].sort((a, b) => {
+    const ta = floorSinceMs(vehicleByJc[a.jobCardNumber])
+    const tb = floorSinceMs(vehicleByJc[b.jobCardNumber])
+    if (ta === null && tb === null) {
+      const ra = sortKeyReg(vehicleByJc[a.jobCardNumber], a.jobCardNumber)
+      const rb = sortKeyReg(vehicleByJc[b.jobCardNumber], b.jobCardNumber)
+      return ra.localeCompare(rb, 'en')
+    }
+    if (ta === null) return 1
+    if (tb === null) return -1
+    if (ta !== tb) return ta - tb
+    const ra = sortKeyReg(vehicleByJc[a.jobCardNumber], a.jobCardNumber)
+    const rb = sortKeyReg(vehicleByJc[b.jobCardNumber], b.jobCardNumber)
+    if (ra !== rb) return ra.localeCompare(rb, 'en')
+    return a.jobCardNumber.localeCompare(b.jobCardNumber)
+  })
 }
 
 /** Newest assignment first; missing assign time last. */

@@ -25,13 +25,28 @@ export const NOT_REQUIRED_ASSIGNMENT_CODE = 'NOT_REQUIRED'
 
 type AssignmentRow = Record<string, unknown>
 
-const PRIMARY_ROLE_COLUMNS: Record<BodyshopFloorWorkLogRole, { code: string; name: string }> = {
-  DENTOR: { code: 'dentor_employee_code', name: 'dentor_employee_name' },
-  DENTOR_HELPER: { code: 'dentor_helper_employee_code', name: 'dentor_helper_employee_name' },
-  PAINTER: { code: 'painter_employee_code', name: 'painter_employee_name' },
-  PAINTER_HELPER: { code: 'painter_helper_employee_code', name: 'painter_helper_employee_name' },
-  TECHNICIAN: { code: 'technician_employee_code', name: 'technician_employee_name' },
-  RUBBING: { code: 'rubbing_employee_code', name: 'rubbing_employee_name' },
+const PRIMARY_ROLE_COLUMNS: Record<
+  BodyshopFloorWorkLogRole,
+  { code: string; name: string; assignedAt: string }
+> = {
+  DENTOR: { code: 'dentor_employee_code', name: 'dentor_employee_name', assignedAt: 'dentor_in_ts' },
+  DENTOR_HELPER: {
+    code: 'dentor_helper_employee_code',
+    name: 'dentor_helper_employee_name',
+    assignedAt: 'dentor_helper_in_ts',
+  },
+  PAINTER: { code: 'painter_employee_code', name: 'painter_employee_name', assignedAt: 'painter_in_ts' },
+  PAINTER_HELPER: {
+    code: 'painter_helper_employee_code',
+    name: 'painter_helper_employee_name',
+    assignedAt: 'painter_helper_in_ts',
+  },
+  TECHNICIAN: {
+    code: 'technician_employee_code',
+    name: 'technician_employee_name',
+    assignedAt: 'technician_in_ts',
+  },
+  RUBBING: { code: 'rubbing_employee_code', name: 'rubbing_employee_name', assignedAt: 'rubbing_in_ts' },
 }
 
 export type BodyshopFloorWorkTask = {
@@ -42,8 +57,16 @@ export type BodyshopFloorWorkTask = {
   /** Employee code for this assignment slot (used for logs; may differ from login when admin overview). */
   assignedEmployeeCode: string
   employeeName: string | null
+  assignedAt: string | null
   isSupport: boolean
   supportAssignmentId?: number
+}
+
+function roleAssignedAtFromRow(row: AssignmentRow, cols: { assignedAt: string }): string | null {
+  const fromRole = String(row[cols.assignedAt] ?? '').trim()
+  if (fromRole) return fromRole
+  const fallback = String(row.assigned_at ?? '').trim()
+  return fallback || null
 }
 
 function normCode(raw: unknown): string {
@@ -75,6 +98,7 @@ export function listWorkTasksForEmployee(
     support_role?: string
     employee_code?: string
     employee_name?: string | null
+    assigned_at?: string | null
     is_active?: boolean
     dealer_code?: string
   }>,
@@ -105,6 +129,7 @@ export function listWorkTasksForEmployee(
         floorRole: role,
         assignedEmployeeCode: code,
         employeeName: String(row[cols.name] ?? '').trim() || null,
+        assignedAt: roleAssignedAtFromRow(row, cols),
         isSupport: false,
       })
     }
@@ -127,6 +152,7 @@ export function listWorkTasksForEmployee(
       floorRole: roleRaw as BodyshopFloorWorkLogRole,
       assignedEmployeeCode: supportCode,
       employeeName: String(row.employee_name ?? '').trim() || null,
+      assignedAt: String(row.assigned_at ?? '').trim() || null,
       isSupport: true,
       supportAssignmentId: typeof row.id === 'number' ? row.id : undefined,
     })
@@ -144,6 +170,7 @@ export function listAllWorkTasksForAdmin(
     support_role?: string
     employee_code?: string
     employee_name?: string | null
+    assigned_at?: string | null
     is_active?: boolean
     dealer_code?: string
   }>,
@@ -171,6 +198,7 @@ export function listAllWorkTasksForAdmin(
         floorRole: role,
         assignedEmployeeCode: code,
         employeeName: String(row[cols.name] ?? '').trim() || null,
+        assignedAt: roleAssignedAtFromRow(row, cols),
         isSupport: false,
       })
     }
@@ -192,6 +220,7 @@ export function listAllWorkTasksForAdmin(
       floorRole: roleRaw as BodyshopFloorWorkLogRole,
       assignedEmployeeCode: supportCode,
       employeeName: String(row.employee_name ?? '').trim() || null,
+      assignedAt: String(row.assigned_at ?? '').trim() || null,
       isSupport: true,
       supportAssignmentId: typeof row.id === 'number' ? row.id : undefined,
     })

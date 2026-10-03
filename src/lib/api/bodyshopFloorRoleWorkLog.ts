@@ -7,6 +7,7 @@ import {
   type BodyshopFloorRoleDailyLogRow,
 } from '../bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorWorkLogRole } from '../bodyshopFloorWork/roles'
+import { inferRegistrationFromAssignmentKey } from '../bodyshopFloorWork/display'
 import { driveUrlFromUniversalResponse, postUniversalDriveWithRetry } from './postUniversalDriveUpload'
 import { fail, ok, type ApiResult } from './types'
 
@@ -54,6 +55,22 @@ export type FloorWorkPhotoWithLog = BodyshopFloorRoleDailyLogPhotoRow & {
 }
 
 const LOG_META_SELECT = 'id, job_card_number, update_date, floor_role, employee_code, employee_name, note_text'
+const LOG_JC_CHUNK = 40
+
+async function fetchDailyLogsForJobCardKeys(keys: string[]): Promise<DailyLogMeta[]> {
+  const unique = Array.from(new Set(keys.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
+  if (unique.length === 0) return []
+  const byId = new Map<number, DailyLogMeta>()
+  for (let i = 0; i < unique.length; i += LOG_JC_CHUNK) {
+    const chunk = unique.slice(i, i + LOG_JC_CHUNK)
+    const { data, error } = await supabase.from(LOG_TABLE).select(LOG_META_SELECT).in('job_card_number', chunk)
+    if (error) throw new Error(error.message)
+    for (const row of (data ?? []) as DailyLogMeta[]) {
+      byId.set(row.id, row)
+    }
+  }
+  return [...byId.values()]
+}
 
 export async function fetchAllFloorWorkPhotosForJobCards(
   jobCardKeys: string[],
@@ -61,9 +78,12 @@ export async function fetchAllFloorWorkPhotosForJobCards(
   const keys = Array.from(new Set(jobCardKeys.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
   if (keys.length === 0) return ok([])
 
-  const { data: logs, error: logErr } = await supabase.from(LOG_TABLE).select(LOG_META_SELECT).in('job_card_number', keys)
-  if (logErr) return fail(logErr.message)
-  const logRows = (logs ?? []) as DailyLogMeta[]
+  let logRows: DailyLogMeta[]
+  try {
+    logRows = await fetchDailyLogsForJobCardKeys(keys)
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : 'Failed to load logs')
+  }
   if (logRows.length === 0) return ok([])
 
   const logById = new Map(logRows.map((l) => [l.id, l]))
@@ -103,6 +123,39 @@ export async function fetchAllFloorWorkPhotosForJobCards(
   })
 
   return ok(merged)
+}
+
+/** Lightweight photo totals for table (no file payloads). */
+export async function fetchFloorWorkPhotoCountsForJobCards(
+  jobCardKeys: string[],
+): Promise<ApiResult<Record<string, number>>> {
+  const keys = Array.from(new Set(jobCardKeys.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
+  if (keys.length === 0) return ok({})
+
+  let logRows: DailyLogMeta[]
+  try {
+    logRows = await fetchDailyLogsForJobCardKeys(keys)
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : 'Failed to load logs')
+  }
+  if (logRows.length === 0) return ok(Object.fromEntries(keys.map((k) => [k, 0])))
+
+  const logIdToJc = new Map(logRows.map((l) => [l.id, normalizeBodyshopFloorWorkJc(l.job_card_number)]))
+  const counts: Record<string, number> = Object.fromEntries(keys.map((k) => [k, 0]))
+  const logIds = logRows.map((l) => l.id)
+
+  for (let i = 0; i < logIds.length; i += 120) {
+    const chunk = logIds.slice(i, i + 120)
+    const { data, error } = await supabase.from(PHOTO_TABLE).select('log_id').in('log_id', chunk)
+    if (error) return fail(error.message)
+    for (const row of data ?? []) {
+      const jc = logIdToJc.get(Number(row.log_id))
+      if (!jc) continue
+      counts[jc] = (counts[jc] ?? 0) + 1
+    }
+  }
+
+  return ok(counts)
 }
 
 export async function upsertRoleDailyLog(input: {
@@ -182,7 +235,10 @@ export async function uploadRoleDailyLogPhoto(input: {
 }): Promise<ApiResult<BodyshopFloorRoleDailyLogPhotoRow>> {
   const jc = normalizeBodyshopFloorWorkJc(input.jobCardNumber)
   const dealer = String(input.dealerCode ?? '').trim().toUpperCase()
-  const regNumber = String(input.regNumber ?? '').trim().toUpperCase() || null
+  const regNumber =
+    String(input.regNumber ?? '').trim().toUpperCase()
+    || inferRegistrationFromAssignmentKey(jc)
+    || null
   const ext = (input.file.name.split('.').pop() || 'jpg').toLowerCase()
   const path = `${dealer}/bodyshop-floor-work/${jc}/${input.logId}/${crypto.randomUUID()}.${ext}`
 

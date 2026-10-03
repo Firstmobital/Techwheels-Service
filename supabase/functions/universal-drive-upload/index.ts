@@ -119,6 +119,17 @@ function toYmd(input: string | null | undefined): string {
   return date.toISOString().slice(0, 10).replaceAll('-', '')
 }
 
+/** Bodyshop floor often stores the plate as job_card_number on assignments/logs. */
+function inferRegistrationFromAssignmentKey(raw: string | null | undefined): string | null {
+  const v = String(raw ?? '').trim()
+  if (!v) return null
+  const upper = v.toUpperCase()
+  if (upper.startsWith('JC-') || upper.startsWith('JC_') || upper.includes('-MBTPLT-')) return null
+  const compact = upper.replace(/\s+/g, '')
+  if (compact.length >= 6 && compact.length <= 13 && /^[A-Z0-9]+$/.test(compact)) return compact
+  return null
+}
+
 function extFromPath(path: string): string {
   const base = path.split('/').at(-1) ?? ''
   const ext = base.includes('.') ? base.split('.').at(-1) ?? '' : ''
@@ -694,14 +705,29 @@ Deno.serve(async (req) => {
           registrationNo = String(cardRow?.reg_number ?? '').trim()
         }
         if (!registrationNo && logRow?.job_card_number) {
+          const jcKey = String(logRow.job_card_number).trim()
           const { data: cardRow } = await supabase
             .from('bodyshop_repair_cards')
             .select('reg_number')
-            .eq('job_card_no', logRow.job_card_number)
+            .eq('job_card_no', jcKey)
             .order('updated_at', { ascending: false })
             .limit(1)
             .maybeSingle()
           registrationNo = String(cardRow?.reg_number ?? '').trim()
+          if (!registrationNo) {
+            const { data: byRegRow } = await supabase
+              .from('bodyshop_repair_cards')
+              .select('reg_number')
+              .eq('reg_number', jcKey.toUpperCase())
+              .order('updated_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            registrationNo = String(byRegRow?.reg_number ?? '').trim()
+          }
+          if (!registrationNo) {
+            const inferred = inferRegistrationFromAssignmentKey(jcKey)
+            if (inferred) registrationNo = inferred
+          }
         }
       }
 

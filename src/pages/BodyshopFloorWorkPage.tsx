@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getLinkedEmployeeContext } from '../lib/api/bodyshopFloorWorkContext'
 import {
@@ -17,6 +17,7 @@ import {
 } from '../lib/bodyshopFloorRoleWorkLog'
 import {
   fetchAllFloorWorkPhotosForJobCards,
+  fetchFloorWorkPhotoCountsForJobCards,
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForDate,
   upsertRoleDailyLog,
@@ -35,17 +36,40 @@ import { fetchLiveOnFloorJobCardKeys, fetchRepairCardVehicleByJcs } from '../lib
 import {
   floorWorkVehicleSubtitle,
   floorWorkVehicleTitle,
-  sortFloorWorkTasksByVehicle,
-  sortJobCardsByVehicle,
+  sortJobCardsByFloorDayRecency,
   edpVehicleOptionLabel,
   floorWorkStandingLine,
   floorWorkJobCardLookupKeys,
   normalizeFloorWorkAssignmentKey,
+  buildFloorWorkMonthFilterOptions,
+  floorWorkFloorDayBucket,
+  floorWorkFloorDayLabel,
+  istYearMonthFromIso,
+  type FloorWorkFloorDayBucket,
+  type FloorWorkVehicleMeta,
+  buildMinimalFloorWorkVehicleMeta,
 } from '../lib/bodyshopFloorWork/display'
+
+const FLOOR_WORK_LIST_PAGE_SIZE = 24
+
+type UpdateFilter = 'all' | 'pending' | 'done'
+type FloorDayFilter = 'all' | FloorWorkFloorDayBucket
+
+function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of assRows) {
+    const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+    const at = String(row.created_at ?? '').trim()
+    if (!jc || !at) continue
+    const prev = out[jc]
+    if (!prev || new Date(at).getTime() < new Date(prev).getTime()) out[jc] = at
+  }
+  return out
+}
 
 function jobCardMatchesSearch(
   jc: string,
-  cardByJc: Record<string, { reg: string | null; customer: string | null }>,
+  cardByJc: Record<string, FloorWorkVehicleMeta>,
   q: string,
 ): boolean {
   if (!q) return true
@@ -57,7 +81,7 @@ function jobCardMatchesSearch(
 
 function groupPhotosByVehicle(
   jcList: string[],
-  cardByJc: Record<string, { reg: string | null; customer: string | null }>,
+  cardByJc: Record<string, FloorWorkVehicleMeta>,
   photos: FloorWorkPhotoWithLog[],
 ): Record<string, FloorWorkPhotoWithLog[]> {
   const byVehicle: Record<string, FloorWorkPhotoWithLog[]> = {}
@@ -94,7 +118,7 @@ export default function BodyshopFloorWorkPage() {
   const [tab, setTab] = useState<'worker' | 'edp'>('worker')
 
   const [tasks, setTasks] = useState<BodyshopFloorWorkTask[]>([])
-  const [cardByJc, setCardByJc] = useState<Record<string, { reg: string | null; customer: string | null }>>({})
+  const [cardByJc, setCardByJc] = useState<Record<string, FloorWorkVehicleMeta>>({})
   const [logsByKey, setLogsByKey] = useState<Record<string, BodyshopFloorRoleDailyLogRow>>({})
   const [selectedJc, setSelectedJc] = useState<string | null>(null)
   const [photosByVehicle, setPhotosByVehicle] = useState<Record<string, FloorWorkPhotoWithLog[]>>({})
@@ -109,56 +133,138 @@ export default function BodyshopFloorWorkPage() {
   const [edpSaving, setEdpSaving] = useState(false)
   const [isAdminOverview, setIsAdminOverview] = useState(false)
   const [vehicleSearch, setVehicleSearch] = useState('')
+  const [floorMonthFilter, setFloorMonthFilter] = useState('all')
+  const [floorDayFilter, setFloorDayFilter] = useState<FloorDayFilter>('all')
+  const [updateFilter, setUpdateFilter] = useState<UpdateFilter>('all')
+  const [photoCountByJc, setPhotoCountByJc] = useState<Record<string, number>>({})
+  const [loadingPhotoCounts, setLoadingPhotoCounts] = useState(false)
+  const [loadingSelectedPhotos, setLoadingSelectedPhotos] = useState(false)
+  const [listVisibleCount, setListVisibleCount] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
+  const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
+  const assignmentCreatedAtRef = useRef<Record<string, string>>({})
+  const metaLoadedJcsRef = useRef<Set<string>>(new Set())
 
-  const sortedTasks = useMemo(
-    () => sortFloorWorkTasksByVehicle(tasks, cardByJc),
-    [tasks, cardByJc],
+  const monthFilterOptions = useMemo(() => buildFloorWorkMonthFilterOptions(today, 5), [today])
+
+  useEffect(() => {
+    setListVisibleCount(FLOOR_WORK_LIST_PAGE_SIZE)
+  }, [vehicleSearch, floorMonthFilter, floorDayFilter, updateFilter])
+
+  const vehicleHasTodayUpdate = useCallback(
+    (_jobCardNumber: string, rowTasks: BodyshopFloorWorkTask[]) => {
+      if (rowTasks.length === 0) return false
+      if (isAdminOverview) {
+        return rowTasks.some((t) => {
+          const slot = workTaskEmployeeCode(t, employeeCode)
+          const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
+          return Boolean(logsByKey[k]?.note_text?.trim())
+        })
+      }
+      const me = String(employeeCode ?? '').trim().toUpperCase()
+      return rowTasks.some((t) => {
+        if (workTaskEmployeeCode(t, employeeCode) !== me) return false
+        const slot = workTaskEmployeeCode(t, employeeCode)
+        const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
+        return Boolean(logsByKey[k]?.note_text?.trim())
+      })
+    },
+    [employeeCode, isAdminOverview, logsByKey],
   )
 
-  const visibleTasks = useMemo(() => {
-    const q = vehicleSearch.trim().toLowerCase()
-    if (!q) return sortedTasks
-    return sortedTasks.filter((t) => {
-      const meta = cardByJc[t.jobCardNumber]
-      const title = floorWorkVehicleTitle(meta, t.jobCardNumber).toLowerCase()
-      const sub = floorWorkVehicleSubtitle(meta, t.jobCardNumber).toLowerCase()
-      return title.includes(q) || sub.includes(q) || t.jobCardNumber.toLowerCase().includes(q)
-    })
-  }, [sortedTasks, cardByJc, vehicleSearch])
+  const baseJobCards = useMemo(() => {
+    const set = new Set<string>()
+    if (isAdminOverview) {
+      for (const jc of allFloorJcs) set.add(jc)
+      for (const t of tasks) set.add(t.jobCardNumber)
+    } else {
+      for (const t of tasks) set.add(t.jobCardNumber)
+    }
+    return sortJobCardsByFloorDayRecency([...set], cardByJc, today)
+  }, [isAdminOverview, allFloorJcs, tasks, cardByJc, today])
 
   const edpJobCardsSorted = useMemo(
-    () => sortJobCardsByVehicle(allFloorJcs, cardByJc),
-    [allFloorJcs, cardByJc],
+    () => sortJobCardsByFloorDayRecency(allFloorJcs, cardByJc, today),
+    [allFloorJcs, cardByJc, today],
   )
+
+  const filterCounts = useMemo(() => {
+    const floorDay = { all: 0, today: 0, yesterday: 0, older: 0, unknown: 0 }
+    const updates = { all: 0, pending: 0, done: 0 }
+    const q = vehicleSearch.trim().toLowerCase()
+    for (const jc of baseJobCards) {
+      if (q && !jobCardMatchesSearch(jc, cardByJc, q)) continue
+      const meta = cardByJc[jc]
+      if (floorMonthFilter !== 'all') {
+        const ym = istYearMonthFromIso(meta?.floorSinceAt)
+        if (ym !== floorMonthFilter) continue
+      }
+      floorDay.all += 1
+      const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
+      floorDay[bucket] += 1
+      const rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      if (!isAdminOverview && !rowTasks.some((t) => workTaskEmployeeCode(t, employeeCode) === employeeCode)) {
+        continue
+      }
+      updates.all += 1
+      if (vehicleHasTodayUpdate(jc, rowTasks)) updates.done += 1
+      else updates.pending += 1
+    }
+    return { floorDay, updates }
+  }, [
+    baseJobCards,
+    cardByJc,
+    floorMonthFilter,
+    vehicleSearch,
+    tasks,
+    isAdminOverview,
+    employeeCode,
+    today,
+    vehicleHasTodayUpdate,
+  ])
 
   const vehicleRows = useMemo(() => {
     const q = vehicleSearch.trim().toLowerCase()
-    let jcList = isAdminOverview
-      ? sortJobCardsByVehicle(
-          Array.from(new Set([...allFloorJcs, ...tasks.map((t) => t.jobCardNumber)])),
-          cardByJc,
-        )
-      : null
-    if (jcList && q) {
-      jcList = jcList.filter((jc) => jobCardMatchesSearch(jc, cardByJc, q))
-    }
-
-    const seen = new Set<string>()
     const rows: Array<{ jobCardNumber: string; tasks: BodyshopFloorWorkTask[] }> = []
 
-    const sourceJcs = jcList ?? visibleTasks.map((t) => t.jobCardNumber)
-    for (const jc of sourceJcs) {
-      if (seen.has(jc)) continue
-      seen.add(jc)
+    for (const jc of baseJobCards) {
+      if (q && !jobCardMatchesSearch(jc, cardByJc, q)) continue
+      const meta = cardByJc[jc]
+      if (floorMonthFilter !== 'all') {
+        const ym = istYearMonthFromIso(meta?.floorSinceAt)
+        if (ym !== floorMonthFilter) continue
+      }
+      if (floorDayFilter !== 'all') {
+        const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
+        if (bucket !== floorDayFilter) continue
+      }
       const rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
       if (!isAdminOverview) {
-        const visibleOnJc = visibleTasks.filter((x) => x.jobCardNumber === jc)
-        if (visibleOnJc.length === 0) continue
+        const mine = rowTasks.filter((t) => workTaskEmployeeCode(t, employeeCode) === employeeCode)
+        if (mine.length === 0) continue
       }
+      if (updateFilter === 'pending' && vehicleHasTodayUpdate(jc, rowTasks)) continue
+      if (updateFilter === 'done' && !vehicleHasTodayUpdate(jc, rowTasks)) continue
       rows.push({ jobCardNumber: jc, tasks: rowTasks })
     }
     return rows
-  }, [visibleTasks, isAdminOverview, allFloorJcs, tasks, cardByJc, vehicleSearch])
+  }, [
+    baseJobCards,
+    cardByJc,
+    vehicleSearch,
+    floorMonthFilter,
+    floorDayFilter,
+    updateFilter,
+    tasks,
+    isAdminOverview,
+    employeeCode,
+    today,
+    vehicleHasTodayUpdate,
+  ])
+
+  const displayedVehicleRows = useMemo(
+    () => vehicleRows.slice(0, listVisibleCount),
+    [vehicleRows, listVisibleCount],
+  )
 
   const selectedTask = useMemo(() => {
     if (!selectedJc) return null
@@ -170,20 +276,74 @@ export default function BodyshopFloorWorkPage() {
 
   const selectedVehiclePhotos = selectedJc ? (photosByVehicle[selectedJc] ?? []) : []
 
-  const refreshVehiclePhotos = useCallback(
-    async (taskList: BodyshopFloorWorkTask[], cards: typeof cardByJc, extraJcs?: string[]) => {
-      const jcList = Array.from(
-        new Set([...taskList.map((t) => t.jobCardNumber), ...(extraJcs ?? [])]),
-      )
+  const refreshPhotoCounts = useCallback(async (jcs: string[], cards: typeof cardByJc) => {
+    if (jcs.length === 0) {
+      setPhotoCountByJc({})
+      return
+    }
+    setLoadingPhotoCounts(true)
+    try {
       const lookup = new Set<string>()
-      for (const jc of jcList) {
-        for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) {
-          lookup.add(k)
-        }
+      for (const jc of jcs) {
+        for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) lookup.add(k)
       }
-      const phRes = await fetchAllFloorWorkPhotosForJobCards([...lookup])
-      if (phRes.error) return
-      setPhotosByVehicle(groupPhotosByVehicle(jcList, cards, phRes.data ?? []))
+      const phRes = await fetchFloorWorkPhotoCountsForJobCards([...lookup])
+      if (phRes.error || !phRes.data) return
+      const byVehicle: Record<string, number> = {}
+      for (const jc of jcs) {
+        let n = 0
+        for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) {
+          n += phRes.data[k] ?? 0
+        }
+        byVehicle[jc] = n
+      }
+      setPhotoCountByJc((prev) => ({ ...prev, ...byVehicle }))
+    } finally {
+      setLoadingPhotoCounts(false)
+    }
+  }, [])
+
+  const enrichVehicleMetaBatch = useCallback(
+    async (jcs: string[]) => {
+      const todo = jcs.filter((jc) => jc && !metaLoadedJcsRef.current.has(jc))
+      if (todo.length === 0) return
+      setLoadingMoreMeta(true)
+      try {
+        const batch = await fetchRepairCardVehicleByJcs(todo, {
+          assignmentCreatedAtByJc: assignmentCreatedAtRef.current,
+        })
+        for (const jc of todo) metaLoadedJcsRef.current.add(jc)
+        setCardByJc((prev) => ({ ...prev, ...batch }))
+        await refreshPhotoCounts(todo, batch)
+      } finally {
+        setLoadingMoreMeta(false)
+      }
+    },
+    [refreshPhotoCounts],
+  )
+
+  const loadMoreVehicles = useCallback(() => {
+    const next = listVisibleCount + FLOOR_WORK_LIST_PAGE_SIZE
+    setListVisibleCount(next)
+    const jcs = vehicleRows.slice(0, next).map((r) => r.jobCardNumber)
+    void enrichVehicleMetaBatch(jcs)
+  }, [listVisibleCount, vehicleRows, enrichVehicleMetaBatch])
+
+  const loadPhotosForVehicle = useCallback(
+    async (jc: string, cards: typeof cardByJc) => {
+      setLoadingSelectedPhotos(true)
+      try {
+        const lookup = new Set<string>()
+        for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) lookup.add(k)
+        const phRes = await fetchAllFloorWorkPhotosForJobCards([...lookup])
+        if (phRes.error) return
+        setPhotosByVehicle((prev) => ({
+          ...prev,
+          ...groupPhotosByVehicle([jc], cards, phRes.data ?? []),
+        }))
+      } finally {
+        setLoadingSelectedPhotos(false)
+      }
     },
     [],
   )
@@ -241,32 +401,53 @@ export default function BodyshopFloorWorkPage() {
       const assignmentJcs = Array.from(
         new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
       )
+      const assignmentCreatedAtByJc = buildAssignmentCreatedAtByJc(assRows)
       const liveFloorJcs = adminOverview ? await fetchLiveOnFloorJobCardKeys() : []
-      const allJcs = Array.from(new Set([...assignmentJcs, ...liveFloorJcs, ...myTasks.map((t) => t.jobCardNumber)])).sort()
+      const allJcs = Array.from(new Set([...assignmentJcs, ...liveFloorJcs, ...myTasks.map((t) => t.jobCardNumber)]))
       setAllFloorJcs(allJcs)
+      assignmentCreatedAtRef.current = assignmentCreatedAtByJc
+      metaLoadedJcsRef.current = new Set()
+      setListVisibleCount(FLOOR_WORK_LIST_PAGE_SIZE)
 
-      const cards = allJcs.length > 0 ? await fetchRepairCardVehicleByJcs(allJcs) : {}
-      setCardByJc(cards)
+      const minimalCards =
+        allJcs.length > 0
+          ? buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc)
+          : ({} as Record<string, FloorWorkVehicleMeta>)
+      setCardByJc(minimalCards)
 
-      const logsRes = await fetchRoleDailyLogsForDate(today, allJcs.length ? allJcs : undefined)
+      const logsRes = adminOverview
+        ? await fetchRoleDailyLogsForDate(today)
+        : await fetchRoleDailyLogsForDate(today, allJcs.length ? allJcs : undefined)
+
       if (logsRes.error) throw new Error(logsRes.error)
       const lmap: Record<string, BodyshopFloorRoleDailyLogRow> = {}
       for (const row of logsRes.data ?? []) {
         lmap[workLogMapKey(row.job_card_number, row.floor_role, row.employee_code, row.is_support)] = row
       }
       setLogsByKey(lmap)
+      setPhotosByVehicle({})
+      setPhotoCountByJc({})
 
-      await refreshVehiclePhotos(myTasks, cards, adminOverview ? allJcs : undefined)
+      const firstBatch = sortJobCardsByFloorDayRecency(allJcs, minimalCards, today).slice(
+        0,
+        FLOOR_WORK_LIST_PAGE_SIZE,
+      )
+      void enrichVehicleMetaBatch(firstBatch)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
     } finally {
       setLoading(false)
     }
-  }, [today, refreshVehiclePhotos])
+  }, [today, enrichVehicleMetaBatch])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!selectedJc) return
+    void loadPhotosForVehicle(selectedJc, cardByJc)
+  }, [selectedJc, cardByJc, loadPhotosForVehicle])
 
   useEffect(() => {
     if (!selectedTask) {
@@ -341,7 +522,10 @@ export default function BodyshopFloorWorkPage() {
 
       const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCodeForLog, selected.isSupport)
       setLogsByKey((prev) => ({ ...prev, [key]: up.data! }))
-      await refreshVehiclePhotos(tasks, cardByJc)
+      if (selected.jobCardNumber) {
+        await loadPhotosForVehicle(selected.jobCardNumber, cardByJc)
+        void refreshPhotoCounts(allFloorJcs.length ? allFloorJcs : [selected.jobCardNumber], cardByJc)
+      }
       alert('Submitted for today (IST).')
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Save failed')
@@ -428,15 +612,62 @@ export default function BodyshopFloorWorkPage() {
         <>
           <div className="card" style={{ marginBottom: 16 }}>
             <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My assigned vehicles'}</h2>
-            {vehicleRows.length > 0 || isAdminOverview ? (
-              <input
-                className="inp"
-                type="search"
-                placeholder="Search reg no. / customer / JC…"
-                value={vehicleSearch}
-                onChange={(e) => setVehicleSearch(e.target.value)}
-                style={{ marginBottom: 12, maxWidth: 420 }}
-              />
+            {vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0 ? (
+              <>
+                <input
+                  className="inp"
+                  type="search"
+                  placeholder="Search reg no. / customer / JC…"
+                  value={vehicleSearch}
+                  onChange={(e) => setVehicleSearch(e.target.value)}
+                  style={{ marginBottom: 10, maxWidth: 420 }}
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+                  <label className="field" style={{ margin: 0 }}>
+                    <span className="label" style={{ marginRight: 6 }}>Month on floor</span>
+                    <select
+                      className="sel"
+                      value={floorMonthFilter}
+                      onChange={(e) => setFloorMonthFilter(e.target.value)}
+                      style={{ minWidth: 140 }}
+                    >
+                      {monthFilterOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`btn btn--sm ${floorDayFilter === key ? 'btn--primary' : 'btn--quiet'}`}
+                      onClick={() => setFloorDayFilter(key)}
+                    >
+                      {key === 'all' ? 'All days' : floorWorkFloorDayLabel(key)}
+                      {' '}({filterCounts.floorDay[key]})
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                  {(['all', 'pending', 'done'] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`btn btn--sm ${updateFilter === key ? 'btn--primary' : 'btn--quiet'}`}
+                      onClick={() => setUpdateFilter(key)}
+                    >
+                      {key === 'all' ? 'All updates' : key === 'pending' ? 'Pending today' : 'Updated today'}
+                      {' '}({filterCounts.updates[key]})
+                    </button>
+                  ))}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
+                  Sorted: on floor today → yesterday → longer wait
+                  {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
+                </p>
+              </>
             ) : null}
             {vehicleRows.length === 0 ? (
               <p style={{ color: 'var(--muted)' }}>
@@ -445,63 +676,98 @@ export default function BodyshopFloorWorkPage() {
                   : 'No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.'}
               </p>
             ) : (
-              <div className="tbl-wrap scroll">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>Reg no.</th>
-                      <th>Customer</th>
-                      <th>{isAdminOverview ? 'Roles on floor' : 'My role'}</th>
-                      <th>Today</th>
-                      <th>Photos</th>
-                      <th>Time on floor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
-                      const card = cardByJc[jobCardNumber]
-                      const todayUpdated = rowTasks.some((t) => {
-                        const slot = workTaskEmployeeCode(t, employeeCode)
-                        const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
-                        return Boolean(logsByKey[k]?.note_text?.trim())
-                      })
-                      const photoCount = (photosByVehicle[jobCardNumber] ?? []).length
-                      const active = selectedJc === jobCardNumber
-                      return (
-                        <tr
-                          key={jobCardNumber}
-                          onClick={() => setSelectedJc(jobCardNumber)}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
+                  const card = cardByJc[jobCardNumber]
+                  const todayUpdated = rowTasks.some((t) => {
+                    const slot = workTaskEmployeeCode(t, employeeCode)
+                    const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
+                    return Boolean(logsByKey[k]?.note_text?.trim())
+                  })
+                  const photoCount = photoCountByJc[jobCardNumber] ?? 0
+                  const active = selectedJc === jobCardNumber
+                  const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)
+                  return (
+                    <button
+                      key={jobCardNumber}
+                      type="button"
+                      onClick={() => setSelectedJc(jobCardNumber)}
+                      className="card"
+                      style={{
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        margin: 0,
+                        padding: 14,
+                        border: active ? '2px solid var(--primary, #0d9488)' : '1px solid var(--border, #e5e7eb)',
+                        boxShadow: active ? '0 0 0 1px var(--primary, #0d9488)' : undefined,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                        <strong style={{ fontSize: 16 }}>{floorWorkVehicleTitle(card, jobCardNumber)}</strong>
+                        <span
                           style={{
-                            cursor: 'pointer',
-                            background: active ? 'var(--surface-2, #f3f4f6)' : undefined,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: todayUpdated ? 'var(--surface-2, #e0f2fe)' : 'var(--surface-3, #fef3c7)',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          <td><strong>{floorWorkVehicleTitle(card, jobCardNumber)}</strong></td>
-                          <td>{floorWorkVehicleSubtitle(card, jobCardNumber) || '—'}</td>
-                          <td>
-                            {rowTasks.length === 0
-                              ? '—'
-                              : rowTasks.map((t) => BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]).join(', ')
-                                  + (rowTasks.some((t) => t.isSupport) ? ' (support)' : '')}
-                          </td>
-                          <td>
-                            {rowTasks.length === 0
-                              ? '—'
-                              : isAdminOverview
-                                ? (todayUpdated ? 'Some roles updated' : 'Pending')
-                                : (todayUpdated ? '✓ Updated' : 'Pending')}
-                          </td>
-                          <td>{photoCount}</td>
-                          <td>{floorWorkStandingLine(card) ?? '—'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                          {rowTasks.length === 0
+                            ? '—'
+                            : isAdminOverview
+                              ? (todayUpdated ? 'Updated' : 'Pending')
+                              : (todayUpdated ? 'Done' : 'Pending')}
+                        </span>
+                      </div>
+                      <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
+                        {floorWorkVehicleSubtitle(card, jobCardNumber) || 'Customer —'}
+                      </p>
+                      <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--muted)' }}>
+                        {floorWorkStandingLine(card) ?? 'Time on floor —'}
+                        {' · '}{floorWorkFloorDayLabel(floorDay)}
+                      </p>
+                      {rowTasks.length > 0 ? (
+                        <p style={{ margin: '0 0 8px', fontSize: 12, lineHeight: 1.4 }}>
+                          {isAdminOverview ? 'Roles: ' : 'Role: '}
+                          {rowTasks.map((t) => BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]).join(', ')}
+                        </p>
+                      ) : null}
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600 }}>
+                        Photos: {photoCount}
+                      </p>
+                    </button>
+                  )
+                })}
               </div>
             )}
+            {vehicleRows.length > 0 ? (
+              <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
+                  Showing {Math.min(listVisibleCount, vehicleRows.length)} of {vehicleRows.length} vehicles
+                  {loadingMoreMeta ? ' · Loading details…' : ''}
+                </p>
+                {listVisibleCount < vehicleRows.length ? (
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--primary"
+                    disabled={loadingMoreMeta}
+                    onClick={() => loadMoreVehicles()}
+                  >
+                    {loadingMoreMeta ? 'Loading…' : `Load more (${FLOOR_WORK_LIST_PAGE_SIZE})`}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
-              Click a row to submit today&apos;s update and view all photos (every role, every date) for that vehicle.
+              Click a card to view all role photos and submit today&apos;s update (if assigned).
             </p>
           </div>
 
@@ -566,10 +832,14 @@ export default function BodyshopFloorWorkPage() {
                 </p>
               ) : null}
 
-              <BodyshopFloorWorkPhotoGallery
-                photos={selectedVehiclePhotos}
-                title={`All floor work photos — ${selectedVehiclePhotos.length} total (A→Z / oldest first)`}
-              />
+              {loadingSelectedPhotos ? (
+                <p style={{ fontSize: 13, color: 'var(--muted)' }}>Loading photos…</p>
+              ) : (
+                <BodyshopFloorWorkPhotoGallery
+                  photos={selectedVehiclePhotos}
+                  title={`All floor work photos — ${selectedVehiclePhotos.length} total (A→Z / oldest first)`}
+                />
+              )}
             </div>
           ) : null}
         </>

@@ -4,6 +4,7 @@ import {
   inferRegistrationFromAssignmentKey,
   isSystemJobCardKey,
 } from '../bodyshopFloorWork/display'
+import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
 
 const JC_CHUNK = 80
 
@@ -23,6 +24,7 @@ function mergeMeta(
     reg: patch.reg ?? prev.reg,
     customer: patch.customer ?? prev.customer,
     model: patch.model ?? prev.model,
+    systemJobCardNo: patch.systemJobCardNo ?? prev.systemJobCardNo,
     floorSinceAt: patch.floorSinceAt ?? prev.floorSinceAt,
     bodyshopFloor: patch.bodyshopFloor ?? prev.bodyshopFloor,
   }
@@ -93,8 +95,13 @@ async function attachRepairCardFloorTiming(
   }
 }
 
+export type FetchRepairCardVehicleOptions = {
+  assignmentCreatedAtByJc?: Record<string, string | null | undefined>
+}
+
 export async function fetchRepairCardVehicleByJcs(
   assignmentKeys: string[],
+  opts?: FetchRepairCardVehicleOptions,
 ): Promise<Record<string, FloorWorkVehicleMeta>> {
   const keys = Array.from(new Set(assignmentKeys.map(normKey).filter(Boolean)))
   const map: Record<string, FloorWorkVehicleMeta> = {}
@@ -117,6 +124,7 @@ export async function fetchRepairCardVehicleByJcs(
       mergeMeta(map, jc, {
         reg: c.reg_number ?? null,
         customer: c.customer_name ?? null,
+        systemJobCardNo: jc,
       })
     }
   }
@@ -143,6 +151,7 @@ export async function fetchRepairCardVehicleByJcs(
           mergeMeta(map, assignmentKey, {
             reg: c.reg_number ?? null,
             customer: c.customer_name ?? null,
+            systemJobCardNo: normKey(String(c.job_card_no ?? '')),
           })
         }
       }
@@ -180,8 +189,33 @@ export async function fetchRepairCardVehicleByJcs(
     }
   }
 
-  await attachAssignmentFloorTiming(map, keys)
+  const seeded = opts?.assignmentCreatedAtByJc
+  if (seeded) {
+    for (const [jc, createdAt] of Object.entries(seeded)) {
+      const iso = String(createdAt ?? '').trim()
+      if (iso) mergeMeta(map, jc, { floorSinceAt: iso })
+    }
+  } else {
+    await attachAssignmentFloorTiming(map, keys)
+  }
   await attachRepairCardFloorTiming(map, keys)
 
   return map
+}
+
+export async function fetchLiveOnFloorJobCardKeys(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('bodyshop_repair_cards')
+    .select('job_card_no, current_stage, overall_status')
+    .gte('current_stage', 11)
+    .lte('current_stage', 14)
+  if (error) throw new Error(error.message)
+  return Array.from(
+    new Set(
+      (data ?? [])
+        .filter((row) => isLiveOnFloorRepairCard(row))
+        .map((row) => normKey(String(row.job_card_no ?? '')))
+        .filter(Boolean),
+    ),
+  )
 }

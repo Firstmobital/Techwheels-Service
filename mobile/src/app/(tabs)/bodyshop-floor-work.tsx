@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -21,20 +21,20 @@ import {
   fetchBodyshopAssignmentsForEmployee,
   fetchBodyshopSupportAssignmentsForEmployee,
 } from '../../lib/api/bodyshopFloorWorkAssignments'
-import { fetchRepairCardVehicleByJcs } from '../../lib/api/bodyshopFloorWorkVehicles'
+import { fetchLiveOnFloorJobCardKeys, fetchRepairCardVehicleByJcs } from '../../lib/api/bodyshopFloorWorkVehicles'
 import {
-  floorWorkAssignmentDayBucket,
-  floorWorkAssignmentDayChipLabel,
   floorWorkVehicleSubtitle,
   floorWorkVehicleTitle,
   floorWorkStandingLine,
   buildFloorWorkMonthFilterOptions,
-  currentIstYearMonth,
   istYearMonthFromIso,
-  sortFloorWorkTasksByNewestAssignment,
-  type FloorWorkAssignmentDayBucket,
+  sortFloorWorkTasksByFloorDayRecency,
+  floorWorkJobCardLookupKeys,
+  buildMinimalFloorWorkVehicleMeta,
   type FloorWorkVehicleMeta,
 } from '../../lib/bodyshopFloorWork/display'
+
+const FLOOR_WORK_LIST_PAGE_SIZE = 20
 import {
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
   listAllWorkTasksForAdmin,
@@ -48,6 +48,7 @@ import {
   type BodyshopFloorRoleDailyLogRow,
 } from '../../lib/bodyshopFloorRoleWorkLog'
 import {
+  fetchAllFloorWorkPhotosForJobCardKeys,
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForDate,
   openRoleDailyLogPhoto,
@@ -56,8 +57,19 @@ import {
 } from '../../lib/api/bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../../lib/bodyshopFloorRoleWorkLog'
 
-type AssignmentDayFilter = 'all' | FloorWorkAssignmentDayBucket
 type UpdateFilter = 'all' | 'pending' | 'done'
+
+function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of assRows) {
+    const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+    const at = String(row.created_at ?? '').trim()
+    if (!jc || !at) continue
+    const prev = out[jc]
+    if (!prev || new Date(at).getTime() < new Date(prev).getTime()) out[jc] = at
+  }
+  return out
+}
 
 function FilterChip({
   label,
@@ -105,9 +117,14 @@ export default function BodyshopFloorWorkScreen() {
   const [saving, setSaving] = useState(false)
   const [isAdminOverview, setIsAdminOverview] = useState(false)
   const [vehicleSearch, setVehicleSearch] = useState('')
-  const [assignmentMonthFilter, setAssignmentMonthFilter] = useState(() => currentIstYearMonth(today))
-  const [assignmentDayFilter, setAssignmentDayFilter] = useState<AssignmentDayFilter>('all')
+  const [assignmentMonthFilter, setAssignmentMonthFilter] = useState('all')
   const [updateFilter, setUpdateFilter] = useState<UpdateFilter>('pending')
+  const [allVehiclePhotos, setAllVehiclePhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
+  const [loadingAllPhotos, setLoadingAllPhotos] = useState(false)
+  const [listLimit, setListLimit] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
+  const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
+  const assignmentCreatedAtRef = useRef<Record<string, string>>({})
+  const metaLoadedJcsRef = useRef<Set<string>>(new Set())
 
   const monthFilterOptions = useMemo(() => buildFloorWorkMonthFilterOptions(today, 5), [today])
 
@@ -123,12 +140,17 @@ export default function BodyshopFloorWorkScreen() {
 
   const monthFilteredTasks = useMemo(() => {
     if (assignmentMonthFilter === 'all') return tasks
-    return tasks.filter((t) => istYearMonthFromIso(t.assignedAt) === assignmentMonthFilter)
-  }, [tasks, assignmentMonthFilter])
+    return tasks.filter((t) => {
+      const ym =
+        istYearMonthFromIso(vehicleByJc[t.jobCardNumber]?.floorSinceAt)
+        ?? istYearMonthFromIso(t.assignedAt)
+      return ym === assignmentMonthFilter
+    })
+  }, [tasks, assignmentMonthFilter, vehicleByJc])
 
   const searchFilteredTasks = useMemo(() => {
     const q = vehicleSearch.trim().toLowerCase()
-    const sorted = sortFloorWorkTasksByNewestAssignment(monthFilteredTasks, vehicleByJc)
+    const sorted = sortFloorWorkTasksByFloorDayRecency(monthFilteredTasks, vehicleByJc, today)
     if (!q) return sorted
     return sorted.filter((t) => {
       const meta = vehicleByJc[t.jobCardNumber]
@@ -139,30 +161,66 @@ export default function BodyshopFloorWorkScreen() {
   }, [monthFilteredTasks, vehicleByJc, vehicleSearch])
 
   const filterCounts = useMemo(() => {
-    const assignmentDay = { all: 0, today: 0, yesterday: 0, older: 0, unknown: 0 }
     const updates = { all: 0, pending: 0, done: 0 }
     for (const t of searchFilteredTasks) {
-      assignmentDay.all += 1
-      const bucket = floorWorkAssignmentDayBucket(t.assignedAt, today)
-      assignmentDay[bucket] += 1
       updates.all += 1
       if (isTaskDone(t)) updates.done += 1
       else updates.pending += 1
     }
-    return { assignmentDay, updates }
-  }, [searchFilteredTasks, today, isTaskDone])
+    return { updates }
+  }, [searchFilteredTasks, isTaskDone])
 
   const visibleTasks = useMemo(() => {
     return searchFilteredTasks.filter((t) => {
-      if (assignmentDayFilter !== 'all') {
-        const bucket = floorWorkAssignmentDayBucket(t.assignedAt, today)
-        if (bucket !== assignmentDayFilter) return false
-      }
       if (updateFilter === 'pending' && isTaskDone(t)) return false
       if (updateFilter === 'done' && !isTaskDone(t)) return false
       return true
     })
-  }, [searchFilteredTasks, today, assignmentDayFilter, updateFilter, isTaskDone])
+  }, [searchFilteredTasks, updateFilter, isTaskDone])
+
+  const pagedTasks = useMemo(
+    () => visibleTasks.slice(0, listLimit),
+    [visibleTasks, listLimit],
+  )
+
+  useEffect(() => {
+    setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
+  }, [vehicleSearch, assignmentMonthFilter, updateFilter])
+
+  const uniqueJcsFromTasks = useCallback((taskList: BodyshopFloorWorkTask[], maxJcs: number) => {
+    const seen = new Set<string>()
+    const jcs: string[] = []
+    for (const t of taskList) {
+      if (seen.has(t.jobCardNumber)) continue
+      seen.add(t.jobCardNumber)
+      jcs.push(t.jobCardNumber)
+      if (jcs.length >= maxJcs) break
+    }
+    return jcs
+  }, [])
+
+  const enrichVehicleMetaBatch = useCallback(async (jcs: string[]) => {
+    const todo = jcs.filter((jc) => jc && !metaLoadedJcsRef.current.has(jc))
+    if (todo.length === 0) return
+    setLoadingMoreMeta(true)
+    try {
+      const batch = await fetchRepairCardVehicleByJcs(todo, {
+        assignmentCreatedAtByJc: assignmentCreatedAtRef.current,
+      })
+      for (const jc of todo) metaLoadedJcsRef.current.add(jc)
+      setVehicleByJc((prev) => ({ ...prev, ...batch }))
+    } finally {
+      setLoadingMoreMeta(false)
+    }
+  }, [])
+
+  const loadMoreList = useCallback(() => {
+    if (listLimit >= visibleTasks.length) return
+    const next = Math.min(listLimit + FLOOR_WORK_LIST_PAGE_SIZE, visibleTasks.length)
+    setListLimit(next)
+    const jcs = uniqueJcsFromTasks(visibleTasks.slice(0, next), next)
+    void enrichVehicleMetaBatch(jcs)
+  }, [listLimit, visibleTasks, uniqueJcsFromTasks, enrichVehicleMetaBatch])
 
   const load = useCallback(async () => {
     setError(null)
@@ -199,13 +257,28 @@ export default function BodyshopFloorWorkScreen() {
 
       setTasks(taskList)
 
-      const jcs = Array.from(new Set(taskList.map((t) => t.jobCardNumber)))
-      if (jcs.length > 0) {
-        setVehicleByJc(await fetchRepairCardVehicleByJcs(jcs))
+      const assignmentJcs = Array.from(
+        new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
+      )
+      const liveFloorJcs = adminOverview ? await fetchLiveOnFloorJobCardKeys() : []
+      const allJcs = Array.from(
+        new Set([...assignmentJcs, ...liveFloorJcs, ...taskList.map((t) => t.jobCardNumber)]),
+      )
+      const assignmentCreatedAtByJc = buildAssignmentCreatedAtByJc(assRows)
+      assignmentCreatedAtRef.current = assignmentCreatedAtByJc
+      metaLoadedJcsRef.current = new Set()
+      setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
+      if (allJcs.length > 0) {
+        const minimal = buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc)
+        setVehicleByJc(minimal)
+        const sorted = sortFloorWorkTasksByFloorDayRecency(taskList, minimal, today)
+        void enrichVehicleMetaBatch(uniqueJcsFromTasks(sorted, FLOOR_WORK_LIST_PAGE_SIZE))
       } else {
         setVehicleByJc({})
       }
-      const logs = await fetchRoleDailyLogsForDate(today, jcs)
+      const logs = adminOverview
+        ? await fetchRoleDailyLogsForDate(today)
+        : await fetchRoleDailyLogsForDate(today, allJcs)
       const lmap: Record<string, BodyshopFloorRoleDailyLogRow> = {}
       for (const row of logs) {
         lmap[workLogMapKey(row.job_card_number, row.floor_role, row.employee_code, row.is_support)] = row
@@ -214,7 +287,7 @@ export default function BodyshopFloorWorkScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
     }
-  }, [today])
+  }, [today, enrichVehicleMetaBatch, uniqueJcsFromTasks])
 
   useEffect(() => {
     setLoading(true)
@@ -226,6 +299,24 @@ export default function BodyshopFloorWorkScreen() {
     await load()
     setRefreshing(false)
   }, [load])
+
+  useEffect(() => {
+    if (!selected) {
+      setAllVehiclePhotos([])
+      return
+    }
+    if (!isAdminOverview) {
+      setAllVehiclePhotos([])
+      return
+    }
+    const meta = vehicleByJc[selected.jobCardNumber]
+    const keys = floorWorkJobCardLookupKeys(selected.jobCardNumber, meta)
+    setLoadingAllPhotos(true)
+    void fetchAllFloorWorkPhotosForJobCardKeys(keys)
+      .then(setAllVehiclePhotos)
+      .catch(() => setAllVehiclePhotos([]))
+      .finally(() => setLoadingAllPhotos(false))
+  }, [selected, isAdminOverview, vehicleByJc])
 
   useEffect(() => {
     if (!selected) {
@@ -291,8 +382,15 @@ export default function BodyshopFloorWorkScreen() {
     ])
   }
 
+  const canSubmitSelected = useMemo(() => {
+    if (!selected) return false
+    if (!isAdminOverview) return true
+    const me = String(employeeCode ?? '').trim().toUpperCase()
+    return workTaskEmployeeCode(selected, employeeCode) === me
+  }, [selected, isAdminOverview, employeeCode])
+
   async function save() {
-    if (!selected) return
+    if (!selected || !canSubmitSelected) return
     const slotCode = workTaskEmployeeCode(selected, employeeCode)
     if (!slotCode) return
     const trimmed = note.trim()
@@ -436,13 +534,20 @@ export default function BodyshopFloorWorkScreen() {
                   {selected.isSupport ? ' · support' : ''}
                 </Text>
               </View>
-              <Text style={S.arrivalBadge}>
-                {floorWorkAssignmentDayChipLabel(floorWorkAssignmentDayBucket(selected.assignedAt, today))}
-              </Text>
+              {isAdminOverview ? (
+                <Text style={S.arrivalBadge}>
+                  {selected.employeeName?.trim() || selected.assignedEmployeeCode || '—'}
+                </Text>
+              ) : null}
             </View>
+            {!canSubmitSelected && isAdminOverview ? (
+              <Text style={S.adminViewOnlyHint}>View only — this slot is assigned to another employee.</Text>
+            ) : null}
             {floorWorkStandingLine(vehicleByJc[selected.jobCardNumber]) ? (
               <Text style={S.standingLine}>{floorWorkStandingLine(vehicleByJc[selected.jobCardNumber])}</Text>
             ) : null}
+            {canSubmitSelected ? (
+              <>
             <Text style={S.fieldLabel}>Today&apos;s work (IST)</Text>
             <TextInput
               style={S.noteInput}
@@ -457,12 +562,39 @@ export default function BodyshopFloorWorkScreen() {
                 + Photo — Camera or Gallery ({photoUris.length} new)
               </Text>
             </TouchableOpacity>
-            {savedPhotos.length > 0 ? (
-              <View style={S.savedPhotosBox}>
-                <Text style={S.savedPhotosHint}>
-                  Tap to open. Drive link appears after background sync.
-                </Text>
-                {savedPhotos.map((p) => (
+              </>
+            ) : null}
+              {isAdminOverview ? (
+                <View style={S.savedPhotosBox}>
+                  <Text style={S.savedPhotosHint}>
+                    {loadingAllPhotos
+                      ? 'Loading all floor photos for this vehicle…'
+                      : `All floor photos (${allVehiclePhotos.length}) — tap to open`}
+                  </Text>
+                  {allVehiclePhotos.map((p) => (
+                    <TouchableOpacity
+                      key={`all-${p.id}`}
+                      onPress={() =>
+                        void openRoleDailyLogPhoto(p).catch((e) =>
+                          Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
+                        )
+                      }
+                      style={S.savedPhotoRow}
+                    >
+                      <Text style={S.savedPhotoText}>
+                        {p.file_name ?? `Photo ${p.sort_order + 1}`}
+                        {p.drive_url ? ' · Drive' : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+              {savedPhotos.length > 0 ? (
+                <View style={S.savedPhotosBox}>
+                  <Text style={S.savedPhotosHint}>
+                    Tap to open. Drive link appears after background sync.
+                  </Text>
+                  {savedPhotos.map((p) => (
                   <TouchableOpacity
                     key={p.id}
                     onPress={() =>
@@ -480,9 +612,11 @@ export default function BodyshopFloorWorkScreen() {
                 ))}
               </View>
             ) : null}
+            {canSubmitSelected ? (
             <TouchableOpacity onPress={() => void save()} disabled={saving} style={[S.saveBtn, saving && S.saveBtnDisabled]}>
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Submit today&apos;s update</Text>}
             </TouchableOpacity>
+            ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (
@@ -497,7 +631,7 @@ export default function BodyshopFloorWorkScreen() {
             />
           </View>
 
-          <Text style={S.filterSectionLabel}>Assignment month (IST)</Text>
+          <Text style={S.filterSectionLabel}>Month on floor (IST)</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -512,39 +646,6 @@ export default function BodyshopFloorWorkScreen() {
                 onPress={() => setAssignmentMonthFilter(opt.value)}
               />
             ))}
-          </ScrollView>
-
-          <Text style={S.filterSectionLabel}>My assignment date</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={S.filterScrollRow}
-            contentContainerStyle={S.filterScrollContent}
-          >
-            <FilterChip
-              label="All"
-              count={filterCounts.assignmentDay.all}
-              active={assignmentDayFilter === 'all'}
-              onPress={() => setAssignmentDayFilter('all')}
-            />
-            <FilterChip
-              label="Assigned today"
-              count={filterCounts.assignmentDay.today}
-              active={assignmentDayFilter === 'today'}
-              onPress={() => setAssignmentDayFilter('today')}
-            />
-            <FilterChip
-              label="Assigned yesterday"
-              count={filterCounts.assignmentDay.yesterday}
-              active={assignmentDayFilter === 'yesterday'}
-              onPress={() => setAssignmentDayFilter('yesterday')}
-            />
-            <FilterChip
-              label="Assigned earlier"
-              count={filterCounts.assignmentDay.older}
-              active={assignmentDayFilter === 'older'}
-              onPress={() => setAssignmentDayFilter('older')}
-            />
           </ScrollView>
 
           <Text style={S.filterSectionLabel}>Today&apos;s update</Text>
@@ -575,20 +676,47 @@ export default function BodyshopFloorWorkScreen() {
             />
           </ScrollView>
 
-          <Text style={S.listOrderHint}>Newest assignments first · no assign date at bottom</Text>
+          <Text style={S.listOrderHint}>
+            {isAdminOverview
+              ? 'Admin — on floor today → yesterday → longer wait'
+              : 'On floor today → yesterday → longer wait'}
+            {' · '}
+            Showing {pagedTasks.length} of {visibleTasks.length} rows
+            {loadingMoreMeta ? ' · loading details…' : ''}
+          </Text>
 
           <FlatList
-            data={visibleTasks}
+            data={pagedTasks}
             keyExtractor={(item) => `${item.jobCardNumber}-${item.floorRole}-${item.isSupport}`}
             contentContainerStyle={S.listContent}
+            initialNumToRender={12}
+            maxToRenderPerBatch={10}
+            windowSize={7}
+            onEndReached={() => loadMoreList()}
+            onEndReachedThreshold={0.35}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#2a4cd0" />}
+            ListFooterComponent={
+              listLimit < visibleTasks.length ? (
+                <TouchableOpacity
+                  onPress={() => loadMoreList()}
+                  disabled={loadingMoreMeta}
+                  style={S.loadMoreBtn}
+                >
+                  <Text style={S.loadMoreBtnText}>
+                    {loadingMoreMeta ? 'Loading…' : `Load more (${FLOOR_WORK_LIST_PAGE_SIZE})`}
+                  </Text>
+                </TouchableOpacity>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={S.empty}>
                 <Text style={S.emptyIcon}>🚗</Text>
                 <Text style={S.emptyText}>
                   {tasks.length === 0
-                    ? 'No assignment for your code yet. Floor Incharge must assign you on Bodyshop Floor.'
-                    : 'No vehicles match these filters — try another month or filter.'}
+                    ? isAdminOverview
+                      ? 'No active floor assignments yet.'
+                      : 'No assignment for your code yet. Floor Incharge must assign you on Bodyshop Floor.'
+                    : 'No vehicles match these filters — try All months or another update filter.'}
                 </Text>
               </View>
             }
@@ -597,7 +725,6 @@ export default function BodyshopFloorWorkScreen() {
               const key = workLogMapKey(item.jobCardNumber, item.floorRole, slotCode, item.isSupport)
               const done = Boolean(logsByKey[key]?.note_text?.trim())
               const meta = vehicleByJc[item.jobCardNumber]
-              const assignmentDay = floorWorkAssignmentDayBucket(item.assignedAt, today)
               return (
                 <TouchableOpacity onPress={() => setSelected(item)} style={[S.card, done ? S.cardDone : S.cardPending]}>
                   <View style={S.cardTopRow}>
@@ -619,7 +746,11 @@ export default function BodyshopFloorWorkScreen() {
                       {BODYSHOP_FLOOR_WORK_ROLE_LABELS[item.floorRole]}
                       {item.isSupport ? ' · support' : ''}
                     </Text>
-                    <Text style={S.cardArrival}>{floorWorkAssignmentDayChipLabel(assignmentDay)}</Text>
+                    {isAdminOverview ? (
+                      <Text style={S.cardArrival}>
+                        {item.employeeName?.trim() || item.assignedEmployeeCode}
+                      </Text>
+                    ) : null}
                   </View>
                 </TouchableOpacity>
               )
@@ -709,6 +840,15 @@ const S = StyleSheet.create({
   filterChipAccentActive: { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
   filterChipText: { fontSize: 12, fontWeight: '700', color: '#4b4e59' },
   filterChipTextActive: { color: '#fff' },
+  loadMoreBtn: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#2a4cd0',
+    alignItems: 'center',
+  },
+  loadMoreBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   listContent: { padding: 16, paddingTop: 8, paddingBottom: 32 },
   card: {
     backgroundColor: '#fff',
@@ -748,6 +888,7 @@ const S = StyleSheet.create({
   roleBadge: { backgroundColor: '#e9eef3', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   roleBadgeText: { fontSize: 12, fontWeight: '700', color: '#41617f' },
   arrivalBadge: { fontSize: 12, fontWeight: '800', color: '#4b4e59', alignSelf: 'center' },
+  adminViewOnlyHint: { fontSize: 13, color: '#82858f', marginTop: 10, lineHeight: 18 },
   standingLine: { fontSize: 12, color: '#2a4cd0', marginTop: 8, fontWeight: '700' },
   fieldLabel: {
     fontSize: 10.5,
