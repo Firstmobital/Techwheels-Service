@@ -41,7 +41,6 @@ import {
   floorWorkStandingLine,
   floorWorkJobCardLookupKeys,
   floorWorkPhotoBelongsToVehicle,
-  normalizeFloorWorkAssignmentKey,
   buildFloorWorkMonthFilterOptions,
   floorWorkFloorDayBucket,
   floorWorkFloorDayLabel,
