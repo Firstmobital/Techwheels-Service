@@ -15,18 +15,42 @@ import { driveUrlFromUniversalResponse, postUniversalDriveWithRetry } from './po
 const LOG_TABLE = 'bodyshop_floor_role_daily_logs'
 const PHOTO_TABLE = 'bodyshop_floor_role_daily_log_photos'
 
+const LOG_JC_FETCH_CHUNK = 40
+
 export async function fetchRoleDailyLogsForDate(
   updateDate = bodyshopFloorWorkTodayIstDate(),
   jobCardNumbers?: string[],
 ): Promise<BodyshopFloorRoleDailyLogRow[]> {
-  let query = supabase.from(LOG_TABLE).select('*').eq('update_date', updateDate)
-  if (jobCardNumbers?.length) {
-    const keys = Array.from(new Set(jobCardNumbers.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
-    query = query.in('job_card_number', keys)
+  const keys =
+    jobCardNumbers && jobCardNumbers.length > 0
+      ? Array.from(new Set(jobCardNumbers.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
+      : null
+
+  if (!keys || keys.length === 0) {
+    const { data, error } = await supabase
+      .from(LOG_TABLE)
+      .select('*')
+      .eq('update_date', updateDate)
+      .order('updated_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data ?? []) as BodyshopFloorRoleDailyLogRow[]
   }
-  const { data, error } = await query.order('updated_at', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as BodyshopFloorRoleDailyLogRow[]
+
+  const byId = new Map<number, BodyshopFloorRoleDailyLogRow>()
+  for (let i = 0; i < keys.length; i += LOG_JC_FETCH_CHUNK) {
+    const chunk = keys.slice(i, i + LOG_JC_FETCH_CHUNK)
+    const { data, error } = await supabase
+      .from(LOG_TABLE)
+      .select('*')
+      .eq('update_date', updateDate)
+      .in('job_card_number', chunk)
+      .order('updated_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    for (const row of (data ?? []) as BodyshopFloorRoleDailyLogRow[]) {
+      byId.set(row.id, row)
+    }
+  }
+  return [...byId.values()]
 }
 
 export async function upsertRoleDailyLog(input: {

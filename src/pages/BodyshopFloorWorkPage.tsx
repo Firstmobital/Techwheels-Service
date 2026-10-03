@@ -17,7 +17,7 @@ import {
 } from '../lib/bodyshopFloorRoleWorkLog'
 import {
   fetchAllFloorWorkPhotosForJobCards,
-  fetchFloorWorkPhotoCountsForJobCards,
+  fetchFloorWorkPhotoCountsForAssignments,
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForDate,
   upsertRoleDailyLog,
@@ -34,6 +34,11 @@ import {
   fetchBodyshopSupportAssignmentsForEmployee,
 } from '../lib/api/bodyshopFloorWorkAssignments'
 import { fetchLiveOnFloorJobCardKeys, fetchRepairCardVehicleByJcs } from '../lib/api/bodyshopFloorWorkVehicles'
+import { completeBodyshopFloorWorkRoleOnAssignment } from '../lib/api/bodyshopFloorWorkPipeline'
+import {
+  buildAssignmentRowByJobCard,
+  isFloorWorkTaskAtActivePipelineStep,
+} from '../lib/bodyshopFloorWork/pipeline'
 import {
   floorWorkVehicleSubtitle,
   floorWorkVehicleTitle,
@@ -47,6 +52,7 @@ import {
   floorWorkFloorDayBucket,
   floorWorkFloorDayLabel,
   istYearMonthFromIso,
+  currentIstYearMonth,
   type FloorWorkFloorDayBucket,
   type FloorWorkVehicleMeta,
   buildMinimalFloorWorkVehicleMeta,
@@ -127,6 +133,7 @@ export default function BodyshopFloorWorkPage() {
   const [savedPhotos, setSavedPhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
   const [saving, setSaving] = useState(false)
   const [allFloorJcs, setAllFloorJcs] = useState<string[]>([])
+  const [assignmentByJc, setAssignmentByJc] = useState<Record<string, Record<string, unknown>>>({})
 
   const [edpJc, setEdpJc] = useState<string | null>(null)
   const [edpNote, setEdpNote] = useState('')
@@ -215,7 +222,10 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      const rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      if (!isAdminOverview) {
+        rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
+      }
       if (!vehicleInWorkerScope(rowTasks)) continue
 
       const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
@@ -249,6 +259,8 @@ export default function BodyshopFloorWorkPage() {
     vehicleMatchesSearchAndMonth,
     vehicleInWorkerScope,
     vehicleHasTodayUpdate,
+    isAdminOverview,
+    assignmentByJc,
   ])
 
   const vehicleRows = useMemo(() => {
@@ -262,7 +274,10 @@ export default function BodyshopFloorWorkPage() {
         const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
         if (bucket !== floorDayFilter) continue
       }
-      const rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      if (!isAdminOverview) {
+        rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
+      }
       if (!vehicleInWorkerScope(rowTasks)) continue
       if (updateFilter === 'pending' && vehicleHasTodayUpdate(jc, rowTasks)) continue
       if (updateFilter === 'done' && !vehicleHasTodayUpdate(jc, rowTasks)) continue
@@ -280,6 +295,8 @@ export default function BodyshopFloorWorkPage() {
     vehicleMatchesSearchAndMonth,
     vehicleInWorkerScope,
     vehicleHasTodayUpdate,
+    isAdminOverview,
+    assignmentByJc,
   ])
 
   const displayedVehicleRows = useMemo(
@@ -304,21 +321,11 @@ export default function BodyshopFloorWorkPage() {
     }
     setLoadingPhotoCounts(true)
     try {
-      const lookup = new Set<string>()
-      for (const jc of jcs) {
-        for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) lookup.add(k)
-      }
-      const phRes = await fetchFloorWorkPhotoCountsForJobCards([...lookup])
+      const phRes = await fetchFloorWorkPhotoCountsForAssignments(
+        jcs.map((jc) => ({ assignmentKey: jc, meta: cards[jc] })),
+      )
       if (phRes.error || !phRes.data) return
-      const byVehicle: Record<string, number> = {}
-      for (const jc of jcs) {
-        let n = 0
-        for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) {
-          n += phRes.data[k] ?? 0
-        }
-        byVehicle[jc] = n
-      }
-      setPhotoCountByJc((prev) => ({ ...prev, ...byVehicle }))
+      setPhotoCountByJc((prev) => ({ ...prev, ...phRes.data }))
     } finally {
       setLoadingPhotoCounts(false)
     }
@@ -334,8 +341,11 @@ export default function BodyshopFloorWorkPage() {
           assignmentCreatedAtByJc: assignmentCreatedAtRef.current,
         })
         for (const jc of todo) metaLoadedJcsRef.current.add(jc)
-        setCardByJc((prev) => ({ ...prev, ...batch }))
-        await refreshPhotoCounts(todo, batch)
+        setCardByJc((prev) => {
+          const next = { ...prev, ...batch }
+          void refreshPhotoCounts(todo, next)
+          return next
+        })
       } finally {
         setLoadingMoreMeta(false)
       }
@@ -421,6 +431,18 @@ export default function BodyshopFloorWorkPage() {
         throw new Error('No employee linked to your login.')
       }
 
+      const assignmentMap = buildAssignmentRowByJobCard(assRows)
+      if (!adminOverview) {
+        myTasks = myTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentMap[t.jobCardNumber]))
+        setFloorMonthFilter(currentIstYearMonth(today))
+        setFloorDayFilter('today')
+        setUpdateFilter('pending')
+      } else {
+        setFloorMonthFilter('all')
+        setFloorDayFilter('all')
+        setUpdateFilter('all')
+      }
+      setAssignmentByJc(assignmentMap)
       setTasks(myTasks)
 
       const assignmentJcs = Array.from(
@@ -474,6 +496,13 @@ export default function BodyshopFloorWorkPage() {
     const jcs = displayedVehicleRows.map((r) => r.jobCardNumber)
     void enrichVehicleMetaBatch(jcs)
   }, [loading, displayedVehicleRows, enrichVehicleMetaBatch])
+
+  useEffect(() => {
+    if (!selectedJc) return
+    if (!vehicleRows.some((r) => r.jobCardNumber === selectedJc)) {
+      setSelectedJc(null)
+    }
+  }, [vehicleRows, selectedJc])
 
   useEffect(() => {
     if (!selectedJc) return
@@ -553,9 +582,32 @@ export default function BodyshopFloorWorkPage() {
 
       const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCodeForLog, selected.isSupport)
       setLogsByKey((prev) => ({ ...prev, [key]: up.data! }))
+
+      const completeRes = await completeBodyshopFloorWorkRoleOnAssignment({
+        jobCardNumber: selected.jobCardNumber,
+        floorRole: selected.floorRole,
+        actorEmail: user?.email ?? null,
+      })
+      if (completeRes.error) throw new Error(completeRes.error)
+
+      const { data: assRow, error: assReadErr } = await supabase
+        .from('bodyshop_assignments')
+        .select('*')
+        .eq('is_active', true)
+        .eq('job_card_number', selected.jobCardNumber)
+        .maybeSingle()
+      if (assReadErr) throw new Error(assReadErr.message)
+      if (assRow) {
+        const row = assRow as Record<string, unknown>
+        setAssignmentByJc((prev) => ({ ...prev, [selected.jobCardNumber]: row }))
+        if (!isAdminOverview) {
+          setTasks((prev) => prev.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, row)))
+        }
+      }
+
       if (selected.jobCardNumber) {
         await loadPhotosForVehicle(selected.jobCardNumber, cardByJc)
-        void refreshPhotoCounts(allFloorJcs.length ? allFloorJcs : [selected.jobCardNumber], cardByJc)
+        void refreshPhotoCounts([selected.jobCardNumber], cardByJc)
       }
       alert('Submitted for today (IST).')
     } catch (e) {
@@ -569,11 +621,18 @@ export default function BodyshopFloorWorkPage() {
     if (!edpJc) return
     setEdpSaving(true)
     try {
-      const logsRes = await fetchRoleDailyLogsForDate(today, [edpJc])
+      const edpKeys = floorWorkJobCardLookupKeys(edpJc, cardByJc[edpJc])
+      const logsRes = await fetchRoleDailyLogsForDate(today, edpKeys)
       if (logsRes.error) throw new Error(logsRes.error)
+      const aliasKeys = new Set(edpKeys.map((k) => k.toUpperCase()))
       const parts: string[] = []
       for (const role of BODYSHOP_FLOOR_WORK_LOG_ROLES) {
-        const row = (logsRes.data ?? []).find((l) => l.floor_role === role && String(l.note_text ?? '').trim())
+        const row = (logsRes.data ?? []).find(
+          (l) =>
+            l.floor_role === role
+            && String(l.note_text ?? '').trim()
+            && aliasKeys.has(String(l.job_card_number ?? '').trim().toUpperCase()),
+        )
         if (row) parts.push(`${BODYSHOP_FLOOR_WORK_ROLE_LABELS[role]}: ${String(row.note_text).trim()}`)
       }
       const merged = (edpNote.trim() || parts.join(' | ')).trim()
@@ -642,7 +701,13 @@ export default function BodyshopFloorWorkPage() {
       {tab === 'worker' ? (
         <>
           <div className="card" style={{ marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My assigned vehicles'}</h2>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My vehicles — your pipeline step'}</h2>
+            {!isAdminOverview ? (
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
+                Only vehicles on floor <strong>today</strong> (this month) where it is your turn:
+                Dentor → Painter → Technician → Rubbing. Submit today&apos;s update to send the car to the next step.
+              </p>
+            ) : null}
             {vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0 ? (
               <>
                 <div className="bfw-filters">
@@ -865,7 +930,7 @@ export default function BodyshopFloorWorkPage() {
                     disabled={saving}
                     onClick={() => void saveWorkerLog()}
                   >
-                    {saving ? 'Submitting…' : 'Submit today\'s update'}
+                    {saving ? 'Submitting…' : 'Submit & complete my step'}
                   </button>
                 </>
               ) : isAdminOverview ? (

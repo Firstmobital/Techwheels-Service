@@ -32,6 +32,33 @@ export function floorWorkJobCardLookupKeys(
   return [...keys]
 }
 
+export function floorWorkVehicleHasTodayLogUpdate(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+  logsByKey: Record<string, { job_card_number?: string | null; note_text?: string | null }>,
+): boolean {
+  const keys = new Set(floorWorkJobCardLookupKeys(assignmentKey, meta))
+  for (const log of Object.values(logsByKey)) {
+    if (!String(log.note_text ?? '').trim()) continue
+    const logJc = normalizeFloorWorkAssignmentKey(log.job_card_number)
+    if (keys.has(logJc)) return true
+  }
+  return false
+}
+
+export function floorWorkPhotoBelongsToVehicle(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+  photo: { log_job_card_number?: string | null; reg_number?: string | null },
+): boolean {
+  const logJc = normalizeFloorWorkAssignmentKey(photo.log_job_card_number)
+  const keys = floorWorkJobCardLookupKeys(assignmentKey, meta)
+  if (logJc && keys.includes(logJc)) return true
+  const photoReg = normalizeFloorWorkAssignmentKey(photo.reg_number)
+  const vehicleReg = normalizeFloorWorkAssignmentKey(resolveFloorWorkRegistration(meta, assignmentKey))
+  return Boolean(photoReg && vehicleReg && photoReg === vehicleReg)
+}
+
 export function inferRegistrationFromAssignmentKey(jobCardNumber: string): string | null {
   const v = String(jobCardNumber ?? '').trim()
   if (!v || isSystemJobCardKey(v)) return null

@@ -31,8 +31,15 @@ import {
   sortFloorWorkTasksByFloorDayRecency,
   floorWorkJobCardLookupKeys,
   buildMinimalFloorWorkVehicleMeta,
+  currentIstYearMonth,
+  floorWorkFloorDayBucket,
   type FloorWorkVehicleMeta,
 } from '../../lib/bodyshopFloorWork/display'
+import {
+  buildAssignmentRowByJobCard,
+  isFloorWorkTaskAtActivePipelineStep,
+} from '../../lib/bodyshopFloorWork/pipeline'
+import { completeBodyshopFloorWorkRoleOnAssignment } from '../../lib/api/bodyshopFloorWorkPipeline'
 
 const FLOOR_WORK_LIST_PAGE_SIZE = 20
 import {
@@ -58,6 +65,7 @@ import {
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../../lib/bodyshopFloorRoleWorkLog'
 
 type UpdateFilter = 'all' | 'pending' | 'done'
+type FloorDayFilter = 'all' | 'today' | 'yesterday' | 'older' | 'unknown'
 
 function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -118,7 +126,9 @@ export default function BodyshopFloorWorkScreen() {
   const [isAdminOverview, setIsAdminOverview] = useState(false)
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [assignmentMonthFilter, setAssignmentMonthFilter] = useState('all')
+  const [floorDayFilter, setFloorDayFilter] = useState<FloorDayFilter>('today')
   const [updateFilter, setUpdateFilter] = useState<UpdateFilter>('pending')
+  const [assignmentByJc, setAssignmentByJc] = useState<Record<string, Record<string, unknown>>>({})
   const [allVehiclePhotos, setAllVehiclePhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
   const [loadingAllPhotos, setLoadingAllPhotos] = useState(false)
   const [listLimit, setListLimit] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
@@ -172,11 +182,16 @@ export default function BodyshopFloorWorkScreen() {
 
   const visibleTasks = useMemo(() => {
     return searchFilteredTasks.filter((t) => {
+      if (!isAdminOverview) {
+        if (!isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[t.jobCardNumber])) return false
+        const bucket = floorWorkFloorDayBucket(vehicleByJc[t.jobCardNumber]?.floorSinceAt, today)
+        if (floorDayFilter !== 'all' && bucket !== floorDayFilter) return false
+      }
       if (updateFilter === 'pending' && isTaskDone(t)) return false
       if (updateFilter === 'done' && !isTaskDone(t)) return false
       return true
     })
-  }, [searchFilteredTasks, updateFilter, isTaskDone])
+  }, [searchFilteredTasks, updateFilter, isTaskDone, isAdminOverview, assignmentByJc, vehicleByJc, floorDayFilter, today])
 
   const pagedTasks = useMemo(
     () => visibleTasks.slice(0, listLimit),
@@ -185,7 +200,7 @@ export default function BodyshopFloorWorkScreen() {
 
   useEffect(() => {
     setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
-  }, [vehicleSearch, assignmentMonthFilter, updateFilter])
+  }, [vehicleSearch, assignmentMonthFilter, floorDayFilter, updateFilter])
 
   const uniqueJcsFromTasks = useCallback((taskList: BodyshopFloorWorkTask[], maxJcs: number) => {
     const seen = new Set<string>()
@@ -255,6 +270,18 @@ export default function BodyshopFloorWorkScreen() {
         throw new Error('No employee linked to your login.')
       }
 
+      const assignmentMap = buildAssignmentRowByJobCard(assRows)
+      if (!adminOverview) {
+        taskList = taskList.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentMap[t.jobCardNumber]))
+        setAssignmentMonthFilter(currentIstYearMonth(today))
+        setFloorDayFilter('today')
+        setUpdateFilter('pending')
+      } else {
+        setAssignmentMonthFilter('all')
+        setFloorDayFilter('all')
+        setUpdateFilter('all')
+      }
+      setAssignmentByJc(assignmentMap)
       setTasks(taskList)
 
       const assignmentJcs = Array.from(
@@ -278,7 +305,10 @@ export default function BodyshopFloorWorkScreen() {
       }
       const logs = adminOverview
         ? await fetchRoleDailyLogsForDate(today)
-        : await fetchRoleDailyLogsForDate(today, allJcs)
+        : await fetchRoleDailyLogsForDate(
+            today,
+            allJcs.length > 0 ? allJcs : taskList.map((t) => t.jobCardNumber),
+          )
       const lmap: Record<string, BodyshopFloorRoleDailyLogRow> = {}
       for (const row of logs) {
         lmap[workLogMapKey(row.job_card_number, row.floor_role, row.employee_code, row.is_support)] = row
@@ -293,6 +323,12 @@ export default function BodyshopFloorWorkScreen() {
     setLoading(true)
     void load().finally(() => setLoading(false))
   }, [load])
+
+  useEffect(() => {
+    if (loading || pagedTasks.length === 0) return
+    const jcs = uniqueJcsFromTasks(pagedTasks, pagedTasks.length)
+    void enrichVehicleMetaBatch(jcs)
+  }, [loading, pagedTasks, uniqueJcsFromTasks, enrichVehicleMetaBatch])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -317,6 +353,18 @@ export default function BodyshopFloorWorkScreen() {
       .catch(() => setAllVehiclePhotos([]))
       .finally(() => setLoadingAllPhotos(false))
   }, [selected, isAdminOverview, vehicleByJc])
+
+  const reloadAdminVehiclePhotos = useCallback(async (task: BodyshopFloorWorkTask) => {
+    if (!isAdminOverview) return
+    const meta = vehicleByJc[task.jobCardNumber]
+    const keys = floorWorkJobCardLookupKeys(task.jobCardNumber, meta)
+    try {
+      const photos = await fetchAllFloorWorkPhotosForJobCardKeys(keys)
+      setAllVehiclePhotos(photos)
+    } catch {
+      setAllVehiclePhotos([])
+    }
+  }, [isAdminOverview, vehicleByJc])
 
   useEffect(() => {
     if (!selected) {
@@ -444,6 +492,31 @@ export default function BodyshopFloorWorkScreen() {
       const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCodeForLog, selected.isSupport)
       setLogsByKey((prev) => ({ ...prev, [key]: row }))
       setPhotoUris([])
+
+      await completeBodyshopFloorWorkRoleOnAssignment({
+        jobCardNumber: selected.jobCardNumber,
+        floorRole: selected.floorRole,
+        actorEmail: user?.email ?? null,
+      })
+
+      const { data: assRow, error: assReadErr } = await supabase
+        .from('bodyshop_assignments')
+        .select('*')
+        .eq('is_active', true)
+        .eq('job_card_number', selected.jobCardNumber)
+        .maybeSingle()
+      if (assReadErr) throw new Error(assReadErr.message)
+      if (assRow) {
+        const assignmentRow = assRow as Record<string, unknown>
+        setAssignmentByJc((prev) => ({ ...prev, [selected.jobCardNumber]: assignmentRow }))
+        if (!isAdminOverview) {
+          setTasks((prev) => prev.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentRow)))
+        }
+      }
+
+      if (uploadedPhotos.length > 0) {
+        void reloadAdminVehiclePhotos(selected)
+      }
       const driveHint =
         uploadedPhotos.length > 0
           ? ' Photos are saved. Google Drive link will sync in the background (no need to wait).'
@@ -614,7 +687,7 @@ export default function BodyshopFloorWorkScreen() {
             ) : null}
             {canSubmitSelected ? (
             <TouchableOpacity onPress={() => void save()} disabled={saving} style={[S.saveBtn, saving && S.saveBtnDisabled]}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Submit today&apos;s update</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Submit & complete my step</Text>}
             </TouchableOpacity>
             ) : null}
           </ScrollView>

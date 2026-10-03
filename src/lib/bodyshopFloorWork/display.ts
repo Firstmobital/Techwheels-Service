@@ -36,7 +36,6 @@ export function floorWorkJobCardLookupKeys(
   return [...keys]
 }
 
-/** Match a stored photo/log to a floor work vehicle card (JC vs plate-as-JC). */
 /** Any role submitted today's IST log for this vehicle (admin list / filters). */
 export function floorWorkVehicleHasTodayLogUpdate(
   assignmentKey: string,

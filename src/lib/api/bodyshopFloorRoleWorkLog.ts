@@ -7,7 +7,13 @@ import {
   type BodyshopFloorRoleDailyLogRow,
 } from '../bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorWorkLogRole } from '../bodyshopFloorWork/roles'
-import { inferRegistrationFromAssignmentKey, normalizeFloorWorkAssignmentKey } from '../bodyshopFloorWork/display'
+import {
+  floorWorkJobCardLookupKeys,
+  floorWorkPhotoBelongsToVehicle,
+  inferRegistrationFromAssignmentKey,
+  normalizeFloorWorkAssignmentKey,
+  type FloorWorkVehicleMeta,
+} from '../bodyshopFloorWork/display'
 import { driveUrlFromUniversalResponse, postUniversalDriveWithRetry } from './postUniversalDriveUpload'
 import { fail, ok, type ApiResult } from './types'
 
@@ -18,14 +24,36 @@ export async function fetchRoleDailyLogsForDate(
   updateDate = bodyshopFloorWorkTodayIstDate(),
   jobCardNumbers?: string[],
 ): Promise<ApiResult<BodyshopFloorRoleDailyLogRow[]>> {
-  let query = supabase.from(LOG_TABLE).select('*').eq('update_date', updateDate)
-  if (jobCardNumbers && jobCardNumbers.length > 0) {
-    const keys = Array.from(new Set(jobCardNumbers.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
-    query = query.in('job_card_number', keys)
+  const keys =
+    jobCardNumbers && jobCardNumbers.length > 0
+      ? Array.from(new Set(jobCardNumbers.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
+      : null
+
+  if (!keys || keys.length === 0) {
+    const { data, error } = await supabase
+      .from(LOG_TABLE)
+      .select('*')
+      .eq('update_date', updateDate)
+      .order('updated_at', { ascending: false })
+    if (error) return fail(error.message)
+    return ok((data ?? []) as BodyshopFloorRoleDailyLogRow[])
   }
-  const { data, error } = await query.order('updated_at', { ascending: false })
-  if (error) return fail(error.message)
-  return ok((data ?? []) as BodyshopFloorRoleDailyLogRow[])
+
+  const byId = new Map<number, BodyshopFloorRoleDailyLogRow>()
+  for (let i = 0; i < keys.length; i += LOG_JC_CHUNK) {
+    const chunk = keys.slice(i, i + LOG_JC_CHUNK)
+    const { data, error } = await supabase
+      .from(LOG_TABLE)
+      .select('*')
+      .eq('update_date', updateDate)
+      .in('job_card_number', chunk)
+      .order('updated_at', { ascending: false })
+    if (error) return fail(error.message)
+    for (const row of (data ?? []) as BodyshopFloorRoleDailyLogRow[]) {
+      byId.set(row.id, row)
+    }
+  }
+  return ok([...byId.values()])
 }
 
 export async function fetchRoleDailyLogPhotos(logIds: number[]): Promise<ApiResult<BodyshopFloorRoleDailyLogPhotoRow[]>> {
@@ -193,6 +221,25 @@ export async function fetchFloorWorkPhotoCountsForJobCards(
     }
   }
 
+  return ok(counts)
+}
+
+/** Unique photo totals per assignment card (no double-count across JC/reg aliases). */
+export async function fetchFloorWorkPhotoCountsForAssignments(
+  items: Array<{ assignmentKey: string; meta?: FloorWorkVehicleMeta }>,
+): Promise<ApiResult<Record<string, number>>> {
+  if (items.length === 0) return ok({})
+  const lookup = new Set<string>()
+  for (const { assignmentKey, meta } of items) {
+    for (const k of floorWorkJobCardLookupKeys(assignmentKey, meta)) lookup.add(k)
+  }
+  const phRes = await fetchAllFloorWorkPhotosForJobCards([...lookup])
+  if (phRes.error) return fail(phRes.error)
+  const photos = phRes.data ?? []
+  const counts: Record<string, number> = {}
+  for (const { assignmentKey, meta } of items) {
+    counts[assignmentKey] = photos.filter((p) => floorWorkPhotoBelongsToVehicle(assignmentKey, meta, p)).length
+  }
   return ok(counts)
 }
 
