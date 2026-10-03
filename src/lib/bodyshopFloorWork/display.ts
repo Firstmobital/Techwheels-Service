@@ -36,6 +36,20 @@ export function floorWorkJobCardLookupKeys(
   return [...keys]
 }
 
+/** Match a stored photo/log to a floor work vehicle card (JC vs plate-as-JC). */
+export function floorWorkPhotoBelongsToVehicle(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+  photo: { log_job_card_number?: string | null; reg_number?: string | null },
+): boolean {
+  const logJc = normalizeFloorWorkAssignmentKey(photo.log_job_card_number)
+  const keys = floorWorkJobCardLookupKeys(assignmentKey, meta)
+  if (logJc && keys.includes(logJc)) return true
+  const photoReg = normalizeFloorWorkAssignmentKey(photo.reg_number)
+  const vehicleReg = normalizeFloorWorkAssignmentKey(resolveFloorWorkRegistration(meta, assignmentKey))
+  return Boolean(photoReg && vehicleReg && photoReg === vehicleReg)
+}
+
 export function inferRegistrationFromAssignmentKey(jobCardNumber: string): string | null {
   const v = String(jobCardNumber ?? '').trim()
   if (!v || isSystemJobCardKey(v)) return null

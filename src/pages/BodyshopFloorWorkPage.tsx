@@ -40,6 +40,7 @@ import {
   edpVehicleOptionLabel,
   floorWorkStandingLine,
   floorWorkJobCardLookupKeys,
+  floorWorkPhotoBelongsToVehicle,
   normalizeFloorWorkAssignmentKey,
   buildFloorWorkMonthFilterOptions,
   floorWorkFloorDayBucket,
@@ -88,10 +89,8 @@ function groupPhotosByVehicle(
   for (const jc of jcList) byVehicle[jc] = []
 
   for (const p of photos) {
-    const logJc = normalizeFloorWorkAssignmentKey(p.log_job_card_number)
     for (const jc of jcList) {
-      const keys = floorWorkJobCardLookupKeys(jc, cardByJc[jc])
-      if (!keys.includes(logJc)) continue
+      if (!floorWorkPhotoBelongsToVehicle(jc, cardByJc[jc], p)) continue
       if (!byVehicle[jc].some((x) => x.id === p.id)) byVehicle[jc].push(p)
     }
   }
@@ -139,6 +138,7 @@ export default function BodyshopFloorWorkPage() {
   const [photoCountByJc, setPhotoCountByJc] = useState<Record<string, number>>({})
   const [loadingPhotoCounts, setLoadingPhotoCounts] = useState(false)
   const [loadingSelectedPhotos, setLoadingSelectedPhotos] = useState(false)
+  const [selectedPhotosError, setSelectedPhotosError] = useState<string | null>(null)
   const [listVisibleCount, setListVisibleCount] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
@@ -332,11 +332,15 @@ export default function BodyshopFloorWorkPage() {
   const loadPhotosForVehicle = useCallback(
     async (jc: string, cards: typeof cardByJc) => {
       setLoadingSelectedPhotos(true)
+      setSelectedPhotosError(null)
       try {
         const lookup = new Set<string>()
         for (const k of floorWorkJobCardLookupKeys(jc, cards[jc])) lookup.add(k)
         const phRes = await fetchAllFloorWorkPhotosForJobCards([...lookup])
-        if (phRes.error) return
+        if (phRes.error) {
+          setSelectedPhotosError(phRes.error)
+          return
+        }
         setPhotosByVehicle((prev) => ({
           ...prev,
           ...groupPhotosByVehicle([jc], cards, phRes.data ?? []),
@@ -832,6 +836,9 @@ export default function BodyshopFloorWorkPage() {
                 </p>
               ) : null}
 
+              {selectedPhotosError ? (
+                <p style={{ fontSize: 13, color: 'var(--danger, #b91c1c)' }}>{selectedPhotosError}</p>
+              ) : null}
               {loadingSelectedPhotos ? (
                 <p style={{ fontSize: 13, color: 'var(--muted)' }}>Loading photos…</p>
               ) : (

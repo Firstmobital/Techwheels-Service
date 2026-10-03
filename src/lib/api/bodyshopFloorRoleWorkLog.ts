@@ -7,7 +7,7 @@ import {
   type BodyshopFloorRoleDailyLogRow,
 } from '../bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorWorkLogRole } from '../bodyshopFloorWork/roles'
-import { inferRegistrationFromAssignmentKey } from '../bodyshopFloorWork/display'
+import { inferRegistrationFromAssignmentKey, normalizeFloorWorkAssignmentKey } from '../bodyshopFloorWork/display'
 import { driveUrlFromUniversalResponse, postUniversalDriveWithRetry } from './postUniversalDriveUpload'
 import { fail, ok, type ApiResult } from './types'
 
@@ -57,6 +57,17 @@ export type FloorWorkPhotoWithLog = BodyshopFloorRoleDailyLogPhotoRow & {
 const LOG_META_SELECT = 'id, job_card_number, update_date, floor_role, employee_code, employee_name, note_text'
 const LOG_JC_CHUNK = 40
 
+function registrationKeysFromLookup(keys: string[]): string[] {
+  return Array.from(
+    new Set(
+      keys
+        .map((k) => inferRegistrationFromAssignmentKey(k))
+        .filter(Boolean)
+        .map((r) => normalizeFloorWorkAssignmentKey(r)),
+    ),
+  )
+}
+
 async function fetchDailyLogsForJobCardKeys(keys: string[]): Promise<DailyLogMeta[]> {
   const unique = Array.from(new Set(keys.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
   if (unique.length === 0) return []
@@ -69,6 +80,30 @@ async function fetchDailyLogsForJobCardKeys(keys: string[]): Promise<DailyLogMet
       byId.set(row.id, row)
     }
   }
+
+  const regKeys = registrationKeysFromLookup(unique)
+  if (regKeys.length > 0) {
+    const extraLogIds = new Set<number>()
+    for (let i = 0; i < regKeys.length; i += LOG_JC_CHUNK) {
+      const chunk = regKeys.slice(i, i + LOG_JC_CHUNK)
+      const { data, error } = await supabase.from(PHOTO_TABLE).select('log_id').in('reg_number', chunk)
+      if (error) throw new Error(error.message)
+      for (const row of data ?? []) {
+        const id = Number(row.log_id)
+        if (Number.isFinite(id) && !byId.has(id)) extraLogIds.add(id)
+      }
+    }
+    const missing = [...extraLogIds]
+    for (let i = 0; i < missing.length; i += 80) {
+      const chunk = missing.slice(i, i + 80)
+      const { data, error } = await supabase.from(LOG_TABLE).select(LOG_META_SELECT).in('id', chunk)
+      if (error) throw new Error(error.message)
+      for (const row of (data ?? []) as DailyLogMeta[]) {
+        byId.set(row.id, row)
+      }
+    }
+  }
+
   return [...byId.values()]
 }
 
@@ -140,18 +175,21 @@ export async function fetchFloorWorkPhotoCountsForJobCards(
   }
   if (logRows.length === 0) return ok(Object.fromEntries(keys.map((k) => [k, 0])))
 
-  const logIdToJc = new Map(logRows.map((l) => [l.id, normalizeBodyshopFloorWorkJc(l.job_card_number)]))
+  const logById = new Map(logRows.map((l) => [l.id, l]))
   const counts: Record<string, number> = Object.fromEntries(keys.map((k) => [k, 0]))
   const logIds = logRows.map((l) => l.id)
 
   for (let i = 0; i < logIds.length; i += 120) {
     const chunk = logIds.slice(i, i + 120)
-    const { data, error } = await supabase.from(PHOTO_TABLE).select('log_id').in('log_id', chunk)
+    const { data, error } = await supabase.from(PHOTO_TABLE).select('log_id, reg_number').in('log_id', chunk)
     if (error) return fail(error.message)
     for (const row of data ?? []) {
-      const jc = logIdToJc.get(Number(row.log_id))
-      if (!jc) continue
-      counts[jc] = (counts[jc] ?? 0) + 1
+      const log = logById.get(Number(row.log_id))
+      if (!log) continue
+      const logJc = normalizeBodyshopFloorWorkJc(log.job_card_number)
+      if (keys.includes(logJc)) counts[logJc] = (counts[logJc] ?? 0) + 1
+      const reg = normalizeFloorWorkAssignmentKey(row.reg_number)
+      if (reg && keys.includes(reg)) counts[reg] = (counts[reg] ?? 0) + 1
     }
   }
 

@@ -205,15 +205,35 @@ export async function fetchAllFloorWorkPhotosForJobCardKeys(
   const keys = Array.from(new Set(jobCardKeys.map((k) => normalizeBodyshopFloorWorkJc(k)).filter(Boolean)))
   if (keys.length === 0) return []
 
-  const logIds: number[] = []
+  const logIdSet = new Set<number>()
   for (let i = 0; i < keys.length; i += LOG_JC_CHUNK) {
     const chunk = keys.slice(i, i + LOG_JC_CHUNK)
     const { data, error } = await supabase.from(LOG_TABLE).select('id').in('job_card_number', chunk)
     if (error) throw new Error(error.message)
     for (const row of data ?? []) {
-      if (typeof row.id === 'number') logIds.push(row.id)
+      if (typeof row.id === 'number') logIdSet.add(row.id)
     }
   }
+
+  const regKeys = Array.from(
+    new Set(
+      keys
+        .map((k) => inferRegistrationFromAssignmentKey(k))
+        .filter(Boolean)
+        .map((r) => String(r).trim().toUpperCase()),
+    ),
+  )
+  for (let i = 0; i < regKeys.length; i += LOG_JC_CHUNK) {
+    const chunk = regKeys.slice(i, i + LOG_JC_CHUNK)
+    const { data, error } = await supabase.from(PHOTO_TABLE).select('log_id').in('reg_number', chunk)
+    if (error) throw new Error(error.message)
+    for (const row of data ?? []) {
+      const id = Number(row.log_id)
+      if (Number.isFinite(id)) logIdSet.add(id)
+    }
+  }
+
+  const logIds = [...logIdSet]
   if (logIds.length === 0) return []
 
   const photos: BodyshopFloorRoleDailyLogPhotoRow[] = []
