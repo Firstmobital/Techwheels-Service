@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-30T07:19:11.413Z",
-  "scanned_files": 82,
+  "generated_at_utc": "2026-10-03T06:36:17.787Z",
+  "scanned_files": 83,
   "violations": 0,
   "scanned": [
     {
@@ -581,6 +581,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-002_REVISIT_DETECTION_PLAN_2026-08-06.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-003_RECEPTION_IDENTITY_LOCATION_SCOPED_SA_PLAN_2026-09-30.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

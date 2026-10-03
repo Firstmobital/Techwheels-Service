@@ -3,6 +3,8 @@ import { getDealerSettings, saveDealerSetting } from '../lib/api/dealerSettings'
 import * as XLSX from 'xlsx'
 import { normalizeDepartmentDisplay } from '../lib/department'
 import { validateAndCanonicalizeRoles } from '../lib/businessRoles'
+import { setEmployeeActive } from '../lib/api/payroll'
+import { isEmployeeCurrentlyActive } from '../lib/employeeActive'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { HelpdeskContactsSettingsSection } from '../components/settings/HelpdeskContactsSettingsSection'
@@ -64,6 +66,8 @@ import {
   suggestCatalogueServiceNames,
 } from '../lib/catalogueIdentity'
 
+type EmployeeStatusScope = 'active' | 'inactive' | 'all'
+
 interface EmployeeRow {
   id: number
   employee_code: string
@@ -75,6 +79,7 @@ interface EmployeeRow {
   bank_name: string | null
   account_number: string | null
   ifsc: string | null
+  is_active: boolean | null
 }
 
 interface MappingIssueRow {
@@ -367,7 +372,7 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false)
   const [savingCode, setSavingCode] = useState<string | null>(null)
   const [resolvingIssueId, setResolvingIssueId] = useState<number | null>(null)
-  const [deletingEmployeeId, setDeletingEmployeeId] = useState<number | null>(null)
+  const [lifecycleEmployeeId, setLifecycleEmployeeId] = useState<number | null>(null)
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null)
   const [editBaselineCodes, setEditBaselineCodes] = useState<Record<number, string>>({})
 
@@ -399,13 +404,18 @@ export default function SettingsPage() {
     ifsc: '',
   })
   const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employeeStatusFilter, setEmployeeStatusFilter] = useState<EmployeeStatusScope>('active')
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false)
 
   const filteredEmployees = useMemo(() => {
     const query = employeeSearch.trim().toLowerCase()
-    if (!query) return employees
 
     return employees.filter((employee) => {
+      if (employeeStatusFilter === 'active' && !isEmployeeCurrentlyActive(employee)) return false
+      if (employeeStatusFilter === 'inactive' && isEmployeeCurrentlyActive(employee)) return false
+
+      if (!query) return true
+
       const haystack = [
         employee.employee_code,
         employee.employee_name,
@@ -421,7 +431,7 @@ export default function SettingsPage() {
         .toLowerCase()
       return haystack.includes(query)
     })
-  }, [employees, employeeSearch])
+  }, [employees, employeeSearch, employeeStatusFilter])
 
   const handleExportEmployees = useCallback(() => {
     if (employees.length === 0) {
@@ -811,7 +821,10 @@ export default function SettingsPage() {
   })
 
   const employeeOptions = useMemo(
-    () => employees.map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
+    () =>
+      employees
+        .filter((employee) => isEmployeeCurrentlyActive(employee))
+        .map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
     [employees],
   )
 
@@ -1106,7 +1119,7 @@ export default function SettingsPage() {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('id, employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc')
+      .select('id, employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc, is_active')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
@@ -1616,29 +1629,28 @@ export default function SettingsPage() {
     }
   }, [issues, employees, fetchIssues])
 
-  const handleDeleteEmployee = useCallback(async (employee: EmployeeRow) => {
-    if (!window.confirm(`Delete ${employee.employee_code} - ${employee.employee_name}?`)) {
-      return
+  const handleEmployeeLifecycle = useCallback(async (employee: EmployeeRow, nextActive: boolean) => {
+    const label = `${employee.employee_code} — ${employee.employee_name}`
+    if (!nextActive) {
+      const confirmed = window.confirm(
+        `Deactivate ${label}?\n\nThe employee will be removed from current operational selections. Historical records and user mappings will remain.`,
+      )
+      if (!confirmed) return
     }
 
-    setDeletingEmployeeId(employee.id)
+    setLifecycleEmployeeId(employee.id)
     setMessage(null)
     setError(null)
 
-    const { error: deleteError } = await supabase
-      .from('employee_master')
-      .delete()
-      .eq('id', employee.id)
-
-    if (deleteError) {
-      setError(deleteError.message)
-      setDeletingEmployeeId(null)
-      return
+    try {
+      await setEmployeeActive(employee.employee_code.trim(), nextActive)
+      setMessage(nextActive ? `Reactivated ${employee.employee_code}.` : `Deactivated ${employee.employee_code}.`)
+      await fetchEmployees()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Employee lifecycle update failed')
+    } finally {
+      setLifecycleEmployeeId(null)
     }
-
-    setMessage(`Deleted ${employee.employee_code}.`)
-    setDeletingEmployeeId(null)
-    await fetchEmployees()
   }, [fetchEmployees])
 
   useEffect(() => {
@@ -2471,16 +2483,27 @@ export default function SettingsPage() {
               Governance: Business Role supports comma-separated values (example: PAINTER, RUBBING). Platform Role is managed in Admin → Users.
             </div>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative w-full sm:max-w-sm">
-                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
-                  <Icon name="search" size={14} strokeWidth={2.2} />
-                </span>
-                <input
-                  value={employeeSearch}
-                  onChange={(event) => setEmployeeSearch(event.target.value)}
-                  placeholder="Search code, name, role, location, bank, IFSC"
-                  className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-                />
+              <div className="flex w-full flex-col gap-2 sm:max-w-xl sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
+                    <Icon name="search" size={14} strokeWidth={2.2} />
+                  </span>
+                  <input
+                    value={employeeSearch}
+                    onChange={(event) => setEmployeeSearch(event.target.value)}
+                    placeholder="Search code, name, role, location, bank, IFSC"
+                    className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
+                  />
+                </div>
+                <select
+                  value={employeeStatusFilter}
+                  onChange={(event) => setEmployeeStatusFilter(event.target.value as EmployeeStatusScope)}
+                  className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="all">All</option>
+                </select>
               </div>
               <span className="text-xs font-medium text-gray-500">{filteredEmployees.length} shown</span>
             </div>
@@ -2576,18 +2599,21 @@ export default function SettingsPage() {
                     <th className="px-3 py-2 font-semibold">Bank Name</th>
                     <th className="px-3 py-2 font-semibold">Account Number</th>
                     <th className="px-3 py-2 font-semibold">IFSC</th>
+                    <th className="px-3 py-2 font-semibold">Status</th>
                     <th className="px-3 py-2 font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingEmployees ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={10}>Loading employees...</td>
+                      <td className="px-3 py-3 text-gray-400" colSpan={11}>Loading employees...</td>
                     </tr>
                   ) : filteredEmployees.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={10}>
-                        {employees.length === 0 ? 'No employees found.' : 'No matching employees for current search.'}
+                      <td className="px-3 py-3 text-gray-400" colSpan={11}>
+                        {employees.length === 0
+                          ? 'No employees found.'
+                          : 'No matching employees for current search or status filter.'}
                       </td>
                     </tr>
                   ) : (
@@ -2742,6 +2768,17 @@ export default function SettingsPage() {
                           />
                         </td>
                         <td className="px-3 py-2">
+                          <span
+                            className={
+                              isEmployeeCurrentlyActive(employee)
+                                ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700'
+                                : 'rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600'
+                            }
+                          >
+                            {isEmployeeCurrentlyActive(employee) ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
                           <div className="flex gap-2">
                             {editingEmployeeId === employee.id ? (
                               <>
@@ -2784,15 +2821,25 @@ export default function SettingsPage() {
                                 Edit
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteEmployee(employee)}
-                              disabled={deletingEmployeeId === employee.id || savingCode === employee.employee_code}
-                              className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <Icon name="trash" size={11} strokeWidth={2.2} />
-                              {deletingEmployeeId === employee.id ? 'Deleting...' : 'Delete'}
-                            </button>
+                            {isEmployeeCurrentlyActive(employee) ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleEmployeeLifecycle(employee, false)}
+                                disabled={lifecycleEmployeeId === employee.id || savingCode === employee.employee_code}
+                                className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {lifecycleEmployeeId === employee.id ? 'Updating...' : 'Deactivate'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void handleEmployeeLifecycle(employee, true)}
+                                disabled={lifecycleEmployeeId === employee.id || savingCode === employee.employee_code}
+                                className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {lifecycleEmployeeId === employee.id ? 'Updating...' : 'Reactivate'}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

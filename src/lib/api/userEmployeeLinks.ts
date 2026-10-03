@@ -1,3 +1,4 @@
+import { isEmployeeCurrentlyActive } from '../employeeActive'
 import { supabase } from '../supabase'
 import { fail, ok, type ApiResult } from './types'
 
@@ -75,12 +76,16 @@ export async function createUserEmployeeLink(
     // Validation 1: Verify employee_code exists
     const { data: empData, error: empError } = await supabase
       .from('employee_master')
-      .select('employee_code')
+      .select('employee_code, is_active')
       .eq('employee_code', input.employee_code)
       .single()
 
     if (empError || !empData) {
       return fail(`Employee code '${input.employee_code}' not found`)
+    }
+
+    if (!isEmployeeCurrentlyActive(empData)) {
+      return fail(`Employee code '${input.employee_code}' is inactive; choose an active employee`)
     }
 
     // Validation 2: Check if user exists and is active
@@ -139,7 +144,7 @@ export async function updateUserEmployeeLink(
   try {
     const { data: current, error: currentError } = await supabase
       .from('user_employee_links')
-      .select('user_id, dealer_code')
+      .select('user_id, dealer_code, employee_code')
       .eq('id', id)
       .single()
 
@@ -153,16 +158,26 @@ export async function updateUserEmployeeLink(
       dealer_code: update.dealer_code?.trim().toUpperCase(),
     }
 
-    // Validation: If employee code changed, ensure it exists.
+    // Validation: If employee code changed, ensure the new target exists and is active.
     if (normalizedUpdate.employee_code) {
-      const { data: empData, error: empError } = await supabase
-        .from('employee_master')
-        .select('employee_code')
-        .eq('employee_code', normalizedUpdate.employee_code)
-        .single()
+      const previousCode = current.employee_code.trim().toUpperCase()
+      const nextCode = normalizedUpdate.employee_code.trim().toUpperCase()
+      const employeeCodeChanged = previousCode !== nextCode
 
-      if (empError || !empData) {
-        return fail(`Employee code '${normalizedUpdate.employee_code}' not found`)
+      if (employeeCodeChanged) {
+        const { data: empData, error: empError } = await supabase
+          .from('employee_master')
+          .select('employee_code, is_active')
+          .eq('employee_code', normalizedUpdate.employee_code)
+          .single()
+
+        if (empError || !empData) {
+          return fail(`Employee code '${normalizedUpdate.employee_code}' not found`)
+        }
+
+        if (!isEmployeeCurrentlyActive(empData)) {
+          return fail(`Employee code '${normalizedUpdate.employee_code}' is inactive; choose an active employee`)
+        }
       }
     }
 
@@ -223,7 +238,8 @@ export async function listEmployees(): Promise<ApiResult<Array<{ employee_code: 
     // Employee mapping is role-agnostic: any employee can be linked to a user.
     const { data: allData, error: allError } = await supabase
       .from('employee_master')
-      .select('employee_code, employee_name, role')
+      .select('employee_code, employee_name, role, is_active')
+      .eq('is_active', true)
       .order('employee_name')
 
     if (allError) return fail(`Failed to list employees: ${allError.message}`)
