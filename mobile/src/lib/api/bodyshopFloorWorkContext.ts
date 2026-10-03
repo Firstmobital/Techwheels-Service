@@ -6,6 +6,8 @@ export type LinkedEmployeeContext = {
   employeeRole: string | null
   dealerCode: string | null
   isAdminOverview?: boolean
+  /** Platform admin with employee link — full floor list on mobile too. */
+  isFloorWorkAdminView?: boolean
 }
 
 const ADMIN_FLOOR_WORK_ROLE =
@@ -83,6 +85,7 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
     dealerCode: String(link?.dealer_code ?? '').trim() || null,
   }
   if (await userHasAdminAccess(user.id, user)) {
+    ctx.isFloorWorkAdminView = true
     ctx.employeeRole = [ctx.employeeRole, ADMIN_FLOOR_WORK_ROLE].filter(Boolean).join(',')
   }
   return ctx

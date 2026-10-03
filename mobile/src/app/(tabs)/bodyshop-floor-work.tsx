@@ -169,7 +169,7 @@ export default function BodyshopFloorWorkScreen() {
     try {
       const ctx = await getLinkedEmployeeContext()
       const myCode = String(ctx.employeeCode ?? '').trim().toUpperCase()
-      const adminOverview = Boolean(ctx.isAdminOverview) && !myCode
+      const adminOverview = Boolean(ctx.isAdminOverview) || Boolean(ctx.isFloorWorkAdminView)
       setIsAdminOverview(adminOverview)
       setEmployeeCode(myCode)
       setEmployeeName(ctx.employeeName)
@@ -178,11 +178,7 @@ export default function BodyshopFloorWorkScreen() {
       let supportRows: Record<string, unknown>[] = []
       let taskList: BodyshopFloorWorkTask[] = []
 
-      if (myCode) {
-        assRows = await fetchBodyshopAssignmentsForEmployee(myCode)
-        supportRows = await fetchBodyshopSupportAssignmentsForEmployee(myCode)
-        taskList = listWorkTasksForEmployee(myCode, assRows, supportRows)
-      } else if (adminOverview) {
+      if (adminOverview) {
         const { data: assAll, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
         if (assErr) throw assErr
         const { data: supAll, error: supErr } = await supabase
@@ -193,6 +189,10 @@ export default function BodyshopFloorWorkScreen() {
         assRows = assAll ?? []
         supportRows = supAll ?? []
         taskList = listAllWorkTasksForAdmin(assRows, supportRows)
+      } else if (myCode) {
+        assRows = await fetchBodyshopAssignmentsForEmployee(myCode)
+        supportRows = await fetchBodyshopSupportAssignmentsForEmployee(myCode)
+        taskList = listWorkTasksForEmployee(myCode, assRows, supportRows)
       } else {
         throw new Error('No employee linked to your login.')
       }

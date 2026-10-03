@@ -4,6 +4,7 @@ import {
   inferRegistrationFromAssignmentKey,
   isSystemJobCardKey,
 } from '../bodyshopFloorWork/display'
+import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
 import { listReceptionEntriesByJobCardNumbers } from './reception'
 
 const JC_CHUNK = 80
@@ -182,4 +183,22 @@ export async function fetchRepairCardVehicleByJcs(
   await attachRepairCardFloorTiming(map, keys)
 
   return map
+}
+
+/** Job cards for vehicles currently in bodyshop floor stages (11–14). */
+export async function fetchLiveOnFloorJobCardKeys(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('bodyshop_repair_cards')
+    .select('job_card_no, current_stage, overall_status')
+    .gte('current_stage', 11)
+    .lte('current_stage', 14)
+  if (error) throw new Error(error.message)
+  return Array.from(
+    new Set(
+      (data ?? [])
+        .filter((row) => isLiveOnFloorRepairCard(row))
+        .map((row) => normKey(String(row.job_card_no ?? '')))
+        .filter(Boolean),
+    ),
+  )
 }

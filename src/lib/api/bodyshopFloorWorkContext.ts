@@ -8,6 +8,8 @@ export type LinkedEmployeeContext = {
   dealerCode: string | null
   /** Admin login without employee mapping — full floor overview + EDP compile. */
   isAdminOverview?: boolean
+  /** Platform admin with employee link — still sees all floor vehicles. */
+  isFloorWorkAdminView?: boolean
 }
 
 const ADMIN_FLOOR_WORK_ROLE =
@@ -85,6 +87,7 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
     dealerCode: String(link?.dealer_code ?? '').trim() || null,
   }
   if (await userHasAdminAccess(user.id, user)) {
+    ctx.isFloorWorkAdminView = true
     if (!parseBusinessRolesForFloorWork(ctx.employeeRole)) {
       ctx.employeeRole = [ctx.employeeRole, ADMIN_FLOOR_WORK_ROLE].filter(Boolean).join(',')
     }
