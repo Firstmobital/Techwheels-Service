@@ -139,15 +139,27 @@ export async function customerGetVisitContext(
     if (error.message?.includes('Could not find the function') || error.code === 'PGRST202') {
       const legacy = await customerGetActiveJob(sessionToken, reg)
       const job = legacy.job ? { ...legacy.job } : null
-      const jcNo = (job?.jc_number as string) || null
-      let repair_card =
-        (await customerGetRepairCard(sessionToken, reg, { bypassCache: opts?.bypassCache, jobCardNo: jcNo }).catch(
-          () => null
-        )) ?? (await resolveLatestRepairCardRow(reg, jcNo, null))
-      if (repair_card) {
-        repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+      const legacyServerKind = String(legacy.visit_kind ?? '').trim()
+      let repair_card: Record<string, unknown> | null = null
+      let visitKind: CustomerVisitKind
+
+      if (legacyServerKind === 'mechanical') {
+        visitKind = 'mechanical'
+      } else {
+        const jcNo = (job?.jc_number as string) || null
+        repair_card =
+          (await customerGetRepairCard(sessionToken, reg, { bypassCache: opts?.bypassCache, jobCardNo: jcNo }).catch(
+            () => null
+          )) ?? (await resolveLatestRepairCardRow(reg, jcNo, null))
+        if (repair_card) {
+          repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+        }
+        visitKind = resolveCustomerVisitKind(job, legacy.visit_kind as string | undefined, repair_card)
+        if (visitKind !== 'bodyshop') {
+          repair_card = null
+        }
       }
-      const visitKind = resolveCustomerVisitKind(job, legacy.visit_kind as string | undefined, repair_card)
+
       let mechanical_case: Record<string, unknown> | null = null
       if (visitKind === 'mechanical') {
         mechanical_case = (await customerGetMechanicalCase(sessionToken, reg).catch(() => null)) as Record<
@@ -158,8 +170,8 @@ export async function customerGetVisitContext(
       return setCache(cacheKey, {
         ...legacy,
         visit_kind: visitKind,
-        mechanical_case: visitKind === 'bodyshop' ? null : mechanical_case,
-        repair_card,
+        mechanical_case,
+        repair_card: visitKind === 'bodyshop' ? repair_card : null,
       })
     }
     throw new Error(rpcErrorMessage(error, 'Unable to load visit.'))
@@ -179,30 +191,40 @@ export async function customerGetVisitContext(
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
-  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
-  const sessionCard = await customerGetRepairCard(sessionToken, reg, {
-    bypassCache: opts?.bypassCache,
-    jobCardNo: jcNo,
-  }).catch(() => null)
-  if (sessionCard) {
-    repair_card = sessionCard
-  } else {
-    repair_card = await resolveLatestRepairCardRow(reg, jcNo, repair_card)
-  }
-  if (repair_card) {
-    repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
-  }
+  const serverVisitKind = String(res.visit_kind ?? '').trim()
+  let repair_card: Record<string, unknown> | null = null
+  let visitKind: CustomerVisitKind
 
-  const visitKind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
+  if (serverVisitKind === 'mechanical') {
+    visitKind = 'mechanical'
+  } else {
+    const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
+    repair_card = res.repair_card ?? null
+    const sessionCard = await customerGetRepairCard(sessionToken, reg, {
+      bypassCache: opts?.bypassCache,
+      jobCardNo: jcNo,
+    }).catch(() => null)
+    if (sessionCard) {
+      repair_card = sessionCard
+    } else {
+      repair_card = await resolveLatestRepairCardRow(reg, jcNo, repair_card)
+    }
+    if (repair_card) {
+      repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+    }
+    visitKind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
+    if (visitKind !== 'bodyshop') {
+      repair_card = null
+    }
+  }
 
   const payload: CustomerVisitContextPayload = {
     phone: res.phone,
     vehicle: res.vehicle ?? null,
     job,
     visit_kind: visitKind,
-    mechanical_case: visitKind === 'bodyshop' ? null : (res.mechanical_case ?? null),
-    repair_card,
+    mechanical_case: visitKind === 'mechanical' ? (res.mechanical_case ?? null) : null,
+    repair_card: visitKind === 'bodyshop' ? repair_card : null,
   }
 
   setCache(`active_job_${sessionToken}_${reg}`, {
@@ -246,9 +268,20 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  const jcForCard = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
-  const repair_card = await resolveLatestRepairCardRow(reg, jcForCard, null)
-  const visit_kind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
+  const serverVisitKind = String(res.visit_kind ?? '').trim()
+  let repair_card: Record<string, unknown> | null = null
+  let visit_kind: CustomerVisitKind
+
+  if (serverVisitKind === 'mechanical') {
+    visit_kind = 'mechanical'
+  } else {
+    const jcForCard = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
+    repair_card = await resolveLatestRepairCardRow(reg, jcForCard, null)
+    visit_kind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
+    if (visit_kind !== 'bodyshop') {
+      repair_card = null
+    }
+  }
 
   return setCache(cacheKey, { ...res, job, visit_kind, repair_card })
 }

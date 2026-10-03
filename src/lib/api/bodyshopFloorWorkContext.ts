@@ -85,7 +85,6 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
     dealerCode: String(link?.dealer_code ?? '').trim() || null,
   }
   if (await userHasAdminAccess(user.id, user)) {
-    ctx.isAdminOverview = true
     if (!parseBusinessRolesForFloorWork(ctx.employeeRole)) {
       ctx.employeeRole = [ctx.employeeRole, ADMIN_FLOOR_WORK_ROLE].filter(Boolean).join(',')
     }

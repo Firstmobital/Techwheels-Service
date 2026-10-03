@@ -29,10 +29,10 @@ export function isEffectiveMechanicalCustomerVisit(params: {
   visitReady: boolean
   kind: CustomerVisitKind
   isBodyshop: boolean
-  repairCard: Record<string, unknown> | null | undefined
+  repairCard?: Record<string, unknown> | null | undefined
 }): boolean {
   if (!params.visitReady) return false
-  if (params.isBodyshop || params.kind === 'bodyshop' || params.repairCard) return false
+  if (params.isBodyshop || params.kind === 'bodyshop') return false
   return params.kind === 'mechanical'
 }
 
@@ -42,17 +42,17 @@ export function resolveCustomerVisitKind(
   serverVisitKind?: string | null,
   repairCard?: Record<string, unknown> | null | undefined
 ): CustomerVisitKind {
-  // CRITICAL RULE: If a Bodyshop Repair Card exists for this vehicle, IT IS STRICTLY A BODYSHOP CLAIM VISIT!
-  if (repairCard || job?.repair_card_id || job?.source === 'bodyshop') {
-    return 'bodyshop'
-  }
-
   const fromServer = String(serverVisitKind ?? '').trim()
+  // Active reception job wins over stale bodyshop cards on the same registration.
+  if (fromServer === 'mechanical') {
+    return 'mechanical'
+  }
   if (fromServer === 'bodyshop') {
     return 'bodyshop'
   }
-  if (fromServer === 'mechanical') {
-    return 'mechanical'
+
+  if (repairCard || job?.repair_card_id || job?.source === 'bodyshop') {
+    return 'bodyshop'
   }
 
   if (!job) return 'other'

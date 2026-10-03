@@ -16,13 +16,15 @@ import {
   type BodyshopFloorRoleDailyLogRow,
 } from '../lib/bodyshopFloorRoleWorkLog'
 import {
+  fetchAllFloorWorkPhotosForJobCards,
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForDate,
-  openRoleDailyLogPhoto,
   upsertRoleDailyLog,
   uploadRoleDailyLogPhoto,
+  type FloorWorkPhotoWithLog,
 } from '../lib/api/bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../lib/bodyshopFloorRoleWorkLog'
+import { BodyshopFloorWorkPhotoGallery } from '../components/BodyshopFloorWorkPhotoGallery'
 import { upsertBodyshopFloorDailyUpdate } from '../lib/api/bodyshopFloorDailyUpdate'
 import { getDealerContext } from '../lib/api'
 import {
@@ -36,7 +38,39 @@ import {
   sortFloorWorkTasksByVehicle,
   sortJobCardsByVehicle,
   edpVehicleOptionLabel,
+  floorWorkStandingLine,
+  floorWorkJobCardLookupKeys,
+  normalizeFloorWorkAssignmentKey,
 } from '../lib/bodyshopFloorWork/display'
+
+function groupPhotosByVehicle(
+  tasks: BodyshopFloorWorkTask[],
+  cardByJc: Record<string, { reg: string | null; customer: string | null }>,
+  photos: FloorWorkPhotoWithLog[],
+): Record<string, FloorWorkPhotoWithLog[]> {
+  const byVehicle: Record<string, FloorWorkPhotoWithLog[]> = {}
+  const jcList = Array.from(new Set(tasks.map((t) => t.jobCardNumber)))
+  for (const jc of jcList) byVehicle[jc] = []
+
+  for (const p of photos) {
+    const logJc = normalizeFloorWorkAssignmentKey(p.log_job_card_number)
+    for (const jc of jcList) {
+      const keys = floorWorkJobCardLookupKeys(jc, cardByJc[jc])
+      if (!keys.includes(logJc)) continue
+      if (!byVehicle[jc].some((x) => x.id === p.id)) byVehicle[jc].push(p)
+    }
+  }
+
+  for (const jc of jcList) {
+    byVehicle[jc].sort((a, b) => {
+      const ta = new Date(a.created_at).getTime()
+      const tb = new Date(b.created_at).getTime()
+      if (ta !== tb) return ta - tb
+      return String(a.file_name ?? '').localeCompare(String(b.file_name ?? ''), 'en')
+    })
+  }
+  return byVehicle
+}
 
 export default function BodyshopFloorWorkPage() {
   const today = bodyshopFloorWorkTodayIstDate()
@@ -51,7 +85,8 @@ export default function BodyshopFloorWorkPage() {
   const [tasks, setTasks] = useState<BodyshopFloorWorkTask[]>([])
   const [cardByJc, setCardByJc] = useState<Record<string, { reg: string | null; customer: string | null }>>({})
   const [logsByKey, setLogsByKey] = useState<Record<string, BodyshopFloorRoleDailyLogRow>>({})
-  const [selected, setSelected] = useState<BodyshopFloorWorkTask | null>(null)
+  const [selectedJc, setSelectedJc] = useState<string | null>(null)
+  const [photosByVehicle, setPhotosByVehicle] = useState<Record<string, FloorWorkPhotoWithLog[]>>({})
   const [note, setNote] = useState('')
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([])
   const [savedPhotos, setSavedPhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
@@ -85,15 +120,55 @@ export default function BodyshopFloorWorkPage() {
     [allFloorJcs, cardByJc],
   )
 
+  const vehicleRows = useMemo(() => {
+    const seen = new Set<string>()
+    const rows: Array<{ jobCardNumber: string; tasks: BodyshopFloorWorkTask[] }> = []
+    for (const t of visibleTasks) {
+      if (seen.has(t.jobCardNumber)) continue
+      seen.add(t.jobCardNumber)
+      rows.push({
+        jobCardNumber: t.jobCardNumber,
+        tasks: visibleTasks.filter((x) => x.jobCardNumber === t.jobCardNumber),
+      })
+    }
+    return rows
+  }, [visibleTasks])
+
+  const selectedTask = useMemo(() => {
+    if (!selectedJc) return null
+    const onVehicle = tasks.filter((t) => t.jobCardNumber === selectedJc)
+    const me = String(employeeCode ?? '').trim().toUpperCase()
+    const mine = onVehicle.find((t) => workTaskEmployeeCode(t, employeeCode) === me)
+    return mine ?? onVehicle[0] ?? null
+  }, [selectedJc, tasks, employeeCode])
+
+  const selectedVehiclePhotos = selectedJc ? (photosByVehicle[selectedJc] ?? []) : []
+
+  const refreshVehiclePhotos = useCallback(
+    async (taskList: BodyshopFloorWorkTask[], cards: typeof cardByJc) => {
+      const lookup = new Set<string>()
+      for (const t of taskList) {
+        for (const k of floorWorkJobCardLookupKeys(t.jobCardNumber, cards[t.jobCardNumber])) {
+          lookup.add(k)
+        }
+      }
+      const phRes = await fetchAllFloorWorkPhotosForJobCards([...lookup])
+      if (phRes.error) return
+      setPhotosByVehicle(groupPhotosByVehicle(taskList, cards, phRes.data ?? []))
+    },
+    [],
+  )
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const ctx = await getLinkedEmployeeContext()
       if (ctx.error || !ctx.data) throw new Error(ctx.error ?? 'Employee link missing')
-      const adminOverview = Boolean(ctx.data.isAdminOverview)
+      const myCode = String(ctx.data.employeeCode ?? '').trim().toUpperCase()
+      const adminOverview = Boolean(ctx.data.isAdminOverview) && !myCode
       setIsAdminOverview(adminOverview)
-      setEmployeeCode(ctx.data.employeeCode)
+      setEmployeeCode(myCode)
       setEmployeeName(ctx.data.employeeName)
       setEmployeeRole(ctx.data.employeeRole)
       const modes = adminOverview
@@ -104,7 +179,19 @@ export default function BodyshopFloorWorkPage() {
 
       let assRows: Record<string, unknown>[] = []
       let supportRows: Record<string, unknown>[] = []
-      if (adminOverview) {
+      let myTasks: BodyshopFloorWorkTask[] = []
+
+      if (myCode) {
+        const [assRes, supRes] = await Promise.all([
+          fetchBodyshopAssignmentsForEmployee(myCode),
+          fetchBodyshopSupportAssignmentsForEmployee(myCode),
+        ])
+        if (assRes.error) throw new Error(assRes.error)
+        if (supRes.error) throw new Error(supRes.error)
+        assRows = assRes.data ?? []
+        supportRows = supRes.data ?? []
+        myTasks = listWorkTasksForEmployee(myCode, assRows, supportRows)
+      } else if (adminOverview) {
         const { data: assAll, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
         if (assErr) throw assErr
         const { data: supAll, error: supErr } = await supabase
@@ -114,30 +201,16 @@ export default function BodyshopFloorWorkPage() {
         if (supErr) throw supErr
         assRows = assAll ?? []
         supportRows = supAll ?? []
+        myTasks = listAllWorkTasksForAdmin(assRows, supportRows)
       } else {
-        const [assRes, supRes] = await Promise.all([
-          fetchBodyshopAssignmentsForEmployee(ctx.data.employeeCode),
-          fetchBodyshopSupportAssignmentsForEmployee(ctx.data.employeeCode),
-        ])
-        if (assRes.error) throw new Error(assRes.error)
-        if (supRes.error) throw new Error(supRes.error)
-        assRows = assRes.data ?? []
-        supportRows = supRes.data ?? []
+        throw new Error('No employee linked to your login.')
       }
 
-      const myTasks = adminOverview
-        ? listAllWorkTasksForAdmin(assRows, supportRows)
-        : listWorkTasksForEmployee(ctx.data.employeeCode, assRows, supportRows)
       setTasks(myTasks)
 
-      const jcs = adminOverview
-        ? Array.from(new Set(assRows.map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)))
-        : Array.from(new Set(myTasks.map((t) => t.jobCardNumber)))
-      if (jcs.length > 0) {
-        setCardByJc(await fetchRepairCardVehicleByJcs(jcs))
-      } else {
-        setCardByJc({})
-      }
+      const jcs = Array.from(new Set(myTasks.map((t) => t.jobCardNumber)))
+      const cards = jcs.length > 0 ? await fetchRepairCardVehicleByJcs(jcs) : {}
+      setCardByJc(cards)
 
       const logsRes = await fetchRoleDailyLogsForDate(today, jcs.length ? jcs : undefined)
       if (logsRes.error) throw new Error(logsRes.error)
@@ -151,25 +224,26 @@ export default function BodyshopFloorWorkPage() {
         new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
       ).sort()
       setAllFloorJcs(allJcs)
+      await refreshVehiclePhotos(myTasks, cards)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
     } finally {
       setLoading(false)
     }
-  }, [today])
+  }, [today, refreshVehiclePhotos])
 
   useEffect(() => {
     void load()
   }, [load])
 
   useEffect(() => {
-    if (!selected) {
+    if (!selectedTask) {
       setNote('')
       setSavedPhotos([])
       return
     }
-    const slotCode = workTaskEmployeeCode(selected, employeeCode)
-    const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, slotCode, selected.isSupport)
+    const slotCode = workTaskEmployeeCode(selectedTask, employeeCode)
+    const key = workLogMapKey(selectedTask.jobCardNumber, selectedTask.floorRole, slotCode, selectedTask.isSupport)
     setNote(String(logsByKey[key]?.note_text ?? ''))
     setPendingPhotos([])
     const logId = logsByKey[key]?.id
@@ -180,19 +254,11 @@ export default function BodyshopFloorWorkPage() {
     void fetchRoleDailyLogPhotos([logId]).then((res) => {
       if (!res.error) setSavedPhotos(res.data ?? [])
     })
-  }, [selected, logsByKey, employeeCode])
-
-  async function viewSavedPhoto(photo: BodyshopFloorRoleDailyLogPhotoRow) {
-    const res = await openRoleDailyLogPhoto(photo)
-    if (res.error || !res.data) {
-      alert(res.error ?? 'Could not open photo')
-      return
-    }
-    window.open(res.data, '_blank', 'noopener,noreferrer')
-  }
+  }, [selectedTask, logsByKey, employeeCode])
 
   async function saveWorkerLog() {
-    if (!selected) return
+    if (!selectedTask) return
+    const selected = selectedTask
     const slotCode = workTaskEmployeeCode(selected, employeeCode)
     if (!slotCode) return
     const trimmed = note.trim()
@@ -203,16 +269,22 @@ export default function BodyshopFloorWorkPage() {
     setSaving(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      const dealerCtx = await getDealerContext()
+      const [dealerCtx, { data: myCodeRaw, error: myCodeErr }] = await Promise.all([
+        getDealerContext(),
+        supabase.rpc('my_employee_code'),
+      ])
       const dealerCode = selected.dealerCode || dealerCtx.data?.dealerCode || ''
       if (!dealerCode) throw new Error('Dealer code missing')
+      if (myCodeErr) throw new Error(myCodeErr.message)
+      const employeeCodeForLog =
+        String(myCodeRaw ?? employeeCode ?? slotCode).trim().toUpperCase() || slotCode
 
       const up = await upsertRoleDailyLog({
         jobCardNumber: selected.jobCardNumber,
         repairCardId: selected.repairCardId,
         dealerCode,
         floorRole: selected.floorRole,
-        employeeCode: slotCode,
+        employeeCode: employeeCodeForLog,
         employeeName: selected.employeeName ?? employeeName,
         noteText: trimmed,
         isSupport: selected.isSupport,
@@ -235,9 +307,10 @@ export default function BodyshopFloorWorkPage() {
       }
       setPendingPhotos([])
 
-      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, slotCode, selected.isSupport)
+      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCodeForLog, selected.isSupport)
       setLogsByKey((prev) => ({ ...prev, [key]: up.data! }))
-      alert('Saved for today (IST).')
+      await refreshVehiclePhotos(tasks, cardByJc)
+      alert('Submitted for today (IST).')
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -320,9 +393,9 @@ export default function BodyshopFloorWorkPage() {
       ) : null}
 
       {tab === 'worker' ? (
-        <div className="grid-2">
-          <div className="card">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All floor work today' : 'My vehicles today'}</h2>
+        <>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My assigned vehicles'}</h2>
             {tasks.length > 0 ? (
               <input
                 className="inp"
@@ -330,7 +403,7 @@ export default function BodyshopFloorWorkPage() {
                 placeholder="Search reg no. / customer / JC…"
                 value={vehicleSearch}
                 onChange={(e) => setVehicleSearch(e.target.value)}
-                style={{ marginBottom: 12 }}
+                style={{ marginBottom: 12, maxWidth: 420 }}
               />
             ) : null}
             {tasks.length === 0 ? (
@@ -340,91 +413,111 @@ export default function BodyshopFloorWorkPage() {
                   : 'No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.'}
               </p>
             ) : (
-              <ul className="plain-list">
-                {visibleTasks.map((t) => {
-                  const slotCode = workTaskEmployeeCode(t, employeeCode)
-                  const key = workLogMapKey(t.jobCardNumber, t.floorRole, slotCode, t.isSupport)
-                  const hasLog = Boolean(logsByKey[key]?.note_text?.trim())
-                  const card = cardByJc[t.jobCardNumber]
-                  return (
-                    <li key={`${key}-${t.jobCardNumber}`}>
-                      <button
-                        type="button"
-                        className="btn btn--quiet btn--block"
-                        style={{ textAlign: 'left', marginBottom: 8 }}
-                        onClick={() => setSelected(t)}
-                      >
-                        <strong>{floorWorkVehicleTitle(card, t.jobCardNumber)}</strong>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                          {floorWorkVehicleSubtitle(card, t.jobCardNumber)}
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                          {BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]}
-                          {t.isSupport ? ' (support)' : ''}
-                          {isAdminOverview && (t.employeeName || slotCode)
-                            ? ` · ${t.employeeName ?? slotCode}`
-                            : ''}
-                          {hasLog ? ' · ✓ update saved' : ' · pending today'}
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Reg no.</th>
+                      <th>Customer</th>
+                      <th>My role</th>
+                      <th>Today</th>
+                      <th>Photos</th>
+                      <th>Time on floor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
+                      const card = cardByJc[jobCardNumber]
+                      const myTask =
+                        rowTasks.find((t) => workTaskEmployeeCode(t, employeeCode) === employeeCode) ?? rowTasks[0]
+                      const slotCode = workTaskEmployeeCode(myTask, employeeCode)
+                      const key = workLogMapKey(myTask.jobCardNumber, myTask.floorRole, slotCode, myTask.isSupport)
+                      const hasLog = Boolean(logsByKey[key]?.note_text?.trim())
+                      const photoCount = (photosByVehicle[jobCardNumber] ?? []).length
+                      const active = selectedJc === jobCardNumber
+                      return (
+                        <tr
+                          key={jobCardNumber}
+                          onClick={() => setSelectedJc(jobCardNumber)}
+                          style={{
+                            cursor: 'pointer',
+                            background: active ? 'var(--surface-2, #f3f4f6)' : undefined,
+                          }}
+                        >
+                          <td><strong>{floorWorkVehicleTitle(card, jobCardNumber)}</strong></td>
+                          <td>{floorWorkVehicleSubtitle(card, jobCardNumber) || '—'}</td>
+                          <td>
+                            {rowTasks.map((t) => BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]).join(', ')}
+                            {rowTasks.some((t) => t.isSupport) ? ' (support)' : ''}
+                          </td>
+                          <td>{hasLog ? '✓ Updated' : 'Pending'}</td>
+                          <td>{photoCount}</td>
+                          <td>{floorWorkStandingLine(card) ?? '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
+              Click a row to submit today&apos;s update and view all photos (every role, every date) for that vehicle.
+            </p>
           </div>
 
-          <div className="card">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>Today&apos;s update</h2>
-            {!selected ? (
-              <p style={{ color: 'var(--muted)' }}>Select a vehicle from the list.</p>
-            ) : (
-              <>
-                <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-                  {floorWorkVehicleTitle(cardByJc[selected.jobCardNumber], selected.jobCardNumber)}
-                </p>
-                <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
-                  {floorWorkVehicleSubtitle(cardByJc[selected.jobCardNumber], selected.jobCardNumber)}
-                  {' · '}{BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}
-                </p>
-                <textarea
-                  className="inp"
-                  rows={5}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="What work was done today? (panels, stage, hold reason…)"
+          {selectedJc && selectedTask ? (
+            <div className="card">
+              <h2 style={{ fontSize: 16, marginTop: 0 }}>
+                {floorWorkVehicleTitle(cardByJc[selectedJc], selectedJc)}
+              </h2>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+                {floorWorkVehicleSubtitle(cardByJc[selectedJc], selectedJc)}
+                {' · Your role: '}{BODYSHOP_FLOOR_WORK_ROLE_LABELS[selectedTask.floorRole]}
+                {selectedTask.isSupport ? ' (support)' : ''}
+              </p>
+
+              <h3 style={{ fontSize: 14, margin: '0 0 8px' }}>Today&apos;s update (IST)</h3>
+              <textarea
+                className="inp"
+                rows={4}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="What work was done today?"
+              />
+              <label className="field" style={{ marginTop: 10 }}>
+                <span className="label">Add photos (optional)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setPendingPhotos(Array.from(e.target.files ?? []))}
                 />
-                <label className="field" style={{ marginTop: 10 }}>
-                  <span className="label">Photos (optional)</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => setPendingPhotos(Array.from(e.target.files ?? []))}
-                  />
-                </label>
-                {pendingPhotos.length > 0 ? (
-                  <p style={{ fontSize: 12, color: 'var(--muted)' }}>{pendingPhotos.length} photo(s) ready to upload</p>
-                ) : null}
-                {savedPhotos.length > 0 ? (
-                  <ul className="plain-list" style={{ marginTop: 10, fontSize: 13 }}>
-                    {savedPhotos.map((p) => (
-                      <li key={p.id}>
-                        <button type="button" className="btn btn--quiet btn--sm" onClick={() => void viewSavedPhoto(p)}>
-                          {p.file_name ?? `Photo ${p.sort_order + 1}`}
-                          {p.drive_url ? ' · Drive' : ''}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <button type="button" className="btn btn--primary" disabled={saving} onClick={() => void saveWorkerLog()}>
-                  {saving ? 'Saving…' : 'Save today\'s update'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+              </label>
+              {pendingPhotos.length > 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--muted)' }}>{pendingPhotos.length} new photo(s) on submit</p>
+              ) : null}
+              {savedPhotos.length > 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+                  {savedPhotos.length} photo(s) on today&apos;s log for your role.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ marginTop: 12 }}
+                disabled={saving}
+                onClick={() => void saveWorkerLog()}
+              >
+                {saving ? 'Submitting…' : 'Submit today\'s update'}
+              </button>
+
+              <BodyshopFloorWorkPhotoGallery
+                photos={selectedVehiclePhotos}
+                title={`All floor work photos — ${selectedVehiclePhotos.length} total (A→Z / oldest first)`}
+              />
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {tab === 'edp' ? (

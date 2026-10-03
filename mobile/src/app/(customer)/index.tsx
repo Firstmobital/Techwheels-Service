@@ -41,6 +41,7 @@ export default function CustomerDashboardScreen() {
     repairCard,
     mechCase,
     isBodyshop,
+    isMechanical,
     kind: visitKind,
     refresh: refreshVisit,
   } = useCustomerVisit()

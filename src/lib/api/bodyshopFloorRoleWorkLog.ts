@@ -34,6 +34,77 @@ export async function fetchRoleDailyLogPhotos(logIds: number[]): Promise<ApiResu
   return ok((data ?? []) as BodyshopFloorRoleDailyLogPhotoRow[])
 }
 
+type DailyLogMeta = {
+  id: number
+  job_card_number: string
+  update_date: string
+  floor_role: BodyshopFloorWorkLogRole
+  employee_code: string
+  employee_name: string | null
+  note_text: string | null
+}
+
+export type FloorWorkPhotoWithLog = BodyshopFloorRoleDailyLogPhotoRow & {
+  log_job_card_number: string
+  log_update_date: string
+  log_floor_role: BodyshopFloorWorkLogRole
+  log_employee_code: string
+  log_employee_name: string | null
+  log_note_text: string | null
+}
+
+const LOG_META_SELECT = 'id, job_card_number, update_date, floor_role, employee_code, employee_name, note_text'
+
+export async function fetchAllFloorWorkPhotosForJobCards(
+  jobCardKeys: string[],
+): Promise<ApiResult<FloorWorkPhotoWithLog[]>> {
+  const keys = Array.from(new Set(jobCardKeys.map(normalizeBodyshopFloorWorkJc).filter(Boolean)))
+  if (keys.length === 0) return ok([])
+
+  const { data: logs, error: logErr } = await supabase.from(LOG_TABLE).select(LOG_META_SELECT).in('job_card_number', keys)
+  if (logErr) return fail(logErr.message)
+  const logRows = (logs ?? []) as DailyLogMeta[]
+  if (logRows.length === 0) return ok([])
+
+  const logById = new Map(logRows.map((l) => [l.id, l]))
+  const logIds = logRows.map((l) => l.id)
+
+  const photos: BodyshopFloorRoleDailyLogPhotoRow[] = []
+  for (let i = 0; i < logIds.length; i += 80) {
+    const chunk = logIds.slice(i, i + 80)
+    const { data, error } = await supabase.from(PHOTO_TABLE).select('*').in('log_id', chunk)
+    if (error) return fail(error.message)
+    photos.push(...((data ?? []) as BodyshopFloorRoleDailyLogPhotoRow[]))
+  }
+
+  const merged: FloorWorkPhotoWithLog[] = photos
+    .map((p) => {
+      const log = logById.get(p.log_id)
+      if (!log) return null
+      return {
+        ...p,
+        log_job_card_number: log.job_card_number,
+        log_update_date: log.update_date,
+        log_floor_role: log.floor_role,
+        log_employee_code: log.employee_code,
+        log_employee_name: log.employee_name,
+        log_note_text: log.note_text,
+      }
+    })
+    .filter(Boolean) as FloorWorkPhotoWithLog[]
+
+  merged.sort((a, b) => {
+    const ta = new Date(a.created_at).getTime()
+    const tb = new Date(b.created_at).getTime()
+    if (ta !== tb) return ta - tb
+    const fa = String(a.file_name ?? '').localeCompare(String(b.file_name ?? ''), 'en')
+    if (fa !== 0) return fa
+    return a.id - b.id
+  })
+
+  return ok(merged)
+}
+
 export async function upsertRoleDailyLog(input: {
   jobCardNumber: string
   repairCardId?: number | null
@@ -137,7 +208,7 @@ export async function uploadRoleDailyLogPhoto(input: {
     .single()
   if (error || !data?.id) return fail(error?.message ?? 'Failed to save photo metadata')
 
-  const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry({
+  void postUniversalDriveWithRetry({
     resource_type: 'bodyshop_floor_work_photo',
     resource_id: data.id,
     bucket_id: AUTODOC_BUCKET,
@@ -145,17 +216,15 @@ export async function uploadRoleDailyLogPhoto(input: {
     file_type: 'bodyshop_floor_work_photo',
     file_size_mb: Number((input.file.size / (1024 * 1024)).toFixed(3)),
     registration_no: regNumber ?? undefined,
+  }).then(({ res: driveRes, body: drivePayload }) => {
+    if (!driveRes.ok || drivePayload?.error) return
+    const driveUrl = driveUrlFromUniversalResponse(drivePayload)
+    if (driveUrl) {
+      void supabase.from(PHOTO_TABLE).update({ drive_url: driveUrl }).eq('id', data.id)
+    }
   })
-  if (!driveRes.ok || drivePayload?.error) {
-    return ok(data as BodyshopFloorRoleDailyLogPhotoRow)
-  }
 
-  const driveUrl = driveUrlFromUniversalResponse(drivePayload)
-  if (driveUrl) {
-    return ok({ ...(data as BodyshopFloorRoleDailyLogPhotoRow), drive_url: driveUrl })
-  }
-  const { data: refreshed } = await supabase.from(PHOTO_TABLE).select('*').eq('id', data.id).maybeSingle()
-  return ok((refreshed ?? data) as BodyshopFloorRoleDailyLogPhotoRow)
+  return ok(data as BodyshopFloorRoleDailyLogPhotoRow)
 }
 
 export async function openRoleDailyLogPhoto(photo: BodyshopFloorRoleDailyLogPhotoRow): Promise<ApiResult<string>> {

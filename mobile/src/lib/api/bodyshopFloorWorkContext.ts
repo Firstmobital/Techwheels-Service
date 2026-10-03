@@ -83,7 +83,6 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
     dealerCode: String(link?.dealer_code ?? '').trim() || null,
   }
   if (await userHasAdminAccess(user.id, user)) {
-    ctx.isAdminOverview = true
     ctx.employeeRole = [ctx.employeeRole, ADMIN_FLOOR_WORK_ROLE].filter(Boolean).join(',')
   }
   return ctx

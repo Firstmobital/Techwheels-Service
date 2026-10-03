@@ -127,7 +127,9 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
       const ctx = await customerGetVisitContext(token, selectedReg, { bypassCache: opts?.bypassCache ?? true })
       if (seq !== loadSeq.current) return 'other'
 
-      const rawCard = (ctx.repair_card as Record<string, unknown> | null) ?? null
+      const serverKind = String(ctx.visit_kind ?? '').trim()
+      const rawCard =
+        serverKind === 'mechanical' ? null : ((ctx.repair_card as Record<string, unknown> | null) ?? null)
       const jobObj = (ctx.job as Record<string, unknown> | null) ?? null
 
       // Ensure customer_type is preserved from local memory if backend has not yet updated it
@@ -145,11 +147,16 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
       }
 
       const resolvedKind = resolveCustomerVisitKind(jobObj, ctx.visit_kind, finalCard)
+      const cardForState = resolvedKind === 'bodyshop' ? finalCard : null
 
       setJob(jobObj)
       setKind(resolvedKind)
-      setMechCase((ctx.mechanical_case as MechanicalCasePayload | null) ?? null)
-      setRepairCard(finalCard)
+      setMechCase(
+        resolvedKind === 'mechanical'
+          ? ((ctx.mechanical_case as MechanicalCasePayload | null) ?? null)
+          : null,
+      )
+      setRepairCard(cardForState)
       return resolvedKind
     } catch (err) {
       if (seq !== loadSeq.current) return 'other'
