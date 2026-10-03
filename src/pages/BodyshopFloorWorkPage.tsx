@@ -42,6 +42,7 @@ import {
   floorWorkStandingLine,
   floorWorkJobCardLookupKeys,
   floorWorkPhotoBelongsToVehicle,
+  floorWorkVehicleHasTodayLogUpdate,
   buildFloorWorkMonthFilterOptions,
   floorWorkFloorDayBucket,
   floorWorkFloorDayLabel,
@@ -151,15 +152,12 @@ export default function BodyshopFloorWorkPage() {
   }, [vehicleSearch, floorMonthFilter, floorDayFilter, updateFilter])
 
   const vehicleHasTodayUpdate = useCallback(
-    (_jobCardNumber: string, rowTasks: BodyshopFloorWorkTask[]) => {
-      if (rowTasks.length === 0) return false
+    (jobCardNumber: string, rowTasks: BodyshopFloorWorkTask[]) => {
+      const meta = cardByJc[jobCardNumber]
       if (isAdminOverview) {
-        return rowTasks.some((t) => {
-          const slot = workTaskEmployeeCode(t, employeeCode)
-          const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
-          return Boolean(logsByKey[k]?.note_text?.trim())
-        })
+        return floorWorkVehicleHasTodayLogUpdate(jobCardNumber, meta, logsByKey)
       }
+      if (rowTasks.length === 0) return false
       const me = String(employeeCode ?? '').trim().toUpperCase()
       return rowTasks.some((t) => {
         if (workTaskEmployeeCode(t, employeeCode) !== me) return false
@@ -168,7 +166,29 @@ export default function BodyshopFloorWorkPage() {
         return Boolean(logsByKey[k]?.note_text?.trim())
       })
     },
-    [employeeCode, isAdminOverview, logsByKey],
+    [employeeCode, isAdminOverview, logsByKey, cardByJc],
+  )
+
+  const vehicleInWorkerScope = useCallback(
+    (rowTasks: BodyshopFloorWorkTask[]) => {
+      if (isAdminOverview) return true
+      const me = String(employeeCode ?? '').trim().toUpperCase()
+      return rowTasks.some((t) => workTaskEmployeeCode(t, employeeCode) === me)
+    },
+    [isAdminOverview, employeeCode],
+  )
+
+  const vehicleMatchesSearchAndMonth = useCallback(
+    (jc: string, q: string) => {
+      if (q && !jobCardMatchesSearch(jc, cardByJc, q)) return false
+      const meta = cardByJc[jc]
+      if (floorMonthFilter !== 'all') {
+        const ym = istYearMonthFromIso(meta?.floorSinceAt)
+        if (ym !== floorMonthFilter) return false
+      }
+      return true
+    },
+    [cardByJc, floorMonthFilter],
   )
 
   const baseJobCards = useMemo(() => {
@@ -191,34 +211,43 @@ export default function BodyshopFloorWorkPage() {
     const floorDay = { all: 0, today: 0, yesterday: 0, older: 0, unknown: 0 }
     const updates = { all: 0, pending: 0, done: 0 }
     const q = vehicleSearch.trim().toLowerCase()
+
     for (const jc of baseJobCards) {
-      if (q && !jobCardMatchesSearch(jc, cardByJc, q)) continue
+      if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (floorMonthFilter !== 'all') {
-        const ym = istYearMonthFromIso(meta?.floorSinceAt)
-        if (ym !== floorMonthFilter) continue
-      }
-      floorDay.all += 1
-      const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
-      floorDay[bucket] += 1
       const rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
-      if (!isAdminOverview && !rowTasks.some((t) => workTaskEmployeeCode(t, employeeCode) === employeeCode)) {
-        continue
+      if (!vehicleInWorkerScope(rowTasks)) continue
+
+      const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
+      const hasUpdate = vehicleHasTodayUpdate(jc, rowTasks)
+
+      const passesUpdateFacet =
+        updateFilter === 'all'
+        || (updateFilter === 'pending' && !hasUpdate)
+        || (updateFilter === 'done' && hasUpdate)
+      const passesFloorDayFacet = floorDayFilter === 'all' || floorDayFilter === bucket
+
+      if (passesUpdateFacet) {
+        floorDay.all += 1
+        floorDay[bucket] += 1
       }
-      updates.all += 1
-      if (vehicleHasTodayUpdate(jc, rowTasks)) updates.done += 1
-      else updates.pending += 1
+      if (passesFloorDayFacet) {
+        updates.all += 1
+        if (hasUpdate) updates.done += 1
+        else updates.pending += 1
+      }
     }
     return { floorDay, updates }
   }, [
     baseJobCards,
     cardByJc,
-    floorMonthFilter,
     vehicleSearch,
     tasks,
-    isAdminOverview,
-    employeeCode,
     today,
+    floorDayFilter,
+    updateFilter,
+    vehicleMatchesSearchAndMonth,
+    vehicleInWorkerScope,
     vehicleHasTodayUpdate,
   ])
 
@@ -227,21 +256,14 @@ export default function BodyshopFloorWorkPage() {
     const rows: Array<{ jobCardNumber: string; tasks: BodyshopFloorWorkTask[] }> = []
 
     for (const jc of baseJobCards) {
-      if (q && !jobCardMatchesSearch(jc, cardByJc, q)) continue
+      if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (floorMonthFilter !== 'all') {
-        const ym = istYearMonthFromIso(meta?.floorSinceAt)
-        if (ym !== floorMonthFilter) continue
-      }
       if (floorDayFilter !== 'all') {
         const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
         if (bucket !== floorDayFilter) continue
       }
       const rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
-      if (!isAdminOverview) {
-        const mine = rowTasks.filter((t) => workTaskEmployeeCode(t, employeeCode) === employeeCode)
-        if (mine.length === 0) continue
-      }
+      if (!vehicleInWorkerScope(rowTasks)) continue
       if (updateFilter === 'pending' && vehicleHasTodayUpdate(jc, rowTasks)) continue
       if (updateFilter === 'done' && !vehicleHasTodayUpdate(jc, rowTasks)) continue
       rows.push({ jobCardNumber: jc, tasks: rowTasks })
@@ -251,13 +273,12 @@ export default function BodyshopFloorWorkPage() {
     baseJobCards,
     cardByJc,
     vehicleSearch,
-    floorMonthFilter,
     floorDayFilter,
     updateFilter,
     tasks,
-    isAdminOverview,
-    employeeCode,
     today,
+    vehicleMatchesSearchAndMonth,
+    vehicleInWorkerScope,
     vehicleHasTodayUpdate,
   ])
 
@@ -624,79 +645,81 @@ export default function BodyshopFloorWorkPage() {
             <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My assigned vehicles'}</h2>
             {vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0 ? (
               <>
-                <div className="bsf-filterbar" style={{ marginBottom: 10 }}>
-                  <div className="bsf-search">
-                    <Icon name="search" size={16} />
-                    <input
-                      className="bsf-search__input"
-                      type="search"
-                      placeholder="Search reg / customer / JC…"
-                      value={vehicleSearch}
-                      onChange={(e) => setVehicleSearch(e.target.value)}
-                    />
+                <div className="bfw-filters">
+                  <div className="bfw-filters__top">
+                    <div className="bsf-search">
+                      <Icon name="search" size={16} />
+                      <input
+                        className="bsf-search__input"
+                        type="search"
+                        placeholder="Search reg / customer / JC…"
+                        value={vehicleSearch}
+                        onChange={(e) => setVehicleSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="bsf-group">
+                      <span className="bsf-label">Month on floor</span>
+                      <select
+                        className="sel sel--advisor-filter"
+                        value={floorMonthFilter}
+                        onChange={(e) => setFloorMonthFilter(e.target.value)}
+                        aria-label="Month on floor"
+                      >
+                        {monthFilterOptions.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <span className="bsf-sep" aria-hidden />
-
-                  <div className="bsf-group">
-                    <span className="bsf-label">Month</span>
-                    <select
-                      className="sel sel--advisor-filter"
-                      value={floorMonthFilter}
-                      onChange={(e) => setFloorMonthFilter(e.target.value)}
-                      aria-label="Month on floor"
-                    >
-                      {monthFilterOptions.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
+                  <div className="bfw-filters__row">
+                    <div className="bsf-group">
+                      <span className="bsf-label">On floor (IST)</span>
+                      {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
+                          onClick={() => setFloorDayFilter(key)}
+                        >
+                          {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}
+                          <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
-                  <span className="bsf-sep" aria-hidden />
-
-                  <div className="bsf-group">
-                    <span className="bsf-label">On floor</span>
-                    {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
-                        onClick={() => setFloorDayFilter(key)}
-                      >
-                        {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}
-                        <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <span className="bsf-sep" aria-hidden />
-
-                  <div className="bsf-group">
-                    <span className="bsf-label">Today</span>
-                    {(['all', 'pending', 'done'] as const).map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
-                        onClick={() => setUpdateFilter(key)}
-                      >
-                        {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}
-                        <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
-                      </button>
-                    ))}
+                  <div className="bfw-filters__row">
+                    <div className="bsf-group">
+                      <span className="bsf-label">Today&apos;s update</span>
+                      {(['all', 'pending', 'done'] as const).map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
+                          onClick={() => setUpdateFilter(key)}
+                        >
+                          {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}
+                          <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 12 }}>
-                  Sorted: on floor today → yesterday → longer wait
+                  Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
+                  {' · '}Sorted: on floor today → yesterday → longer wait
                   {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
                 </p>
               </>
             ) : null}
             {vehicleRows.length === 0 ? (
               <p style={{ color: 'var(--muted)' }}>
-                {isAdminOverview
-                  ? 'No vehicles on floor or active assignments yet.'
-                  : 'No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.'}
+                {baseJobCards.length === 0
+                  ? isAdminOverview
+                    ? 'No vehicles on floor or active assignments yet.'
+                    : 'No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.'
+                  : 'No vehicles match the current filters. Try All for On floor and Today\'s update, or clear search.'}
               </p>
             ) : (
               <div
@@ -708,11 +731,7 @@ export default function BodyshopFloorWorkPage() {
               >
                 {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
                   const card = cardByJc[jobCardNumber]
-                  const todayUpdated = rowTasks.some((t) => {
-                    const slot = workTaskEmployeeCode(t, employeeCode)
-                    const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
-                    return Boolean(logsByKey[k]?.note_text?.trim())
-                  })
+                  const todayUpdated = vehicleHasTodayUpdate(jobCardNumber, rowTasks)
                   const photoCount = photoCountByJc[jobCardNumber] ?? 0
                   const active = selectedJc === jobCardNumber
                   const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)

@@ -37,6 +37,21 @@ export function floorWorkJobCardLookupKeys(
 }
 
 /** Match a stored photo/log to a floor work vehicle card (JC vs plate-as-JC). */
+/** Any role submitted today's IST log for this vehicle (admin list / filters). */
+export function floorWorkVehicleHasTodayLogUpdate(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+  logsByKey: Record<string, { job_card_number?: string | null; note_text?: string | null }>,
+): boolean {
+  const keys = new Set(floorWorkJobCardLookupKeys(assignmentKey, meta))
+  for (const log of Object.values(logsByKey)) {
+    if (!String(log.note_text ?? '').trim()) continue
+    const logJc = normalizeFloorWorkAssignmentKey(log.job_card_number)
+    if (keys.has(logJc)) return true
+  }
+  return false
+}
+
 export function floorWorkPhotoBelongsToVehicle(
   assignmentKey: string,
   meta: FloorWorkVehicleMeta | undefined,
