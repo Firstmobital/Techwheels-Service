@@ -196,14 +196,21 @@ async function markDocAwaitingAdvisor(
   if (error) throw new Error(error.message)
 }
 
+function driveUrlFromUniversalPayload(payload: Record<string, unknown>): string {
+  const nested = payload.result as { driveUrl?: string; fileId?: string } | undefined
+  const fromNested = nested?.driveUrl ? String(nested.driveUrl) : ''
+  const fileId = text(payload.drive_file_id || payload.fileId || nested?.fileId)
+  const fromFileId = fileId ? `https://drive.google.com/file/d/${fileId}/view` : ''
+  return text(payload.drive_url || payload.link || fromNested || fromFileId)
+}
+
 async function offloadBodyshopDocument(
   supabaseUrl: string,
   serviceRoleKey: string,
   input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number; regNumber?: string }
 ): Promise<{ ok: true; drive_url: string } | { ok: false; error: string }> {
   const controller = new AbortController()
-  // Background offload only — fail fast; customer already has Supabase copy; retry_drive can rerun.
-  const DRIVE_OFFLOAD_TIMEOUT_MS = 18_000
+  const DRIVE_OFFLOAD_TIMEOUT_MS = 55_000
   const timeout = setTimeout(() => controller.abort(), DRIVE_OFFLOAD_TIMEOUT_MS)
   try {
     const send = () => fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
@@ -224,9 +231,14 @@ async function offloadBodyshopDocument(
       }),
       signal: controller.signal,
     })
-    const res = await send()
-    const payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
-    const driveUrl = text(payload.drive_url || payload.link)
+    let res = await send()
+    let payload = await res.json().catch(() => ({} as Record<string, unknown>))
+    let driveUrl = driveUrlFromUniversalPayload(payload)
+    if (!res.ok || payload.ok === false || !driveUrl) {
+      res = await send()
+      payload = await res.json().catch(() => ({} as Record<string, unknown>))
+      driveUrl = driveUrlFromUniversalPayload(payload)
+    }
     if (!driveUrl) {
       return { ok: false, error: text(payload.error) || `Drive upload failed (${res.status})` }
     }
@@ -419,7 +431,31 @@ Deno.serve(async (req) => {
         return json(500, { ok: false, error: upsertError?.message || 'Failed to save document' })
       }
 
-      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
+      const drive = await offloadBodyshopDocument(supabaseUrl, serviceRoleKey, {
+        resourceId: Number(upserted.id),
+        objectName: storagePath,
+        docKey,
+        fileSizeBytes: Number.isFinite(fileSize) ? fileSize : Number(upserted.file_size_bytes || 0),
+        regNumber: ctx.regNumber,
+      })
+
+      if (!drive.ok) {
+        try {
+          await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
+        } catch (flagError) {
+          return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
+        }
+        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
+        return json(200, {
+          ok: true,
+          storage_saved: true,
+          drive_pending: true,
+          view_url: signed?.signedUrl || null,
+          resource_id: upserted.id,
+          doc_key: docKey,
+          error: drive.error,
+        })
+      }
 
       try {
         await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
@@ -427,25 +463,11 @@ Deno.serve(async (req) => {
         return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
       }
 
-      const drivePromise = offloadBodyshopDocument(supabaseUrl, serviceRoleKey, {
-        resourceId: Number(upserted.id),
-        objectName: storagePath,
-        docKey,
-        fileSizeBytes: Number.isFinite(fileSize) ? fileSize : Number(upserted.file_size_bytes || 0),
-        regNumber: ctx.regNumber,
-      })
-      try {
-        // @ts-ignore Supabase Edge runtime
-        EdgeRuntime.waitUntil(drivePromise)
-      } catch {
-        void drivePromise.catch(() => undefined)
-      }
-
       return json(200, {
         ok: true,
         storage_saved: true,
-        drive_pending: true,
-        view_url: signed?.signedUrl || null,
+        drive_url: drive.drive_url,
+        view_url: drive.drive_url,
         resource_id: upserted.id,
         doc_key: docKey,
       })

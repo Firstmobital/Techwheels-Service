@@ -1,4 +1,4 @@
-/** Monthly Bodyshop earnings — same rules as /bodyshop-tracker. */
+/** Monthly Bodyshop earnings — same module as web src/lib/bodyshopMonthlyEarnings.ts (payroll + tracker authority). */
 
 import { supabase } from './supabase'
 import {
@@ -12,8 +12,6 @@ import {
   type BodyshopRole,
   type BodyshopSupportRow,
 } from './bodyshopEarnings'
-import { matchesBranchSelection } from './branches'
-import { matchesBusinessRoleFilter } from './businessRoles'
 import { monthRangeIst } from './payroll/calculations'
 import { calculateSAIncome, normalizeEmployeeCode, parseAmount } from './payroll/earningsFormulas'
 
@@ -86,6 +84,7 @@ function roundPaise(value: number): number {
 async function fetchBodyshopSharePercents(): Promise<BodyshopSharePercents> {
   const percents: BodyshopSharePercents = { ...DEFAULT_BODYSHOP_SHARE_PERCENTS }
   const res = await supabase.from('bodyshop_role_earning_settings').select('role, percentage')
+  // Floor staff often lack bodyshop_tracker — use defaults (same % as tracker page defaults).
   if (res.error) return percents
   ;(res.data ?? []).forEach((row) => {
     const role = String((row as { role?: string }).role ?? '').trim().toUpperCase() as BodyshopStakeholderRole
@@ -157,10 +156,6 @@ function addComponent(
   components.set(code, list)
 }
 
-/**
- * Authoritative monthly Bodyshop Tracker stakeholder earnings.
- * totalBodyshopEarning includes legitimate income with no employee_code (unmapped).
- */
 export async function fetchMonthlyBodyshopStakeholderEarnings(
   payrollMonth: string,
 ): Promise<BodyshopStakeholderEarnings> {
@@ -250,128 +245,10 @@ export async function fetchMonthlyBodyshopStakeholderEarnings(
   }
 }
 
-/** Per-employee map used by payroll recompute. Does not include unmapped stakeholder income. */
+/** Per-employee map — same as payroll recompute & Bodyshop Tracker totals by code. */
 export async function fetchMonthlyBodyshopEarningsByCode(
   payrollMonth: string,
 ): Promise<Map<string, number>> {
   const result = await fetchMonthlyBodyshopStakeholderEarnings(payrollMonth)
   return result.earningsByEmployeeCode
-}
-
-/**
- * Payroll branch authority for Bodyshop Tracker scoping:
- * employee_code → employee_master.location.
- * Bidirectional alias match covers Sitapura ↔ Sitapura PV/EV.
- */
-export function employeeMasterBranchMatches(
-  employeeBranch: unknown,
-  selectedBranch: string,
-): boolean {
-  const selected = String(selectedBranch ?? '').trim()
-  if (!selected || selected.toLowerCase() === 'all') return true
-  return (
-    matchesBranchSelection(employeeBranch, selected)
-    || matchesBranchSelection(selected, String(employeeBranch ?? ''))
-  )
-}
-
-export interface BodyshopBranchScope {
-  displayedTotal: number
-  mappedInScope: number
-  unmappedInScope: number
-  includeUnmapped: boolean
-}
-
-function isAllFilter(value: string | null | undefined): boolean {
-  const selected = String(value ?? '').trim()
-  return !selected || selected.toLowerCase() === 'all'
-}
-
-function departmentMatches(employeeDepartment: unknown, selectedDepartment: string): boolean {
-  if (isAllFilter(selectedDepartment)) return true
-  return (String(employeeDepartment ?? '').trim()) === String(selectedDepartment).trim()
-}
-
-function salaryTypeMatches(employeeSalaryType: unknown, selectedSalaryType: string): boolean {
-  if (isAllFilter(selectedSalaryType)) return true
-  return String(employeeSalaryType ?? '') === String(selectedSalaryType).trim()
-}
-
-/** Same payroll UI filters as the other Processing cards: department, role, salary type, and branch. */
-export function employeeMatchesBodyshopPayrollScope(input: {
-  department?: string | null
-  role?: string | null
-  salaryType?: string | null
-  masterBranch?: string | null
-  selectedDepartment?: string
-  selectedRole?: string
-  selectedSalaryType?: string
-  selectedBranch?: string
-}): boolean {
-  return (
-    departmentMatches(input.department, input.selectedDepartment ?? 'all')
-    && matchesBusinessRoleFilter(input.role, input.selectedRole ?? 'all')
-    && salaryTypeMatches(input.salaryType, input.selectedSalaryType ?? 'all')
-    && employeeMasterBranchMatches(input.masterBranch, input.selectedBranch ?? 'all')
-  )
-}
-
-/**
- * View/scope already-calculated Tracker earnings by the current payroll filters.
- * Does not recompute role percentages. Unmapped income is included only when
- * department, business role, branch, and salary type are all unscoped.
- */
-export function scopeBodyshopTrackerByBranch(input: {
-  earningsByEmployeeCode: Map<string, number>
-  totalBodyshopEarning: number
-  mappedBodyshopEarning: number
-  unmappedBodyshopEarning: number
-  branchByEmployeeCode: Map<string, string | null | undefined>
-  selectedBranch: string
-  departmentByEmployeeCode?: Map<string, string | null | undefined>
-  roleByEmployeeCode?: Map<string, string | null | undefined>
-  salaryTypeByEmployeeCode?: Map<string, string | null | undefined>
-  selectedDepartment?: string
-  selectedRole?: string
-  selectedSalaryType?: string
-}): BodyshopBranchScope {
-  const unscoped = (
-    isAllFilter(input.selectedBranch)
-    && isAllFilter(input.selectedDepartment)
-    && isAllFilter(input.selectedRole)
-    && isAllFilter(input.selectedSalaryType)
-  )
-
-  if (unscoped) {
-    return {
-      displayedTotal: input.totalBodyshopEarning,
-      mappedInScope: input.mappedBodyshopEarning,
-      unmappedInScope: input.unmappedBodyshopEarning,
-      includeUnmapped: true,
-    }
-  }
-
-  let mappedInScope = 0
-  input.earningsByEmployeeCode.forEach((amount, code) => {
-    const key = normalizeEmployeeCode(code)
-    if (employeeMatchesBodyshopPayrollScope({
-      department: input.departmentByEmployeeCode?.get(key),
-      role: input.roleByEmployeeCode?.get(key),
-      salaryType: input.salaryTypeByEmployeeCode?.get(key),
-      masterBranch: input.branchByEmployeeCode.get(key),
-      selectedDepartment: input.selectedDepartment,
-      selectedRole: input.selectedRole,
-      selectedSalaryType: input.selectedSalaryType,
-      selectedBranch: input.selectedBranch,
-    })) {
-      mappedInScope += amount
-    }
-  })
-  mappedInScope = roundPaise(mappedInScope)
-  return {
-    displayedTotal: mappedInScope,
-    mappedInScope,
-    unmappedInScope: 0,
-    includeUnmapped: false,
-  }
 }

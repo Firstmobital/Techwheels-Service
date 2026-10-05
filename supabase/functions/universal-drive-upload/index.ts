@@ -1,5 +1,24 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.5'
-import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6?target=deno'
+/**
+ * No top-level remote imports. A static `jose` import from esm.sh blocked cold start
+ * and the gateway returned 504 before Drive sync could run.
+ */
+type SupabaseClient = {
+  from: (table: string) => any
+  storage: { from: (bucket: string) => any }
+}
+
+let supabaseModulePromise: Promise<{ createClient: (url: string, key: string) => SupabaseClient }> | null = null
+function loadSupabase() {
+  if (!supabaseModulePromise) {
+    supabaseModulePromise = import('npm:@supabase/supabase-js@2.43.5')
+  }
+  return supabaseModulePromise
+}
+
+async function createSupabase(url: string, key: string): Promise<SupabaseClient> {
+  const { createClient } = await loadSupabase()
+  return createClient(url, key)
+}
 
 type UploadBody = {
   resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_floor_work_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
@@ -181,24 +200,53 @@ function decodeServiceAccountKey(rawBase64: string): string {
   ].join('\n')
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function pemToPkcs8(pem: string): ArrayBuffer {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '')
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
+}
+
+/** RS256 service-account JWT using Web Crypto, so Drive auth does not depend on esm.sh. */
+async function signGoogleServiceAccountJwt(serviceEmail: string, privateKeyPem: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToPkcs8(privateKeyPem),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const now = Math.floor(Date.now() / 1000)
+  const encoder = new TextEncoder()
+  const header = bytesToBase64Url(encoder.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })))
+  const payload = bytesToBase64Url(encoder.encode(JSON.stringify({
+    iss: serviceEmail,
+    sub: serviceEmail,
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+    scope: 'https://www.googleapis.com/auth/drive',
+  })))
+  const signingInput = encoder.encode(`${header}.${payload}`)
+  const signature = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, signingInput))
+  return `${header}.${payload}.${bytesToBase64Url(signature)}`
+}
+
 async function fetchGoogleAccessToken(input: {
   serviceEmail: string
   privateKeyPem: string
 }): Promise<string> {
-  const now = Math.floor(Date.now() / 1000)
-  const alg = 'RS256'
-  const key = await importPKCS8(input.privateKeyPem, alg)
-
-  const assertion = await new SignJWT({
-    scope: 'https://www.googleapis.com/auth/drive',
-  })
-    .setProtectedHeader({ alg, typ: 'JWT' })
-    .setIssuer(input.serviceEmail)
-    .setSubject(input.serviceEmail)
-    .setAudience('https://oauth2.googleapis.com/token')
-    .setIssuedAt(now)
-    .setExpirationTime(now + 3600)
-    .sign(key)
+  const assertion = await signGoogleServiceAccountJwt(input.serviceEmail, input.privateKeyPem)
 
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -402,11 +450,29 @@ function driveViewUrl(fileId: string): string {
 }
 
 // deno-lint-ignore no-explicit-any
+function sanitizePendingUploadPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...payload }
+  const rawId = next.resource_id
+  if (rawId == null || rawId === '') return next
+  const rid = String(rawId).trim()
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rid)
+  if (isUuid) return next
+  next.resource_id = null
+  if (/^\d+$/.test(rid)) {
+    const prev = String(next.error_message ?? '').trim()
+    next.error_message = prev ? `${prev} | resource_id_num=${rid}` : `resource_id_num=${rid}`
+  }
+  return next
+}
+
 async function logPendingUpload(
   supabase: { from: (table: string) => any },
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await supabase.from('pending_drive_uploads').insert(payload as any)
+  const { error } = await supabase
+    .from('pending_drive_uploads')
+    .insert(sanitizePendingUploadPayload(payload) as any)
   if (error) {
     console.warn('[universal-drive-upload] pending log write failed:', error.message)
   }
@@ -515,7 +581,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const supabase = createClient(supabaseUrl, serviceRole)
+    const supabase = await createSupabase(supabaseUrl, serviceRole)
 
     let registrationNo = ''
 
@@ -1206,7 +1272,7 @@ Deno.serve(async (req) => {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')
       const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
       if (supabaseUrl && serviceRole) {
-        await logPendingUpload(createClient(supabaseUrl, serviceRole), {
+        await logPendingUpload(await createSupabase(supabaseUrl, serviceRole), {
           ...pendingOnFailure,
           status: 'drive_failed',
           error_message: message,

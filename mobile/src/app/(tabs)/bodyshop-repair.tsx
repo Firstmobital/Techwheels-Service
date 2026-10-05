@@ -4,7 +4,7 @@
  * Ground truth: src/pages/BodyshopRepairPage.tsx (web) + src/lib/api/bodyshopRepair.ts
  * Structure: follows floor-incharge.tsx patterns (FlatList, expand/collapse, toast, useFocusEffect)
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactElement } from 'react'
 import {
   ActivityIndicator, Alert, FlatList, Linking, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -13,6 +13,7 @@ import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
+import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -228,6 +229,7 @@ export default function BodyshopRepairScreen() {
   const [floorAssignments, setFloorAssignments] = useState<Record<string, FloorRoleInfo[]>>({})
 
   const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [pipelineGroupFilter, setPipelineGroupFilter] = useState<string>('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [search,       setSearch]       = useState('')
 
@@ -454,12 +456,15 @@ export default function BodyshopRepairScreen() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const branches = useMemo(() => Array.from(new Set(cards.map(c => c.branch ?? 'Unknown'))).sort(), [cards])
+  const branches = useMemo(
+    () => Array.from(new Set(cards.map((c) => bodyshopBranchLabel(c.branch)))).sort(),
+    [cards],
+  )
 
-  const filtered = useMemo(() => {
+  const scopedCards = useMemo(() => {
     let list = [...cards]
     if (statusFilter !== 'all') list = list.filter(c => c.overall_status === statusFilter)
-    if (branchFilter !== 'all') list = list.filter(c => (c.branch ?? '') === branchFilter)
+    if (branchFilter !== 'all') list = list.filter(c => matchesBodyshopBranchFilter(c.branch, branchFilter))
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(c =>
@@ -471,13 +476,31 @@ export default function BodyshopRepairScreen() {
     return list
   }, [cards, statusFilter, branchFilter, search])
 
-  const stageCounts = useMemo(() => {
-    const active = cards.filter(c => c.overall_status === 'active')
-    return DISPLAY_STAGE_GROUPS.map(g => ({
-      ...g,
-      count: active.filter(c => g.stages.includes(c.current_stage)).length,
-    }))
-  }, [cards])
+  const stageCounts = useMemo(
+    () =>
+      DISPLAY_STAGE_GROUPS.map(g => ({
+        ...g,
+        count: scopedCards.filter(c => g.stages.includes(c.current_stage)).length,
+      })),
+    [scopedCards],
+  )
+
+  const filtered = useMemo(() => {
+    if (pipelineGroupFilter === 'all') return scopedCards
+    const group = DISPLAY_STAGE_GROUPS.find(g => g.label === pipelineGroupFilter)
+    if (!group) return scopedCards
+    return scopedCards.filter(c => group.stages.includes(c.current_stage))
+  }, [scopedCards, pipelineGroupFilter])
+
+  const hasExtraFilters =
+    pipelineGroupFilter !== 'all' || branchFilter !== 'all' || statusFilter !== 'active' || search.trim().length > 0
+
+  const clearAllFilters = useCallback(() => {
+    setPipelineGroupFilter('all')
+    setBranchFilter('all')
+    setStatusFilter('active')
+    setSearch('')
+  }, [])
 
   const bodyshopEmpNames = useMemo(() => {
     const seen = new Set<string>()
@@ -487,6 +510,129 @@ export default function BodyshopRepairScreen() {
       .filter(n => { const k = n.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true })
       .sort((a, b) => a.localeCompare(b))
   }, [employees])
+
+  const filterHeader = useMemo((): ReactElement => (
+    <View style={S.filtersBlock}>
+      <Text style={S.filterSectionLabel}>Pipeline — tap stage group</Text>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        style={S.filterScrollRow}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        {stageCounts.map(g => {
+          const active = pipelineGroupFilter === g.label
+          return (
+            <TouchableOpacity
+              key={g.label}
+              onPress={() => setPipelineGroupFilter(active ? 'all' : g.label)}
+              style={[
+                S.pipelineChip,
+                { backgroundColor: g.bg, borderColor: g.color },
+                active && S.pipelineChipActive,
+              ]}
+              activeOpacity={0.85}
+            >
+              <Text style={{ fontSize: 10, fontWeight: '700', color: g.color }}>{g.label}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: g.color, marginTop: 2 }}>{g.count}</Text>
+              {active ? <Text style={S.pipelineChipActiveHint}>Selected</Text> : null}
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
+      <View style={S.searchWrap}>
+        <TextInput
+          style={S.searchInput}
+          placeholder="Search JC / reg / customer..."
+          placeholderTextColor="#a7a99f"
+          value={search}
+          onChangeText={setSearch}
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      <Text style={S.filterSectionLabel}>Status</Text>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        style={S.filterScrollRow}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        {STATUS_FILTER.map(f => {
+          const active = statusFilter === f.value
+          const col =
+            f.value === 'active' ? '#2a4cd0'
+            : f.value === 'delivered' ? '#1c8f63'
+            : f.value === 'cancelled' ? '#c33b53'
+            : '#1a1b21'
+          return (
+            <TouchableOpacity
+              key={f.value}
+              onPress={() => setStatusFilter(f.value)}
+              style={[S.chip, active && { backgroundColor: col, borderColor: col }]}
+            >
+              <Text style={[S.chipText, active && { color: '#fff' }]}>{f.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
+      <Text style={S.filterSectionLabel}>Branch</Text>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        style={[S.filterScrollRow, S.filterScrollRowLast]}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        <TouchableOpacity
+          onPress={() => setBranchFilter('all')}
+          style={[S.chip, branchFilter === 'all' && { backgroundColor: '#41617f', borderColor: '#41617f' }]}
+        >
+          <Text style={[S.chipText, branchFilter === 'all' && { color: '#fff' }]}>All branches</Text>
+        </TouchableOpacity>
+        {branches.map(b => {
+          const active = branchFilter === b
+          return (
+            <TouchableOpacity
+              key={b}
+              onPress={() => setBranchFilter(active ? 'all' : b)}
+              style={[S.chip, active && { backgroundColor: '#41617f', borderColor: '#41617f' }]}
+            >
+              <Text style={[S.chipText, active && { color: '#fff' }]}>{b}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
+      {hasExtraFilters ? (
+        <TouchableOpacity onPress={clearAllFilters} style={S.clearFiltersBtn}>
+          <Text style={S.clearFiltersBtnText}>Clear filters</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <Text style={S.listHint}>
+        Showing {filtered.length} of {scopedCards.length}
+        {pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}
+        {statusFilter !== 'all' ? ` · ${statusFilter}` : ''}
+        {branchFilter !== 'all' ? ` · ${branchFilter}` : ''}
+      </Text>
+    </View>
+  ), [
+    stageCounts,
+    pipelineGroupFilter,
+    search,
+    statusFilter,
+    branchFilter,
+    branches,
+    filtered.length,
+    scopedCards.length,
+    hasExtraFilters,
+    clearAllFilters,
+  ])
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
@@ -1114,56 +1260,27 @@ export default function BodyshopRepairScreen() {
       {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
 
       <View style={S.topBar}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={S.screenTitle}>Bodyshop Repair</Text>
-          <Text style={S.screenSubtitle}>{filtered.length} vehicles</Text>
+          <Text style={S.screenSubtitle}>
+            {filtered.length} shown
+            {pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}
+          </Text>
         </View>
         <TouchableOpacity onPress={() => loadAll(true)} style={S.refreshBtn}>
           <Text style={S.refreshBtnText}>↻</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 14 }} contentContainerStyle={{ gap: 6, paddingBottom: 8 }}>
-        {stageCounts.map(g => (
-          <View key={g.label} style={[S.pipelineChip, { backgroundColor: g.bg, borderColor: g.color }]}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: g.color }}>{g.label}</Text>
-            <Text style={{ fontSize: 13, fontWeight: '800', color: g.color, marginTop: 1 }}>{g.count}</Text>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View style={{ paddingHorizontal: 14, paddingBottom: 8 }}>
-        <TextInput style={S.searchInput} placeholder="Search JC / reg / customer..." placeholderTextColor="#a7a99f" value={search} onChangeText={setSearch} clearButtonMode="while-editing" />
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 14 }} contentContainerStyle={{ gap: 6, paddingBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
-        {STATUS_FILTER.map(f => {
-          const active = statusFilter === f.value
-          const col = f.value === 'active' ? '#2a4cd0' : f.value === 'delivered' ? '#1c8f63' : f.value === 'cancelled' ? '#c33b53' : '#1a1b21'
-          return (
-            <TouchableOpacity key={f.value} onPress={() => setStatusFilter(f.value)}
-              style={[S.chip, active && { backgroundColor: col, borderColor: col }]}>
-              <Text style={[S.chipText, active && { color: '#fff' }]}>{f.label}</Text>
-            </TouchableOpacity>
-          )
-        })}
-        {branches.map(b => {
-          const active = branchFilter === b
-          return (
-            <TouchableOpacity key={b} onPress={() => setBranchFilter(active ? 'all' : b)}
-              style={[S.chip, active && { backgroundColor: '#41617f', borderColor: '#41617f' }]}>
-              <Text style={[S.chipText, active && { color: '#fff' }]}>{b}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
-
       <FlatList
+        style={S.listFlex}
         data={filtered}
         keyExtractor={item => String(item.id)}
+        ListHeaderComponent={filterHeader}
+        stickyHeaderIndices={undefined}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} />}
-        contentContainerStyle={{ padding: 14, paddingBottom: 80, gap: 10 }}
-        ListEmptyComponent={<View style={S.empty}><Text style={S.emptyIcon}>🔧</Text><Text style={S.emptyText}>No vehicles found</Text></View>}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 80, gap: 10 }}
+        ListEmptyComponent={<View style={S.empty}><Text style={S.emptyIcon}>🔧</Text><Text style={S.emptyText}>No vehicles match these filters</Text></View>}
         renderItem={({ item: card }) => {
           const group = getDisplayGroup(card.current_stage)
           const statusColor = card.overall_status === 'active' ? '#2a4cd0' : card.overall_status === 'delivered' ? '#1c8f63' : '#c33b53'
@@ -1179,7 +1296,7 @@ export default function BodyshopRepairScreen() {
               <Text style={S.cardReg}>{[
                 card.reg_number?.trim().toUpperCase() !== card.job_card_no?.trim().toUpperCase() ? card.reg_number : null,
                 card.customer_name,
-                card.branch,
+                bodyshopBranchLabel(card.branch) !== 'Unknown' ? bodyshopBranchLabel(card.branch) : null,
               ].filter(Boolean).join(' · ')}</Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <View style={[S.stageBadge, { backgroundColor: group.bg }]}>
@@ -1207,7 +1324,33 @@ const S = StyleSheet.create({
   screenSubtitle:   { fontSize: 12.5, color: '#82858f', fontWeight: '500', marginTop: 2 },
   refreshBtn:       { padding: 8 },
   refreshBtnText:   { fontSize: 20, color: '#2a4cd0' },
-  pipelineChip:     { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, borderWidth: 1, alignItems: 'center', minWidth: 74 },
+  listFlex:         { flex: 1 },
+  filtersBlock:     { paddingBottom: 4 },
+  filterSectionLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#82858f',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  filterScrollRow:  { flexGrow: 0, flexShrink: 0, maxHeight: 88 },
+  filterScrollRowLast: { marginBottom: 4 },
+  filterScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 20,
+    gap: 8,
+    paddingVertical: 2,
+  },
+  searchWrap:       { marginTop: 4, marginBottom: 4 },
+  pipelineChip:     { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', minWidth: 78 },
+  pipelineChipActive: { borderWidth: 2.5, transform: [{ scale: 1.02 }] },
+  pipelineChipActiveHint: { fontSize: 8, fontWeight: '800', color: '#1a1b21', marginTop: 2, textTransform: 'uppercase' },
+  clearFiltersBtn:  { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  clearFiltersBtnText: { fontSize: 12, fontWeight: '700', color: '#2a4cd0' },
+  listHint:         { fontSize: 11, color: '#82858f', marginTop: 8, marginBottom: 4 },
   searchInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13.5, color: '#1a1b21' },
   searchInputSm:    { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#1a1b21', marginBottom: 6 },
   chip:             { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 14, backgroundColor: '#fbfaf6', borderWidth: 1, borderColor: '#e7e3d9' },

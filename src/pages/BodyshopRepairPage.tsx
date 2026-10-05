@@ -1069,6 +1069,7 @@ export default function BodyshopRepairPage() {
   const [bodyshopDocsLoadError, setBodyshopDocsLoadError] = useState<string | null>(null)
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
+  const pendingDocActionRef = useRef<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
   const [floorWorkStartedLookup, setFloorWorkStartedLookup] = useState<Record<string, boolean>>({})
@@ -3025,15 +3026,28 @@ export default function BodyshopRepairPage() {
   }
 
   function startBodyshopDocUpload(docKey: BodyshopDocKey, mode: 'upload' | 'replace') {
-    setPendingDocAction({ docKey, mode })
-    bodyshopDocInputRef.current?.click()
+    const action = { docKey, mode }
+    pendingDocActionRef.current = action
+    setPendingDocAction(action)
+    const input = bodyshopDocInputRef.current
+    if (!input) {
+      pendingDocActionRef.current = null
+      setPendingDocAction(null)
+      toast_('Upload control is not ready. Open SA → Docs and try again.', false)
+      return
+    }
+    input.click()
   }
 
   async function handleBodyshopDocFilePicked(files: FileList | null) {
-    const action = pendingDocAction
+    const action = pendingDocActionRef.current
+    pendingDocActionRef.current = null
     setPendingDocAction(null)
 
     if (!action || !selected || !files || files.length === 0) return
+
+    const wasAdvisorApproved = isLegacyBooleanDocKey(action.docKey)
+      && advisorVerifiedDoc(selected, action.docKey)
 
     const file = files[0]
     const docKey = action.docKey
@@ -3114,6 +3128,9 @@ export default function BodyshopRepairPage() {
             file_size_bytes: file.size,
             uploaded_by: uploadedBy,
             uploaded_at: new Date().toISOString(),
+            ...(action.mode === 'replace'
+              ? { drive_url: null, drive_file_id: null }
+              : {}),
           }, {
             onConflict: 'repair_card_id,doc_key',
           })
@@ -3190,8 +3207,8 @@ export default function BodyshopRepairPage() {
         }
       }
 
-      if (isLegacyBooleanDocKey(docKey)) {
-        // Optimistically tick only legacy boolean docs immediately after upload.
+      if (isLegacyBooleanDocKey(docKey) && !(action.mode === 'replace' && wasAdvisorApproved)) {
+        // Optimistically tick legacy boolean docs after upload (not when replacing an approved file).
         setSelected((prev) => prev ? ({ ...prev, [docKey]: true } as RepairCard) : prev)
         setCards((prev) => prev.map((card) => (
           card.id === selected.id ? ({ ...card, [docKey]: true } as RepairCard) : card
@@ -3283,8 +3300,14 @@ export default function BodyshopRepairPage() {
       if (isLegacyBooleanDocKey(docKey)) {
         const hasDraftChanges = Object.keys(editPatch).length > 0
         const nextRejected = rejectedDocKeys(selected).filter((item) => item !== docKey)
+        const nextApproved =
+          action.mode === 'replace'
+            ? wasAdvisorApproved
+              ? false
+              : advisorVerifiedDoc(selected, docKey)
+            : true
         const updated = await updateRepairCard(selected.id, {
-          [docKey]: true,
+          [docKey]: nextApproved,
           doc_rejected_keys: nextRejected,
           ...(hasDraftChanges ? editPatch : {}),
         } as Partial<RepairCard>)
@@ -3299,12 +3322,26 @@ export default function BodyshopRepairPage() {
         await supabase.storage.from(AUTODOC_BUCKET).remove([existing.storage_path])
       }
 
+      const replaceAfterApproval = action.mode === 'replace' && wasAdvisorApproved && isLegacyBooleanDocKey(docKey)
       setDocUploadFeedbackByKey((prev) => ({
         ...prev,
-        [docKey]: { tone: 'ok', text: action.mode === 'replace' ? 'Document replaced successfully.' : 'Document uploaded successfully.' },
+        [docKey]: {
+          tone: 'ok',
+          text: replaceAfterApproval
+            ? 'File replaced. Status reset to uploaded — approve again after verifying.'
+            : action.mode === 'replace'
+              ? 'Document replaced successfully.'
+              : 'Document uploaded successfully.',
+        },
       }))
 
-      toast_(action.mode === 'replace' ? 'Document replaced ✅' : 'Document uploaded ✅')
+      toast_(
+        replaceAfterApproval
+          ? 'Document replaced — please approve again after verifying ✅'
+          : action.mode === 'replace'
+            ? 'Document replaced ✅'
+            : 'Document uploaded ✅',
+      )
     } catch (e) {
       console.error('[BodyshopDocUpload] upload failed', e)
       setDocUploadFeedbackByKey((prev) => ({

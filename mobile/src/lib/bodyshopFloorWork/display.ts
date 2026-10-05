@@ -7,6 +7,8 @@ export type FloorWorkVehicleMeta = {
   systemJobCardNo?: string | null
   floorSinceAt?: string | null
   bodyshopFloor?: string | null
+  qcStatus?: string | null
+  repairCardId?: number | null
 }
 
 export function isSystemJobCardKey(value: string): boolean {
@@ -203,6 +205,19 @@ function floorSinceMs(meta: FloorWorkVehicleMeta | undefined): number | null {
 }
 
 export type FloorWorkFloorDayBucket = 'today' | 'yesterday' | 'older' | 'unknown'
+
+export function floorWorkFloorDayLabel(bucket: FloorWorkFloorDayBucket): string {
+  switch (bucket) {
+    case 'today':
+      return 'On floor today'
+    case 'yesterday':
+      return 'On floor yesterday'
+    case 'older':
+      return 'On floor longer'
+    default:
+      return 'Floor date unknown'
+  }
+}
 
 export function floorWorkFloorDayBucket(
   floorSinceIso: string | null | undefined,

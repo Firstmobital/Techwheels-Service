@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getLinkedEmployeeContext } from '../lib/api/bodyshopFloorWorkContext'
 import {
-  BODYSHOP_FLOOR_WORK_LOG_ROLES,
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
   listAllWorkTasksForAdmin,
   listWorkTasksForEmployee,
-  resolveBodyshopFloorWorkUiModes,
   workTaskEmployeeCode,
   type BodyshopFloorWorkTask,
 } from '../lib/bodyshopFloorWork/roles'
@@ -27,7 +25,6 @@ import {
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../lib/bodyshopFloorRoleWorkLog'
 import { BodyshopFloorWorkPhotoGallery } from '../components/BodyshopFloorWorkPhotoGallery'
 import Icon from '../components/Icon'
-import { upsertBodyshopFloorDailyUpdate } from '../lib/api/bodyshopFloorDailyUpdate'
 import { getDealerContext } from '../lib/api'
 import {
   fetchBodyshopAssignmentsForEmployee,
@@ -37,17 +34,18 @@ import { fetchLiveOnFloorJobCardKeys, fetchRepairCardVehicleByJcs } from '../lib
 import { completeBodyshopFloorWorkRoleOnAssignment } from '../lib/api/bodyshopFloorWorkPipeline'
 import {
   buildAssignmentRowByJobCard,
+  canSubmitFloorWorkTask,
   isFloorWorkTaskAtActivePipelineStep,
+  isFloorWorkTaskStepCompleted,
+  pickFloorWorkDetailTask,
 } from '../lib/bodyshopFloorWork/pipeline'
 import {
   floorWorkVehicleSubtitle,
   floorWorkVehicleTitle,
   sortJobCardsByFloorDayRecency,
-  edpVehicleOptionLabel,
   floorWorkStandingLine,
   floorWorkJobCardLookupKeys,
   floorWorkPhotoBelongsToVehicle,
-  floorWorkVehicleHasTodayLogUpdate,
   buildFloorWorkMonthFilterOptions,
   floorWorkFloorDayBucket,
   floorWorkFloorDayLabel,
@@ -120,9 +118,6 @@ export default function BodyshopFloorWorkPage() {
   const [employeeCode, setEmployeeCode] = useState('')
   const [employeeName, setEmployeeName] = useState<string | null>(null)
   const [, setEmployeeRole] = useState<string | null>(null)
-  const [uiModes, setUiModes] = useState<Array<'worker' | 'edp'>>(['worker'])
-  const [tab, setTab] = useState<'worker' | 'edp'>('worker')
-
   const [tasks, setTasks] = useState<BodyshopFloorWorkTask[]>([])
   const [cardByJc, setCardByJc] = useState<Record<string, FloorWorkVehicleMeta>>({})
   const [logsByKey, setLogsByKey] = useState<Record<string, BodyshopFloorRoleDailyLogRow>>({})
@@ -134,10 +129,9 @@ export default function BodyshopFloorWorkPage() {
   const [saving, setSaving] = useState(false)
   const [allFloorJcs, setAllFloorJcs] = useState<string[]>([])
   const [assignmentByJc, setAssignmentByJc] = useState<Record<string, Record<string, unknown>>>({})
+  /** Worker slots on Bodyshop Floor before pipeline filter (for empty-state hints). */
+  const [workerAssignedSlotCount, setWorkerAssignedSlotCount] = useState(0)
 
-  const [edpJc, setEdpJc] = useState<string | null>(null)
-  const [edpNote, setEdpNote] = useState('')
-  const [edpSaving, setEdpSaving] = useState(false)
   const [isAdminOverview, setIsAdminOverview] = useState(false)
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [floorMonthFilter, setFloorMonthFilter] = useState('all')
@@ -158,22 +152,13 @@ export default function BodyshopFloorWorkPage() {
     setListVisibleCount(FLOOR_WORK_LIST_PAGE_SIZE)
   }, [vehicleSearch, floorMonthFilter, floorDayFilter, updateFilter])
 
-  const vehicleHasTodayUpdate = useCallback(
+  const vehicleHasPendingPipelineSteps = useCallback(
     (jobCardNumber: string, rowTasks: BodyshopFloorWorkTask[]) => {
-      const meta = cardByJc[jobCardNumber]
-      if (isAdminOverview) {
-        return floorWorkVehicleHasTodayLogUpdate(jobCardNumber, meta, logsByKey)
-      }
-      if (rowTasks.length === 0) return false
-      const me = String(employeeCode ?? '').trim().toUpperCase()
-      return rowTasks.some((t) => {
-        if (workTaskEmployeeCode(t, employeeCode) !== me) return false
-        const slot = workTaskEmployeeCode(t, employeeCode)
-        const k = workLogMapKey(t.jobCardNumber, t.floorRole, slot, t.isSupport)
-        return Boolean(logsByKey[k]?.note_text?.trim())
-      })
+      const row = assignmentByJc[jobCardNumber]
+      if (rowTasks.length === 0) return true
+      return rowTasks.some((t) => !isFloorWorkTaskStepCompleted(t, row))
     },
-    [employeeCode, isAdminOverview, logsByKey, cardByJc],
+    [assignmentByJc],
   )
 
   const vehicleInWorkerScope = useCallback(
@@ -209,11 +194,6 @@ export default function BodyshopFloorWorkPage() {
     return sortJobCardsByFloorDayRecency([...set], cardByJc, today)
   }, [isAdminOverview, allFloorJcs, tasks, cardByJc, today])
 
-  const edpJobCardsSorted = useMemo(
-    () => sortJobCardsByFloorDayRecency(allFloorJcs, cardByJc, today),
-    [allFloorJcs, cardByJc, today],
-  )
-
   const filterCounts = useMemo(() => {
     const floorDay = { all: 0, today: 0, yesterday: 0, older: 0, unknown: 0 }
     const updates = { all: 0, pending: 0, done: 0 }
@@ -229,12 +209,12 @@ export default function BodyshopFloorWorkPage() {
       if (!vehicleInWorkerScope(rowTasks)) continue
 
       const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
-      const hasUpdate = vehicleHasTodayUpdate(jc, rowTasks)
+      const hasPending = vehicleHasPendingPipelineSteps(jc, rowTasks)
 
       const passesUpdateFacet =
         updateFilter === 'all'
-        || (updateFilter === 'pending' && !hasUpdate)
-        || (updateFilter === 'done' && hasUpdate)
+        || (updateFilter === 'pending' && hasPending)
+        || (updateFilter === 'done' && !hasPending)
       const passesFloorDayFacet = floorDayFilter === 'all' || floorDayFilter === bucket
 
       if (passesUpdateFacet) {
@@ -243,7 +223,7 @@ export default function BodyshopFloorWorkPage() {
       }
       if (passesFloorDayFacet) {
         updates.all += 1
-        if (hasUpdate) updates.done += 1
+        if (!hasPending) updates.done += 1
         else updates.pending += 1
       }
     }
@@ -258,7 +238,7 @@ export default function BodyshopFloorWorkPage() {
     updateFilter,
     vehicleMatchesSearchAndMonth,
     vehicleInWorkerScope,
-    vehicleHasTodayUpdate,
+    vehicleHasPendingPipelineSteps,
     isAdminOverview,
     assignmentByJc,
   ])
@@ -270,7 +250,7 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (floorDayFilter !== 'all') {
+      if (isAdminOverview && floorDayFilter !== 'all') {
         const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
         if (bucket !== floorDayFilter) continue
       }
@@ -279,8 +259,10 @@ export default function BodyshopFloorWorkPage() {
         rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
       }
       if (!vehicleInWorkerScope(rowTasks)) continue
-      if (updateFilter === 'pending' && vehicleHasTodayUpdate(jc, rowTasks)) continue
-      if (updateFilter === 'done' && !vehicleHasTodayUpdate(jc, rowTasks)) continue
+      if (isAdminOverview) {
+        if (updateFilter === 'pending' && !vehicleHasPendingPipelineSteps(jc, rowTasks)) continue
+        if (updateFilter === 'done' && vehicleHasPendingPipelineSteps(jc, rowTasks)) continue
+      }
       rows.push({ jobCardNumber: jc, tasks: rowTasks })
     }
     return rows
@@ -294,7 +276,7 @@ export default function BodyshopFloorWorkPage() {
     today,
     vehicleMatchesSearchAndMonth,
     vehicleInWorkerScope,
-    vehicleHasTodayUpdate,
+    vehicleHasPendingPipelineSteps,
     isAdminOverview,
     assignmentByJc,
   ])
@@ -307,10 +289,22 @@ export default function BodyshopFloorWorkPage() {
   const selectedTask = useMemo(() => {
     if (!selectedJc) return null
     const onVehicle = tasks.filter((t) => t.jobCardNumber === selectedJc)
+    const row = assignmentByJc[selectedJc]
+    const qcStatus = cardByJc[selectedJc]?.qcStatus
+    if (isAdminOverview) {
+      return pickFloorWorkDetailTask(onVehicle, row, qcStatus, employeeCode)
+    }
     const me = String(employeeCode ?? '').trim().toUpperCase()
     const mine = onVehicle.find((t) => workTaskEmployeeCode(t, employeeCode) === me)
     return mine ?? onVehicle[0] ?? null
-  }, [selectedJc, tasks, employeeCode])
+  }, [selectedJc, tasks, employeeCode, isAdminOverview, assignmentByJc, cardByJc])
+
+  const canEditSelectedTask = useMemo(() => {
+    if (!selectedTask) return false
+    const row = assignmentByJc[selectedTask.jobCardNumber]
+    const qcStatus = cardByJc[selectedTask.jobCardNumber]?.qcStatus
+    return canSubmitFloorWorkTask(selectedTask, row, qcStatus, { isAdminOverview })
+  }, [selectedTask, assignmentByJc, cardByJc, isAdminOverview])
 
   const selectedVehiclePhotos = selectedJc ? (photosByVehicle[selectedJc] ?? []) : []
 
@@ -396,12 +390,6 @@ export default function BodyshopFloorWorkPage() {
       setEmployeeCode(myCode)
       setEmployeeName(ctx.data.employeeName)
       setEmployeeRole(ctx.data.employeeRole)
-      const modes = adminOverview
-        ? (['worker', 'edp'] as const)
-        : resolveBodyshopFloorWorkUiModes(ctx.data.employeeRole)
-      setUiModes([...modes])
-      setTab(modes.includes('worker') ? 'worker' : 'edp')
-
       let assRows: Record<string, unknown>[] = []
       let supportRows: Record<string, unknown>[] = []
       let myTasks: BodyshopFloorWorkTask[] = []
@@ -433,11 +421,13 @@ export default function BodyshopFloorWorkPage() {
 
       const assignmentMap = buildAssignmentRowByJobCard(assRows)
       if (!adminOverview) {
+        setWorkerAssignedSlotCount(myTasks.length)
         myTasks = myTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentMap[t.jobCardNumber]))
         setFloorMonthFilter(currentIstYearMonth(today))
-        setFloorDayFilter('today')
-        setUpdateFilter('pending')
+        setFloorDayFilter('all')
+        setUpdateFilter('all')
       } else {
+        setWorkerAssignedSlotCount(0)
         setFloorMonthFilter('all')
         setFloorDayFilter('all')
         setUpdateFilter('all')
@@ -535,8 +525,8 @@ export default function BodyshopFloorWorkPage() {
     const slotCode = workTaskEmployeeCode(selected, employeeCode)
     if (!slotCode) return
     const trimmed = note.trim()
-    if (!trimmed) {
-      alert('Enter today\'s work description.')
+    if (pendingPhotos.length === 0 && savedPhotos.length === 0) {
+      alert('Add at least one work photo before marking Done.')
       return
     }
     setSaving(true)
@@ -549,8 +539,9 @@ export default function BodyshopFloorWorkPage() {
       const dealerCode = selected.dealerCode || dealerCtx.data?.dealerCode || ''
       if (!dealerCode) throw new Error('Dealer code missing')
       if (myCodeErr) throw new Error(myCodeErr.message)
-      const employeeCodeForLog =
-        String(myCodeRaw ?? employeeCode ?? slotCode).trim().toUpperCase() || slotCode
+      const employeeCodeForLog = isAdminOverview
+        ? slotCode
+        : String(myCodeRaw ?? employeeCode ?? slotCode).trim().toUpperCase() || slotCode
 
       const up = await upsertRoleDailyLog({
         jobCardNumber: selected.jobCardNumber,
@@ -609,51 +600,11 @@ export default function BodyshopFloorWorkPage() {
         await loadPhotosForVehicle(selected.jobCardNumber, cardByJc)
         void refreshPhotoCounts([selected.jobCardNumber], cardByJc)
       }
-      alert('Submitted for today (IST).')
+      alert('Done — your step is complete and the vehicle moves to the next role.')
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function compileEdpDaily() {
-    if (!edpJc) return
-    setEdpSaving(true)
-    try {
-      const edpKeys = floorWorkJobCardLookupKeys(edpJc, cardByJc[edpJc])
-      const logsRes = await fetchRoleDailyLogsForDate(today, edpKeys)
-      if (logsRes.error) throw new Error(logsRes.error)
-      const aliasKeys = new Set(edpKeys.map((k) => k.toUpperCase()))
-      const parts: string[] = []
-      for (const role of BODYSHOP_FLOOR_WORK_LOG_ROLES) {
-        const row = (logsRes.data ?? []).find(
-          (l) =>
-            l.floor_role === role
-            && String(l.note_text ?? '').trim()
-            && aliasKeys.has(String(l.job_card_number ?? '').trim().toUpperCase()),
-        )
-        if (row) parts.push(`${BODYSHOP_FLOOR_WORK_ROLE_LABELS[role]}: ${String(row.note_text).trim()}`)
-      }
-      const merged = (edpNote.trim() || parts.join(' | ')).trim()
-      if (!merged) throw new Error('No role updates to publish for this job card today.')
-
-      const dealerCtx = await getDealerContext()
-      if (dealerCtx.error || !dealerCtx.data?.dealerCode) throw new Error(dealerCtx.error ?? 'Dealer missing')
-      const { data: { user } } = await supabase.auth.getUser()
-      const res = await upsertBodyshopFloorDailyUpdate({
-        jobCardNumber: edpJc,
-        repairCardId: null,
-        dealerCode: dealerCtx.data.dealerCode,
-        noteText: merged,
-        actorEmail: user?.email ?? null,
-      })
-      if (res.error || !res.data) throw new Error(res.error ?? 'Publish failed')
-      alert('Daily floor update published for this job card.')
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Publish failed')
-    } finally {
-      setEdpSaving(false)
     }
   }
 
@@ -683,45 +634,31 @@ export default function BodyshopFloorWorkPage() {
         {' · IST date '}{today}
       </p>
 
-      {uiModes.length > 1 ? (
-        <div className="toolbar" style={{ marginBottom: 16 }}>
-          {uiModes.includes('worker') ? (
-            <button type="button" className={`btn btn--sm ${tab === 'worker' ? 'btn--primary' : 'btn--quiet'}`} onClick={() => setTab('worker')}>
-              My assigned work
-            </button>
-          ) : null}
-          {uiModes.includes('edp') ? (
-            <button type="button" className={`btn btn--sm ${tab === 'edp' ? 'btn--primary' : 'btn--quiet'}`} onClick={() => setTab('edp')}>
-              EDP compile
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {tab === 'worker' ? (
-        <>
+      <>
           <div className="card" style={{ marginBottom: 16 }}>
             <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My vehicles — your pipeline step'}</h2>
             {!isAdminOverview ? (
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
-                Only vehicles on floor <strong>today</strong> (this month) where it is your turn:
-                Dentor → Painter → Technician → Rubbing. Submit today&apos;s update to send the car to the next step.
+                Your assigned vehicles this month, only when it is your turn in the pipeline
+                (Dentor → Painter → Technician → Rubbing). Submit to complete your step.
               </p>
             ) : null}
             {vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0 ? (
               <>
                 <div className="bfw-filters">
                   <div className="bfw-filters__top">
-                    <div className="bsf-search">
-                      <Icon name="search" size={16} />
-                      <input
-                        className="bsf-search__input"
-                        type="search"
-                        placeholder="Search reg / customer / JC…"
-                        value={vehicleSearch}
-                        onChange={(e) => setVehicleSearch(e.target.value)}
-                      />
-                    </div>
+                    {isAdminOverview ? (
+                      <div className="bsf-search">
+                        <Icon name="search" size={16} />
+                        <input
+                          className="bsf-search__input"
+                          type="search"
+                          placeholder="Search reg / customer / JC…"
+                          value={vehicleSearch}
+                          onChange={(e) => setVehicleSearch(e.target.value)}
+                        />
+                      </div>
+                    ) : null}
                     <div className="bsf-group">
                       <span className="bsf-label">Month on floor</span>
                       <select
@@ -737,39 +674,43 @@ export default function BodyshopFloorWorkPage() {
                     </div>
                   </div>
 
-                  <div className="bfw-filters__row">
-                    <div className="bsf-group">
-                      <span className="bsf-label">On floor (IST)</span>
-                      {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
-                          onClick={() => setFloorDayFilter(key)}
-                        >
-                          {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}
-                          <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  {isAdminOverview ? (
+                    <>
+                      <div className="bfw-filters__row">
+                        <div className="bsf-group">
+                          <span className="bsf-label">On floor (IST)</span>
+                          {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
+                              onClick={() => setFloorDayFilter(key)}
+                            >
+                              {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}
+                              <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
-                  <div className="bfw-filters__row">
-                    <div className="bsf-group">
-                      <span className="bsf-label">Today&apos;s update</span>
-                      {(['all', 'pending', 'done'] as const).map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
-                          onClick={() => setUpdateFilter(key)}
-                        >
-                          {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}
-                          <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                      <div className="bfw-filters__row">
+                        <div className="bsf-group">
+                          <span className="bsf-label">Pipeline step</span>
+                          {(['all', 'pending', 'done'] as const).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
+                              onClick={() => setUpdateFilter(key)}
+                            >
+                              {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}
+                              <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 12 }}>
                   Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
@@ -780,11 +721,15 @@ export default function BodyshopFloorWorkPage() {
             ) : null}
             {vehicleRows.length === 0 ? (
               <p style={{ color: 'var(--muted)' }}>
-                {baseJobCards.length === 0
-                  ? isAdminOverview
+                {isAdminOverview
+                  ? baseJobCards.length === 0
                     ? 'No vehicles on floor or active assignments yet.'
-                    : 'No active floor assignment for your employee code. Floor Incharge must assign you on Bodyshop Floor.'
-                  : 'No vehicles match the current filters. Try All for On floor and Today\'s update, or clear search.'}
+                    : 'No vehicles match the current filters. Try All for On floor and Today\'s update, or clear search.'
+                  : workerAssignedSlotCount === 0
+                    ? 'No vehicle is assigned to you on Bodyshop Floor yet. Ask Floor Incharge to assign your name (Dentor / Painter / etc.) on the Bodyshop Floor screen for that job card.'
+                    : tasks.length === 0
+                      ? 'You have floor assignments, but none are at your pipeline step right now (an earlier role must finish first). Try another month above if the car arrived earlier.'
+                      : 'No vehicles match this month or search. Try “All months” in the month filter.'}
               </p>
             ) : (
               <div
@@ -796,7 +741,7 @@ export default function BodyshopFloorWorkPage() {
               >
                 {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
                   const card = cardByJc[jobCardNumber]
-                  const todayUpdated = vehicleHasTodayUpdate(jobCardNumber, rowTasks)
+                  const stepPending = vehicleHasPendingPipelineSteps(jobCardNumber, rowTasks)
                   const photoCount = photoCountByJc[jobCardNumber] ?? 0
                   const active = selectedJc === jobCardNumber
                   const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)
@@ -823,15 +768,15 @@ export default function BodyshopFloorWorkPage() {
                             fontWeight: 700,
                             padding: '2px 8px',
                             borderRadius: 999,
-                            background: todayUpdated ? 'var(--surface-2, #e0f2fe)' : 'var(--surface-3, #fef3c7)',
+                            background: stepPending ? 'var(--surface-3, #fef3c7)' : 'var(--surface-2, #e0f2fe)',
                             whiteSpace: 'nowrap',
                           }}
                         >
                           {rowTasks.length === 0
                             ? '—'
                             : isAdminOverview
-                              ? (todayUpdated ? 'Updated' : 'Pending')
-                              : (todayUpdated ? 'Done' : 'Pending')}
+                              ? (stepPending ? 'Pending' : 'Done')
+                              : (stepPending ? 'Your turn' : 'Done')}
                         </span>
                       </div>
                       <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
@@ -874,7 +819,7 @@ export default function BodyshopFloorWorkPage() {
               </div>
             ) : null}
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
-              Click a card to view all role photos and submit today&apos;s update (if assigned).
+              Click a card — add update + photos, then Done to move the vehicle to the next role.
             </p>
           </div>
 
@@ -896,18 +841,18 @@ export default function BodyshopFloorWorkPage() {
                 ) : null}
               </p>
 
-              {selectedTask ? (
+              {selectedTask && canEditSelectedTask ? (
                 <>
-                  <h3 style={{ fontSize: 14, margin: '0 0 8px' }}>Today&apos;s update (IST)</h3>
+                  <h3 style={{ fontSize: 14, margin: '0 0 8px' }}>Work update (optional)</h3>
                   <textarea
                     className="inp"
                     rows={4}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="What work was done today?"
+                    placeholder="Optional — what work did you finish?"
                   />
                   <label className="field" style={{ marginTop: 10 }}>
-                    <span className="label">Add photos (optional)</span>
+                    <span className="label">Work photos (required before Done)</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -920,7 +865,7 @@ export default function BodyshopFloorWorkPage() {
                   ) : null}
                   {savedPhotos.length > 0 ? (
                     <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-                      {savedPhotos.length} photo(s) on today&apos;s log for your role.
+                      {savedPhotos.length} photo(s) saved for this step — open from gallery below.
                     </p>
                   ) : null}
                   <button
@@ -930,12 +875,12 @@ export default function BodyshopFloorWorkPage() {
                     disabled={saving}
                     onClick={() => void saveWorkerLog()}
                   >
-                    {saving ? 'Submitting…' : 'Submit & complete my step'}
+                    {saving ? 'Saving…' : 'Done — send to next step'}
                   </button>
                 </>
-              ) : isAdminOverview ? (
+              ) : isAdminOverview && selectedTask ? (
                 <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
-                  You are not assigned on this vehicle — use EDP compile or view photos only.
+                  Admin: this row is not the active pipeline step — use the gallery below to view photos (View / preview), or pick the vehicle when that role is active to upload like denter/painter.
                 </p>
               ) : null}
 
@@ -953,33 +898,6 @@ export default function BodyshopFloorWorkPage() {
             </div>
           ) : null}
         </>
-      ) : null}
-
-      {tab === 'edp' ? (
-        <div className="card">
-          <h2 style={{ fontSize: 16, marginTop: 0 }}>Publish daily floor line (EDP)</h2>
-          <label className="field">
-            <span className="label">Vehicle (reg no.)</span>
-            <select className="sel" value={edpJc ?? ''} onChange={(e) => setEdpJc(e.target.value || null)}>
-              <option value="">Select…</option>
-              {edpJobCardsSorted.map((jc) => (
-                <option key={jc} value={jc}>{edpVehicleOptionLabel(jc, cardByJc[jc])}</option>
-              ))}
-            </select>
-          </label>
-          <textarea
-            className="inp"
-            rows={4}
-            value={edpNote}
-            onChange={(e) => setEdpNote(e.target.value)}
-            placeholder="Optional override — leave blank to auto-merge today’s role logs"
-            style={{ marginTop: 10 }}
-          />
-          <button type="button" className="btn btn--primary" style={{ marginTop: 10 }} disabled={edpSaving || !edpJc} onClick={() => void compileEdpDaily()}>
-            {edpSaving ? 'Publishing…' : 'Publish to official daily update'}
-          </button>
-        </div>
-      ) : null}
     </div>
   )
 }

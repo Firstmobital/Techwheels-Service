@@ -5,6 +5,7 @@ import {
   isSystemJobCardKey,
 } from '../bodyshopFloorWork/display'
 import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
+import { BODYSHOP_FLOOR_WORK_ON_FLOOR_FROM_IST } from '../bodyshopFloorWork/eligibility'
 
 const JC_CHUNK = 80
 
@@ -27,6 +28,8 @@ function mergeMeta(
     systemJobCardNo: patch.systemJobCardNo ?? prev.systemJobCardNo,
     floorSinceAt: patch.floorSinceAt ?? prev.floorSinceAt,
     bodyshopFloor: patch.bodyshopFloor ?? prev.bodyshopFloor,
+    qcStatus: patch.qcStatus ?? prev.qcStatus,
+    repairCardId: patch.repairCardId ?? prev.repairCardId,
   }
 }
 
@@ -115,7 +118,7 @@ export async function fetchRepairCardVehicleByJcs(
     const chunk = keys.slice(i, i + JC_CHUNK)
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .select('job_card_no, reg_number, customer_name')
+      .select('id, job_card_no, reg_number, customer_name, qc_status')
       .in('job_card_no', chunk)
     if (error) throw new Error(error.message)
     for (const c of data ?? []) {
@@ -125,6 +128,8 @@ export async function fetchRepairCardVehicleByJcs(
         reg: c.reg_number ?? null,
         customer: c.customer_name ?? null,
         systemJobCardNo: jc,
+        qcStatus: c.qc_status ?? null,
+        repairCardId: typeof c.id === 'number' ? c.id : null,
       })
     }
   }
@@ -140,7 +145,7 @@ export async function fetchRepairCardVehicleByJcs(
     const chunk = regSearch.slice(i, i + JC_CHUNK)
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .select('job_card_no, reg_number, customer_name')
+      .select('id, job_card_no, reg_number, customer_name, qc_status')
       .in('reg_number', chunk)
     if (error) throw new Error(error.message)
     for (const c of data ?? []) {
@@ -152,6 +157,8 @@ export async function fetchRepairCardVehicleByJcs(
             reg: c.reg_number ?? null,
             customer: c.customer_name ?? null,
             systemJobCardNo: normKey(String(c.job_card_no ?? '')),
+            qcStatus: c.qc_status ?? null,
+            repairCardId: typeof c.id === 'number' ? c.id : null,
           })
         }
       }
@@ -203,7 +210,38 @@ export async function fetchRepairCardVehicleByJcs(
   return map
 }
 
+/** Merge repair-card QC + id into minimal meta (all JC chunks — for worker list filtering). */
+export async function attachQcStatusToVehicleMeta(
+  map: Record<string, FloorWorkVehicleMeta>,
+  keys: string[],
+): Promise<Record<string, FloorWorkVehicleMeta>> {
+  const out = { ...map }
+  const uniq = Array.from(new Set(keys.map(normKey).filter(Boolean)))
+  for (let i = 0; i < uniq.length; i += JC_CHUNK) {
+    const chunk = uniq.slice(i, i + JC_CHUNK)
+    const { data, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .select('id, job_card_no, qc_status')
+      .in('job_card_no', chunk)
+    if (error) throw new Error(error.message)
+    for (const c of data ?? []) {
+      const jc = normKey(String(c.job_card_no ?? ''))
+      if (!jc) continue
+      mergeMeta(out, jc, {
+        qcStatus: c.qc_status ?? null,
+        repairCardId: typeof c.id === 'number' ? c.id : null,
+      })
+    }
+  }
+  return out
+}
+
 export async function fetchLiveOnFloorJobCardKeys(): Promise<string[]> {
+  return fetchLiveOnFloorJobCardKeysSince(BODYSHOP_FLOOR_WORK_ON_FLOOR_FROM_IST)
+}
+
+/** Live stage 11–14 (for vehicle meta). Task visibility still uses assignment floor date from Oct go-live. */
+export async function fetchLiveOnFloorJobCardKeysSince(_eligibleFromIst: string): Promise<string[]> {
   const { data, error } = await supabase
     .from('bodyshop_repair_cards')
     .select('job_card_no, current_stage, overall_status')

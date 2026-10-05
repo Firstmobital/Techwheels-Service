@@ -262,7 +262,6 @@ export async function upsertRoleDailyLog(input: {
   if (!jc) return fail('Job card is required')
   if (!dealerCode) return fail('Dealer code is required')
   if (!employeeCode) return fail('Employee code is required')
-  if (!noteText) return fail('Work description is required')
 
   const updateDate = input.updateDate ?? bodyshopFloorWorkTodayIstDate()
   const isSupport = Boolean(input.isSupport)

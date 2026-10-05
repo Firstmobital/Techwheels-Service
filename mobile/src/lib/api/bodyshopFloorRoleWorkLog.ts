@@ -53,6 +53,24 @@ export async function fetchRoleDailyLogsForDate(
   return [...byId.values()]
 }
 
+/** Recent worker logs for one job card (Floor incharge read-only view). */
+export async function fetchRoleDailyLogsForJobCard(
+  jobCardNumber: string,
+  limit = 24,
+): Promise<BodyshopFloorRoleDailyLogRow[]> {
+  const jc = normalizeBodyshopFloorWorkJc(jobCardNumber)
+  if (!jc) return []
+  const { data, error } = await supabase
+    .from(LOG_TABLE)
+    .select('*')
+    .eq('job_card_number', jc)
+    .order('update_date', { ascending: false })
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as BodyshopFloorRoleDailyLogRow[]
+}
+
 export async function upsertRoleDailyLog(input: {
   jobCardNumber: string
   repairCardId?: number | null
@@ -68,7 +86,7 @@ export async function upsertRoleDailyLog(input: {
   const dealerCode = String(input.dealerCode ?? '').trim()
   const employeeCode = String(input.employeeCode ?? '').trim().toUpperCase()
   const noteText = String(input.noteText ?? '').trim()
-  if (!jc || !dealerCode || !employeeCode || !noteText) throw new Error('Missing required fields')
+  if (!jc || !dealerCode || !employeeCode) throw new Error('Missing required fields')
 
   const updateDate = bodyshopFloorWorkTodayIstDate()
   const isSupport = Boolean(input.isSupport)

@@ -16,10 +16,10 @@ import { supabase } from '../../lib/supabase'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
   BODYSHOP_FLOOR_LIVE_LIST_LABEL,
-  BODYSHOP_FLOOR_TOTAL_KPI_LABEL,
   isLiveOnFloorRepairCard,
   type BodyshopFloorVehicleListMode,
 } from '../../lib/bodyshopFloorLive'
+import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
 import type { BodyshopFloorDailyUpdateRow } from '../../lib/bodyshopFloorDailyUpdate'
 import {
   dailyUpdateMapKey,
@@ -27,6 +27,15 @@ import {
 } from '../../lib/bodyshopFloorDailyUpdate'
 import { fetchBodyshopFloorDailyUpdatesForJcs } from '../../lib/api/bodyshopFloorDailyUpdate'
 import { FloorDailyUpdatePanel } from '../../components/bodyshop/FloorDailyUpdatePanel'
+import { WorkerRoleUpdatesPanel } from '../../components/bodyshop/WorkerRoleUpdatesPanel'
+import { BodyshopFloorStepTracker } from '../../components/bodyshop/BodyshopFloorStepTracker'
+import { arePipelineWorkStepsFinished } from '../../lib/bodyshopFloorWork/pipeline'
+import {
+  BODYSHOP_FLOOR_DETAIL_STEP_ORDER,
+  computeBodyshopFloorFlowSteps,
+  isEdpAssignmentAllowed,
+  type FloorFlowStepId,
+} from '../../lib/bodyshopFloorWork/floorFlowSteps'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -254,17 +263,31 @@ const STATUS_OPTIONS = [
   { value: 'completed',      label: 'Completed',  bg: '#e4f4ec', color: '#1c8f63' },
 ]
 
-const VIEW_TABS: { key: AssignmentView; label: string }[] = [
-  { key: 'all',            label: 'All' },
-  { key: 'unassigned',     label: 'Unassigned' },
-  { key: 'assigned',       label: 'Assigned' },
+/** Main floor list filters — counts shown for the selected floor (or all floors). */
+const PRIMARY_ASSIGNMENT_TABS: { key: AssignmentView; label: string }[] = [
+  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'assigned', label: 'Assigned' },
   { key: 'work_inprocess', label: 'In Process' },
-  { key: 'hold',           label: 'Hold' },
-  { key: 'completed',      label: 'Completed' },
-  { key: 'qc',             label: 'QC' },
-  { key: 'ri',             label: 'RI' },
-  { key: 'approvals',      label: 'Approvals' },
+  { key: 'completed', label: 'Done' },
 ]
+
+const QC_RI_TABS: { key: AssignmentView; label: string }[] = [
+  { key: 'qc', label: 'QC' },
+  { key: 'ri', label: 'RI' },
+]
+
+const NOT_REQUIRED_CODE = 'NOT_REQUIRED'
+const NOT_REQUIRED_NAME = 'Not Required'
+const NOT_REQUIRED_STATUS = 'not_required'
+const ALWAYS_REQUIRED_ROLES = new Set<BSRole>(['FLOOR_INCHARGE'])
+
+function isNotRequiredAssignment(ass: Pick<BSAssignment, 'employee_code' | 'employee_name' | 'work_status'> | null | undefined): boolean {
+  if (!ass) return false
+  const code = String(ass.employee_code ?? '').trim().toUpperCase()
+  if (code === NOT_REQUIRED_CODE) return true
+  if (String(ass.employee_name ?? '').trim().toLowerCase() === 'not required') return true
+  return String(ass.work_status ?? '').trim().toLowerCase() === NOT_REQUIRED_STATUS
+}
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -311,9 +334,22 @@ function getRowId(roleMap: Record<BSRole, BSAssignment | undefined> | undefined)
   if (!roleMap) return null
   for (const role of ALL_ROLES) {
     const a = roleMap[role]
-    if (a?.id) return a.id
+    if (a?.id != null && a.id > 0) return a.id
   }
   return null
+}
+
+function notRequiredPayloadForRole(role: BSRole): Record<string, unknown> {
+  const cols = ROLE_COLUMNS[role]
+  return {
+    [cols.code]: NOT_REQUIRED_CODE,
+    [cols.name]: NOT_REQUIRED_NAME,
+    [cols.status]: NOT_REQUIRED_STATUS,
+    [cols.inTs]: null,
+    [cols.remark]: null,
+    [cols.outTs]: null,
+    [cols.completedBy]: null,
+  }
 }
 
 function parseAdditionalApprovalParts(raw: string | null | undefined): AdditionalApprovalPart[] {
@@ -414,12 +450,24 @@ function resolveFloorSinceIso(
 }
 
 function parseQcNames(raw: string | null | undefined): string[] {
-  return String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
-    .filter((v, i, a) => a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i)
+  const str = String(raw ?? '').trim()
+  if (!str) return []
+  const tokens = str.includes('|')
+    ? str.split('|').map(s => s.trim()).filter(Boolean)
+    : [str]
+  const seen = new Set<string>()
+  const result: string[] = []
+  tokens.forEach(name => {
+    const key = name.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(name)
+  })
+  return result
 }
 
 function joinQcNames(names: string[]): string {
-  return names.filter(Boolean).join(', ')
+  return names.map(n => n.trim()).filter(Boolean).join('|')
 }
 
 function emptyRiState(): RiState {
@@ -457,6 +505,7 @@ export default function BodyshopFloorScreen() {
   const [dailyUpdatesByJc,  setDailyUpdatesByJc]  = useState<Record<string, BodyshopFloorDailyUpdateRow>>({})
   const [employees,         setEmployees]         = useState<Employee[]>([])
   const [assignments,       setAssignments]       = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
+  const [assignmentRawByJc, setAssignmentRawByJc] = useState<Record<string, DBAssignmentRow>>({})
   const [supportAssignments,setSupportAssignments]= useState<Record<string, Record<SupportRole, SupportAssignment[]>>>({})
   const [bsFloorStatus,     setBsFloorStatus]     = useState<Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }>>({})
   const [qcByJc,            setQcByJc]            = useState<Record<string, QcState>>({})
@@ -623,11 +672,13 @@ export default function BodyshopFloorScreen() {
       if (assErr) throw assErr
 
       const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
+      const rawByJc: Record<string, DBAssignmentRow> = {}
       const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
       const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
       for (const row of (assData ?? []) as DBAssignmentRow[]) {
         const k = jcKey(row.job_card_number)
         if (!assMap[k]) {
+          rawByJc[k] = row
           assMap[k] = mapRowToRoleMap(row)
           floorMap[k] = {
             completedAt: row.bs_floor_completed_at ?? null,
@@ -642,6 +693,7 @@ export default function BodyshopFloorScreen() {
         }
       }
       setAssignments(assMap)
+      setAssignmentRawByJc(rawByJc)
       setBsFloorStatus(floorMap)
       setStageDrafts(drafts)
 
@@ -716,7 +768,10 @@ export default function BodyshopFloorScreen() {
     return status === 'completed'
   }
   function isInQcQueue(c: FloorCar) {
-    return isBsCompleted(c) && !isQcPassed(c)
+    if (isQcPassed(c)) return false
+    if (isBsCompleted(c)) return true
+    const row = assignmentRawByJc[jcKey(c.job_card_no)]
+    return row ? arePipelineWorkStepsFinished(row as unknown as Record<string, unknown>) : false
   }
   function isInRiQueue(c: FloorCar) {
     return isBsCompleted(c) && isQcPassed(c) && !isRiCompleted(c)
@@ -728,23 +783,9 @@ export default function BodyshopFloorScreen() {
       : cars
   ), [cars, vehicleListMode])
 
-  const counts = useMemo(() => ({
-    all:            scopeCars.length,
-    unassigned:     scopeCars.filter(c => !hasAnyAssignment(c)).length,
-    assigned:       scopeCars.filter(c =>  hasAnyAssignment(c)).length,
-    work_inprocess: scopeCars.filter(c => !isBsCompleted(c) && hasStatus(c, 'work_inprocess')).length,
-    hold:           scopeCars.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold')).length,
-    completed:      scopeCars.filter(c => isBsCompleted(c)).length,
-    qc:             scopeCars.filter(c => isInQcQueue(c)).length,
-    ri:             scopeCars.filter(c => isInRiQueue(c)).length,
-    approvals:      scopeCars.filter(c => pendingApprovalCount(c.additional_approval) > 0).length,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [scopeCars, assignments, bsFloorStatus, qcByJc, riByJc])
-
-  const filtered = useMemo(() => {
+  const baseScopedCars = useMemo(() => {
     let list = [...scopeCars]
-    if (branchFilter !== 'all') list = list.filter(c => (c.branch ?? '') === branchFilter)
-    if (floorFilter  !== 'all') list = list.filter(c => c.bodyshop_floor === floorFilter)
+    if (branchFilter !== 'all') list = list.filter(c => matchesBodyshopBranchFilter(c.branch, branchFilter))
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(c =>
@@ -755,20 +796,75 @@ export default function BodyshopFloorScreen() {
         (c.sa_name ?? '').toLowerCase().includes(q)
       )
     }
-    if (assignmentView === 'unassigned')     return list.filter(c => !hasAnyAssignment(c))
-    if (assignmentView === 'assigned')       return list.filter(c =>  hasAnyAssignment(c))
-    if (assignmentView === 'work_inprocess') return list.filter(c => !isBsCompleted(c) && hasStatus(c, 'work_inprocess'))
-    if (assignmentView === 'hold')           return list.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold'))
-    if (assignmentView === 'completed')      return list.filter(c => isBsCompleted(c))
-    if (assignmentView === 'qc')             return list.filter(c => isInQcQueue(c))
-    if (assignmentView === 'ri')             return list.filter(c => isInRiQueue(c))
-    if (assignmentView === 'approvals')      return list.filter(c => pendingApprovalCount(c.additional_approval) > 0)
+    return list
+  }, [scopeCars, branchFilter, search])
+
+  const floorCountsByKey = useMemo(() => {
+    const out: Record<string, number> = { all: baseScopedCars.length }
+    for (const c of baseScopedCars) {
+      const f = String(c.bodyshop_floor ?? '').trim()
+      if (!f) continue
+      out[f] = (out[f] ?? 0) + 1
+    }
+    return out
+  }, [baseScopedCars])
+
+  const assignmentScopeCars = useMemo(() => {
+    if (floorFilter === 'all') return baseScopedCars
+    return baseScopedCars.filter(c => c.bodyshop_floor === floorFilter)
+  }, [baseScopedCars, floorFilter])
+
+  const primaryCounts = useMemo(() => ({
+    all: assignmentScopeCars.length,
+    unassigned: assignmentScopeCars.filter(c => !hasAnyAssignment(c)).length,
+    assigned: assignmentScopeCars.filter(c => hasAnyAssignment(c)).length,
+    work_inprocess: assignmentScopeCars.filter(
+      c => !isBsCompleted(c) && (hasStatus(c, 'work_inprocess') || hasStatus(c, 'hold')),
+    ).length,
+    completed: assignmentScopeCars.filter(c => isBsCompleted(c)).length,
+    qc: assignmentScopeCars.filter(c => isInQcQueue(c)).length,
+    ri: assignmentScopeCars.filter(c => isInRiQueue(c)).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [assignmentScopeCars, assignments, bsFloorStatus, assignmentRawByJc, qcByJc, riByJc])
+
+  const filtered = useMemo(() => {
+    let list = [...assignmentScopeCars]
+    if (assignmentView === 'unassigned') {
+      return list.filter(c => !hasAnyAssignment(c))
+    }
+    if (assignmentView === 'assigned') {
+      return list.filter(c => hasAnyAssignment(c))
+    }
+    if (assignmentView === 'work_inprocess') {
+      return list.filter(c => !isBsCompleted(c) && (hasStatus(c, 'work_inprocess') || hasStatus(c, 'hold')))
+    }
+    if (assignmentView === 'completed') {
+      return list.filter(c => isBsCompleted(c))
+    }
+    if (assignmentView === 'hold') {
+      return list.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold'))
+    }
+    if (assignmentView === 'qc') {
+      return list.filter(c => isInQcQueue(c))
+    }
+    if (assignmentView === 'ri') {
+      return list.filter(c => isInRiQueue(c))
+    }
+    if (assignmentView === 'approvals') {
+      return list.filter(c => pendingApprovalCount(c.additional_approval) > 0)
+    }
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeCars, branchFilter, floorFilter, search, assignmentView, assignments, bsFloorStatus, qcByJc])
+  }, [assignmentScopeCars, assignmentView, assignments, bsFloorStatus, qcByJc, riByJc])
 
-  const branches = useMemo(() => Array.from(new Set(scopeCars.map(c => c.branch ?? 'Unknown'))).sort(), [scopeCars])
-  const floors   = useMemo(() => Array.from(new Set(scopeCars.map(c => c.bodyshop_floor ?? '').filter(Boolean))).sort(), [scopeCars])
+  const branches = useMemo(
+    () => Array.from(new Set(scopeCars.map((c) => bodyshopBranchLabel(c.branch)))).sort(),
+    [scopeCars],
+  )
+  const floors = useMemo(
+    () => Array.from(new Set(baseScopedCars.map(c => c.bodyshop_floor ?? '').filter(Boolean))).sort(),
+    [baseScopedCars],
+  )
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -793,40 +889,100 @@ export default function BodyshopFloorScreen() {
   }
 
   async function assignRole(car: FloorCar, role: BSRole, empCode: string) {
-    const emp = empByRole[role].find(e => e.employee_code === empCode)
-    if (!emp) return
+    if (!empCode) return
+    const isNotRequired = empCode === NOT_REQUIRED_CODE
+    const emp = isNotRequired ? null : empByRole[role].find(e => e.employee_code === empCode)
+    if (!isNotRequired && !emp) return
     const k = jcKey(car.job_card_no)
+    if (role === 'EDP' && !isEdpAssignmentAllowed(riByJc[k]?.reinspection_status ?? car.reinspection_status)) {
+      showToast('Complete Re-Inspection (RI) before assigning EDP', 'error')
+      return
+    }
+    if (bsFloorStatus[k]?.completedAt) {
+      showToast('Floor is completed — assignments are locked', 'error')
+      return
+    }
     setSaving(`${k}-${role}`)
     try {
+      const roleMap = assignments[k]
+      const existingRoleAssignment = roleMap?.[role]
+      const existingRowId = getRowId(roleMap)
       const cols = ROLE_COLUMNS[role]
       const { data: { user } } = await supabase.auth.getUser()
-      const existingRowId = getRowId(assignments[k])
       const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
       const payload: Record<string, unknown> = {
-        [cols.code]:   emp.employee_code,
-        [cols.name]:   emp.employee_name,
-        [cols.status]: draft.work_status,
-        [cols.inTs]:   assignments[k]?.[role]?.in_ts ?? new Date().toISOString(),
-        [cols.remark]: draft.remark.trim() || null,
-        assigned_at:   new Date().toISOString(),
-        assigned_by:   user?.email ?? null,
-        is_active:     true,
+        [cols.code]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
+        [cols.name]: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
+        [cols.status]: isNotRequired ? NOT_REQUIRED_STATUS : draft.work_status,
+        [cols.inTs]: isNotRequired ? null : (existingRoleAssignment?.in_ts ?? new Date().toISOString()),
+        [cols.remark]: isNotRequired ? null : (draft.remark.trim() || null),
+        [cols.outTs]: isNotRequired ? null : (existingRoleAssignment?.out_ts ?? null),
+        [cols.completedBy]: isNotRequired ? null : (existingRoleAssignment?.completed_by ?? null),
+        assigned_at: new Date().toISOString(),
+        assigned_by: user?.email ?? null,
+        is_active: true,
+      }
+
+      if (isNotRequired && !existingRowId) {
+        const synthetic: BSAssignment = {
+          id: -1,
+          job_card_number: k,
+          role,
+          employee_code: NOT_REQUIRED_CODE,
+          employee_name: NOT_REQUIRED_NAME,
+          work_status: NOT_REQUIRED_STATUS,
+          remark: null,
+          in_ts: null,
+          out_ts: null,
+          completed_by: null,
+        }
+        setAssignments(prev => ({
+          ...prev,
+          [k]: { ...(prev[k] ?? emptyRoleMap()), [role]: synthetic },
+        }))
+        setStageDrafts(prev => ({
+          ...prev,
+          [k]: { ...(prev[k] ?? {}), [role]: { work_status: NOT_REQUIRED_STATUS, remark: '' } },
+        }))
+        showToast(`${ROLE_META[role].label} marked Not Required`, 'success')
+        setEmpPickerRole(null)
+        return
       }
 
       let result
       if (existingRowId) {
         result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existingRowId).select().single()
       } else {
-        result = await supabase.from('bodyshop_assignments').insert({
+        const insertPayload: Record<string, unknown> = {
           ...payload,
           job_card_number: k,
           repair_card_id: car.id,
           dealer_code: car.branch ?? 'UNKNOWN',
-        }).select().single()
+        }
+        const localMap = assignments[k]
+        if (localMap) {
+          for (const r of ALL_ROLES) {
+            if (r === role) continue
+            const slot = localMap[r]
+            if (!isNotRequiredAssignment(slot)) continue
+            Object.assign(insertPayload, notRequiredPayloadForRole(r))
+          }
+        }
+        result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
       }
       if (result.error) throw result.error
 
+      if (isNotRequired && !ALWAYS_REQUIRED_ROLES.has(role)) {
+        await supabase
+          .from('bodyshop_floor_support_assignments')
+          .update({ is_active: false })
+          .eq('job_card_number', k)
+          .eq('support_role', role)
+          .eq('is_active', true)
+      }
+
       const updatedRow = result.data as DBAssignmentRow
+      setAssignmentRawByJc(prev => ({ ...prev, [k]: updatedRow }))
       const newRoleMap = mapRowToRoleMap(updatedRow)
       setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
       setBsFloorStatus(prev => ({
@@ -839,9 +995,14 @@ export default function BodyshopFloorScreen() {
       }))
       setStageDrafts(prev => ({
         ...prev,
-        [k]: { ...(prev[k] ?? {}), [role]: { work_status: newRoleMap[role]?.work_status ?? 'work_inprocess', remark: newRoleMap[role]?.remark ?? '' } },
+        [k]: {
+          ...(prev[k] ?? {}),
+          [role]: isNotRequired
+            ? { work_status: NOT_REQUIRED_STATUS, remark: '' }
+            : { work_status: newRoleMap[role]?.work_status ?? 'work_inprocess', remark: newRoleMap[role]?.remark ?? '' },
+        },
       }))
-      showToast(`${ROLE_META[role].label} assigned: ${emp.employee_name}`, 'success')
+      showToast(`${ROLE_META[role].label}: ${isNotRequired ? 'Not Required' : emp!.employee_name}`, 'success')
       setEmpPickerRole(null)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
@@ -851,7 +1012,8 @@ export default function BodyshopFloorScreen() {
   async function saveStage(car: FloorCar, role: BSRole) {
     const k = jcKey(car.job_card_no)
     const assignment = assignments[k]?.[role]
-    if (!assignment?.id) { showToast('Assign person first', 'error'); return }
+    if (!assignment?.id || assignment.id <= 0) { showToast('Assign person first', 'error'); return }
+    if (isNotRequiredAssignment(assignment)) return
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
     if (draft.work_status === 'hold' && !draft.remark.trim()) {
       showToast('Hold reason is required when status is Hold', 'error'); return
@@ -871,6 +1033,7 @@ export default function BodyshopFloorScreen() {
       const result = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id).select().single()
       if (result.error) throw result.error
       const updatedRow = result.data as DBAssignmentRow
+      setAssignmentRawByJc(prev => ({ ...prev, [k]: updatedRow }))
       const newRoleMap = mapRowToRoleMap(updatedRow)
       setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
       setBsFloorStatus(prev => ({
@@ -889,6 +1052,10 @@ export default function BodyshopFloorScreen() {
 
   async function addSupport(car: FloorCar, role: BSRole, emp: Employee) {
     const k = jcKey(car.job_card_no)
+    if (isNotRequiredAssignment(assignments[k]?.[role])) {
+      showToast('Cannot add support — role is Not Required', 'error')
+      return
+    }
     const existing = (supportAssignments[k]?.[role] ?? [])
     if (existing.some(s => s.employee_code === emp.employee_code)) {
       showToast(`${emp.employee_name} already assigned`, 'error'); return
@@ -966,10 +1133,40 @@ export default function BodyshopFloorScreen() {
       setCars(prev => prev.map(c => c.id === repairCardId ? {
         ...c,
         qc_status: String(result.data?.qc_status ?? draft.qc_status),
+        qc_checked_by: joinQcNames(checkers),
+        qc_checked_at: now,
+        qc_fail_reason: draft.qc_status === 'fail' ? draft.qc_fail_reason.trim() : null,
         current_stage: draft.qc_status === 'pass' ? 14 : 13,
       } : c))
       if (draft.qc_status === 'pass') {
-        showToast('QC passed — moved to RI', 'success')
+        const rowId = getRowId(assignments[k])
+        if (rowId && !bsFloorStatus[k]?.completedAt) {
+          const { data: { user } } = await supabase.auth.getUser()
+          const now = new Date().toISOString()
+          const floorRes = await supabase
+            .from('bodyshop_assignments')
+            .update({ bs_floor_completed_at: now, bs_floor_completed_by: user?.email ?? null })
+            .eq('id', rowId)
+            .select('bs_floor_completed_at, bs_floor_completed_by')
+            .single()
+          if (!floorRes.error && floorRes.data) {
+            setBsFloorStatus(prev => ({
+              ...prev,
+              [k]: {
+                completedAt: floorRes.data?.bs_floor_completed_at ?? now,
+                completedBy: floorRes.data?.bs_floor_completed_by ?? null,
+                enteredAt: prev[k]?.enteredAt ?? null,
+              },
+            }))
+            if (assignmentRawByJc[k]) {
+              setAssignmentRawByJc(prev => ({
+                ...prev,
+                [k]: { ...prev[k], bs_floor_completed_at: floorRes.data?.bs_floor_completed_at ?? now },
+              }))
+            }
+          }
+        }
+        showToast('QC passed — complete RI below', 'success')
         setAssignmentView('ri')
       } else {
         showToast('QC details saved', 'success')
@@ -1066,6 +1263,18 @@ export default function BodyshopFloorScreen() {
           enteredAt: prev[k]?.enteredAt ?? null,
         },
       }))
+      setAssignmentRawByJc(prev => {
+        const row = prev[k]
+        if (!row) return prev
+        return {
+          ...prev,
+          [k]: {
+            ...row,
+            bs_floor_completed_at: result.data?.bs_floor_completed_at ?? now,
+            bs_floor_completed_by: result.data?.bs_floor_completed_by ?? null,
+          },
+        }
+      })
       showToast('Floor work marked completed', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed', 'error')
@@ -1174,7 +1383,17 @@ export default function BodyshopFloorScreen() {
     const anyHold = roleMap ? ALL_ROLES.some(r => roleMap[r]?.work_status === 'hold') : false
     const qc = qcByJc[k] ?? { repairCardId: car.id, qc_status: 'pending', qc_fail_reason: '', qc_checked_by: '', qc_checked_at: '' }
     const ri = riByJc[k] ?? emptyRiState()
-    const showRiSection = qc.qc_status === 'pass' || assignmentView === 'ri'
+    const pipelineWorkDone = arePipelineWorkStepsFinished(assignmentRawByJc[k] as unknown as Record<string, unknown>)
+    const flowSteps = computeBodyshopFloorFlowSteps({
+      assignRow: assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
+      roleAt: (role) => roleMap?.[role],
+      qcStatus: qc.qc_status,
+      riStatus: ri.reinspection_status,
+    })
+    const flowStepById = Object.fromEntries(flowSteps.map((s) => [s.id, s])) as Record<
+      FloorFlowStepId,
+      (typeof flowSteps)[number]
+    >
     const approvalParts = parseAdditionalApprovalParts(car.additional_approval)
     const assignedCheckers = getAssignedCheckerNames(car)
     const detailFloor = carSummary(car)
@@ -1298,6 +1517,10 @@ export default function BodyshopFloorScreen() {
             onSaved={(row) => setDailyUpdatesByJc(prev => ({ ...prev, [k]: row }))}
           />
 
+          <WorkerRoleUpdatesPanel jobCardNumber={car.job_card_no} />
+
+          <BodyshopFloorStepTracker steps={flowSteps} />
+
           {/* Status banner */}
           {bsComp ? (
             <View style={[S.banner, { backgroundColor: '#e4f4ec', borderColor: '#86efac' }]}>
@@ -1311,40 +1534,191 @@ export default function BodyshopFloorScreen() {
             </View>
           )}
 
-          {/* Mark floor completed */}
-          {!bsComp && assignedCount > 0 && (
+          {!bsComp && pipelineWorkDone ? (
+            <View style={[S.banner, { backgroundColor: '#f0fdf4', borderColor: '#86efac', marginBottom: 12 }]}>
+              <Text style={{ fontSize: 12, color: '#166534', lineHeight: 18 }}>
+                Pipeline work is done — dentor / painter / rubbing team submits QC from Floor Work. You can override QC or complete RI below.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Mark floor completed (legacy — prefer worker QC) */}
+          {!bsComp && assignedCount > 0 && !pipelineWorkDone && (
             <TouchableOpacity style={[S.markDoneBtn, saving?.includes('-bs-floor') && { opacity: 0.5 }]} disabled={!!saving} onPress={() => markFloorCompleted(car)}>
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✓ Mark Floor Work Completed</Text>
             </TouchableOpacity>
           )}
 
-          {/* RI form prominent when opened from RI tab */}
-          {assignmentView === 'ri' && showRiSection && renderRiForm()}
+          {/* Role Assignment + QC + RI in pipeline order (Rubbing → QC → RI → EDP) */}
+          <Text style={S.sectionTitle}>Floor pipeline steps</Text>
+          <Text style={{ fontSize: 11, color: '#82858f', marginBottom: 10, lineHeight: 16 }}>
+            Steps unlock in order. After Rubbing (Floor Work Done) → QC → RI → then EDP. Dentor / Painter work in the Floor Work app.
+          </Text>
+          {BODYSHOP_FLOOR_DETAIL_STEP_ORDER.map((stepId) => {
+            const step = flowStepById[stepId]
+            if (stepId === 'QC') {
+              if (step?.state === 'locked') {
+                return (
+                  <View key="QC" style={[S.roleCard, { opacity: 0.85 }]}>
+                    <View style={S.roleCardHeader}>
+                      <View style={[S.roleInitial, { backgroundColor: '#f6f4ee' }]}>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: '#82858f' }}>QC</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>Quality Check</Text>
+                        <Text style={{ fontSize: 11.5, color: '#82858f' }}>{step?.lockReason ?? 'Locked'}</Text>
+                      </View>
+                      <View style={[S.statusPill, { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' }]}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#82858f' }}>Locked</Text>
+                      </View>
+                    </View>
+                  </View>
+                )
+              }
+              return (
+                <View key="QC">
+                  <Text style={[S.sectionTitle, { marginTop: 8 }]}>Quality Check</Text>
+                  <View style={S.qcCard}>
+                    <Text style={S.fieldLabel}>QC Status</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                      {['pending','pass','fail'].map(o => {
+                        const active = qc.qc_status === o
+                        const col = o === 'pass' ? '#1c8f63' : o === 'fail' ? '#c33b53' : '#82858f'
+                        return (
+                          <TouchableOpacity key={o} style={{ flex: 1 }} onPress={() => patchQc(k, { qc_status: o })}>
+                            <View style={[S.statusChip, active && { backgroundColor: `${col}15`, borderColor: col }]}>
+                              <Text style={{ fontSize: 12, fontWeight: active ? '700' : '500', color: active ? col : '#82858f', textTransform: 'capitalize' }}>{o}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                    <Text style={S.fieldLabel}>Checked By</Text>
+                    {selectedCheckers.length > 0 && (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                        {selectedCheckers.map(name => (
+                          <TouchableOpacity key={name} style={S.checkerChip} onPress={() => patchQc(k, { qc_checked_by: joinQcNames(selectedCheckers.filter(n => n.toLowerCase() !== name.toLowerCase())) })}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{name} ×</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                    <Text style={[S.fieldLabel, { marginTop: 4, marginBottom: 4 }]}>Assigned Workforce</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      {assignedCheckers.length === 0 ? <Text style={{ fontSize: 12, color: '#82858f' }}>No assigned workforce</Text> : assignedCheckers.map(name => {
+                        const active = selectedCheckers.some(s => s.toLowerCase() === name.toLowerCase())
+                        return (
+                          <TouchableOpacity key={name} onPress={() => {
+                            const next = active ? selectedCheckers.filter(s => s.toLowerCase() !== name.toLowerCase()) : [...selectedCheckers, name]
+                            patchQc(k, { qc_checked_by: joinQcNames(next) })
+                          }}>
+                            <View style={[S.statusChip, active && { backgroundColor: '#e9effe', borderColor: '#2a4cd0' }]}>
+                              <Text style={{ fontSize: 11, fontWeight: '600', color: active ? '#2a4cd0' : '#4b4e59' }}>{name}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                    <TouchableOpacity onPress={() => { setQcOtherOpen(prev => !prev); setQcOtherSearch('') }} style={S.otherEmpBtn}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59' }}>{qcOtherOpen ? 'Hide' : 'Other Employees'}</Text>
+                    </TouchableOpacity>
+                    {qcOtherOpen && (
+                      <View style={{ marginTop: 8 }}>
+                        <TextInput style={S.searchInput} placeholder="Search..." placeholderTextColor="#a7a99f" value={qcOtherSearch} onChangeText={setQcOtherSearch} />
+                        <View style={{ maxHeight: 140, borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, padding: 8, gap: 4 }}>
+                          {otherNames.slice(0, 30).map(name => {
+                            const active = selectedCheckers.some(s => s.toLowerCase() === name.toLowerCase())
+                            return (
+                              <TouchableOpacity key={name} onPress={() => {
+                                const next = active ? selectedCheckers.filter(s => s.toLowerCase() !== name.toLowerCase()) : [...selectedCheckers, name]
+                                patchQc(k, { qc_checked_by: joinQcNames(next) })
+                              }}>
+                                <Text style={{ fontSize: 12, padding: 4, color: active ? '#2a4cd0' : '#1a1b21', fontWeight: active ? '700' : '400' }}>{name}</Text>
+                              </TouchableOpacity>
+                            )
+                          })}
+                        </View>
+                      </View>
+                    )}
+                    {qc.qc_status === 'fail' && (
+                      <View style={{ marginTop: 10 }}>
+                        <Text style={S.fieldLabel}>Fail Reason *</Text>
+                        <TextInput style={S.remarkInput} multiline placeholder="Describe the fail reason..." placeholderTextColor="#a7a99f" value={qc.qc_fail_reason} onChangeText={t => patchQc(k, { qc_fail_reason: t })} />
+                      </View>
+                    )}
+                    <TouchableOpacity style={[S.saveBtn, saving?.includes('-qc') && { opacity: 0.5 }]} disabled={!!saving} onPress={() => saveQc(car)}>
+                      {saving?.includes('-qc') ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Save QC</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )
+            }
+            if (stepId === 'RI') {
+              if (step?.state === 'locked') {
+                return (
+                  <View key="RI" style={[S.roleCard, { opacity: 0.85 }]}>
+                    <View style={S.roleCardHeader}>
+                      <View style={[S.roleInitial, { backgroundColor: '#f6f4ee' }]}>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: '#82858f' }}>RI</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>Re-Inspection</Text>
+                        <Text style={{ fontSize: 11.5, color: '#82858f' }}>{step?.lockReason ?? 'Locked'}</Text>
+                      </View>
+                      <View style={[S.statusPill, { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' }]}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#82858f' }}>Locked</Text>
+                      </View>
+                    </View>
+                  </View>
+                )
+              }
+              return <View key="RI">{renderRiForm(12)}</View>
+            }
 
-          {/* Role Assignment */}
-          <Text style={S.sectionTitle}>Role Assignment</Text>
-          {ALL_ROLES.map(role => {
+            const role = stepId as BSRole
             const assignment = roleMap?.[role]
+            const stepLocked = step?.state === 'locked'
             const draft = stageDrafts[k]?.[role] ?? { work_status: assignment?.work_status ?? 'work_inprocess', remark: assignment?.remark ?? '' }
             const support = supportAssignments[k]?.[role] ?? []
             const isExpanded = expandedRole === role
-            const sd = STATUS_OPTIONS.find(o => o.value === (assignment?.work_status ?? 'unassigned')) ?? { bg: '#f6f4ee', color: '#82858f' }
-            const hasDraftChanges = assignment && (draft.work_status !== assignment.work_status || draft.remark !== (assignment.remark ?? ''))
+            const notRequired = isNotRequiredAssignment(assignment)
+            const sd = notRequired
+              ? { bg: '#e4f4ec', color: '#1c8f63' }
+              : (STATUS_OPTIONS.find(o => o.value === (assignment?.work_status ?? 'unassigned')) ?? { bg: '#f6f4ee', color: '#82858f' })
+            const hasDraftChanges = assignment && !notRequired && (draft.work_status !== assignment.work_status || draft.remark !== (assignment.remark ?? ''))
             const isSaving = saving === `${k}-${role}-stage`
 
+            const stepLabel =
+              step?.state === 'locked'
+                ? 'Locked'
+                : step?.state === 'done'
+                  ? 'Done'
+                  : step?.state === 'skipped'
+                    ? 'Skipped'
+                    : step?.state === 'active'
+                      ? 'Active'
+                      : null
+
             return (
-              <View key={role} style={S.roleCard}>
+              <View key={role} style={[S.roleCard, notRequired && S.roleCardNotRequired, stepLocked && { opacity: 0.9 }]}>
                 <TouchableOpacity style={S.roleCardHeader} onPress={() => setExpandedRole(isExpanded ? null : role)} activeOpacity={0.8}>
-                  <View style={[S.roleInitial, { backgroundColor: ROLE_META[role].bg }]}>
-                    <Text style={{ fontSize: 12, fontWeight: '800', color: ROLE_META[role].color }}>{ROLE_META[role].initial}</Text>
+                  <View style={[S.roleInitial, { backgroundColor: notRequired ? '#e4f4ec' : ROLE_META[role].bg }]}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: notRequired ? '#1c8f63' : ROLE_META[role].color }}>{ROLE_META[role].initial}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>{ROLE_META[role].label}</Text>
-                    <Text style={{ fontSize: 11.5, color: '#4b4e59' }}>{assignment?.employee_name ?? 'Tap to assign'}</Text>
+                    <Text style={{ fontSize: 11.5, color: stepLocked ? '#82858f' : notRequired ? '#1c8f63' : '#4b4e59', fontWeight: notRequired ? '700' : '400' }}>
+                      {stepLocked
+                        ? (step?.lockReason ?? 'Complete previous steps first')
+                        : notRequired
+                          ? 'Not Required'
+                          : (assignment?.employee_name ?? 'Tap to assign')}
+                    </Text>
                   </View>
-                  <View style={[S.statusPill, { backgroundColor: assignment ? sd.bg : '#f6f4ee', borderColor: assignment ? sd.color : '#d9d4c7' }]}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: assignment ? sd.color : '#82858f' }}>
-                      {assignment ? (STATUS_OPTIONS.find(o => o.value === assignment.work_status)?.label ?? assignment.work_status) : 'Unassigned'}
+                  <View style={[S.statusPill, { backgroundColor: stepLocked ? '#f6f4ee' : assignment ? sd.bg : '#f6f4ee', borderColor: stepLocked ? '#d9d4c7' : assignment ? sd.color : '#d9d4c7' }]}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: stepLocked ? '#82858f' : assignment ? sd.color : '#82858f' }}>
+                      {stepLabel ??
+                        (notRequired ? 'Not Required' : assignment ? (STATUS_OPTIONS.find(o => o.value === assignment.work_status)?.label ?? assignment.work_status) : 'Unassigned')}
                     </Text>
                   </View>
                   <Text style={{ color: '#82858f', marginLeft: 6 }}>{isExpanded ? '▲' : '▼'}</Text>
@@ -1352,13 +1726,23 @@ export default function BodyshopFloorScreen() {
 
                 {isExpanded && (
                   <View style={S.roleCardBody}>
+                    {stepLocked ? (
+                      <Text style={{ fontSize: 12, color: '#82858f', lineHeight: 18 }}>{step?.lockReason ?? 'Complete earlier pipeline steps to unlock this role.'}</Text>
+                    ) : (
+                    <>
                     {/* Assign employee */}
                     <Text style={S.fieldLabel}>Assign Employee</Text>
-                    <TouchableOpacity style={S.selectBtn} onPress={() => { setEmpPickerRole(role); setEmpPickerSearch('') }}>
-                      <Text style={[S.selectBtnText, !assignment && { color: '#82858f' }]}>{assignment?.employee_name ?? 'Select employee...'}</Text>
+                    <TouchableOpacity style={S.selectBtn} onPress={() => { setEmpPickerRole(role); setEmpPickerSearch('') }} disabled={bsComp || stepLocked}>
+                      <Text style={[S.selectBtnText, !assignment && { color: '#82858f' }]}>
+                        {notRequired ? NOT_REQUIRED_NAME : (assignment?.employee_name ?? 'Select employee...')}
+                      </Text>
                       <Text style={{ color: '#82858f' }}>›</Text>
                     </TouchableOpacity>
 
+                    {notRequired ? (
+                      <Text style={{ fontSize: 12, color: '#1c8f63', marginTop: 10, fontWeight: '600' }}>This role is marked not required — pipeline skips it.</Text>
+                    ) : (
+                    <>
                     {/* Work Status */}
                     <Text style={[S.fieldLabel, { marginTop: 12 }]}>Work Status</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1419,95 +1803,15 @@ export default function BodyshopFloorScreen() {
                         ))}
                       </View>
                     )}
+                    </>
+                    )}
+                    </>
+                    )}
                   </View>
                 )}
               </View>
             )
           })}
-
-          {/* Quality Check */}
-          <Text style={[S.sectionTitle, { marginTop: 20 }]}>Quality Check</Text>
-          <View style={S.qcCard}>
-            <Text style={S.fieldLabel}>QC Status</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-              {['pending','pass','fail'].map(o => {
-                const active = qc.qc_status === o
-                const col = o === 'pass' ? '#1c8f63' : o === 'fail' ? '#c33b53' : '#82858f'
-                return (
-                  <TouchableOpacity key={o} style={{ flex: 1 }} onPress={() => patchQc(k, { qc_status: o })}>
-                    <View style={[S.statusChip, active && { backgroundColor: `${col}15`, borderColor: col }]}>
-                      <Text style={{ fontSize: 12, fontWeight: active ? '700' : '500', color: active ? col : '#82858f', textTransform: 'capitalize' }}>{o}</Text>
-                    </View>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-
-            {/* QC Checked By */}
-            <Text style={S.fieldLabel}>Checked By</Text>
-            {selectedCheckers.length > 0 && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {selectedCheckers.map(name => (
-                  <TouchableOpacity key={name} style={S.checkerChip} onPress={() => patchQc(k, { qc_checked_by: joinQcNames(selectedCheckers.filter(n => n.toLowerCase() !== name.toLowerCase())) })}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{name} ×</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <Text style={[S.fieldLabel, { marginTop: 4, marginBottom: 4 }]}>Assigned Workforce</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {assignedCheckers.length === 0 ? <Text style={{ fontSize: 12, color: '#82858f' }}>No assigned workforce</Text> : assignedCheckers.map(name => {
-                const active = selectedCheckers.some(s => s.toLowerCase() === name.toLowerCase())
-                return (
-                  <TouchableOpacity key={name} onPress={() => {
-                    const next = active ? selectedCheckers.filter(s => s.toLowerCase() !== name.toLowerCase()) : [...selectedCheckers, name]
-                    patchQc(k, { qc_checked_by: joinQcNames(next) })
-                  }}>
-                    <View style={[S.statusChip, active && { backgroundColor: '#e9effe', borderColor: '#2a4cd0' }]}>
-                      <Text style={{ fontSize: 11, fontWeight: '600', color: active ? '#2a4cd0' : '#4b4e59' }}>{name}</Text>
-                    </View>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-
-            <TouchableOpacity onPress={() => { setQcOtherOpen(prev => !prev); setQcOtherSearch('') }} style={S.otherEmpBtn}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59' }}>{qcOtherOpen ? 'Hide' : 'Other Employees'}</Text>
-            </TouchableOpacity>
-            {qcOtherOpen && (
-              <View style={{ marginTop: 8 }}>
-                <TextInput style={S.searchInput} placeholder="Search..." placeholderTextColor="#a7a99f" value={qcOtherSearch} onChangeText={setQcOtherSearch} />
-                <View style={{ maxHeight: 140, borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, padding: 8, gap: 4 }}>
-                  {otherNames.slice(0, 30).map(name => {
-                    const active = selectedCheckers.some(s => s.toLowerCase() === name.toLowerCase())
-                    return (
-                      <TouchableOpacity key={name} onPress={() => {
-                        const next = active ? selectedCheckers.filter(s => s.toLowerCase() !== name.toLowerCase()) : [...selectedCheckers, name]
-                        patchQc(k, { qc_checked_by: joinQcNames(next) })
-                      }}>
-                        <Text style={{ fontSize: 12, padding: 4, color: active ? '#2a4cd0' : '#1a1b21', fontWeight: active ? '700' : '400' }}>{name}</Text>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
-              </View>
-            )}
-
-            {qc.qc_status === 'fail' && (
-              <View style={{ marginTop: 10 }}>
-                <Text style={S.fieldLabel}>Fail Reason *</Text>
-                <TextInput style={S.remarkInput} multiline placeholder="Describe the fail reason..." placeholderTextColor="#a7a99f" value={qc.qc_fail_reason} onChangeText={t => patchQc(k, { qc_fail_reason: t })} />
-              </View>
-            )}
-
-            <TouchableOpacity style={[S.saveBtn, saving?.includes('-qc') && { opacity: 0.5 }]} disabled={!!saving} onPress={() => saveQc(car)}>
-              {saving?.includes('-qc') ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Save QC</Text>}
-            </TouchableOpacity>
-          </View>
-
-          {/* Re-Inspection — below QC when QC passed (and not already shown from RI tab) */}
-          {showRiSection && assignmentView !== 'ri' && renderRiForm(20)}
 
           {/* Additional Approval */}
           <Text style={[S.sectionTitle, { marginTop: 20 }]}>Additional Approval</Text>
@@ -1558,7 +1862,20 @@ export default function BodyshopFloorScreen() {
             <View style={{ padding: 12 }}>
               <TextInput style={S.searchInput} placeholder="Search employee..." placeholderTextColor="#a7a99f" value={empPickerSearch} onChangeText={setEmpPickerSearch} autoFocus />
             </View>
-            <FlatList data={empPickerCandidates} keyExtractor={e => e.employee_code}
+            <FlatList
+              data={empPickerCandidates}
+              keyExtractor={e => e.employee_code}
+              ListHeaderComponent={
+                empPickerRole && !ALWAYS_REQUIRED_ROLES.has(empPickerRole) ? (
+                  <TouchableOpacity
+                    style={[S.pickerItem, { backgroundColor: '#e4f4ec', borderBottomWidth: 0, marginHorizontal: 12, marginBottom: 8, borderRadius: 10 }]}
+                    onPress={() => empPickerRole && assignRole(car, empPickerRole, NOT_REQUIRED_CODE)}
+                  >
+                    <Text style={[S.pickerItemName, { color: '#1c8f63' }]}>Not Required</Text>
+                    <Text style={[S.pickerItemCode, { color: '#1c8f63' }]}>Skip this role in pipeline</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
               ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#82858f' }}>No matching employees</Text>}
               renderItem={({ item: e }) => (
                 <TouchableOpacity style={S.pickerItem} onPress={() => empPickerRole && assignRole(car, empPickerRole, e.employee_code)}>
@@ -1627,9 +1944,12 @@ export default function BodyshopFloorScreen() {
         <View>
           <Text style={S.screenTitle}>Bodyshop Floor</Text>
           <Text style={S.screenSubtitle}>
-            {vehicleListMode === 'live_on_floor'
-              ? `${filtered.length} · ${BODYSHOP_FLOOR_LIVE_LIST_LABEL}`
-              : `${filtered.length} vehicles (all pipeline)`}
+            {floorFilter !== 'all'
+              ? `${floorFilter}: ${primaryCounts.all}`
+              : vehicleListMode === 'live_on_floor'
+                ? `${primaryCounts.all} · ${BODYSHOP_FLOOR_LIVE_LIST_LABEL}`
+                : `${primaryCounts.all} vehicles (all pipeline)`}
+            {assignmentView !== 'all' ? ` · showing ${filtered.length}` : ''}
           </Text>
         </View>
         <TouchableOpacity onPress={() => loadAll(true)} style={S.refreshBtn}>
@@ -1667,30 +1987,6 @@ export default function BodyshopFloorScreen() {
         <TextInput style={S.searchInput} placeholder="Search JC / reg / model / customer..." placeholderTextColor="#a7a99f" value={search} onChangeText={setSearch} clearButtonMode="while-editing" />
       </View>
 
-      {/* Assignment view tabs */}
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        style={S.filterScrollRow}
-        contentContainerStyle={S.filterScrollContent}
-      >
-        {VIEW_TABS.map(tab => {
-          const active = assignmentView === tab.key
-          const cnt = counts[tab.key]
-          const label = tab.key === 'all' && vehicleListMode === 'live_on_floor'
-            ? BODYSHOP_FLOOR_TOTAL_KPI_LABEL
-            : tab.label
-          return (
-            <TouchableOpacity key={tab.key} onPress={() => setAssignmentView(tab.key)} style={[S.viewTab, active && S.viewTabActive]}>
-              <Text style={[S.viewTabText, active && S.viewTabTextActive]} numberOfLines={1}>
-                {label} {cnt}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
-
       {/* Branch filters */}
       <ScrollView
         horizontal
@@ -1702,7 +1998,7 @@ export default function BodyshopFloorScreen() {
         {['all', ...branches].map(b => {
           const active = branchFilter === b
           return (
-            <TouchableOpacity key={b} onPress={() => setBranchFilter(b)}
+            <TouchableOpacity key={b} onPress={() => setBranchFilter(active && b !== 'all' ? 'all' : b)}
               style={[S.filterChip, active && S.filterChipBranchActive]}>
               <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>
                 {b === 'all' ? 'All Branches' : b}
@@ -1712,34 +2008,107 @@ export default function BodyshopFloorScreen() {
         })}
       </ScrollView>
 
-      {/* Floor filters (separate row — avoids one overcrowded horizontal strip) */}
+      {/* Floor filters + count badge per floor */}
       {floors.length > 0 ? (
         <ScrollView
           horizontal
           nestedScrollEnabled
           showsHorizontalScrollIndicator={false}
-          style={[S.filterScrollRow, S.filterScrollRowLast]}
+          style={S.filterScrollRow}
           contentContainerStyle={S.filterScrollContent}
         >
           <TouchableOpacity
             onPress={() => setFloorFilter('all')}
-            style={[S.filterChip, floorFilter === 'all' && S.filterChipFloorActive]}
+            style={[S.filterChip, S.filterChipWithBadge, floorFilter === 'all' && S.filterChipFloorActive]}
           >
             <Text style={[S.filterChipText, floorFilter === 'all' && S.filterChipTextActive]} numberOfLines={1}>
               All Floors
             </Text>
+            <View style={[S.filterCountBadge, floorFilter === 'all' && S.filterCountBadgeActive]}>
+              <Text style={[S.filterCountBadgeText, floorFilter === 'all' && S.filterCountBadgeTextActive]}>
+                {floorCountsByKey.all ?? 0}
+              </Text>
+            </View>
           </TouchableOpacity>
           {floors.map(f => {
             const active = floorFilter === f
+            const n = floorCountsByKey[f] ?? 0
             return (
-              <TouchableOpacity key={f} onPress={() => setFloorFilter(active ? 'all' : f)}
-                style={[S.filterChip, active && S.filterChipFloorActive]}>
+              <TouchableOpacity
+                key={f}
+                onPress={() => setFloorFilter(active ? 'all' : f)}
+                style={[S.filterChip, S.filterChipWithBadge, active && S.filterChipFloorActive]}
+              >
                 <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{f}</Text>
+                <View style={[S.filterCountBadge, active && S.filterCountBadgeActive]}>
+                  <Text style={[S.filterCountBadgeText, active && S.filterCountBadgeTextActive]}>{n}</Text>
+                </View>
               </TouchableOpacity>
             )
           })}
         </ScrollView>
       ) : null}
+
+      {floorFilter !== 'all' ? (
+        <View style={S.floorTotalBanner}>
+          <Text style={S.floorTotalLabel}>{floorFilter}</Text>
+          <Text style={S.floorTotalNumber}>{primaryCounts.all}</Text>
+        </View>
+      ) : null}
+
+      {/* Assignment status — scoped to selected floor */}
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        style={[S.filterScrollRow, S.filterScrollRowLast]}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        <TouchableOpacity
+          onPress={() => setAssignmentView('all')}
+          style={[S.viewTab, S.viewTabWithCount, assignmentView === 'all' && S.viewTabActive]}
+        >
+          <Text style={[S.viewTabText, assignmentView === 'all' && S.viewTabTextActive]}>All</Text>
+          <Text style={[S.viewTabCount, assignmentView === 'all' && S.viewTabCountActive]}>{primaryCounts.all}</Text>
+        </TouchableOpacity>
+        {PRIMARY_ASSIGNMENT_TABS.map(tab => {
+          const active = assignmentView === tab.key
+          const cnt = primaryCounts[tab.key as keyof typeof primaryCounts] ?? 0
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              onPress={() => setAssignmentView(active ? 'all' : tab.key)}
+              style={[S.viewTab, S.viewTabWithCount, active && S.viewTabActive]}
+            >
+              <Text style={[S.viewTabText, active && S.viewTabTextActive]} numberOfLines={1}>{tab.label}</Text>
+              <Text style={[S.viewTabCount, active && S.viewTabCountActive]}>{cnt}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        style={[S.filterScrollRow, { marginBottom: 8 }]}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        {QC_RI_TABS.map(tab => {
+          const active = assignmentView === tab.key
+          const cnt = primaryCounts[tab.key as keyof typeof primaryCounts] ?? 0
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              onPress={() => setAssignmentView(active ? 'all' : tab.key)}
+              style={[S.viewTab, S.viewTabWithCount, active && S.viewTabActive, tab.key === 'ri' && active && { backgroundColor: '#1c8f63', borderColor: '#1c8f63' }]}
+            >
+              <Text style={[S.viewTabText, active && S.viewTabTextActive]}>{tab.label}</Text>
+              <Text style={[S.viewTabCount, active && S.viewTabCountActive]}>{cnt}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
 
       {/* List */}
       <FlatList
@@ -1841,8 +2210,39 @@ const S = StyleSheet.create({
   filterChip:       { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: '#fbfaf6', borderWidth: 1, borderColor: '#e7e3d9', flexShrink: 0 },
   filterChipBranchActive: { backgroundColor: '#1a1b21', borderColor: '#1a1b21' },
   filterChipFloorActive:  { backgroundColor: '#41617f', borderColor: '#41617f' },
+  filterChipWithBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  filterCountBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    backgroundColor: '#e9eef3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCountBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  filterCountBadgeText: { fontSize: 11, fontWeight: '800', color: '#41617f' },
+  filterCountBadgeTextActive: { color: '#fff' },
   filterChipText:   { fontSize: 11.5, fontWeight: '600', color: '#4b4e59' },
   filterChipTextActive: { color: '#fff', fontWeight: '700' },
+  floorTotalBanner: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e7e3d9',
+  },
+  floorTotalLabel: { fontSize: 13, fontWeight: '800', color: '#41617f' },
+  floorTotalNumber: { fontSize: 22, fontWeight: '800', color: '#1a1b21' },
+  viewTabWithCount: { alignItems: 'center', minWidth: 72, paddingVertical: 6 },
+  viewTabCount: { fontSize: 16, fontWeight: '800', color: '#1a1b21', marginTop: 2 },
+  viewTabCountActive: { color: '#fff' },
   card:             { backgroundColor: '#fff', borderRadius: 14, padding: 13, borderWidth: 1, borderColor: '#e7e3d9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   cardJc:           { fontSize: 14.5, fontWeight: '700', color: '#1a1b21' },
   cardReg:          { fontSize: 12.5, color: '#4b4e59', fontWeight: '500', marginTop: 2 },
@@ -1866,6 +2266,7 @@ const S = StyleSheet.create({
   markDoneBtn:      { backgroundColor: '#1c8f63', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 14 },
   sectionTitle:     { fontSize: 13, fontWeight: '800', color: '#1a1b21', marginBottom: 8 },
   roleCard:         { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e7e3d9', marginBottom: 8, overflow: 'hidden' },
+  roleCardNotRequired: { borderColor: '#86efac', backgroundColor: '#f0fdf4' },
   roleCardHeader:   { flexDirection: 'row', alignItems: 'center', padding: 11, gap: 10 },
   roleInitial:      { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   roleCardBody:     { padding: 12, borderTopWidth: 1, borderTopColor: '#f6f4ee' },

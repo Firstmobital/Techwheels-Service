@@ -7,6 +7,13 @@ import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { getHomeDashboardMetrics, type HomeDashboardMetrics } from '../../lib/api/homeDashboard'
+import {
+  fetchBodyshopFloorWorkerHomeMetrics,
+  fetchMyBodyshopIncomeForMonth,
+  formatBodyshopIncomeInr,
+  isBodyshopFloorWorkerBusinessRole,
+  type BodyshopFloorWorkerHomeMetrics,
+} from '../../lib/api/bodyshopFloorWorkerHome'
 import { getStaffAdvisorChatUnreadCount } from '../../lib/api/advisorChat'
 import { registerStaffPush } from '../../lib/notifications/pushRegistration'
 
@@ -31,7 +38,7 @@ const MODULES: ModuleRow[] = [
   { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
   { key: 'bodyshop-repair', label: 'Bodyshop Repair', icon: 'package', iconBg: 'bg-violet-100', description: '18-stage accident repair pipeline', route: '/(tabs)/bodyshop-repair' },
   { key: 'bodyshop-floor', label: 'Bodyshop Floor', icon: 'sliders', iconBg: 'bg-rose-100', description: '9-role floor assignment · QC · approvals', route: '/(tabs)/bodyshop-floor' },
-  { key: 'bodyshop-floor-work', label: 'Floor Work', icon: 'edit', iconBg: 'bg-orange-100', description: 'Denter · Painter · Tech daily updates + photos', route: '/(tabs)/bodyshop-floor-work' },
+  { key: 'bodyshop-floor-work', label: 'Floor Work', icon: 'edit', iconBg: 'bg-orange-100', description: 'Work update · photos · Done → next step', route: '/(tabs)/bodyshop-floor-work' },
 ]
 
 const DEFAULT_METRICS: HomeDashboardMetrics = {
@@ -120,6 +127,9 @@ export default function PlatformHomeScreen() {
     return () => { mounted = false }
   }, [user])
   const [metrics, setMetrics] = useState<HomeDashboardMetrics>(DEFAULT_METRICS)
+  const [floorWorkerHome, setFloorWorkerHome] = useState<BodyshopFloorWorkerHomeMetrics | null>(null)
+  const [showFloorWorkerHome, setShowFloorWorkerHome] = useState(false)
+  const [homeIncomeLoading, setHomeIncomeLoading] = useState(false)
   const [chatUnread, setChatUnread] = useState(0)
 
   const displayName = useMemo(() => {
@@ -143,9 +153,41 @@ export default function PlatformHomeScreen() {
   }, [displayName])
 
   const loadDashboard = useCallback(async () => {
-    const result = await getHomeDashboardMetrics()
-    if (result.error || !result.data) return
-    setMetrics(result.data)
+    const monthIst = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7)
+    const [{ data: scopeRows }, metricsRes] = await Promise.all([
+      supabase.rpc('get_my_bodyshop_employee_scope'),
+      getHomeDashboardMetrics(),
+    ])
+
+    if (!metricsRes.error && metricsRes.data) setMetrics(metricsRes.data)
+
+    const scope = (scopeRows ?? [])[0] as { employee_code?: string; role?: string } | undefined
+    const empCode = String(scope?.employee_code ?? '').trim()
+    const role = scope?.role ?? null
+    if (empCode && isBodyshopFloorWorkerBusinessRole(role)) {
+      setShowFloorWorkerHome(true)
+      setHomeIncomeLoading(true)
+      const workerRes = await fetchBodyshopFloorWorkerHomeMetrics(empCode, monthIst)
+      const base =
+        workerRes.data ?? {
+          vehiclesTotal: 0,
+          vehiclesDone: 0,
+          vehiclesPending: 0,
+          bodyshopIncomeMonth: 0,
+          monthLabel: monthIst,
+          monthKey: monthIst,
+        }
+      setFloorWorkerHome(base)
+      void fetchMyBodyshopIncomeForMonth(empCode, monthIst)
+        .then((amount) => {
+          setFloorWorkerHome((prev) => (prev ? { ...prev, bodyshopIncomeMonth: amount } : prev))
+        })
+        .finally(() => setHomeIncomeLoading(false))
+    } else {
+      setShowFloorWorkerHome(false)
+      setFloorWorkerHome(null)
+      setHomeIncomeLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -278,34 +320,74 @@ export default function PlatformHomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards (3 columns below header) */}
+        {/* Stats Cards */}
         <View className="px-4 pt-6 pb-4">
-          <View className="flex-row gap-2">
-            <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
-              <View className="flex-row items-baseline gap-1 mb-1">
-                <Icon name="arrow-up" size={16} color="#3b82f6" strokeWidth={2.2} />
-                <Text className="text-slate-400 text-xs">Revenue</Text>
+          {showFloorWorkerHome && floorWorkerHome !== null ? (
+            <>
+              <Text className="text-slate-500 text-xs font-semibold mb-2 uppercase tracking-wide">
+                Your floor work · {floorWorkerHome.monthLabel}
+              </Text>
+              <View className="flex-row gap-2 mb-2">
+                <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
+                  <Text className="text-slate-400 text-xs mb-1">Total</Text>
+                  <Text className="text-slate-900 text-lg font-bold">{floorWorkerHome.vehiclesTotal}</Text>
+                  <Text className="text-slate-500 text-xs mt-1">assigned</Text>
+                </View>
+                <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
+                  <Text className="text-slate-400 text-xs mb-1">Done</Text>
+                  <Text className="text-slate-900 text-lg font-bold">{floorWorkerHome.vehiclesDone}</Text>
+                  <Text className="text-slate-500 text-xs mt-1">step complete</Text>
+                </View>
+                <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
+                  <Text className="text-slate-400 text-xs mb-1">Pending</Text>
+                  <Text className="text-slate-900 text-lg font-bold">{floorWorkerHome.vehiclesPending}</Text>
+                  <Text className="text-slate-500 text-xs mt-1">your step</Text>
+                </View>
               </View>
-              <Text className="text-slate-900 text-lg font-bold">{formatCompactCurrencyInr(metrics.revenueToday)}</Text>
-              <Text className="text-slate-500 text-xs mt-1">today</Text>
-            </View>
-            <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
-              <View className="flex-row items-baseline gap-1 mb-1">
-                <Icon name="file-text" size={16} color="#8b5cf6" strokeWidth={2.2} />
-                <Text className="text-slate-400 text-xs">Job Cards</Text>
+              <View className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
+                <Text className="text-emerald-800 text-xs font-semibold uppercase tracking-wide">
+                  Bodyshop income
+                </Text>
+                {homeIncomeLoading ? (
+                  <Text className="text-emerald-700 text-lg font-bold mt-2">Loading…</Text>
+                ) : (
+                  <Text className="text-emerald-900 text-2xl font-bold mt-1">
+                    {formatBodyshopIncomeInr(floorWorkerHome.bodyshopIncomeMonth)}
+                  </Text>
+                )}
+                <Text className="text-emerald-800/70 text-xs mt-2">
+                  Closed accident jobs · same as Tracker & payroll
+                </Text>
               </View>
-              <Text className="text-slate-900 text-lg font-bold">{metrics.openJobCards}</Text>
-              <Text className="text-slate-500 text-xs mt-1">open</Text>
-            </View>
-            <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
-              <View className="flex-row items-baseline gap-1 mb-1">
-                <Icon name="alert-circle" size={16} color="#ef4444" strokeWidth={2.2} />
-                <Text className="text-slate-400 text-xs">Claims</Text>
+            </>
+          ) : (
+            <View className="flex-row gap-2">
+              <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
+                <View className="flex-row items-baseline gap-1 mb-1">
+                  <Icon name="arrow-up" size={16} color="#3b82f6" strokeWidth={2.2} />
+                  <Text className="text-slate-400 text-xs">Revenue</Text>
+                </View>
+                <Text className="text-slate-900 text-lg font-bold">{formatCompactCurrencyInr(metrics.revenueToday)}</Text>
+                <Text className="text-slate-500 text-xs mt-1">today</Text>
               </View>
-              <Text className="text-slate-900 text-lg font-bold">{metrics.pendingClaims}</Text>
-              <Text className="text-slate-500 text-xs mt-1">pending</Text>
+              <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
+                <View className="flex-row items-baseline gap-1 mb-1">
+                  <Icon name="file-text" size={16} color="#8b5cf6" strokeWidth={2.2} />
+                  <Text className="text-slate-400 text-xs">Job Cards</Text>
+                </View>
+                <Text className="text-slate-900 text-lg font-bold">{metrics.openJobCards}</Text>
+                <Text className="text-slate-500 text-xs mt-1">open</Text>
+              </View>
+              <View className="flex-1 bg-white rounded-xl border border-slate-100 p-3 items-center">
+                <View className="flex-row items-baseline gap-1 mb-1">
+                  <Icon name="alert-circle" size={16} color="#ef4444" strokeWidth={2.2} />
+                  <Text className="text-slate-400 text-xs">Claims</Text>
+                </View>
+                <Text className="text-slate-900 text-lg font-bold">{metrics.pendingClaims}</Text>
+                <Text className="text-slate-500 text-xs mt-1">pending</Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
 
         {/* Service Modules List Section */}

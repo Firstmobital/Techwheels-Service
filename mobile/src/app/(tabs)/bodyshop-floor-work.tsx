@@ -21,7 +21,11 @@ import {
   fetchBodyshopAssignmentsForEmployee,
   fetchBodyshopSupportAssignmentsForEmployee,
 } from '../../lib/api/bodyshopFloorWorkAssignments'
-import { fetchLiveOnFloorJobCardKeys, fetchRepairCardVehicleByJcs } from '../../lib/api/bodyshopFloorWorkVehicles'
+import {
+  attachQcStatusToVehicleMeta,
+  fetchLiveOnFloorJobCardKeys,
+  fetchRepairCardVehicleByJcs,
+} from '../../lib/api/bodyshopFloorWorkVehicles'
 import {
   floorWorkVehicleSubtitle,
   floorWorkVehicleTitle,
@@ -32,14 +36,30 @@ import {
   floorWorkJobCardLookupKeys,
   buildMinimalFloorWorkVehicleMeta,
   currentIstYearMonth,
-  floorWorkFloorDayBucket,
   type FloorWorkVehicleMeta,
 } from '../../lib/bodyshopFloorWork/display'
 import {
+  activePipelineStepLabel,
   buildAssignmentRowByJobCard,
+  canSubmitFloorWorkTask,
   isFloorWorkTaskAtActivePipelineStep,
+  isFloorWorkTaskStepCompleted,
+  isFloorWorkTaskVisible,
+  isWorkerQcTurn,
 } from '../../lib/bodyshopFloorWork/pipeline'
+import { saveWorkerQcFromFloorWork, type WorkerQcDecision } from '../../lib/api/bodyshopFloorWorkerQc'
+import { filterTasksByFloorWorkGoLive } from '../../lib/bodyshopFloorWork/eligibility'
 import { completeBodyshopFloorWorkRoleOnAssignment } from '../../lib/api/bodyshopFloorWorkPipeline'
+import {
+  buildAdminFloorWorkerRoster,
+  fetchAdminRosterPeopleAndIncome,
+  fetchAdminRosterIncome,
+  fetchAllActiveBodyshopAssignmentRows,
+  fetchMyBodyshopIncomeForMonth,
+  formatBodyshopIncomeInr,
+  type AdminFloorWorkerCard,
+  type AdminRosterPerson,
+} from '../../lib/api/bodyshopFloorWorkerHome'
 
 const FLOOR_WORK_LIST_PAGE_SIZE = 20
 import {
@@ -49,6 +69,32 @@ import {
   workTaskEmployeeCode,
   type BodyshopFloorWorkTask,
 } from '../../lib/bodyshopFloorWork/roles'
+
+function normFloorEmployeeCode(raw: string | null | undefined): string {
+  return String(raw ?? '').trim().toUpperCase()
+}
+
+function formatJobCardAssignments(slots: BodyshopFloorWorkTask[] | undefined, jobCardNumber: string): string {
+  const list = [...(slots ?? [])].sort((a, b) => a.floorRole.localeCompare(b.floorRole))
+  if (list.length === 0) return 'Assigned: —'
+  const parts = list.map((t) => {
+    const role = BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]
+    const who = t.employeeName?.trim() || t.assignedEmployeeCode || '—'
+    return `${role}: ${who}${t.isSupport ? ' (support)' : ''}`
+  })
+  return parts.join(' · ')
+}
+
+function employeeTasksOnJobCard(
+  tasks: BodyshopFloorWorkTask[],
+  jobCardNumber: string,
+  employeeCode: string,
+): BodyshopFloorWorkTask[] {
+  const code = normFloorEmployeeCode(employeeCode)
+  return tasks.filter(
+    (t) => t.jobCardNumber === jobCardNumber && normFloorEmployeeCode(t.assignedEmployeeCode) === code,
+  )
+}
 import {
   bodyshopFloorWorkTodayIstDate,
   workLogMapKey,
@@ -64,8 +110,34 @@ import {
 } from '../../lib/api/bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../../lib/bodyshopFloorRoleWorkLog'
 
-type UpdateFilter = 'all' | 'pending' | 'done'
-type FloorDayFilter = 'all' | 'today' | 'yesterday' | 'older' | 'unknown'
+function FloorWorkStatsThree({
+  total,
+  pending,
+  done,
+  compact,
+}: {
+  total: number
+  pending: number
+  done: number
+  compact?: boolean
+}) {
+  return (
+    <View style={[S.statsThreeRow, compact && S.statsThreeRowCompact]}>
+      <View style={S.statsThreeCell}>
+        <Text style={S.statsThreeL}>Total</Text>
+        <Text style={S.statsThreeN}>{total}</Text>
+      </View>
+      <View style={S.statsThreeCell}>
+        <Text style={S.statsThreeL}>Pending</Text>
+        <Text style={S.statsThreeN}>{pending}</Text>
+      </View>
+      <View style={S.statsThreeCell}>
+        <Text style={S.statsThreeL}>Done</Text>
+        <Text style={S.statsThreeN}>{done}</Text>
+      </View>
+    </View>
+  )
+}
 
 function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -77,6 +149,66 @@ function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Recor
     if (!prev || new Date(at).getTime() < new Date(prev).getTime()) out[jc] = at
   }
   return out
+}
+
+function AdminFloorTeamRoster({
+  cards,
+  loading,
+  error,
+  onSelect,
+}: {
+  cards: AdminFloorWorkerCard[] | null
+  loading: boolean
+  error: string | null
+  onSelect: (person: AdminFloorWorkerCard) => void
+}) {
+  const monthLabel = cards?.[0]?.monthLabel
+  const groups: Array<'Denters' | 'Painters'> = ['Denters', 'Painters']
+  return (
+    <ScrollView contentContainerStyle={S.rosterScroll}>
+      <Text style={S.rosterIntro}>
+        Tap a team member to see their vehicles and pipeline step — same as web admin floor work.
+        {monthLabel ? ` · ${monthLabel}` : ''}
+      </Text>
+      {loading && cards === null ? (
+        <ActivityIndicator color="#2a4cd0" style={{ marginVertical: 16 }} />
+      ) : null}
+      {error ? <Text style={S.rosterError}>{error}</Text> : null}
+      {groups.map((group) => {
+        const people = (cards ?? []).filter((card) => card.groupLabel === group)
+        if (!loading && people.length === 0) return null
+        return (
+          <View key={group} style={S.rosterGroup}>
+            <Text style={S.rosterGroupTitle}>{group}</Text>
+            {people.map((person) => (
+              <TouchableOpacity
+                key={person.employeeCode}
+                onPress={() => onSelect(person)}
+                style={S.rosterCard}
+                activeOpacity={0.85}
+              >
+                <Text style={S.rosterName}>{person.employeeName}</Text>
+                <Text style={S.rosterMeta}>
+                  {person.roleLabel} · {person.employeeCode}
+                </Text>
+                <FloorWorkStatsThree
+                  total={person.vehiclesTotal}
+                  pending={person.vehiclesPending}
+                  done={person.vehiclesDone}
+                  compact
+                />
+                <Text style={S.rosterIncome}>{formatBodyshopIncomeInr(person.bodyshopIncomeMonth)}</Text>
+                <Text style={S.rosterTapHint}>View work →</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )
+      })}
+      {!loading && (cards?.length ?? 0) === 0 && !error ? (
+        <Text style={S.emptyText}>No active denters or painters in Employee Master.</Text>
+      ) : null}
+    </ScrollView>
+  )
 }
 
 function FilterChip({
@@ -124,83 +256,204 @@ export default function BodyshopFloorWorkScreen() {
   const [vehicleByJc, setVehicleByJc] = useState<Record<string, FloorWorkVehicleMeta>>({})
   const [saving, setSaving] = useState(false)
   const [isAdminOverview, setIsAdminOverview] = useState(false)
-  const [vehicleSearch, setVehicleSearch] = useState('')
+  const [selectedAdminEmployee, setSelectedAdminEmployee] = useState<AdminFloorWorkerCard | null>(null)
+  const [adminRosterPeople, setAdminRosterPeople] = useState<AdminRosterPerson[]>([])
+  const [adminIncomeByCode, setAdminIncomeByCode] = useState<Map<string, number>>(new Map())
+  const [adminRosterLoading, setAdminRosterLoading] = useState(false)
+  const [adminRosterError, setAdminRosterError] = useState<string | null>(null)
+  const [adminPrimaryRows, setAdminPrimaryRows] = useState<Record<string, unknown>[]>([])
+  const [adminSupportRows, setAdminSupportRows] = useState<Record<string, unknown>[]>([])
   const [assignmentMonthFilter, setAssignmentMonthFilter] = useState('all')
-  const [floorDayFilter, setFloorDayFilter] = useState<FloorDayFilter>('today')
-  const [updateFilter, setUpdateFilter] = useState<UpdateFilter>('pending')
   const [assignmentByJc, setAssignmentByJc] = useState<Record<string, Record<string, unknown>>>({})
+  const [workerAssignedSlotCount, setWorkerAssignedSlotCount] = useState(0)
+  const [trackerIncomeMonth, setTrackerIncomeMonth] = useState<number | null>(null)
+  const [incomeLoading, setIncomeLoading] = useState(false)
   const [allVehiclePhotos, setAllVehiclePhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
   const [loadingAllPhotos, setLoadingAllPhotos] = useState(false)
   const [listLimit, setListLimit] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
+  const [workerQcFailReason, setWorkerQcFailReason] = useState('')
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
 
   const monthFilterOptions = useMemo(() => buildFloorWorkMonthFilterOptions(today, 5), [today])
 
-  const isTaskDone = useCallback(
-    (t: BodyshopFloorWorkTask) => {
-      const slotCode = workTaskEmployeeCode(t, employeeCode)
-      if (!slotCode) return false
-      const key = workLogMapKey(t.jobCardNumber, t.floorRole, slotCode, t.isSupport)
-      return Boolean(logsByKey[key]?.note_text?.trim())
-    },
-    [employeeCode, logsByKey],
-  )
+  const adminRoster = useMemo(() => {
+    if (!isAdminOverview || adminRosterPeople.length === 0) return null
+    return buildAdminFloorWorkerRoster(
+      assignmentMonthFilter,
+      adminRosterPeople,
+      adminPrimaryRows,
+      adminSupportRows,
+      adminIncomeByCode,
+    )
+  }, [
+    isAdminOverview,
+    adminRosterPeople,
+    adminPrimaryRows,
+    adminSupportRows,
+    adminIncomeByCode,
+    assignmentMonthFilter,
+  ])
+
+  const tasksByJobCard = useMemo(() => {
+    const map = new Map<string, BodyshopFloorWorkTask[]>()
+    for (const t of tasks) {
+      const list = map.get(t.jobCardNumber) ?? []
+      list.push(t)
+      map.set(t.jobCardNumber, list)
+    }
+    return map
+  }, [tasks])
+
+  const adminEmployeeScopedTasks = useMemo(() => {
+    if (!isAdminOverview || !selectedAdminEmployee) return tasks
+    if (adminPrimaryRows.length > 0 || adminSupportRows.length > 0) {
+      return listWorkTasksForEmployee(
+        selectedAdminEmployee.employeeCode,
+        adminPrimaryRows,
+        adminSupportRows,
+      )
+    }
+    const code = selectedAdminEmployee.employeeCode
+    return tasks.filter((t) => normFloorEmployeeCode(t.assignedEmployeeCode) === code)
+  }, [tasks, isAdminOverview, selectedAdminEmployee, adminPrimaryRows, adminSupportRows])
+
+  const tasksForList = isAdminOverview && selectedAdminEmployee ? adminEmployeeScopedTasks : tasks
 
   const monthFilteredTasks = useMemo(() => {
-    if (assignmentMonthFilter === 'all') return tasks
-    return tasks.filter((t) => {
+    if (assignmentMonthFilter === 'all') return tasksForList
+    return tasksForList.filter((t) => {
       const ym =
         istYearMonthFromIso(vehicleByJc[t.jobCardNumber]?.floorSinceAt)
         ?? istYearMonthFromIso(t.assignedAt)
       return ym === assignmentMonthFilter
     })
-  }, [tasks, assignmentMonthFilter, vehicleByJc])
+  }, [tasksForList, assignmentMonthFilter, vehicleByJc])
 
-  const searchFilteredTasks = useMemo(() => {
-    const q = vehicleSearch.trim().toLowerCase()
-    const sorted = sortFloorWorkTasksByFloorDayRecency(monthFilteredTasks, vehicleByJc, today)
-    if (!q) return sorted
-    return sorted.filter((t) => {
-      const meta = vehicleByJc[t.jobCardNumber]
-      const title = floorWorkVehicleTitle(meta, t.jobCardNumber).toLowerCase()
-      const sub = floorWorkVehicleSubtitle(meta, t.jobCardNumber).toLowerCase()
-      return title.includes(q) || sub.includes(q) || t.jobCardNumber.toLowerCase().includes(q)
-    })
-  }, [monthFilteredTasks, vehicleByJc, vehicleSearch])
+  const sortedMonthTasks = useMemo(
+    () => sortFloorWorkTasksByFloorDayRecency(monthFilteredTasks, vehicleByJc, today),
+    [monthFilteredTasks, vehicleByJc, today],
+  )
 
-  const filterCounts = useMemo(() => {
-    const updates = { all: 0, pending: 0, done: 0 }
-    for (const t of searchFilteredTasks) {
-      updates.all += 1
-      if (isTaskDone(t)) updates.done += 1
-      else updates.pending += 1
-    }
-    return { updates }
-  }, [searchFilteredTasks, isTaskDone])
+  const vehicleStepPendingForAdmin = useCallback(
+    (jobCardNumber: string, employeeCode?: string | null) => {
+      const row = assignmentByJc[jobCardNumber]
+      const slots = employeeCode
+        ? employeeTasksOnJobCard(adminEmployeeScopedTasks, jobCardNumber, employeeCode)
+        : tasks.filter((t) => t.jobCardNumber === jobCardNumber)
+      if (slots.length === 0) return true
+      return slots.some((t) => !isFloorWorkTaskStepCompleted(t, row))
+    },
+    [assignmentByJc, adminEmployeeScopedTasks, tasks],
+  )
+
+  const qcStatusForTask = useCallback(
+    (t: BodyshopFloorWorkTask) =>
+      vehicleByJc[t.jobCardNumber]?.qcStatus
+      ?? (t.repairCardId ? undefined : undefined),
+    [vehicleByJc],
+  )
 
   const visibleTasks = useMemo(() => {
-    return searchFilteredTasks.filter((t) => {
-      if (!isAdminOverview) {
-        if (!isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[t.jobCardNumber])) return false
-        const bucket = floorWorkFloorDayBucket(vehicleByJc[t.jobCardNumber]?.floorSinceAt, today)
-        if (floorDayFilter !== 'all' && bucket !== floorDayFilter) return false
-      }
-      if (updateFilter === 'pending' && isTaskDone(t)) return false
-      if (updateFilter === 'done' && !isTaskDone(t)) return false
-      return true
-    })
-  }, [searchFilteredTasks, updateFilter, isTaskDone, isAdminOverview, assignmentByJc, vehicleByJc, floorDayFilter, today])
+    if (isAdminOverview) return sortedMonthTasks
+    return sortedMonthTasks.filter((t) =>
+      isFloorWorkTaskVisible(t, assignmentByJc[t.jobCardNumber], qcStatusForTask(t)),
+    )
+  }, [sortedMonthTasks, isAdminOverview, assignmentByJc, qcStatusForTask])
+
+  const visibleListTasks = useMemo(() => {
+    if (!isAdminOverview || !selectedAdminEmployee) return visibleTasks
+    const code = selectedAdminEmployee.employeeCode
+    const ordered: BodyshopFloorWorkTask[] = []
+    const seen = new Set<string>()
+    for (const t of visibleTasks) {
+      if (seen.has(t.jobCardNumber)) continue
+      seen.add(t.jobCardNumber)
+      const onJc = employeeTasksOnJobCard(adminEmployeeScopedTasks, t.jobCardNumber, code)
+      if (onJc.length === 0) continue
+      const row = assignmentByJc[t.jobCardNumber]
+      const pick =
+        onJc.find((x) => isWorkerQcTurn(x, row, qcStatusForTask(x)))
+        ?? onJc.find((x) => isFloorWorkTaskAtActivePipelineStep(x, row))
+        ?? onJc.find((x) => !isFloorWorkTaskStepCompleted(x, row))
+        ?? onJc[0]
+      ordered.push(pick)
+    }
+    return ordered
+  }, [visibleTasks, isAdminOverview, selectedAdminEmployee, adminEmployeeScopedTasks, assignmentByJc, qcStatusForTask])
 
   const pagedTasks = useMemo(
-    () => visibleTasks.slice(0, listLimit),
-    [visibleTasks, listLimit],
+    () => visibleListTasks.slice(0, listLimit),
+    [visibleListTasks, listLimit],
   )
+
+  const adminEmployeeVehicleStats = useMemo(() => {
+    if (!isAdminOverview || !selectedAdminEmployee) return null
+    const code = selectedAdminEmployee.employeeCode
+    let total = 0
+    let pending = 0
+    let done = 0
+    const seen = new Set<string>()
+    for (const t of sortedMonthTasks) {
+      if (seen.has(t.jobCardNumber)) continue
+      if (employeeTasksOnJobCard(adminEmployeeScopedTasks, t.jobCardNumber, code).length === 0) continue
+      seen.add(t.jobCardNumber)
+      total += 1
+      if (vehicleStepPendingForAdmin(t.jobCardNumber, code)) pending += 1
+      else done += 1
+    }
+    return { total, pending, done }
+  }, [
+    isAdminOverview,
+    selectedAdminEmployee,
+    sortedMonthTasks,
+    adminEmployeeScopedTasks,
+    vehicleStepPendingForAdmin,
+  ])
 
   useEffect(() => {
     setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
-  }, [vehicleSearch, assignmentMonthFilter, floorDayFilter, updateFilter])
+  }, [assignmentMonthFilter, selectedAdminEmployee?.employeeCode])
+
+  const adminIncomeMonthLoaded = useRef(false)
+
+  useEffect(() => {
+    if (!isAdminOverview || adminRosterPeople.length === 0) return
+    if (!adminIncomeMonthLoaded.current) {
+      adminIncomeMonthLoaded.current = true
+      return
+    }
+    let cancelled = false
+    void fetchAdminRosterIncome(assignmentMonthFilter)
+      .then((incomeByCode) => {
+        if (!cancelled) setAdminIncomeByCode(incomeByCode)
+      })
+      .catch(() => {
+        if (!cancelled) setAdminIncomeByCode(new Map())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isAdminOverview, assignmentMonthFilter, adminRosterPeople.length])
+
+  useEffect(() => {
+    if (!adminRoster) return
+    setSelectedAdminEmployee((prev) => {
+      if (!prev) return null
+      const fresh = adminRoster.find((c) => c.employeeCode === prev.employeeCode)
+      if (!fresh) return prev
+      if (
+        fresh.vehiclesTotal === prev.vehiclesTotal
+        && fresh.vehiclesPending === prev.vehiclesPending
+        && fresh.vehiclesDone === prev.vehiclesDone
+        && fresh.bodyshopIncomeMonth === prev.bodyshopIncomeMonth
+      ) {
+        return prev
+      }
+      return fresh
+    })
+  }, [adminRoster])
 
   const uniqueJcsFromTasks = useCallback((taskList: BodyshopFloorWorkTask[], maxJcs: number) => {
     const seen = new Set<string>()
@@ -230,12 +483,12 @@ export default function BodyshopFloorWorkScreen() {
   }, [])
 
   const loadMoreList = useCallback(() => {
-    if (listLimit >= visibleTasks.length) return
-    const next = Math.min(listLimit + FLOOR_WORK_LIST_PAGE_SIZE, visibleTasks.length)
+    if (listLimit >= visibleListTasks.length) return
+    const next = Math.min(listLimit + FLOOR_WORK_LIST_PAGE_SIZE, visibleListTasks.length)
     setListLimit(next)
-    const jcs = uniqueJcsFromTasks(visibleTasks.slice(0, next), next)
+    const jcs = uniqueJcsFromTasks(visibleListTasks.slice(0, next), next)
     void enrichVehicleMetaBatch(jcs)
-  }, [listLimit, visibleTasks, uniqueJcsFromTasks, enrichVehicleMetaBatch])
+  }, [listLimit, visibleListTasks, uniqueJcsFromTasks, enrichVehicleMetaBatch])
 
   const load = useCallback(async () => {
     setError(null)
@@ -252,17 +505,15 @@ export default function BodyshopFloorWorkScreen() {
       let taskList: BodyshopFloorWorkTask[] = []
 
       if (adminOverview) {
-        const { data: assAll, error: assErr } = await supabase.from('bodyshop_assignments').select('*').eq('is_active', true)
-        if (assErr) throw assErr
-        const { data: supAll, error: supErr } = await supabase
-          .from('bodyshop_floor_support_assignments')
-          .select('*')
-          .eq('is_active', true)
-        if (supErr) throw supErr
-        assRows = assAll ?? []
-        supportRows = supAll ?? []
+        const loaded = await fetchAllActiveBodyshopAssignmentRows()
+        assRows = loaded.primaryRows
+        supportRows = loaded.supportRows
         taskList = listAllWorkTasksForAdmin(assRows, supportRows)
+        setAdminPrimaryRows(assRows)
+        setAdminSupportRows(supportRows)
       } else if (myCode) {
+        setAdminPrimaryRows([])
+        setAdminSupportRows([])
         assRows = await fetchBodyshopAssignmentsForEmployee(myCode)
         supportRows = await fetchBodyshopSupportAssignmentsForEmployee(myCode)
         taskList = listWorkTasksForEmployee(myCode, assRows, supportRows)
@@ -272,48 +523,102 @@ export default function BodyshopFloorWorkScreen() {
 
       const assignmentMap = buildAssignmentRowByJobCard(assRows)
       if (!adminOverview) {
-        taskList = taskList.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentMap[t.jobCardNumber]))
+        setWorkerAssignedSlotCount(taskList.length)
+        taskList = taskList.filter((t) => {
+          const meta = minimal[t.jobCardNumber]
+          return isFloorWorkTaskVisible(t, assignmentMap[t.jobCardNumber], meta?.qcStatus)
+        })
         setAssignmentMonthFilter(currentIstYearMonth(today))
-        setFloorDayFilter('today')
-        setUpdateFilter('pending')
       } else {
+        setWorkerAssignedSlotCount(0)
         setAssignmentMonthFilter('all')
-        setFloorDayFilter('all')
-        setUpdateFilter('all')
       }
-      setAssignmentByJc(assignmentMap)
-      setTasks(taskList)
+      const assignmentCreatedAtByJc = buildAssignmentCreatedAtByJc(assRows)
+      assignmentCreatedAtRef.current = assignmentCreatedAtByJc
 
       const assignmentJcs = Array.from(
         new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
       )
-      const liveFloorJcs = adminOverview ? await fetchLiveOnFloorJobCardKeys() : []
+      const liveFloorJcs = await fetchLiveOnFloorJobCardKeys()
       const allJcs = Array.from(
         new Set([...assignmentJcs, ...liveFloorJcs, ...taskList.map((t) => t.jobCardNumber)]),
       )
-      const assignmentCreatedAtByJc = buildAssignmentCreatedAtByJc(assRows)
-      assignmentCreatedAtRef.current = assignmentCreatedAtByJc
+      let minimal =
+        allJcs.length > 0 ? buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc) : {}
+      if (allJcs.length > 0) {
+        minimal = await attachQcStatusToVehicleMeta(minimal, allJcs)
+      }
+      taskList = filterTasksByFloorWorkGoLive(taskList, minimal, assignmentMap)
+
+      setAssignmentByJc(assignmentMap)
+      setTasks(taskList)
+
       metaLoadedJcsRef.current = new Set()
       setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
       if (allJcs.length > 0) {
-        const minimal = buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc)
         setVehicleByJc(minimal)
         const sorted = sortFloorWorkTasksByFloorDayRecency(taskList, minimal, today)
         void enrichVehicleMetaBatch(uniqueJcsFromTasks(sorted, FLOOR_WORK_LIST_PAGE_SIZE))
       } else {
         setVehicleByJc({})
       }
-      const logs = adminOverview
-        ? await fetchRoleDailyLogsForDate(today)
-        : await fetchRoleDailyLogsForDate(
-            today,
-            allJcs.length > 0 ? allJcs : taskList.map((t) => t.jobCardNumber),
-          )
-      const lmap: Record<string, BodyshopFloorRoleDailyLogRow> = {}
-      for (const row of logs) {
-        lmap[workLogMapKey(row.job_card_number, row.floor_role, row.employee_code, row.is_support)] = row
+      if (!adminOverview) {
+        const logJcKeys = allJcs.length > 0 ? allJcs : taskList.map((t) => t.jobCardNumber)
+        try {
+          const logs = await fetchRoleDailyLogsForDate(today, logJcKeys.length > 0 ? logJcKeys : undefined)
+          const lmap: Record<string, BodyshopFloorRoleDailyLogRow> = {}
+          for (const row of logs) {
+            lmap[workLogMapKey(row.job_card_number, row.floor_role, row.employee_code, row.is_support)] = row
+          }
+          setLogsByKey(lmap)
+        } catch {
+          setLogsByKey({})
+        }
+      } else {
+        setLogsByKey({})
       }
-      setLogsByKey(lmap)
+
+      if (!adminOverview && myCode) {
+        setIncomeLoading(true)
+        setTrackerIncomeMonth(null)
+        void fetchMyBodyshopIncomeForMonth(myCode, currentIstYearMonth(today))
+          .then((amount) => setTrackerIncomeMonth(amount))
+          .catch(() => setTrackerIncomeMonth(0))
+          .finally(() => setIncomeLoading(false))
+      } else {
+        setTrackerIncomeMonth(null)
+        setIncomeLoading(false)
+      }
+
+      if (adminOverview) {
+        adminIncomeMonthLoaded.current = false
+        setAdminRosterLoading(true)
+        setAdminRosterError(null)
+        void fetchAdminRosterPeopleAndIncome('all')
+          .then(({ people, incomeByCode }) => {
+            setAdminRosterPeople(people)
+            setAdminIncomeByCode(incomeByCode)
+            setSelectedAdminEmployee((prev) => {
+              if (!prev) return null
+              const cards = buildAdminFloorWorkerRoster('all', people, assRows, supportRows, incomeByCode)
+              return cards.find((c) => c.employeeCode === prev.employeeCode) ?? null
+            })
+          })
+          .catch((e) => {
+            setAdminRosterPeople([])
+            setAdminIncomeByCode(new Map())
+            setAdminRosterError(e instanceof Error ? e.message : 'Could not load floor team')
+          })
+          .finally(() => {
+            adminIncomeMonthLoaded.current = true
+            setAdminRosterLoading(false)
+          })
+      } else {
+        setAdminRosterPeople([])
+        setAdminIncomeByCode(new Map())
+        setAdminRosterError(null)
+        setSelectedAdminEmployee(null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
     }
@@ -432,18 +737,94 @@ export default function BodyshopFloorWorkScreen() {
 
   const canSubmitSelected = useMemo(() => {
     if (!selected) return false
-    if (!isAdminOverview) return true
-    const me = String(employeeCode ?? '').trim().toUpperCase()
-    return workTaskEmployeeCode(selected, employeeCode) === me
-  }, [selected, isAdminOverview, employeeCode])
+    const row = assignmentByJc[selected.jobCardNumber]
+    const meta = vehicleByJc[selected.jobCardNumber]
+    return canSubmitFloorWorkTask(selected, row, meta?.qcStatus, { isAdminOverview })
+  }, [selected, isAdminOverview, assignmentByJc, vehicleByJc])
+
+  const selectedWorkerQcTurn = useMemo(() => {
+    if (!selected) return false
+    const row = assignmentByJc[selected.jobCardNumber]
+    const meta = vehicleByJc[selected.jobCardNumber]
+    return isWorkerQcTurn(selected, row, meta?.qcStatus)
+  }, [selected, assignmentByJc, vehicleByJc])
+
+  async function submitWorkerQc(decision: WorkerQcDecision) {
+    if (!selected || !canSubmitSelected || !selectedWorkerQcTurn) return
+    if (decision === 'fail' && !workerQcFailReason.trim()) {
+      Alert.alert('QC Fail', 'Enter a fail reason before submitting.')
+      return
+    }
+    const row = assignmentByJc[selected.jobCardNumber] as Record<string, unknown> | undefined
+    const assignmentId = typeof row?.id === 'number' && row.id > 0 ? row.id : null
+    const meta = vehicleByJc[selected.jobCardNumber]
+    const repairCardId = meta?.repairCardId ?? selected.repairCardId
+    if (!assignmentId || !repairCardId) {
+      Alert.alert('QC', 'Vehicle record is still loading. Pull to refresh and try again.')
+      return
+    }
+    const checker = String(selected.employeeName ?? employeeName ?? employeeCode).trim()
+    setSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const result = await saveWorkerQcFromFloorWork({
+        repairCardId,
+        jobCardNumber: selected.jobCardNumber,
+        assignmentRowId: assignmentId,
+        decision,
+        checkerName: checker,
+        failReason: workerQcFailReason,
+        actorEmail: user?.email ?? null,
+      })
+      setVehicleByJc((prev) => ({
+        ...prev,
+        [selected.jobCardNumber]: {
+          ...(prev[selected.jobCardNumber] ?? { reg: null, customer: null }),
+          qcStatus: result.qc_status,
+        },
+      }))
+      const jc = selected.jobCardNumber
+      const passQc = decision === 'pass' ? 'pass' : result.qc_status
+      const now = new Date().toISOString()
+      const nextRow =
+        decision === 'pass' && row ? { ...row, bs_floor_completed_at: now } : row
+      setAssignmentByJc((prev) => ({
+        ...prev,
+        [jc]: nextRow ?? prev[jc],
+      }))
+      setWorkerQcFailReason('')
+      setTasks((prev) =>
+        prev.filter((t) => {
+          const assignRow =
+            t.jobCardNumber === jc ? (nextRow ?? assignmentByJc[t.jobCardNumber]) : assignmentByJc[t.jobCardNumber]
+          const qc =
+            t.jobCardNumber === jc
+              ? passQc
+              : vehicleByJc[t.jobCardNumber]?.qcStatus
+          return isFloorWorkTaskVisible(t, assignRow, qc)
+        }),
+      )
+      setSelected(null)
+      Alert.alert(
+        decision === 'pass' ? 'QC passed' : 'QC failed',
+        decision === 'pass'
+          ? 'Floor incharge can complete Re-Inspection on Bodyshop Floor.'
+          : 'Fail reason saved. Fix work and submit QC again.',
+      )
+    } catch (e) {
+      Alert.alert('QC failed', e instanceof Error ? e.message : 'Could not save QC')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function save() {
     if (!selected || !canSubmitSelected) return
     const slotCode = workTaskEmployeeCode(selected, employeeCode)
     if (!slotCode) return
     const trimmed = note.trim()
-    if (!trimmed) {
-      Alert.alert('Update', "Enter today's work description.")
+    if (photoUris.length === 0 && savedPhotos.length === 0) {
+      Alert.alert('Photos required', 'Add at least one work photo before marking Done.')
       return
     }
     setSaving(true)
@@ -458,7 +839,7 @@ export default function BodyshopFloorWorkScreen() {
       const dealerCode = String(dealerCodeRaw ?? selected.dealerCode ?? '').trim()
       if (!dealerCode) throw new Error('Dealer code missing')
       const loginEmployeeCode = String(myCodeRaw ?? employeeCode ?? slotCode).trim().toUpperCase()
-      const employeeCodeForLog = loginEmployeeCode || slotCode
+      const employeeCodeForLog = isAdminOverview ? slotCode : loginEmployeeCode || slotCode
 
       const row = await upsertRoleDailyLog({
         jobCardNumber: selected.jobCardNumber,
@@ -510,7 +891,14 @@ export default function BodyshopFloorWorkScreen() {
         const assignmentRow = assRow as Record<string, unknown>
         setAssignmentByJc((prev) => ({ ...prev, [selected.jobCardNumber]: assignmentRow }))
         if (!isAdminOverview) {
-          setTasks((prev) => prev.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentRow)))
+          setTasks((prev) =>
+            prev.filter((t) => {
+              const rowForTask =
+                t.jobCardNumber === selected.jobCardNumber ? assignmentRow : assignmentByJc[t.jobCardNumber]
+              const meta = vehicleByJc[t.jobCardNumber]
+              return isFloorWorkTaskVisible(t, rowForTask, meta?.qcStatus)
+            }),
+          )
         }
       }
 
@@ -521,7 +909,7 @@ export default function BodyshopFloorWorkScreen() {
         uploadedPhotos.length > 0
           ? ' Photos are saved. Google Drive link will sync in the background (no need to wait).'
           : ''
-      Alert.alert('Submitted', `Today's update is saved (IST).${driveHint}`)
+      Alert.alert('Done', `Your step is complete — vehicle moves to the next role.${driveHint}`)
     } catch (e) {
       Alert.alert('Save failed', e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -539,18 +927,45 @@ export default function BodyshopFloorWorkScreen() {
 
   if (error) {
     return (
-      <SafeAreaView style={{ flex: 1, padding: 20 }}>
+      <SafeAreaView style={{ flex: 1, padding: 20, backgroundColor: '#f4f2ec' }}>
         <Text style={S.screenTitle}>Floor Work</Text>
-        <Text style={{ color: '#DC2626', marginBottom: 12 }}>{error}</Text>
-        <Text style={{ color: '#82858f', lineHeight: 20 }}>
-          Admin: grant module bodyshop_floor_work, map user → employee code, set Employee Master role (DENTOR/PAINTER/…).
+        <Text style={{ color: '#DC2626', marginBottom: 12, fontWeight: '700' }}>{error}</Text>
+        <Text style={{ color: '#4b4e59', lineHeight: 22, marginBottom: 12 }}>
+          Common reasons: login not linked to employee code, slow network, or session expired. Pull down after Retry or sign in again.
         </Text>
+        <Text style={{ color: '#82858f', lineHeight: 20, marginBottom: 16 }}>
+          Admin: module <Text style={{ fontWeight: '700' }}>bodyshop_floor_work</Text>, user → employee mapping, role DENTOR/PAINTER in Employee Master.
+        </Text>
+        <TouchableOpacity onPress={() => void onRefresh()} style={S.loadMoreBtn}>
+          <Text style={S.loadMoreBtnText}>Retry</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     )
   }
 
-  const pendingToday = filterCounts.updates.pending
-  const doneToday = filterCounts.updates.done
+  const adminRosterView = isAdminOverview && !selected && !selectedAdminEmployee
+  const adminEmployeeWorkView = isAdminOverview && !selected && Boolean(selectedAdminEmployee)
+
+  const monthFilterBar = (
+    <>
+      <Text style={S.filterSectionLabel}>Month on floor (IST)</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={S.filterScrollRow}
+        contentContainerStyle={S.filterScrollContent}
+      >
+        {monthFilterOptions.map((opt) => (
+          <FilterChip
+            key={opt.value}
+            label={opt.label}
+            active={assignmentMonthFilter === opt.value}
+            onPress={() => setAssignmentMonthFilter(opt.value)}
+          />
+        ))}
+      </ScrollView>
+    </>
+  )
 
   return (
     <SafeAreaView style={S.root} edges={['top']}>
@@ -558,8 +973,11 @@ export default function BodyshopFloorWorkScreen() {
         <View style={{ flex: 1 }}>
           <Text style={S.screenTitle}>Floor Work</Text>
           <Text style={S.screenSubtitle}>
-            {employeeName ?? employeeCode}
-            {isAdminOverview ? ' · Admin' : ''} · {today} (IST)
+            {isAdminOverview
+              ? selectedAdminEmployee
+                ? `${selectedAdminEmployee.employeeName} · ${selectedAdminEmployee.roleLabel}`
+                : `Admin · floor team · ${today} (IST)`
+              : `${employeeName ?? employeeCode} · ${today} (IST)`}
           </Text>
         </View>
         <TouchableOpacity onPress={() => void onRefresh()} style={S.refreshBtn} accessibilityLabel="Refresh">
@@ -567,17 +985,30 @@ export default function BodyshopFloorWorkScreen() {
         </TouchableOpacity>
       </View>
 
-      {!selected ? (
-        <View style={S.summaryRow}>
-          <View style={[S.summaryPill, S.summaryPillPending]}>
-            <Text style={S.summaryPillN}>{pendingToday}</Text>
-            <Text style={S.summaryPillL}>Pending today</Text>
-          </View>
-          <View style={[S.summaryPill, S.summaryPillDone]}>
-            <Text style={S.summaryPillN}>{doneToday}</Text>
-            <Text style={S.summaryPillL}>Updated today</Text>
-          </View>
+      {!selected && !isAdminOverview ? (
+        <View style={S.incomeBanner}>
+          <Text style={S.incomeBannerLabel}>Bodyshop income · {currentIstYearMonth(today)}</Text>
+          {incomeLoading ? (
+            <ActivityIndicator color="#065f46" style={{ marginTop: 8, alignSelf: 'flex-start' }} />
+          ) : (
+            <Text style={S.incomeBannerAmount}>
+              {trackerIncomeMonth !== null ? formatBodyshopIncomeInr(trackerIncomeMonth) : '—'}
+            </Text>
+          )}
+          <Text style={S.incomeBannerHint}>Tracker / payroll calculation (closed accident jobs)</Text>
         </View>
+      ) : null}
+
+      {adminRosterView ? (
+        <>
+          {monthFilterBar}
+          <AdminFloorTeamRoster
+            cards={adminRoster}
+            loading={adminRosterLoading || loading}
+            error={adminRosterError}
+            onSelect={(person) => setSelectedAdminEmployee(person)}
+          />
+        </>
       ) : null}
 
       {selected ? (
@@ -592,7 +1023,9 @@ export default function BodyshopFloorWorkScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <TouchableOpacity onPress={() => setSelected(null)} style={S.backBtn}>
-              <Text style={S.backBtnText}>← Back to list</Text>
+              <Text style={S.backBtnText}>
+                {isAdminOverview && selectedAdminEmployee ? '← Back to vehicles' : '← Back to list'}
+              </Text>
             </TouchableOpacity>
             <Text style={S.detailTitle}>
               {floorWorkVehicleTitle(vehicleByJc[selected.jobCardNumber], selected.jobCardNumber)}
@@ -614,18 +1047,62 @@ export default function BodyshopFloorWorkScreen() {
               ) : null}
             </View>
             {!canSubmitSelected && isAdminOverview ? (
-              <Text style={S.adminViewOnlyHint}>View only — this slot is assigned to another employee.</Text>
+              <Text style={S.adminViewOnlyHint}>
+                This pipeline step is not active on this vehicle — view all photos below, or open the row for the active role to add work (same as denter/painter).
+              </Text>
             ) : null}
             {floorWorkStandingLine(vehicleByJc[selected.jobCardNumber]) ? (
               <Text style={S.standingLine}>{floorWorkStandingLine(vehicleByJc[selected.jobCardNumber])}</Text>
             ) : null}
-            {canSubmitSelected ? (
+            {canSubmitSelected && !selectedWorkerQcTurn && isFloorWorkTaskAtActivePipelineStep(selected, assignmentByJc[selected.jobCardNumber]) ? (
+              <View style={S.stepBanner}>
+                <Text style={S.stepBannerTitle}>Your turn — {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}</Text>
+                <Text style={S.stepBannerHint}>
+                  Pipeline: Dentor → Painter → Technician → Rubbing → QC. Active lane:{' '}
+                  {activePipelineStepLabel(assignmentByJc[selected.jobCardNumber]) ?? '—'}. Add at least one photo, tap Done — Floor Incharge sees it on Bodyshop Floor under Worker updates.
+                </Text>
+              </View>
+            ) : null}
+            {selectedWorkerQcTurn && canSubmitSelected ? (
+              <View style={S.qcPanel}>
+                <Text style={S.qcPanelTitle}>Quality check — your turn</Text>
+                <Text style={S.qcPanelHint}>
+                  All floor steps are done. As the last pipeline role on this job, pass or fail QC here (usually Rubbing).
+                </Text>
+                <View style={S.qcBtnRow}>
+                  <TouchableOpacity
+                    style={[S.qcBtn, S.qcBtnPass, saving && S.saveBtnDisabled]}
+                    disabled={saving}
+                    onPress={() => void submitWorkerQc('pass')}
+                  >
+                    <Text style={S.qcBtnPassText}>QC Pass</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[S.qcBtn, S.qcBtnFail, saving && S.saveBtnDisabled]}
+                    disabled={saving}
+                    onPress={() => void submitWorkerQc('fail')}
+                  >
+                    <Text style={S.qcBtnFailText}>QC Fail</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={S.fieldLabel}>Fail reason (required if Fail)</Text>
+                <TextInput
+                  style={S.noteInput}
+                  multiline
+                  placeholder="Describe defect if QC fails"
+                  placeholderTextColor="#a8abb4"
+                  value={workerQcFailReason}
+                  onChangeText={setWorkerQcFailReason}
+                />
+              </View>
+            ) : null}
+            {canSubmitSelected && !selectedWorkerQcTurn ? (
               <>
-            <Text style={S.fieldLabel}>Today&apos;s work (IST)</Text>
+            <Text style={S.fieldLabel}>Work update (optional)</Text>
             <TextInput
               style={S.noteInput}
               multiline
-              placeholder="Today's work…"
+              placeholder="Optional — short note about the work"
               placeholderTextColor="#a8abb4"
               value={note}
               onChangeText={setNote}
@@ -685,91 +1162,85 @@ export default function BodyshopFloorWorkScreen() {
                 ))}
               </View>
             ) : null}
-            {canSubmitSelected ? (
+            {canSubmitSelected && !selectedWorkerQcTurn ? (
             <TouchableOpacity onPress={() => void save()} disabled={saving} style={[S.saveBtn, saving && S.saveBtnDisabled]}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Submit & complete my step</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Done — send to next step</Text>}
             </TouchableOpacity>
             ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
-      ) : (
+      ) : adminRosterView ? null : (
         <>
-          <View style={S.searchWrap}>
-            <TextInput
-              placeholder="Search reg / customer…"
-              placeholderTextColor="#a8abb4"
-              value={vehicleSearch}
-              onChangeText={setVehicleSearch}
-              style={S.searchInput}
-            />
-          </View>
+          {adminEmployeeWorkView && selectedAdminEmployee ? (
+            <>
+              <TouchableOpacity onPress={() => setSelectedAdminEmployee(null)} style={S.backBtn}>
+                <Text style={S.backBtnText}>← Floor team</Text>
+              </TouchableOpacity>
+              <View style={S.adminStatsCard}>
+                <Text style={S.adminStatsTitle}>{selectedAdminEmployee.employeeName}</Text>
+                <Text style={S.adminStatsSub}>
+                  {selectedAdminEmployee.roleLabel} · {assignmentMonthFilter === 'all' ? 'All months' : selectedAdminEmployee.monthLabel}
+                </Text>
+                <FloorWorkStatsThree
+                  total={adminEmployeeVehicleStats?.total ?? selectedAdminEmployee.vehiclesTotal}
+                  pending={adminEmployeeVehicleStats?.pending ?? selectedAdminEmployee.vehiclesPending}
+                  done={adminEmployeeVehicleStats?.done ?? selectedAdminEmployee.vehiclesDone}
+                />
+                <Text style={S.adminStatsIncome}>
+                  Bodyshop income · {formatBodyshopIncomeInr(selectedAdminEmployee.bodyshopIncomeMonth)}
+                </Text>
+              </View>
+            </>
+          ) : null}
 
-          <Text style={S.filterSectionLabel}>Month on floor (IST)</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={S.filterScrollRow}
-            contentContainerStyle={S.filterScrollContent}
-          >
-            {monthFilterOptions.map((opt) => (
-              <FilterChip
-                key={opt.value}
-                label={opt.label}
-                active={assignmentMonthFilter === opt.value}
-                onPress={() => setAssignmentMonthFilter(opt.value)}
-              />
-            ))}
-          </ScrollView>
-
-          <Text style={S.filterSectionLabel}>Today&apos;s update</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={S.filterScrollRow}
-            contentContainerStyle={S.filterScrollContent}
-          >
-            <FilterChip
-              label="Pending"
-              count={filterCounts.updates.pending}
-              active={updateFilter === 'pending'}
-              onPress={() => setUpdateFilter('pending')}
-              tone="accent"
-            />
-            <FilterChip
-              label="Updated"
-              count={filterCounts.updates.done}
-              active={updateFilter === 'done'}
-              onPress={() => setUpdateFilter('done')}
-            />
-            <FilterChip
-              label="All"
-              count={filterCounts.updates.all}
-              active={updateFilter === 'all'}
-              onPress={() => setUpdateFilter('all')}
-            />
-          </ScrollView>
+          {isAdminOverview ? monthFilterBar : (
+            <>
+              <Text style={S.filterSectionLabel}>Month on floor (IST)</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={S.filterScrollRow}
+                contentContainerStyle={S.filterScrollContent}
+              >
+                {monthFilterOptions.map((opt) => (
+                  <FilterChip
+                    key={opt.value}
+                    label={opt.label}
+                    active={assignmentMonthFilter === opt.value}
+                    onPress={() => setAssignmentMonthFilter(opt.value)}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          )}
 
           <Text style={S.listOrderHint}>
             {isAdminOverview
-              ? 'Admin — on floor today → yesterday → longer wait'
-              : 'On floor today → yesterday → longer wait'}
+              ? `${selectedAdminEmployee?.employeeName ?? 'Employee'} — vehicles (newest on floor first)`
+              : 'Your pipeline step only · pick month above'}
             {' · '}
-            Showing {pagedTasks.length} of {visibleTasks.length} rows
+            Showing {pagedTasks.length} of {visibleListTasks.length}{' '}
+            {adminEmployeeWorkView ? 'vehicles' : 'rows'}
             {loadingMoreMeta ? ' · loading details…' : ''}
           </Text>
 
           <FlatList
             data={pagedTasks}
-            keyExtractor={(item) => `${item.jobCardNumber}-${item.floorRole}-${item.isSupport}`}
+            keyExtractor={(item) =>
+              adminEmployeeWorkView
+                ? item.jobCardNumber
+                : `${item.jobCardNumber}-${item.floorRole}-${item.isSupport}`
+            }
             contentContainerStyle={S.listContent}
-            initialNumToRender={12}
-            maxToRenderPerBatch={10}
-            windowSize={7}
+            initialNumToRender={8}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            removeClippedSubviews
             onEndReached={() => loadMoreList()}
             onEndReachedThreshold={0.35}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#2a4cd0" />}
             ListFooterComponent={
-              listLimit < visibleTasks.length ? (
+              listLimit < visibleListTasks.length ? (
                 <TouchableOpacity
                   onPress={() => loadMoreList()}
                   disabled={loadingMoreMeta}
@@ -785,45 +1256,76 @@ export default function BodyshopFloorWorkScreen() {
               <View style={S.empty}>
                 <Text style={S.emptyIcon}>🚗</Text>
                 <Text style={S.emptyText}>
-                  {tasks.length === 0
-                    ? isAdminOverview
-                      ? 'No active floor assignments yet.'
-                      : 'No assignment for your code yet. Floor Incharge must assign you on Bodyshop Floor.'
-                    : 'No vehicles match these filters — try All months or another update filter.'}
+                  {isAdminOverview
+                    ? adminEmployeeWorkView
+                      ? tasksForList.length === 0
+                        ? 'No active assignments for this employee.'
+                        : 'No vehicles for this month — try All months.'
+                      : tasks.length === 0
+                        ? 'No active floor assignments yet.'
+                        : 'No vehicles for this month — try All months.'
+                    : workerAssignedSlotCount === 0
+                      ? 'No vehicle assigned to you on Bodyshop Floor yet. Ask Floor Incharge to put your name on that job card (Dentor / Painter / etc.).'
+                      : tasks.length === 0
+                        ? 'You have assignments, but none at your pipeline step yet — wait until the previous role finishes.'
+                        : 'No rows for this month — try All months.'}
                 </Text>
               </View>
             }
             renderItem={({ item }) => {
-              const slotCode = workTaskEmployeeCode(item, employeeCode)
-              const key = workLogMapKey(item.jobCardNumber, item.floorRole, slotCode, item.isSupport)
-              const done = Boolean(logsByKey[key]?.note_text?.trim())
               const meta = vehicleByJc[item.jobCardNumber]
+              const assignRow = assignmentByJc[item.jobCardNumber]
+              const qcTurn = !isAdminOverview && isWorkerQcTurn(item, assignRow, meta?.qcStatus)
+              const yourTurn = !isAdminOverview && isFloorWorkTaskAtActivePipelineStep(item, assignRow)
+              const stepDone = isFloorWorkTaskStepCompleted(item, assignRow)
+              const done = adminEmployeeWorkView && selectedAdminEmployee
+                ? !vehicleStepPendingForAdmin(item.jobCardNumber, selectedAdminEmployee.employeeCode)
+                : qcTurn ? false : stepDone
+              const pillLabel = qcTurn ? 'QC due' : yourTurn ? 'Your turn' : done ? 'Done' : 'Waiting'
+              const assigneeLine = formatJobCardAssignments(tasksByJobCard.get(item.jobCardNumber), item.jobCardNumber)
+              const employeeSlots = selectedAdminEmployee
+                ? employeeTasksOnJobCard(adminEmployeeScopedTasks, item.jobCardNumber, selectedAdminEmployee.employeeCode)
+                : [item]
+              const roleLine = employeeSlots
+                .map((t) => `${BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]}${t.isSupport ? ' (support)' : ''}`)
+                .join(', ')
               return (
-                <TouchableOpacity onPress={() => setSelected(item)} style={[S.card, done ? S.cardDone : S.cardPending]}>
+                <TouchableOpacity
+                  onPress={() => setSelected(item)}
+                  style={[
+                    S.card,
+                    qcTurn ? S.cardQc : done ? S.cardDone : yourTurn ? S.cardPending : S.cardWaiting,
+                  ]}
+                >
                   <View style={S.cardTopRow}>
                     <Text style={S.cardTitle}>{floorWorkVehicleTitle(meta, item.jobCardNumber)}</Text>
-                    <View style={[S.statusPill, done ? S.statusPillDone : S.statusPillPending]}>
-                      <Text style={[S.statusPillText, done ? S.statusPillTextDone : S.statusPillTextPending]}>
-                        {done ? 'Done' : 'Pending'}
+                    <View style={[
+                      S.statusPill,
+                      qcTurn ? S.statusPillQc : done ? S.statusPillDone : yourTurn ? S.statusPillPending : S.statusPillWaiting,
+                    ]}>
+                      <Text style={[
+                        S.statusPillText,
+                        qcTurn ? S.statusPillTextQc : done ? S.statusPillTextDone : yourTurn ? S.statusPillTextPending : S.statusPillTextWaiting,
+                      ]}>
+                        {pillLabel}
                       </Text>
                     </View>
                   </View>
                   {floorWorkVehicleSubtitle(meta, item.jobCardNumber) ? (
                     <Text style={S.cardSub}>{floorWorkVehicleSubtitle(meta, item.jobCardNumber)}</Text>
                   ) : null}
+                  {isAdminOverview ? (
+                    <Text style={S.cardAssignee}>{assigneeLine}</Text>
+                  ) : null}
                   {floorWorkStandingLine(meta) ? (
                     <Text style={S.cardStanding}>{floorWorkStandingLine(meta)}</Text>
                   ) : null}
                   <View style={S.cardFooter}>
                     <Text style={S.cardRole}>
-                      {BODYSHOP_FLOOR_WORK_ROLE_LABELS[item.floorRole]}
-                      {item.isSupport ? ' · support' : ''}
+                      {adminEmployeeWorkView
+                        ? (roleLine || '—')
+                        : `${BODYSHOP_FLOOR_WORK_ROLE_LABELS[item.floorRole]}${item.isSupport ? ' · support' : ''}`}
                     </Text>
-                    {isAdminOverview ? (
-                      <Text style={S.cardArrival}>
-                        {item.employeeName?.trim() || item.assignedEmployeeCode}
-                      </Text>
-                    ) : null}
                   </View>
                 </TouchableOpacity>
               )
@@ -852,6 +1354,59 @@ const S = StyleSheet.create({
   screenSubtitle: { fontSize: 12, color: '#82858f', marginTop: 3 },
   refreshBtn: { padding: 8 },
   refreshBtnText: { fontSize: 22, color: '#2a4cd0', fontWeight: '700' },
+  incomeBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  incomeBannerLabel: { fontSize: 11, fontWeight: '700', color: '#047857', textTransform: 'uppercase' },
+  incomeBannerAmount: { fontSize: 22, fontWeight: '800', color: '#065f46', marginTop: 4 },
+  incomeBannerHint: { fontSize: 11, color: '#047857', marginTop: 6, opacity: 0.85 },
+  rosterScroll: { paddingHorizontal: 16, paddingBottom: 24, paddingTop: 8 },
+  rosterIntro: { fontSize: 12, color: '#82858f', lineHeight: 18, marginBottom: 12 },
+  rosterError: { color: '#DC2626', fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  rosterGroup: { marginBottom: 8 },
+  rosterGroupTitle: { fontSize: 16, fontWeight: '800', color: '#1a1b21', marginBottom: 8 },
+  rosterCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e7e3d9',
+    padding: 14,
+    marginBottom: 10,
+  },
+  rosterName: { fontSize: 16, fontWeight: '800', color: '#1a1b21' },
+  rosterMeta: { fontSize: 11, color: '#82858f', marginTop: 2, marginBottom: 10 },
+  statsThreeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  statsThreeRowCompact: { marginTop: 10, marginBottom: 8 },
+  statsThreeCell: { flex: 1, alignItems: 'center' },
+  statsThreeL: { fontSize: 10, color: '#82858f', fontWeight: '700', textTransform: 'uppercase' },
+  statsThreeN: { fontSize: 18, fontWeight: '800', color: '#1a1b21', marginTop: 4 },
+  rosterIncome: { fontSize: 14, fontWeight: '800', color: '#065f46', marginTop: 4 },
+  adminStatsCard: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 4,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e7e3d9',
+  },
+  adminStatsTitle: { fontSize: 17, fontWeight: '800', color: '#1a1b21' },
+  adminStatsSub: { fontSize: 12, color: '#82858f', marginTop: 2, marginBottom: 4 },
+  adminStatsIncome: { fontSize: 12, fontWeight: '700', color: '#065f46', marginTop: 8 },
+  rosterTapHint: { fontSize: 11, color: '#2a4cd0', fontWeight: '700', marginTop: 6 },
   summaryRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   summaryPill: {
     flex: 1,
@@ -939,6 +1494,7 @@ const S = StyleSheet.create({
   cardTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   cardTitle: { flex: 1, fontWeight: '800', color: '#1a1b21', fontSize: 17 },
   cardSub: { fontSize: 12, color: '#4b4e59', marginTop: 4 },
+  cardAssignee: { fontSize: 12, color: '#1a1b21', fontWeight: '600', marginTop: 6, lineHeight: 17 },
   cardStanding: { fontSize: 12, color: '#2a4cd0', marginTop: 6, fontWeight: '700' },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   cardRole: { fontSize: 11.5, color: '#82858f', fontWeight: '600', flex: 1 },
@@ -998,4 +1554,36 @@ const S = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  qcPanel: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cadcf8',
+  },
+  qcPanelTitle: { fontSize: 15, fontWeight: '800', color: '#1a1b21', marginBottom: 6 },
+  qcPanelHint: { fontSize: 12, color: '#4b4e59', lineHeight: 18, marginBottom: 12 },
+  qcBtnRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  qcBtn: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
+  qcBtnPass: { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' },
+  qcBtnFail: { backgroundColor: '#fbe9ec', borderColor: '#c33b53' },
+  qcBtnPassText: { fontWeight: '800', color: '#1c8f63', fontSize: 14 },
+  qcBtnFailText: { fontWeight: '800', color: '#c33b53', fontSize: 14 },
+  stepBanner: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#e9f0fd',
+    borderWidth: 1,
+    borderColor: '#cadcf8',
+  },
+  stepBannerTitle: { fontSize: 14, fontWeight: '800', color: '#2f63cf', marginBottom: 6 },
+  stepBannerHint: { fontSize: 12, color: '#4b4e59', lineHeight: 18 },
+  cardQc: { borderColor: '#7048cf', backgroundColor: '#faf8ff' },
+  cardWaiting: { borderColor: '#e7e3d9', opacity: 0.92 },
+  statusPillQc: { backgroundColor: '#efeafb' },
+  statusPillWaiting: { backgroundColor: '#f6f4ee' },
+  statusPillTextQc: { color: '#7048cf' },
+  statusPillTextWaiting: { color: '#82858f' },
 })
