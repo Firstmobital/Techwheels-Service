@@ -13,12 +13,10 @@ import {
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
-  customerGetActiveJob,
-  customerGetRepairCard,
   customerOpenBodyshopEstimateDocument,
   parseBodyshopEstimateDocument,
 } from '../../lib/api/customerPortal'
-import { supabase } from '../../lib/supabase'
+import { beginCustomerQueryScope, endCustomerQueryScope } from '../../lib/api/customerPortalQueryLog'
 import { MechanicalJourneyContent } from '../../components/customer/MechanicalJourneyContent'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { Icon } from '../../components/ui/Icon'
@@ -123,8 +121,14 @@ export default function CustomerTrackerScreen() {
   const [error, setError] = useState<string | null>(null)
   const [openingEstimateDoc, setOpeningEstimateDoc] = useState(false)
   const [estimatePreviewUri, setEstimatePreviewUri] = useState<string | null>(null)
-  const { isMechanical: isMechanicalVisit, isBodyshop, mechCase, job: visitJob, refresh: refreshVisit } =
-    useCustomerVisit()
+  const {
+    isMechanical: isMechanicalVisit,
+    isBodyshop,
+    mechCase,
+    job: visitJob,
+    repairCard: visitRepairCard,
+    refresh: refreshVisit,
+  } = useCustomerVisit()
 
   const bodyshopEstimateDoc = parseBodyshopEstimateDocument(card)
   const showEstimateDocInStage =
@@ -148,54 +152,42 @@ export default function CustomerTrackerScreen() {
     }
   }
 
+  const syncTechFromJob = useCallback((activeJob: Record<string, unknown> | null) => {
+    const name = String(activeJob?.technician_name ?? '').trim()
+    if (name && name.toLowerCase() !== 'not required') {
+      setTechInfo({
+        name,
+        code: (activeJob?.technician_code as string | null) ?? null,
+        bay_no: (activeJob?.bay_no as string | null) ?? null,
+        assigned_at: (activeJob?.assigned_at as string | null) ?? null,
+        work_status: (activeJob?.work_status as string | null) ?? null,
+        remark: (activeJob?.remark as string | null) ?? null,
+      })
+    } else {
+      setTechInfo(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (visitJob) {
+      setJob(visitJob)
+      setError(null)
+    }
+    if (visitRepairCard) setCard(visitRepairCard)
+    if (!isMechanicalVisit) {
+      syncTechFromJob(visitJob)
+    }
+  }, [visitJob, visitRepairCard, isMechanicalVisit, syncTechFromJob])
+
   const load = useCallback(async (isInitial = false) => {
     if (!token) return
     if (isInitial && !job && !card) {
       setLoading(true)
     }
     try {
-      const activeJcNo = (selected?.jc_number as string) || null
-      const [jobResult, repair] = await Promise.all([
-        customerGetActiveJob(token, selectedReg).catch(() => ({ job: null })),
-        customerGetRepairCard(token, selectedReg, { jobCardNo: activeJcNo }).catch(() => null),
-      ])
-      const activeJob = jobResult.job
-      if (activeJob) {
-        setJob(activeJob)
-        setError(null)
-      }
-      if (repair) setCard(repair)
-
-      const visitKind = await refreshVisit()
-      if (visitKind !== 'mechanical') {
-        const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
-        if (activeJc) {
-          try {
-            const { data: assignData } = await supabase
-              .from('technician_assignments')
-              .select('*')
-              .eq('job_card_number', activeJc.trim().toUpperCase())
-              .order('id', { ascending: false })
-              .limit(1)
-
-            if (assignData && assignData.length > 0) {
-              const row = assignData[0]
-              if (row.technician_name && row.technician_name.toLowerCase() !== 'not required') {
-                setTechInfo({
-                  name: row.technician_name,
-                  code: row.technician_code,
-                  bay_no: row.bay_no,
-                  assigned_at: row.assigned_at,
-                  work_status: row.work_status,
-                  remark: row.remark,
-                })
-              }
-            }
-          } catch {
-            // ignore fallback
-          }
-        }
-      }
+      beginCustomerQueryScope('tracker.load')
+      await refreshVisit({ bypassCache: !isInitial })
+      endCustomerQueryScope()
     } catch (err) {
       if (!job && !card) {
         setError(err instanceof Error ? err.message : 'Unable to load tracker.')
@@ -203,7 +195,7 @@ export default function CustomerTrackerScreen() {
     } finally {
       setLoading(false)
     }
-  }, [token, selectedReg, selected?.jc_number, job, card, refreshVisit])
+  }, [token, job, card, refreshVisit])
 
   useEffect(() => {
     if (!isMechanicalVisit) return

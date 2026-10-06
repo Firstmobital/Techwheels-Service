@@ -11,6 +11,7 @@ import {
 import { AppState, type AppStateStatus } from 'react-native'
 import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../lib/customer/customerAdvisorPoll'
 import { customerGetVisitContext, customerSetCustomerType } from '../lib/api/customerPortal'
+import { beginCustomerQueryScope, endCustomerQueryScope } from '../lib/api/customerPortalQueryLog'
 import type { MechanicalCasePayload } from '../lib/customer/mechanicalCustomerUi'
 import { type CustomerVisitKind, resolveCustomerVisitKind } from '../lib/customer/mechanicalServiceType'
 import { useCustomerSession } from './CustomerSessionContext'
@@ -85,6 +86,8 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
   const setCustomerType = useCallback(
     async (newType: string) => {
       const norm = newType.trim().toLowerCase() || 'individual'
+      const prevType = customerType
+      const prevCard = repairCard
       if (normReg) {
         customerTypeMap[normReg] = norm
       }
@@ -99,11 +102,16 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
           const cardId = Number(repairCard?.id) || undefined
           await customerSetCustomerType(token, selectedReg, norm, cardId)
         } catch (err) {
-          console.warn('CustomerVisitContext: Failed to persist customer type to backend:', err)
+          setCustomerTypeState(prevType)
+          setRepairCard(prevCard)
+          if (normReg) {
+            customerTypeMap[normReg] = prevType
+          }
+          throw err
         }
       }
     },
-    [normReg, token, selectedReg, repairCard?.id]
+    [customerType, normReg, repairCard, token, selectedReg]
   )
 
   const refresh = useCallback(async (opts?: { bypassCache?: boolean }): Promise<CustomerVisitKind> => {
@@ -124,6 +132,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      beginCustomerQueryScope('CustomerVisitContext.refresh')
       const ctx = await customerGetVisitContext(token, selectedReg, { bypassCache: opts?.bypassCache ?? true })
       if (seq !== loadSeq.current) return 'other'
 
@@ -164,6 +173,7 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
       // Do NOT wipe out existing state on background fetch failure
       return kind
     } finally {
+      endCustomerQueryScope()
       if (seq === loadSeq.current) {
         setLoading(false)
         setReady(true)

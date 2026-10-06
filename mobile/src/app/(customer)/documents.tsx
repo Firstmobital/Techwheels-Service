@@ -28,6 +28,10 @@ import {
 } from '../../lib/api/customerBodyshopUploads'
 import { fetchCustomerDocuments, resetCustomerDocumentsInflight } from '../../lib/customer/customerDocumentsCache'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import {
+  beginCustomerQueryScope,
+  endCustomerQueryScope,
+} from '../../lib/api/customerPortalQueryLog'
 import { clearCustomerPortalCache, customerListEstimates, customerSetCustomerType } from '../../lib/api/customerPortal'
 
 const CUSTOMER_TYPE_OPTIONS = [
@@ -144,8 +148,8 @@ export default function CustomerDocumentsScreen() {
     setUpdatingType(true)
     try {
       await setCustomerType(newType)
-      } catch (err) {
-      console.warn('Failed to update customer type:', err)
+    } catch (err) {
+      Alert.alert('Update failed', err instanceof Error ? err.message : 'Could not update customer type.')
     } finally {
       setUpdatingType(false)
     }
@@ -210,11 +214,26 @@ export default function CustomerDocumentsScreen() {
           clearCustomerPortalCache()
           resetCustomerDocumentsInflight()
         }
-        const [activeKind, estList, freshDocs] = await Promise.all([
-          refreshVisit({ bypassCache: mode !== 'initial' }),
-          customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
-          fetchCustomerDocuments(token, selectedReg).catch(() => null),
-        ])
+        beginCustomerQueryScope(`documents.${mode}`)
+        const needsVisitRefresh = mode !== 'initial' || !visitReady
+        const visitPromise = needsVisitRefresh
+          ? refreshVisit({ bypassCache: mode !== 'initial' })
+          : Promise.resolve(visitKind)
+        let activeKind: typeof visitKind = visitKind
+        let estList: Record<string, unknown>[] = []
+        let freshDocs: Awaited<ReturnType<typeof fetchCustomerDocuments>> | null = null
+        try {
+          ;[activeKind, estList, freshDocs] = await Promise.all([
+            visitPromise,
+            customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+            fetchCustomerDocuments(token, selectedReg, {
+              repairCard: !needsVisitRefresh ? repairCard : undefined,
+              refreshRepairCard: mode !== 'initial',
+            }).catch(() => null),
+          ])
+        } finally {
+          endCustomerQueryScope()
+        }
         setEstimates((estList || []).map(parseEstimate))
         if (activeKind === 'mechanical') {
           setDocuments([])
@@ -228,7 +247,7 @@ export default function CustomerDocumentsScreen() {
         setRefreshing(false)
       }
     },
-    [token, selectedReg, applySnapshot, isMechanical, refreshVisit, job, selected]
+    [token, selectedReg, applySnapshot, isMechanical, refreshVisit, job, selected, visitReady, visitKind, repairCard]
   )
 
   useEffect(() => {
@@ -264,6 +283,7 @@ export default function CustomerDocumentsScreen() {
       Alert.alert('Session expired', 'Sign in again to upload documents.')
       return
     }
+    let rollbackDocuments: CustomerBodyshopAsset[] | null = null
     try {
       let uri = ''
       let fileName = `${slot.docKey}.jpg`
@@ -295,8 +315,22 @@ export default function CustomerDocumentsScreen() {
         contentType = res.assets[0].mimeType || (fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
       }
 
+      rollbackDocuments = documents
+      const optimisticRow: CustomerBodyshopAsset = {
+        kind: 'document',
+        id: -1,
+        doc_key: slot.docKey,
+        file_name: fileName,
+        content_type: contentType,
+        uploaded_at: new Date().toISOString(),
+        drive_pending: true,
+      }
+      setDocuments((prev) => {
+        const rest = prev.filter((d) => String(d.doc_key || '') !== slot.docKey)
+        return [...rest, optimisticRow]
+      })
       setBusyKey(slot.docKey)
-      setNotice(null)
+      setNotice(`${slot.title} uploading…`)
       const result = await customerUploadBodyshopAsset({
         sessionToken: token,
         regNumber: selectedReg,
@@ -334,6 +368,7 @@ export default function CustomerDocumentsScreen() {
         }`
       )
     } catch (error) {
+      if (rollbackDocuments) setDocuments(rollbackDocuments)
       Alert.alert('Upload failed', error instanceof Error ? error.message : 'Unable to upload this document.')
     } finally {
       setBusyKey(null)
@@ -946,7 +981,11 @@ export default function CustomerDocumentsScreen() {
 
       <DamagePhotosSection sessionToken={token} regNumber={selectedReg} />
 
-      <FromTechwheelsSection repairCard={effectiveRepairCard} workshopDocuments={documents} />
+      <FromTechwheelsSection
+        repairCard={effectiveRepairCard}
+        workshopDocuments={documents}
+        estimates={estimates as unknown as Record<string, unknown>[]}
+      />
     </CustomerScreen>
   )
 }

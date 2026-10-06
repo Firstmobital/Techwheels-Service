@@ -19,18 +19,38 @@ function regKey(regNumber: string) {
   return regNumber.trim().toUpperCase().replace(/[\s-]/g, '')
 }
 
+export type FetchCustomerDocumentsOptions = {
+  /** Skip repair-card RPC when visit context already has a card. */
+  repairCard?: Record<string, unknown> | null
+  /** When true, always refetch repair card from the server. */
+  refreshRepairCard?: boolean
+}
+
+/** Pure helper — used by fetchCustomerDocuments and unit tests. */
+export function shouldUseContextRepairCardForDocuments(opts?: FetchCustomerDocumentsOptions): boolean {
+  return !opts?.refreshRepairCard && opts != null && 'repairCard' in opts
+}
+
 /** Load repair card + bodyshop assets from the server (deduped in-flight per vehicle). */
 export async function fetchCustomerDocuments(
   sessionToken: string,
-  regNumber: string
+  regNumber: string,
+  opts?: FetchCustomerDocumentsOptions
 ): Promise<CustomerDocumentsSnapshot> {
   const key = regKey(regNumber)
   const existing = inflight.get(key)
   if (existing) return existing
 
   const job = (async () => {
+    const useContextCard = shouldUseContextRepairCardForDocuments(opts)
+    const repairCardPromise = useContextCard
+      ? Promise.resolve(opts!.repairCard ?? null)
+      : customerGetRepairCard(sessionToken, regNumber, {
+          bypassCache: opts?.refreshRepairCard ?? false,
+        }).catch(() => null)
+
     const [repairCard, assets] = await Promise.all([
-      customerGetRepairCard(sessionToken, regNumber, { bypassCache: true }).catch(() => null),
+      repairCardPromise,
       customerListBodyshopAssets(sessionToken, regNumber).catch(() => ({
         documents: [] as CustomerBodyshopAsset[],
         photos: [] as CustomerBodyshopAsset[],

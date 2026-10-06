@@ -37,6 +37,8 @@ type FromTechwheelsSectionProps = {
   repairCard?: Record<string, unknown> | null
   /** Bodyshop asset list from the same screen (includes workshop `doc_estimate`). */
   workshopDocuments?: CustomerBodyshopAsset[]
+  /** Estimates already loaded on Documents (skips duplicate list RPC). */
+  estimates?: Record<string, unknown>[]
 }
 
 function isImageName(name?: string | null, contentType?: string | null) {
@@ -48,6 +50,7 @@ function isImageName(name?: string | null, contentType?: string | null) {
 export function FromTechwheelsSection({
   repairCard: repairCardProp,
   workshopDocuments: workshopDocumentsProp,
+  estimates: estimatesProp,
 }: FromTechwheelsSectionProps = {}) {
   const { token, selectedReg } = useCustomerSession()
   const [loading, setLoading] = useState(true)
@@ -88,7 +91,9 @@ export function FromTechwheelsSection({
         repairCardProp !== undefined
           ? Promise.resolve(repairCardProp)
           : customerGetRepairCard(token, selectedReg, { bypassCache: true }).catch(() => null),
-        customerListEstimates(token, selectedReg).catch(() => []),
+        estimatesProp !== undefined
+          ? Promise.resolve(estimatesProp)
+          : customerListEstimates(token, selectedReg).catch(() => []),
         customerGetSettlement(token, selectedReg).catch(() => null),
         customerGetGatePass(token, selectedReg).catch(() => null),
       ])
@@ -231,7 +236,7 @@ export function FromTechwheelsSection({
     } finally {
       setLoading(false)
     }
-  }, [token, selectedReg, repairCardProp, workshopDocumentsProp, openEstimate])
+  }, [token, selectedReg, repairCardProp, workshopDocumentsProp, estimatesProp, openEstimate])
 
   useFocusEffect(
     useCallback(() => {

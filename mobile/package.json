@@ -19,6 +19,9 @@
     "ota:prod:ios": "npm run check:native-deps && npx --yes eas-cli update --environment production --branch production --platform ios --non-interactive --message \"production ota ios update\"",
     "ota:preview": "npm run check:native-deps && npx --yes eas-cli update --branch preview --platform all --non-interactive --message \"preview ota update\"",
     "check:native-deps": "node scripts/check-native-deps.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -97,7 +100,8 @@
     "eslint": "^8.57.0",
     "patch-package": "^8.0.1",
     "tailwindcss": "^3.4.17",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.7"
   },
   "expo": {
     "install": {

@@ -3,6 +3,17 @@ import { getSupabaseBaseUrl } from '../env'
 import type { CustomerVisitKind } from '../customer/mechanicalServiceType'
 import { resolveCustomerVisitKind } from '../customer/mechanicalServiceType'
 import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabase'
+import { logCustomerQuery } from './customerPortalQueryLog'
+
+function cpFrom(table: string) {
+  logCustomerQuery('from', table)
+  return supabase.from(table)
+}
+
+function cpRpc(fn: string, args: Record<string, unknown>) {
+  logCustomerQuery('rpc', fn)
+  return supabase.rpc(fn, args)
+}
 
 const apiCache = new Map<string, { timestamp: number; data: any }>()
 const CACHE_TTL_MS = 6000 // 6 seconds cache
@@ -53,8 +64,7 @@ async function enrichCustomerActiveJob(
         const orClause = lastDigits
           ? `job_card_number.eq.${jcNorm},job_card_number.ilike.%${lastDigits}%`
           : `job_card_number.eq.${jcNorm}`
-        const { data: assignRows } = await supabase
-          .from('technician_assignments')
+        const { data: assignRows } = await cpFrom('technician_assignments')
           .select('technician_name, technician_code, bay_no, work_status, assigned_at')
           .or(orClause)
           .order('id', { ascending: false })
@@ -71,8 +81,7 @@ async function enrichCustomerActiveJob(
       }
 
       if (!job.technician_name && regNorm) {
-        const { data: botRows } = await supabase
-          .from('post_feedback_bot_data')
+        const { data: botRows } = await cpFrom('post_feedback_bot_data')
           .select('feedback_text')
           .eq('vehicle_registration_number', regNorm)
           .eq('mode', 'technician_allocation_payload')
@@ -130,7 +139,7 @@ export async function customerGetVisitContext(
   const cached = getCached<CustomerVisitContextPayload>(cacheKey)
   if (cached) return cached
 
-  const { data, error } = await supabase.rpc('customer_get_visit_context', {
+  const { data, error } = await cpRpc('customer_get_visit_context', {
     p_session_token: sessionToken,
     p_reg_number: reg,
   })
@@ -147,12 +156,15 @@ export async function customerGetVisitContext(
         visitKind = 'mechanical'
       } else {
         const jcNo = (job?.jc_number as string) || null
-        repair_card =
-          (await customerGetRepairCard(sessionToken, reg, { bypassCache: opts?.bypassCache, jobCardNo: jcNo }).catch(
-            () => null
-          )) ?? (await resolveLatestRepairCardRow(reg, jcNo, null))
-        if (repair_card) {
-          repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+        repair_card = await customerGetRepairCard(sessionToken, reg, {
+          bypassCache: opts?.bypassCache,
+          jobCardNo: jcNo,
+        }).catch(() => null)
+        if (!repair_card) {
+          repair_card = await resolveLatestRepairCardRow(reg, jcNo, null)
+          if (repair_card) {
+            repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+          }
         }
         visitKind = resolveCustomerVisitKind(job, legacy.visit_kind as string | undefined, repair_card)
         if (visitKind !== 'bodyshop') {
@@ -200,16 +212,18 @@ export async function customerGetVisitContext(
   } else {
     const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
     repair_card = res.repair_card ?? null
-    const sessionCard = await customerGetRepairCard(sessionToken, reg, {
-      bypassCache: opts?.bypassCache,
-      jobCardNo: jcNo,
-    }).catch(() => null)
-    if (sessionCard) {
-      repair_card = sessionCard
-    } else {
-      repair_card = await resolveLatestRepairCardRow(reg, jcNo, repair_card)
-    }
-    if (repair_card) {
+    const rpcHasId = Boolean(repair_card && Number(repair_card.id || 0) > 0)
+    if (opts?.bypassCache || !rpcHasId) {
+      const sessionCard = await customerGetRepairCard(sessionToken, reg, {
+        bypassCache: opts?.bypassCache,
+        jobCardNo: jcNo,
+      }).catch(() => null)
+      if (sessionCard) {
+        repair_card = sessionCard
+      } else if (!repair_card) {
+        repair_card = await resolveLatestRepairCardRow(reg, jcNo, null)
+      }
+    } else if (repair_card && !parseBodyshopEstimateDocument(repair_card)) {
       repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
     }
     visitKind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
@@ -250,7 +264,7 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
   const cached = getCached<any>(cacheKey)
   if (cached) return cached
 
-  const { data, error } = await supabase.rpc('customer_get_active_job', {
+  const { data, error } = await cpRpc('customer_get_active_job', {
     p_session_token: sessionToken,
     p_reg_number: reg,
   })
@@ -294,7 +308,7 @@ export async function customerGetMechanicalCase(sessionToken: string, regNumber?
   const cached = getCached<Record<string, unknown> | null>(cacheKey)
   if (cached !== null && cached !== undefined) return cached
 
-  const { data, error } = await supabase.rpc('customer_get_mechanical_case', {
+  const { data, error } = await cpRpc('customer_get_mechanical_case', {
     p_session_token: sessionToken,
     p_reg_number: reg,
   })
@@ -304,7 +318,7 @@ export async function customerGetMechanicalCase(sessionToken: string, regNumber?
 }
 
 export async function customerGetServiceHistory(sessionToken: string, regNumber?: string | null) {
-  const { data, error } = await supabase.rpc('customer_get_service_history', {
+  const { data, error } = await cpRpc('customer_get_service_history', {
     p_session_token: sessionToken,
     p_reg_number: regNumber || null,
   })
@@ -317,7 +331,7 @@ export async function customerSubmitComplaint(
   regNumber: string,
   payload: Record<string, unknown>
 ) {
-  const { data, error } = await supabase.rpc('customer_submit_complaint', {
+  const { data, error } = await cpRpc('customer_submit_complaint', {
     p_session_token: sessionToken,
     p_reg_number: regNumber,
     p_payload: payload,
@@ -363,7 +377,7 @@ export async function customerSubmitFeedback(
   regNumber: string,
   payload: Record<string, unknown>
 ) {
-  const { data, error } = await supabase.rpc('customer_submit_feedback', {
+  const { data, error } = await cpRpc('customer_submit_feedback', {
     p_session_token: sessionToken,
     p_reg_number: regNumber,
     p_payload: payload,
@@ -372,51 +386,116 @@ export async function customerSubmitFeedback(
   return data
 }
 
+function normalizeCustomerEstimateRpcRows(data: unknown): Record<string, unknown>[] {
+  if (Array.isArray(data)) return data as Record<string, unknown>[]
+  return []
+}
+
+function mergeEstimateRows(
+  results: Record<string, unknown>[],
+  seenEstNos: Set<string>,
+  rows: Record<string, unknown>[]
+) {
+  for (const row of rows) {
+    const estNo = String(row.estimate_no || row.estimate_id || '')
+    if (estNo && !seenEstNos.has(estNo)) {
+      seenEstNos.add(estNo)
+      results.push(row)
+    }
+  }
+}
+
+async function overlayEstimateDecisionEvents(
+  regClean: string,
+  results: Record<string, unknown>[]
+): Promise<void> {
+  if (!regClean || results.length === 0) return
+  try {
+    const { data: eventRows } = await cpFrom('post_feedback_bot_data')
+      .select('mode, feedback_text, complaint_date_time, created_at')
+      .ilike('vehicle_registration_number', `%${regClean}%`)
+      .in('mode', ['customer_estimate_approval', 'customer_estimate_rejection'])
+      .order('complaint_date_time', { ascending: false })
+      .limit(10)
+
+    if (!eventRows?.length) return
+
+    for (const ev of eventRows) {
+      const isAppr = ev.mode === 'customer_estimate_approval'
+      const status = isAppr ? 'Approved' : 'Rejected'
+      let reason: string | undefined
+      if (!isAppr && ev.feedback_text) {
+        const match = ev.feedback_text.match(/Reason:\s*(.+)$/i)
+        reason = match ? match[1].trim() : ev.feedback_text
+      }
+
+      const estMatch = ev.feedback_text?.match(/Estimate\s*#?([A-Za-z0-9_-]+)/i)
+      const targetEstNo = estMatch ? estMatch[1] : null
+
+      for (const item of results) {
+        if (!targetEstNo || String(item.estimate_no || item.estimate_id) === targetEstNo) {
+          if (item.status !== 'Approved' && item.status !== 'Rejected') {
+            item.status = status
+            if (reason) item.rejection_reason = reason
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export async function customerListEstimates(sessionToken: string, regNumber?: string | null) {
   const rawReg = (regNumber || '').trim()
   const regClean = rawReg.toUpperCase().replace(/[\s-]/g, '')
   const results: Record<string, unknown>[] = []
   const seenEstNos = new Set<string>()
 
-  // 1. Direct query customer_estimates table in Supabase
+  try {
+    const { data: rpcRows, error: rpcErr } = await cpRpc('customer_list_estimates', {
+      p_session_token: sessionToken,
+      p_reg_number: regNumber || null,
+    })
+    if (!rpcErr) {
+      const rpcList = normalizeCustomerEstimateRpcRows(rpcRows)
+      if (rpcList.length > 0) {
+        mergeEstimateRows(results, seenEstNos, rpcList)
+        await overlayEstimateDecisionEvents(regClean, results)
+        return results
+      }
+    }
+  } catch {
+    // fall through to direct queries
+  }
+
   if (regClean) {
     try {
-      const { data: estRows, error: estErr } = await supabase
-        .from('customer_estimates')
+      const { data: estRows, error: estErr } = await cpFrom('customer_estimates')
         .select('*')
         .ilike('vehicle_registration_number', `%${regClean}%`)
         .order('created_at', { ascending: false })
 
-      if (!estErr && estRows && estRows.length > 0) {
-        for (const row of estRows) {
-          const estNo = String(row.estimate_no || row.id || '')
-          if (estNo && !seenEstNos.has(estNo)) {
-            seenEstNos.add(estNo)
-            results.push(row as Record<string, unknown>)
-          }
-        }
+      if (!estErr && estRows?.length) {
+        mergeEstimateRows(results, seenEstNos, estRows as Record<string, unknown>[])
       }
     } catch (e) {
       console.warn('customerListEstimates customer_estimates query warning:', e)
     }
-  }
 
-  // 2. Query post_feedback_bot_data for customer_estimate_payload
-  if (regClean) {
     try {
-      const { data: botRows, error: botErr } = await supabase
-        .from('post_feedback_bot_data')
+      const { data: botRows, error: botErr } = await cpFrom('post_feedback_bot_data')
         .select('id, feedback_text, complaint_date_time, created_at')
         .ilike('vehicle_registration_number', `%${regClean}%`)
         .eq('mode', 'customer_estimate_payload')
         .order('complaint_date_time', { ascending: false })
 
-      if (!botErr && botRows && botRows.length > 0) {
+      if (!botErr && botRows?.length) {
         for (const row of botRows) {
           try {
-            const parsed = JSON.parse(row.feedback_text)
+            const parsed = JSON.parse(row.feedback_text) as Record<string, unknown>
             const estNo = String(parsed.estimate_no || `bot-${row.id}`)
-            if (parsed && !seenEstNos.has(estNo)) {
+            if (!seenEstNos.has(estNo)) {
               seenEstNos.add(estNo)
               results.push({
                 ...parsed,
@@ -434,64 +513,7 @@ export async function customerListEstimates(sessionToken: string, regNumber?: st
     }
   }
 
-  // 3. RPC Fallback
-  try {
-    const { data: rpcRows, error: rpcErr } = await supabase.rpc('customer_list_estimates', {
-      p_session_token: sessionToken,
-      p_reg_number: regNumber || null,
-    })
-    if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
-      for (const row of rpcRows) {
-        const estNo = String(row.estimate_no || row.estimate_id || '')
-        if (estNo && !seenEstNos.has(estNo)) {
-          seenEstNos.add(estNo)
-          results.push(row as Record<string, unknown>)
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  // 4. Overlay latest real-time approval/rejection event to ensure freshest state
-  if (regClean && results.length > 0) {
-    try {
-      const { data: eventRows } = await supabase
-        .from('post_feedback_bot_data')
-        .select('mode, feedback_text, complaint_date_time, created_at')
-        .ilike('vehicle_registration_number', `%${regClean}%`)
-        .in('mode', ['customer_estimate_approval', 'customer_estimate_rejection'])
-        .order('complaint_date_time', { ascending: false })
-        .limit(10)
-
-      if (eventRows && eventRows.length > 0) {
-        for (const ev of eventRows) {
-          const isAppr = ev.mode === 'customer_estimate_approval'
-          const status = isAppr ? 'Approved' : 'Rejected'
-          let reason: string | undefined = undefined
-          if (!isAppr && ev.feedback_text) {
-            const match = ev.feedback_text.match(/Reason:\s*(.+)$/i)
-            reason = match ? match[1].trim() : ev.feedback_text
-          }
-
-          const estMatch = ev.feedback_text?.match(/Estimate\s*#?([A-Za-z0-9_-]+)/i)
-          const targetEstNo = estMatch ? estMatch[1] : null
-
-          for (const item of results) {
-            if (!targetEstNo || String(item.estimate_no || item.estimate_id) === targetEstNo) {
-              if (item.status !== 'Approved' && item.status !== 'Rejected') {
-                item.status = status
-                if (reason) item.rejection_reason = reason
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
+  await overlayEstimateDecisionEvents(regClean, results)
   return results
 }
 
@@ -513,7 +535,7 @@ export async function customerSetEstimateDecision(
 
   // 1. Attempt backend RPC
   try {
-    const { error } = await supabase.rpc('customer_set_estimate_decision', {
+    const { error } = await cpRpc('customer_set_estimate_decision', {
       p_session_token: sessionToken,
       p_estimate_id: estimateId,
       p_decision: decision,
@@ -550,56 +572,35 @@ export async function customerSetEstimateDecision(
       updatePayload.final_amount = updatedTotals.grand_total
     }
 
-    const { error: estErr } = await supabase
-      .from('customer_estimates')
+    const { error: estErr } = await cpFrom('customer_estimates')
       .update(updatePayload)
       .or(`estimate_no.eq.${estimateId},id.eq.${estimateId}`)
 
     if (estErr && regClean) {
-      await supabase
-        .from('customer_estimates')
-        .update(updatePayload)
-        .eq('vehicle_registration_number', regClean)
+      await cpFrom('customer_estimates').update(updatePayload).eq('vehicle_registration_number', regClean)
     }
   } catch (e) {
     console.warn('Direct customer_estimates update error:', e)
   }
 
-  // 3. Update existing post_feedback_bot_data customer_estimate_payload
   if (regClean) {
     try {
-      const { data: botRows } = await supabase
-        .from('post_feedback_bot_data')
-        .select('id, feedback_text')
-        .ilike('vehicle_registration_number', `%${regClean}%`)
-        .eq('mode', 'customer_estimate_payload')
-
-      if (botRows && botRows.length > 0) {
-        for (const row of botRows) {
-          try {
-            const parsed = JSON.parse(row.feedback_text)
-            if (parsed) {
-              parsed.status = finalStatus
-              if (finalReason) parsed.rejection_reason = finalReason
-              if (isApproved) parsed.approved_at = nowIso
-              parsed.updated_at = nowIso
-              if (updatedItems !== undefined) parsed.items = updatedItems
-              if (updatedTotals?.subtotal !== undefined) parsed.subtotal = updatedTotals.subtotal
-              if (updatedTotals?.gst_tax !== undefined) parsed.gst_tax = updatedTotals.gst_tax
-              if (updatedTotals?.grand_total !== undefined) parsed.grand_total = updatedTotals.grand_total
-
-              await supabase
-                .from('post_feedback_bot_data')
-                .update({
-                  feedback_text: JSON.stringify(parsed),
-                  complaint_date_time: nowIso,
-                })
-                .eq('id', row.id)
-            }
-          } catch {
-            // ignore
-          }
-        }
+      const { error: batchErr } = await cpRpc('customer_batch_sync_estimate_payloads', {
+        p_session_token: sessionToken,
+        p_reg_number: rawReg,
+        p_status: finalStatus,
+        p_reason: finalReason,
+        p_approved_at: isApproved ? nowIso : null,
+        p_updated_at: nowIso,
+        p_items: updatedItems !== undefined ? updatedItems : null,
+        p_subtotal: updatedTotals?.subtotal ?? null,
+        p_gst_tax: updatedTotals?.gst_tax ?? null,
+        p_grand_total: updatedTotals?.grand_total ?? null,
+      })
+      if (batchErr?.message?.includes('Could not find the function') || batchErr?.code === 'PGRST202') {
+        console.warn('customer_batch_sync_estimate_payloads not deployed; skipping bot payload sync')
+      } else if (batchErr) {
+        console.warn('customer_batch_sync_estimate_payloads warning:', batchErr)
       }
     } catch (e) {
       console.warn('Update bot payload estimate error:', e)
@@ -614,7 +615,7 @@ export async function customerSetEstimateDecision(
         ? `[Estimate Approved] Customer approved Estimate #${estimateId} via app.`
         : `[Estimate Rejected] Estimate #${estimateId} rejected. Reason: ${finalReason}`
 
-      await supabase.from('post_feedback_bot_data').insert([
+      await cpFrom('post_feedback_bot_data').insert([
         {
           vehicle_registration_number: regClean,
           feedback_text: feedbackText,
@@ -641,7 +642,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
   // The post_feedback_bot_data shortcut was removed because it queries by reg number only
   // and returns the wrong entry when multiple entries exist for the same vehicle.
   try {
-    const { data, error } = await supabase.rpc('customer_get_gate_pass', {
+    const { data, error } = await cpRpc('customer_get_gate_pass', {
       p_session_token: sessionToken,
       p_reg_number: regNumber || null,
     })
@@ -664,7 +665,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
 
   let rpcResult: Record<string, unknown> | null = null
   try {
-    const { data, error } = await supabase.rpc('customer_get_settlement', {
+    const { data, error } = await cpRpc('customer_get_settlement', {
       p_session_token: sessionToken,
       p_reg_number: regNumber || null,
     })
@@ -1171,7 +1172,7 @@ export async function customerListMyBookings(
 
   // 1. Primary: Use dedicated security-definer RPC that has full access to service_bookings
   try {
-    const { data: rpcData, error: rpcErr } = await supabase.rpc('customer_list_my_bookings', {
+    const { data: rpcData, error: rpcErr } = await cpRpc('customer_list_my_bookings', {
       p_session_token: sessionToken,
       p_reg_number: normReg || null,
     })
@@ -1187,7 +1188,7 @@ export async function customerListMyBookings(
 
   // 2. Direct table fetch from service_bookings (if authenticated or RLS permitted)
   try {
-    let query = supabase.from('service_bookings').select('*')
+    let query = cpFrom('service_bookings').select('*')
 
     if (normReg && normPhone) {
       query = query.or(`reg_number.eq.${normReg},customer_phone.eq.${normPhone}`)
@@ -1297,7 +1298,7 @@ async function attachEstimateDocumentToRepairCard(
 ): Promise<Record<string, unknown>> {
   if (parseBodyshopEstimateDocument(card)) return card
   try {
-    const { data, error } = await supabase.rpc('customer_get_bodyshop_document', {
+    const { data, error } = await cpRpc('customer_get_bodyshop_document', {
       p_session_token: sessionToken,
       p_reg_number: regNumber,
       p_doc_key: 'doc_estimate',
@@ -1322,7 +1323,7 @@ async function resolveLatestRepairCardRow(
   if (!normReg && !normJc) return rpcCard ?? null
 
   try {
-    let q = supabase.from('bodyshop_repair_cards').select('*')
+    let q = cpFrom('bodyshop_repair_cards').select('*')
 
     if (normJc && normReg) {
       q = q.or(`job_card_no.eq.${normJc},reg_number.ilike.%${normReg}%`)
@@ -1398,7 +1399,7 @@ export async function customerGetRepairCard(
 
   // 1. Direct RPC
   try {
-    const { data, error } = await supabase.rpc('customer_get_repair_card', {
+    const { data, error } = await cpRpc('customer_get_repair_card', {
       p_session_token: sessionToken,
       p_reg_number: regNumber || null,
     })
@@ -1409,7 +1410,15 @@ export async function customerGetRepairCard(
     console.warn('customer_get_repair_card RPC note:', rpcErr)
   }
 
-  // 2. Direct table lookup comparing ID DESC & current_stage DESC
+  if (rpcCard && Number(rpcCard.id || 0) > 0 && !opts?.bypassCache) {
+    const row = await attachEstimateDocumentToRepairCard(
+      sessionToken,
+      regNumber || normReg,
+      rpcCard
+    )
+    return setCache(cacheKey, row)
+  }
+
   const latest = await resolveLatestRepairCardRow(normReg, opts?.jobCardNo, rpcCard)
   if (latest) {
     const row = await attachEstimateDocumentToRepairCard(
@@ -1667,7 +1676,7 @@ export async function customerSetCustomerType(
 
   // 1. Try RPC if available
   try {
-    const { data, error } = await supabase.rpc('customer_set_customer_type', {
+    const { data, error } = await cpRpc('customer_set_customer_type', {
       p_session_token: sessionToken,
       p_reg_number: regNumber,
       p_customer_type: normType,
