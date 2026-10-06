@@ -236,7 +236,9 @@ export function carMatchesBodyshopFloorInchargeScope(
 ): boolean {
   if (!shouldRestrictBodyshopFloorList(scope)) return true
   if (scope.lockedBodyshopFloor) {
-    return String(carBodyshopFloor ?? '').trim() === scope.lockedBodyshopFloor
+    const car = normalizeBodyshopPhysicalFloor(carBodyshopFloor) ?? String(carBodyshopFloor ?? '').trim()
+    if (!car) return true
+    return car === scope.lockedBodyshopFloor
   }
   const me = String(scope.employeeCode ?? '').trim().toUpperCase()
   const sup = String(supervisorEmployeeCode ?? '').trim().toUpperCase()

@@ -142,7 +142,6 @@ export default function AutoDocScreen() {
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
   const [preSubmitReadyJobIds, setPreSubmitReadyJobIds] = useState<Set<string>>(new Set())
-  const [listCursor, setListCursor] = useState<JobCardSummaryPageCursor | null>(null)
   const loadJobCards = useCallback(async () => {
     try {
       const sessionRes = await supabase.auth.getSession()
@@ -181,9 +180,6 @@ export default function AutoDocScreen() {
       setRefreshing(false)
     }
   }, [session])
-      setLoadingMore(false)
-    }
-  }, [listCursor, session])
 
   useEffect(() => {
     if (authLoading) return
@@ -479,14 +475,16 @@ export default function AutoDocScreen() {
         <ClaimTrackerView />
       ) : (
         <FlatList
+          data={filteredRows}
+          keyExtractor={(item) =>
+            item.row.job_card_id ?? `${item.row.jc_number ?? 'jc'}-${item.stage}`
+          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', paddingVertical: 40 }}>
               <Text style={{ fontSize: 15, fontWeight: '700', color: '#1a1b21' }}>No job cards</Text>
               <Text style={{ fontSize: 13, color: '#82858f', marginTop: 4 }}>Try another filter or pull to refresh</Text>
             </View>
-          }
-              </View>
-            ) : null
           }
           contentContainerStyle={{ paddingBottom: 120 }}
           ListHeaderComponent={

@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import NetInfo from '@react-native-community/netinfo'
 import { getStaffAuthRedirectUrl } from '../lib/authRedirect'
+import { humanizeStaffAuthError } from '../lib/staffAuthErrors'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
-
-const SIGN_IN_TIMEOUT_MS = 20000
 
 export type StaffSignUpInput = {
   email: string
@@ -111,24 +111,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const signInRequest = supabase.auth.signInWithPassword({ email, password })
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          const timer = setTimeout(() => {
-            clearTimeout(timer)
-            reject(new Error('Sign in timed out. Please check internet and try again.'))
-          }, SIGN_IN_TIMEOUT_MS)
-        })
+        const net = await NetInfo.fetch()
+        if (net.isConnected === false) {
+          return {
+            error: new Error(
+              humanizeStaffAuthError('Network request failed'),
+            ),
+          }
+        }
 
-        const { data, error } = await Promise.race([signInRequest, timeoutPromise])
+        const normalizedEmail = email.trim().toLowerCase()
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        })
         if (error) {
-          return { error }
+          return { error: new Error(humanizeStaffAuthError(error.message)) }
         }
 
         setSession(data.session)
         setUser(data.user)
         return { error: undefined }
       } catch (error) {
-        return { error: error as Error }
+        const err = error as Error
+        const msg = err?.message ?? String(error)
+        if (err?.name === 'AbortError' || msg.includes('auth_fetch_timeout')) {
+          return {
+            error: new Error(
+              humanizeStaffAuthError('Sign in timed out. Please check internet and try again.'),
+            ),
+          }
+        }
+        return { error: new Error(humanizeStaffAuthError(msg)) }
       }
     },
     []
@@ -141,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const phoneDigits = String(input.phone ?? '').replace(/\D/g, '')
       const { error } = await supabase.auth.signUp({
-        email: input.email.trim(),
+        email: input.email.trim().toLowerCase(),
         password: input.password,
         options: {
           data: {

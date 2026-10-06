@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { Platform } from 'react-native'
+import { resolveSupabaseCredentials } from './supabaseConfig'
 
 const extra =
   (Constants.expoConfig?.extra as Record<string, unknown> | undefined)
@@ -11,23 +12,43 @@ const extra =
 const extraSupabaseUrl = typeof extra.supabaseUrl === 'string' ? extra.supabaseUrl : undefined
 const extraSupabaseAnonKey = typeof extra.supabaseAnonKey === 'string' ? extra.supabaseAnonKey : undefined
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? extraSupabaseUrl
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? extraSupabaseAnonKey
-const hasSupabaseEnv = !!supabaseUrl && !!supabaseAnonKey
-const FALLBACK_SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
-const FALLBACK_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptZG5kY3Boa21hbGpod2d6cXhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTQwNTIsImV4cCI6MjA5MzYzMDA1Mn0.ZvYw9-2fsrQQbqgIUfiWlIlvklZZtnkJSJ-V-LvgDE0'
+const resolved = resolveSupabaseCredentials({
+  envUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+  envAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  extraUrl: extraSupabaseUrl,
+  extraAnonKey: extraSupabaseAnonKey,
+})
 
-if (!hasSupabaseEnv) {
-  console.warn('[supabase] Missing Supabase config (EXPO_PUBLIC_* and expo.extra fallback both empty)')
+const supabaseUrl = resolved.url
+const supabaseAnonKey = resolved.anonKey
+const hasSupabaseEnv = resolved.fromEnv || Boolean(supabaseUrl && supabaseAnonKey)
+
+if (!resolved.fromEnv) {
+  console.warn('[supabase] Using embedded production Supabase URL (set EXPO_PUBLIC_SUPABASE_* in EAS for custom projects)')
 }
 
 const isStaticWebRender = Platform.OS === 'web' && typeof window === 'undefined'
 
-export const supabase = createClient(
-  hasSupabaseEnv ? supabaseUrl : FALLBACK_SUPABASE_URL,
-  hasSupabaseEnv ? supabaseAnonKey : FALLBACK_SUPABASE_ANON_KEY,
-  {
+const AUTH_FETCH_TIMEOUT_MS = 25000
+
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const outerSignal = init?.signal
+  if (outerSignal) {
+    if (outerSignal.aborted) {
+      controller.abort(outerSignal.reason)
+    } else {
+      outerSignal.addEventListener('abort', () => controller.abort(outerSignal.reason), { once: true })
+    }
+  }
+  const timer = setTimeout(() => controller.abort(new Error('auth_fetch_timeout')), AUTH_FETCH_TIMEOUT_MS)
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    fetch: fetchWithTimeout,
+  },
   auth: isStaticWebRender
     ? {
         autoRefreshToken: false,
@@ -40,9 +61,8 @@ export const supabase = createClient(
         persistSession: true,
         detectSessionInUrl: false,
       },
-  }
-)
+})
 
 export { hasSupabaseEnv }
-export const SUPABASE_URL = hasSupabaseEnv ? supabaseUrl : FALLBACK_SUPABASE_URL
-export const SUPABASE_ANON_KEY = hasSupabaseEnv ? supabaseAnonKey : FALLBACK_SUPABASE_ANON_KEY
+export const SUPABASE_URL = supabaseUrl
+export const SUPABASE_ANON_KEY = supabaseAnonKey

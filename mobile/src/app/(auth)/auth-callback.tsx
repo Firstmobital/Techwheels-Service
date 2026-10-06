@@ -55,7 +55,7 @@ export default function AuthCallbackScreen() {
         return
       }
       if (result.type === 'recovery') {
-        router.replace('/(auth)/login')
+        router.replace('/(auth)/password-update')
         return
       }
       router.replace('/(tabs)/home')

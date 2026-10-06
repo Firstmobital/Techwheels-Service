@@ -227,7 +227,10 @@ export async function attachQcStatusToVehicleMeta(
       .from('bodyshop_repair_cards')
       .select('id, job_card_no, qc_status')
       .in('job_card_no', chunk)
-    if (error) throw new Error(error.message)
+    if (error) {
+      console.warn('attachQcStatusToVehicleMeta:', error.message)
+      continue
+    }
     for (const c of data ?? []) {
       const jc = normKey(String(c.job_card_no ?? ''))
       if (!jc) continue

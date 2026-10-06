@@ -11,6 +11,12 @@ const PRIMARY_CODE_COLUMNS = [
   'rubbing_employee_code',
 ] as const
 
+function postgrestEqLiteral(value: string): string {
+  const v = String(value ?? '').trim()
+  if (/^[A-Za-z0-9]+$/.test(v)) return v
+  return `"${v.replace(/"/g, '""')}"`
+}
+
 /** Active assignments where this employee is primary assignee on any floor-work role. */
 export async function fetchBodyshopAssignmentsForEmployee(
   employeeCode: string,
@@ -18,7 +24,8 @@ export async function fetchBodyshopAssignmentsForEmployee(
   const code = String(employeeCode ?? '').trim().toUpperCase()
   if (!code) return ok([])
 
-  const orFilter = PRIMARY_CODE_COLUMNS.map((col) => `${col}.eq.${code}`).join(',')
+  const literal = postgrestEqLiteral(code)
+  const orFilter = PRIMARY_CODE_COLUMNS.map((col) => `${col}.eq.${literal}`).join(',')
   const { data, error } = await supabase
     .from('bodyshop_assignments')
     .select('*')

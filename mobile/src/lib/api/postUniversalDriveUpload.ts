@@ -37,13 +37,21 @@ export async function postUniversalDriveWithRetry(
   }
   if (anonKey) headers.apikey = anonKey
 
-  const send = () =>
-    fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+  const send = () => {
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => controller.abort(new Error('drive_upload_timeout')), timeoutMs)
+    }
+    return fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+      signal: controller.signal,
+    }).finally(() => {
+      if (timer) clearTimeout(timer)
     })
+  }
 
   let res = await send()
   let body: UniversalDriveUploadResponse = await res.json().catch(() => ({}))

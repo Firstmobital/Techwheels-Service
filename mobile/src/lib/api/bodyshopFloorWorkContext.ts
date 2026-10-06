@@ -36,7 +36,13 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
   if (authErr) throw new Error(authErr.message)
   if (!user) throw new Error('Not signed in')
 
-  let { data: linkRows, error: linkErr } = await supabase
+  let link: {
+    employee_code?: string | null
+    dealer_code?: string | null
+    employee_master?: { employee_name?: string | null; role?: string | null } | null
+  } | null = null
+
+  const { data: linkRows, error: linkErr } = await supabase
     .from('user_employee_links')
     .select('employee_code, dealer_code, employee_master(employee_name, role)')
     .eq('user_id', user.id)
@@ -44,8 +50,34 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
     .eq('is_active', true)
     .order('updated_at', { ascending: false })
     .limit(1)
-  if (linkErr) throw new Error(linkErr.message)
-  let link = linkRows?.[0] ?? null
+
+  if (linkErr) {
+    const { data: plainRows, error: plainErr } = await supabase
+      .from('user_employee_links')
+      .select('employee_code, dealer_code')
+      .eq('user_id', user.id)
+      .eq('is_primary', true)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+    if (plainErr) throw new Error(plainErr.message)
+    const plain = plainRows?.[0]
+    if (plain?.employee_code) {
+      const code = String(plain.employee_code).trim().toUpperCase()
+      const { data: em } = await supabase
+        .from('employee_master')
+        .select('employee_name, role')
+        .eq('employee_code', code)
+        .maybeSingle()
+      link = {
+        employee_code: plain.employee_code,
+        dealer_code: plain.dealer_code,
+        employee_master: em ?? null,
+      }
+    }
+  } else {
+    link = linkRows?.[0] ?? null
+  }
 
   if (!link?.employee_code && (await userHasAdminAccess(user.id, user))) {
     const inactive = await supabase

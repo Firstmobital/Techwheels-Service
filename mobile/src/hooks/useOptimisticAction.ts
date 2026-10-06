@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { STAFF_PORTAL_SERVER_FIRST_ACTIONS } from '../lib/staff/staffPortalPerformanceRevoked'
 
 export type OptimisticActionOptions = {
   apply: () => void
@@ -31,14 +32,18 @@ export function useOptimisticAction() {
   const run = useCallback(async (key: string | null, opts: OptimisticActionOptions) => {
     lastRunRef.current = { key, opts }
     setFailure(null)
-    opts.apply()
     setRunningKey(key)
     try {
+      if (!STAFF_PORTAL_SERVER_FIRST_ACTIONS) {
+        opts.apply()
+      }
       await opts.execute()
       opts.onSuccess?.()
       setFailure(null)
     } catch (err) {
-      opts.rollback()
+      if (!STAFF_PORTAL_SERVER_FIRST_ACTIONS) {
+        opts.rollback()
+      }
       setFailure({
         message: opts.errorMessage?.(err) ?? defaultErrorMessage(err),
       })
@@ -68,12 +73,16 @@ export function useOptimisticAction() {
 
 /** One-shot optimistic update without retry state (class components / simple toggles). */
 export async function runWithOptimisticRollback(opts: OptimisticActionOptions): Promise<void> {
-  opts.apply()
+  if (!STAFF_PORTAL_SERVER_FIRST_ACTIONS) {
+    opts.apply()
+  }
   try {
     await opts.execute()
     opts.onSuccess?.()
   } catch (err) {
-    opts.rollback()
+    if (!STAFF_PORTAL_SERVER_FIRST_ACTIONS) {
+      opts.rollback()
+    }
     if (opts.rethrow) throw err
     throw err
   }

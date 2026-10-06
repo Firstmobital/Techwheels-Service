@@ -13,7 +13,7 @@ const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
   profile: { icon: 'user', label: 'Profile' },
 }
 
-const VISIBLE_TABS = ['home', 'search', 'new', 'profile']
+const VISIBLE_TABS = ['home', 'search', 'new', 'alerts', 'profile']
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets()

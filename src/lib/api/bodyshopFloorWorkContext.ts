@@ -46,8 +46,32 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
     .eq('is_active', true)
 
   let { data: linkRows, error: linkErr } = await linkQuery.order('updated_at', { ascending: false }).limit(1)
-  if (linkErr) return fail(linkErr.message)
   let link = linkRows?.[0] ?? null
+  if (linkErr) {
+    const { data: plainRows, error: plainErr } = await supabase
+      .from('user_employee_links')
+      .select('employee_code, dealer_code')
+      .eq('user_id', user.id)
+      .eq('is_primary', true)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+    if (plainErr) return fail(plainErr.message)
+    const plain = plainRows?.[0]
+    if (plain?.employee_code) {
+      const emCode = String(plain.employee_code).trim().toUpperCase()
+      const { data: em } = await supabase
+        .from('employee_master')
+        .select('employee_name, role')
+        .eq('employee_code', emCode)
+        .maybeSingle()
+      link = {
+        employee_code: plain.employee_code,
+        dealer_code: plain.dealer_code,
+        employee_master: em ?? null,
+      }
+    }
+  }
 
   if (!link?.employee_code && (await userHasAdminAccess(user.id, user))) {
     const inactive = await supabase

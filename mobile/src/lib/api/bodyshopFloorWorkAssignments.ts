@@ -10,11 +10,19 @@ const PRIMARY_CODE_COLUMNS = [
   'rubbing_employee_code',
 ] as const
 
+/** PostgREST `.or()` values with `_` / special chars must be double-quoted. */
+function postgrestEqLiteral(value: string): string {
+  const v = String(value ?? '').trim()
+  if (/^[A-Za-z0-9]+$/.test(v)) return v
+  return `"${v.replace(/"/g, '""')}"`
+}
+
 export async function fetchBodyshopAssignmentsForEmployee(employeeCode: string): Promise<Record<string, unknown>[]> {
   const code = String(employeeCode ?? '').trim().toUpperCase()
   if (!code) return []
 
-  const orFilter = PRIMARY_CODE_COLUMNS.map((col) => `${col}.eq.${code}`).join(',')
+  const literal = postgrestEqLiteral(code)
+  const orFilter = PRIMARY_CODE_COLUMNS.map((col) => `${col}.eq.${literal}`).join(',')
   const { data, error } = await supabase
     .from('bodyshop_assignments')
     .select('*')

@@ -244,4 +244,26 @@ export function isBodyshopFloorWorkLogRole(value: string): value is BodyshopFloo
   return (BODYSHOP_FLOOR_WORK_LOG_ROLES as readonly string[]).includes(value)
 }
 
+/** Assignee on the bodyshop_assignments row for one floor-work role slot. */
+export function floorWorkRoleAssigneeFromRow(
+  row: AssignmentRow | undefined,
+  role: BodyshopFloorWorkLogRole,
+): { code: string; name: string | null } {
+  if (!row) return { code: '', name: null }
+  const cols = PRIMARY_ROLE_COLUMNS[role]
+  const code = normCode(row[cols.code])
+  const name = String(row[cols.name] ?? '').trim() || null
+  return { code, name }
+}
+
+export function floorWorkRoleAssigneeLabel(
+  row: AssignmentRow | undefined,
+  role: BodyshopFloorWorkLogRole,
+): string {
+  const { code, name } = floorWorkRoleAssigneeFromRow(row, role)
+  if (!code || code === NOT_REQUIRED_ASSIGNMENT_CODE) return 'Not assigned'
+  if (name) return name
+  return code
+}
+
 export type BodyshopFloorRoleForDisplay = BodyshopFloorWorkLogRole | BodyshopFloorRole

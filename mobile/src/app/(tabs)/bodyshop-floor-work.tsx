@@ -6,6 +6,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  AppState,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,12 +17,18 @@ import {
 } from 'react-native'
 import { MaterialIcons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { useFocusEffect } from 'expo-router'
 import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
 import { getLinkedEmployeeContext } from '../../lib/api/bodyshopFloorWorkContext'
+import { loadBodyshopFloorInchargeScope } from '../../lib/bodyshopFloorInchargeScope'
+import {
+  filterFloorWorkTasksForInchargeFloor,
+  shouldUseFloorWorkAdminOverview,
+} from '../../lib/bodyshopFloorWork/inchargeOverview'
 import {
   fetchBodyshopAssignmentsForEmployee,
   fetchBodyshopSupportAssignmentsForEmployee,
@@ -55,6 +62,7 @@ import {
 import { saveWorkerQcFromFloorWork, type WorkerQcDecision } from '../../lib/api/bodyshopFloorWorkerQc'
 import { filterTasksByFloorWorkGoLive } from '../../lib/bodyshopFloorWork/eligibility'
 import { completeBodyshopFloorWorkRoleOnAssignment } from '../../lib/api/bodyshopFloorWorkPipeline'
+import { humanizeStaffAuthError } from '../../lib/staffAuthErrors'
 import {
   buildAdminFloorWorkerRoster,
   fetchAdminRosterPeopleAndIncome,
@@ -108,10 +116,26 @@ import {
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForDate,
   openRoleDailyLogPhoto,
+  syncFloorWorkPhotosToDrive,
   uploadRoleDailyLogPhotoFromUri,
   upsertRoleDailyLog,
 } from '../../lib/api/bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../../lib/bodyshopFloorRoleWorkLog'
+import {
+  enqueueFloorWorkDriveAutoSync,
+  floorWorkPhotoNeedsDriveSync,
+  kickFloorWorkDriveAutoSync,
+  subscribeFloorWorkDriveAutoSync,
+} from '../../lib/api/floorWorkDriveSyncQueue'
+
+function mergeFloorWorkDrivePhotoRows(
+  prev: BodyshopFloorRoleDailyLogPhotoRow[],
+  synced: BodyshopFloorRoleDailyLogPhotoRow[],
+): BodyshopFloorRoleDailyLogPhotoRow[] {
+  if (synced.length === 0) return prev
+  const byId = new Map(synced.map((p) => [p.id, p]))
+  return prev.map((p) => byId.get(p.id) ?? p)
+}
 
 function FloorWorkStatsThree({
   total,
@@ -259,6 +283,7 @@ export default function BodyshopFloorWorkScreen() {
   const [photoThumbs, setPhotoThumbs] = useState<Record<number, string>>({})
   const [vehicleByJc, setVehicleByJc] = useState<Record<string, FloorWorkVehicleMeta>>({})
   const [saving, setSaving] = useState(false)
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [isAdminOverview, setIsAdminOverview] = useState(false)
   const [selectedAdminEmployee, setSelectedAdminEmployee] = useState<AdminFloorWorkerCard | null>(null)
   const [adminRosterPeople, setAdminRosterPeople] = useState<AdminRosterPerson[]>([])
@@ -482,9 +507,12 @@ export default function BodyshopFloorWorkScreen() {
   const load = useCallback(async () => {
     setError(null)
     try {
-      const ctx = await getLinkedEmployeeContext()
+      const [ctx, inchargeScope] = await Promise.all([
+        getLinkedEmployeeContext(),
+        loadBodyshopFloorInchargeScope(),
+      ])
       const myCode = String(ctx.employeeCode ?? '').trim().toUpperCase()
-      const adminOverview = Boolean(ctx.isAdminOverview) || Boolean(ctx.isFloorWorkAdminView)
+      const adminOverview = shouldUseFloorWorkAdminOverview(ctx, inchargeScope)
       setIsAdminOverview(adminOverview)
       setEmployeeCode(myCode)
       setEmployeeName(ctx.employeeName)
@@ -524,7 +552,7 @@ export default function BodyshopFloorWorkScreen() {
       const assignmentJcs = Array.from(
         new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
       )
-      const liveFloorJcs = await fetchLiveOnFloorJobCardKeys()
+      const liveFloorJcs = adminOverview ? await fetchLiveOnFloorJobCardKeys() : []
       const allJcs = Array.from(
         new Set([...assignmentJcs, ...liveFloorJcs, ...taskList.map((t) => t.jobCardNumber)]),
       )
@@ -540,6 +568,13 @@ export default function BodyshopFloorWorkScreen() {
         })
       }
       taskList = filterTasksByFloorWorkGoLive(taskList, minimal, assignmentMap)
+      if (adminOverview && inchargeScope.lockedBodyshopFloor && !inchargeScope.isAdmin) {
+        taskList = filterFloorWorkTasksForInchargeFloor(
+          taskList,
+          minimal,
+          inchargeScope.lockedBodyshopFloor,
+        )
+      }
 
       setAssignmentByJc(assignmentMap)
       setTasks(taskList)
@@ -610,7 +645,8 @@ export default function BodyshopFloorWorkScreen() {
         setSelectedAdminEmployee(null)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Load failed')
+      const raw = e instanceof Error ? e.message : 'Load failed'
+      setError(humanizeStaffAuthError(raw))
     }
   }, [today, enrichVehicleMetaBatch, uniqueJcsFromTasks])
 
@@ -712,13 +748,50 @@ export default function BodyshopFloorWorkScreen() {
     }
   }, [savedPhotos, allVehiclePhotos, isAdminOverview])
 
+  const queueVisibleFloorWorkDriveSync = useCallback(() => {
+    if (!selected) return
+    const jc = selected.jobCardNumber
+    const batch: BodyshopFloorRoleDailyLogPhotoRow[] = [...savedPhotos]
+    if (isAdminOverview) batch.push(...allVehiclePhotos)
+    const pending = batch.filter(floorWorkPhotoNeedsDriveSync)
+    if (pending.length > 0) enqueueFloorWorkDriveAutoSync(pending, jc)
+    else kickFloorWorkDriveAutoSync()
+  }, [selected, savedPhotos, allVehiclePhotos, isAdminOverview])
+
+  useEffect(() => {
+    return subscribeFloorWorkDriveAutoSync((synced) => {
+      setSavedPhotos((prev) => mergeFloorWorkDrivePhotoRows(prev, synced))
+      setAllVehiclePhotos((prev) => mergeFloorWorkDrivePhotoRows(prev, synced))
+    })
+  }, [])
+
+  useEffect(() => {
+    queueVisibleFloorWorkDriveSync()
+  }, [queueVisibleFloorWorkDriveSync])
+
+  useFocusEffect(
+    useCallback(() => {
+      queueVisibleFloorWorkDriveSync()
+    }, [queueVisibleFloorWorkDriveSync]),
+  )
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') queueVisibleFloorWorkDriveSync()
+    })
+    return () => sub.remove()
+  }, [queueVisibleFloorWorkDriveSync])
+
   async function addPhotosFromCamera() {
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
       Alert.alert('Camera', 'Permission needed to take work photos.')
       return
     }
-    const res = await ImagePicker.launchCameraAsync({ quality: 0.8 })
+    const res = await ImagePicker.launchCameraAsync({
+      quality: 0.8,
+      allowsEditing: false,
+    })
     if (res.canceled || !res.assets[0]?.uri) return
     setPhotoUris((prev) => [...prev, { uri: res.assets[0].uri, mime: res.assets[0].mimeType ?? 'image/jpeg' }])
   }
@@ -742,12 +815,96 @@ export default function BodyshopFloorWorkScreen() {
     ])
   }
 
-  function pickPhotos() {
-    Alert.alert('Add photo', 'Choose how to attach work photos', [
-      { text: 'Camera', onPress: () => void addPhotosFromCamera() },
-      { text: 'Gallery', onPress: () => void addPhotosFromGallery() },
-      { text: 'Cancel', style: 'cancel' },
+  const totalPhotoCount = photoUris.length + savedPhotos.length
+
+  async function resolveLogUploadContext() {
+    if (!selected) return null
+    const slotCode = workTaskEmployeeCode(selected, employeeCode)
+    if (!slotCode) return null
+    const { data: { user } } = await supabase.auth.getUser()
+    const [{ data: dealerCodeRaw, error: dealerErr }, { data: myCodeRaw, error: myCodeErr }] = await Promise.all([
+      supabase.rpc('my_dealer_code'),
+      supabase.rpc('my_employee_code'),
     ])
+    if (dealerErr) throw new Error(dealerErr.message)
+    if (myCodeErr) throw new Error(myCodeErr.message)
+    const dealerCode = String(dealerCodeRaw ?? selected.dealerCode ?? '').trim()
+    if (!dealerCode) throw new Error('Dealer code missing')
+    const loginEmployeeCode = String(myCodeRaw ?? employeeCode ?? slotCode).trim().toUpperCase()
+    const employeeCodeForLog = isAdminOverview ? slotCode : loginEmployeeCode || slotCode
+    return {
+      slotCode,
+      user,
+      dealerCode,
+      employeeCodeForLog,
+      trimmedNote: note.trim(),
+    }
+  }
+
+  /** Upload current queue; returns total saved photo count for this log. Does not complete the step. */
+  async function uploadQueuedPhotos(): Promise<number> {
+    if (!selected || photoUris.length === 0) return savedPhotos.length
+    const pending = [...photoUris]
+    const ctx = await resolveLogUploadContext()
+    if (!ctx) return savedPhotos.length
+    const row = await upsertRoleDailyLog({
+      jobCardNumber: selected.jobCardNumber,
+      repairCardId: selected.repairCardId,
+      dealerCode: ctx.dealerCode,
+      floorRole: selected.floorRole,
+      employeeCode: ctx.employeeCodeForLog,
+      employeeName: selected.employeeName ?? employeeName,
+      noteText: ctx.trimmedNote,
+      isSupport: selected.isSupport,
+      actorEmail: ctx.user?.email ?? null,
+    })
+    const baseOrder = savedPhotos.length
+    const uploadedPhotos = await Promise.all(
+      pending.map((p, i) =>
+        uploadRoleDailyLogPhotoFromUri({
+          logId: row.id,
+          dealerCode: ctx.dealerCode,
+          jobCardNumber: selected.jobCardNumber,
+          regNumber: vehicleByJc[selected.jobCardNumber]?.reg ?? null,
+          uri: p.uri,
+          mimeType: p.mime,
+          sortOrder: baseOrder + i,
+        }),
+      ),
+    )
+    let syncedPhotos = uploadedPhotos
+    if (uploadedPhotos.length > 0) {
+      syncedPhotos = await syncFloorWorkPhotosToDrive(uploadedPhotos, selected.jobCardNumber)
+    }
+    const newTotal = baseOrder + syncedPhotos.length
+    if (syncedPhotos.length > 0) {
+      setSavedPhotos((prev) => [...prev, ...syncedPhotos])
+    }
+    const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, ctx.employeeCodeForLog, selected.isSupport)
+    setLogsByKey((prev) => ({ ...prev, [key]: row }))
+    setPhotoUris([])
+    return newTotal
+  }
+
+  async function savePhotosOnly() {
+    if (!selected || !canUploadPhotosSelected) return
+    if (photoUris.length === 0) {
+      Alert.alert('No new photos', 'Take or pick photos first, then tap Save photos.')
+      return
+    }
+    setUploadingPhotos(true)
+    try {
+      const total = await uploadQueuedPhotos()
+      if (total <= 0) throw new Error('Upload failed')
+      Alert.alert(
+        'Photos saved',
+        'Saved in Supabase and copied to Google Drive (same folder as panel). Add more if needed, then tap Done.',
+      )
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploadingPhotos(false)
+    }
   }
 
   const selectedWorkerQcTurn = useMemo(() => {
@@ -871,64 +1028,27 @@ export default function BodyshopFloorWorkScreen() {
 
   async function save() {
     if (!selected || !canUploadPhotosSelected) return
-    const slotCode = workTaskEmployeeCode(selected, employeeCode)
-    if (!slotCode) return
-    const trimmed = note.trim()
     if (photoUris.length === 0 && savedPhotos.length === 0) {
       Alert.alert('Photos required', 'Add at least one work photo before marking Done.')
       return
     }
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const [{ data: dealerCodeRaw, error: dealerErr }, { data: myCodeRaw, error: myCodeErr }] = await Promise.all([
-        supabase.rpc('my_dealer_code'),
-        supabase.rpc('my_employee_code'),
-      ])
-      if (dealerErr) throw new Error(dealerErr.message)
-      if (myCodeErr) throw new Error(myCodeErr.message)
-      const dealerCode = String(dealerCodeRaw ?? selected.dealerCode ?? '').trim()
-      if (!dealerCode) throw new Error('Dealer code missing')
-      const loginEmployeeCode = String(myCodeRaw ?? employeeCode ?? slotCode).trim().toUpperCase()
-      const employeeCodeForLog = isAdminOverview ? slotCode : loginEmployeeCode || slotCode
-
-      const row = await upsertRoleDailyLog({
-        jobCardNumber: selected.jobCardNumber,
-        repairCardId: selected.repairCardId,
-        dealerCode,
-        floorRole: selected.floorRole,
-        employeeCode: employeeCodeForLog,
-        employeeName: selected.employeeName ?? employeeName,
-        noteText: trimmed,
-        isSupport: selected.isSupport,
-        actorEmail: user?.email ?? null,
-      })
-
-      const uploadedPhotos = await Promise.all(
-        photoUris.map((p, i) =>
-          uploadRoleDailyLogPhotoFromUri({
-            logId: row.id,
-            dealerCode,
-            jobCardNumber: selected.jobCardNumber,
-            regNumber: vehicleByJc[selected.jobCardNumber]?.reg ?? null,
-            uri: p.uri,
-            mimeType: p.mime,
-            sortOrder: i,
-          }),
-        ),
-      )
-      if (uploadedPhotos.length > 0) {
-        setSavedPhotos((prev) => [...prev, ...uploadedPhotos])
+      let photoTotal = savedPhotos.length
+      if (photoUris.length > 0) {
+        photoTotal = await uploadQueuedPhotos()
       }
-
-      const key = workLogMapKey(selected.jobCardNumber, selected.floorRole, employeeCodeForLog, selected.isSupport)
-      setLogsByKey((prev) => ({ ...prev, [key]: row }))
-      setPhotoUris([])
+      if (photoTotal <= 0) {
+        Alert.alert('Photos required', 'Add at least one work photo before marking Done.')
+        return
+      }
+      const ctx = await resolveLogUploadContext()
+      if (!ctx) return
 
       await completeBodyshopFloorWorkRoleOnAssignment({
         jobCardNumber: selected.jobCardNumber,
         floorRole: selected.floorRole,
-        actorEmail: user?.email ?? null,
+        actorEmail: ctx.user?.email ?? null,
       })
 
       const { data: assRow, error: assReadErr } = await supabase
@@ -953,14 +1073,13 @@ export default function BodyshopFloorWorkScreen() {
         }
       }
 
-      if (uploadedPhotos.length > 0) {
+      if (savedPhotos.length > 0 || photoUris.length > 0) {
         void reloadAdminVehiclePhotos(selected)
       }
-      const driveHint =
-        uploadedPhotos.length > 0
-          ? ' Photos are saved. Google Drive link will sync in the background (no need to wait).'
-          : ''
-      Alert.alert('Done', `Your step is complete — vehicle moves to the next role.${driveHint}`)
+      Alert.alert(
+        'Done',
+        'Your step is complete — vehicle moves to the next role. Photos stay on this job; Drive sync runs in the background.',
+      )
     } catch (e) {
       Alert.alert('Save failed', e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -997,7 +1116,8 @@ export default function BodyshopFloorWorkScreen() {
           Common reasons: login not linked to employee code, slow network, or session expired. Pull down after Retry or sign in again.
         </Text>
         <Text style={{ color: '#82858f', lineHeight: 20, marginBottom: 16 }}>
-          Admin: module <Text style={{ fontWeight: '700' }}>bodyshop_floor_work</Text>, user → employee mapping, role DENTOR/PAINTER in Employee Master.
+          Your login is linked to employee code <Text style={{ fontWeight: '700' }}>{employeeCode || '—'}</Text>. Admin: module{' '}
+          <Text style={{ fontWeight: '700' }}>bodyshop_floor_work</Text>, user → employee mapping, role DENTOR/PAINTER/HELPER in Employee Master.
         </Text>
         <TouchableOpacity onPress={() => void onRefresh()} style={S.loadMoreBtn} accessibilityRole="button" accessibilityLabel="Retry loading">
           <Text style={S.loadMoreBtnText}>Retry</Text>
@@ -1149,30 +1269,73 @@ export default function BodyshopFloorWorkScreen() {
             ) : null}
             {canUploadPhotosSelected ? (
               <View style={S.photoBlock}>
-                <TouchableOpacity
-                  onPress={pickPhotos}
-                  style={S.cameraBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add photos"
-                >
-                  <MaterialIcons name="photo-camera" size={28} color="#fff" />
-                </TouchableOpacity>
-                <Text style={S.cameraHint}>Tap the camera. You can add several photos at once.</Text>
+                <Text style={S.photoSectionTitle}>Work photos</Text>
+                <Text style={S.cameraHint}>
+                  Add as many photos as you need. Each save goes to Supabase and Google Drive (vehicle reg folder).
+                  If Drive fails, it retries automatically in the background. Done moves the step forward.
+                </Text>
+                <View style={S.photoBtnRow}>
+                  <TouchableOpacity
+                    onPress={() => void addPhotosFromCamera()}
+                    style={[S.photoBtn, S.photoBtnPrimary]}
+                    disabled={uploadingPhotos || saving}
+                    accessibilityRole="button"
+                    accessibilityLabel="Take photo with camera"
+                  >
+                    <MaterialIcons name="photo-camera" size={22} color="#fff" />
+                    <Text style={S.photoBtnTextOnPrimary}>Camera</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => void addPhotosFromGallery()}
+                    style={S.photoBtn}
+                    disabled={uploadingPhotos || saving}
+                    accessibilityRole="button"
+                    accessibilityLabel="Choose photos from gallery"
+                  >
+                    <MaterialIcons name="photo-library" size={22} color="#2a4cd0" />
+                    <Text style={S.photoBtnText}>Gallery</Text>
+                  </TouchableOpacity>
+                </View>
                 {photoUris.length > 0 ? (
-                  <View style={S.thumbRow}>
-                    {photoUris.map((photo, index) => (
-                      <View key={`${photo.uri}-${index}`} style={S.thumbWrap}>
-                        <Image source={{ uri: photo.uri }} style={S.thumb} />
-                        <TouchableOpacity
-                          style={S.thumbRemove}
-                          onPress={() => setPhotoUris((prev) => prev.filter((_, i) => i !== index))}
-                          accessibilityLabel="Remove photo"
-                        >
-                          <Text style={S.thumbRemoveText}>×</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
+                  <>
+                    <Text style={S.photoQueueLabel}>
+                      Ready to upload ({photoUris.length}) — not sent until Save photos or Done
+                    </Text>
+                    <View style={S.thumbRow}>
+                      {photoUris.map((photo, index) => (
+                        <View key={`${photo.uri}-${index}`} style={S.thumbWrap}>
+                          <Image source={{ uri: photo.uri }} style={S.thumb} />
+                          <TouchableOpacity
+                            style={S.thumbRemove}
+                            onPress={() => setPhotoUris((prev) => prev.filter((_, i) => i !== index))}
+                            accessibilityLabel="Remove photo"
+                          >
+                            <Text style={S.thumbRemoveText}>×</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+                {photoUris.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => void savePhotosOnly()}
+                    disabled={uploadingPhotos || saving}
+                    style={[S.saveDraftBtn, (uploadingPhotos || saving) && S.saveBtnDisabled]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save photos without completing step"
+                  >
+                    {uploadingPhotos ? (
+                      <ActivityIndicator color="#2a4cd0" />
+                    ) : (
+                      <Text style={S.saveDraftBtnText}>Save photos (add more, then Done)</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+                {totalPhotoCount > 0 ? (
+                  <Text style={S.photoCountLine}>
+                    Total for this step: {totalPhotoCount} photo{totalPhotoCount === 1 ? '' : 's'}
+                  </Text>
                 ) : null}
               </View>
             ) : !isAdminOverview && canSubmitSelected === false && selected && !selectedWorkerQcTurn ? (
@@ -1209,30 +1372,46 @@ export default function BodyshopFloorWorkScreen() {
               ) : null}
               {savedPhotos.length > 0 ? (
                 <View style={S.savedPhotosBox}>
-                  <Text style={S.savedPhotosHint}>Uploaded photos</Text>
+                  <Text style={S.savedPhotosHint}>Saved on server ({savedPhotos.length})</Text>
                   <View style={S.thumbRow}>
                     {savedPhotos.map((p) => (
-                      <TouchableOpacity
-                        key={p.id}
-                        onPress={() =>
-                          void openRoleDailyLogPhoto(p).catch((e) =>
-                            Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
-                          )
-                        }
-                      >
-                        {photoThumbs[p.id] ? (
-                          <Image source={{ uri: photoThumbs[p.id] }} style={S.thumb} />
+                      <View key={p.id} style={S.thumbWrap}>
+                        <TouchableOpacity
+                          onPress={() =>
+                            void openRoleDailyLogPhoto(p).catch((e) =>
+                              Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
+                            )
+                          }
+                        >
+                          {photoThumbs[p.id] ? (
+                            <Image source={{ uri: photoThumbs[p.id] }} style={S.thumb} />
+                          ) : (
+                            <View style={[S.thumb, S.thumbPlaceholder]} />
+                          )}
+                        </TouchableOpacity>
+                        {p.drive_url ? (
+                          <Text style={S.driveBadge}>Drive</Text>
                         ) : (
-                          <View style={[S.thumb, S.thumbPlaceholder]} />
+                          <Text style={S.drivePendingBadge}>Drive…</Text>
                         )}
-                      </TouchableOpacity>
+                      </View>
                     ))}
                   </View>
                 </View>
               ) : null}
             {canUploadPhotosSelected ? (
-            <TouchableOpacity onPress={() => void save()} disabled={saving} style={[S.saveBtn, saving && S.saveBtnDisabled]}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Done — send to next step</Text>}
+            <TouchableOpacity
+              onPress={() => void save()}
+              disabled={saving || uploadingPhotos || totalPhotoCount === 0}
+              style={[S.saveBtn, (saving || uploadingPhotos || totalPhotoCount === 0) && S.saveBtnDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Done send to next step"
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={S.saveBtnText}>Done — send to next step</Text>
+              )}
             </TouchableOpacity>
             ) : null}
           </ScrollView>
@@ -1589,16 +1768,38 @@ const S = StyleSheet.create({
     color: '#1a1b21',
     backgroundColor: '#fff',
   },
-  photoBlock: { marginTop: 16, alignItems: 'flex-start' },
-  cameraBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#2a4cd0',
+  photoBlock: { marginTop: 16, alignSelf: 'stretch' },
+  photoSectionTitle: { fontSize: 15, fontWeight: '700', color: '#1a1b21', marginBottom: 6 },
+  photoBtnRow: { flexDirection: 'row', gap: 10, marginTop: 10, alignSelf: 'stretch' },
+  photoBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2a4cd0',
+    backgroundColor: '#fff',
   },
-  cameraHint: { marginTop: 8, fontSize: 12, color: '#5c5f69' },
+  photoBtnPrimary: { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
+  photoBtnText: { fontSize: 15, fontWeight: '700', color: '#2a4cd0' },
+  photoBtnTextOnPrimary: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  cameraHint: { fontSize: 12, color: '#5c5f69', lineHeight: 18 },
+  photoQueueLabel: { marginTop: 12, fontSize: 12, fontWeight: '600', color: '#374151' },
+  photoCountLine: { marginTop: 8, fontSize: 12, color: '#5c5f69' },
+  saveDraftBtn: {
+    marginTop: 12,
+    alignSelf: 'stretch',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2a4cd0',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  saveDraftBtnText: { fontSize: 14, fontWeight: '700', color: '#2a4cd0' },
   thumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   thumbWrap: { position: 'relative' },
   thumb: { width: 84, height: 84, borderRadius: 10, backgroundColor: '#eceae4' },
@@ -1615,6 +1816,31 @@ const S = StyleSheet.create({
     justifyContent: 'center',
   },
   thumbRemoveText: { color: '#fff', fontSize: 16, lineHeight: 18, fontWeight: '700' },
+  driveBadge: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#fff',
+    backgroundColor: '#15803d',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  drivePendingBadge: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#92400e',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
   savedPhotosBox: { marginTop: 12, backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e7e3d9' },
   savedPhotosHint: { fontSize: 11, color: '#82858f', marginBottom: 6 },
   savedPhotoRow: { paddingVertical: 6 },

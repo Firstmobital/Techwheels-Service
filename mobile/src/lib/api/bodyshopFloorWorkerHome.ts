@@ -12,11 +12,7 @@ import { fetchMonthlyBodyshopEarningsByCode } from '../bodyshopMonthlyEarnings'
 import { normalizeEmployeeCode } from '../payroll/earningsFormulas'
 import type { BodyshopSupportRow } from '../bodyshopEarnings'
 import { hasBusinessRole } from '../businessRoles'
-import {
-  fetchBodyshopActiveAssignmentsPage,
-  fetchBodyshopActiveSupportAssignmentsPage,
-} from './bodyshopFloorList'
-import type { IdCreatedAtCursor } from '../pagination/listPage'
+import { fetchActiveTableRowsLegacyFull } from '../staff/staffListLoadLegacy'
 
 export function isBodyshopFloorWorkerBusinessRole(roleRaw: string | null | undefined): boolean {
   return (
@@ -152,78 +148,8 @@ async function fetchActiveEmployees() {
   return rows
 }
 
-async function fetchActiveRowsPage(
-  table: 'bodyshop_assignments' | 'bodyshop_floor_support_assignments',
-  cursor: IdCreatedAtCursor | null,
-) {
-  if (table === 'bodyshop_assignments') {
-    return fetchBodyshopActiveAssignmentsPage(cursor)
-  }
-  return fetchBodyshopActiveSupportAssignmentsPage(cursor)
-}
-
-/** First page only — use {@link fetchNextActiveBodyshopAssignmentRows} for load-more. */
-export async function fetchActiveBodyshopAssignmentRowsPage(): Promise<{
-  primaryRows: Record<string, unknown>[]
-  supportRows: Record<string, unknown>[]
-  primaryCursor: IdCreatedAtCursor | null
-  supportCursor: IdCreatedAtCursor | null
-  primaryHasMore: boolean
-  supportHasMore: boolean
-}> {
-  const [primary, support] = await Promise.all([
-    fetchActiveRowsPage('bodyshop_assignments', null),
-    fetchActiveRowsPage('bodyshop_floor_support_assignments', null),
-  ])
-  return {
-    primaryRows: primary.rows,
-    supportRows: support.rows,
-    primaryCursor: primary.nextCursor,
-    supportCursor: support.nextCursor,
-    primaryHasMore: primary.hasMore,
-    supportHasMore: support.hasMore,
-  }
-}
-
-export async function fetchNextActiveBodyshopAssignmentRows(cursors: {
-  primaryCursor: IdCreatedAtCursor | null
-  supportCursor: IdCreatedAtCursor | null
-}): Promise<{
-  primaryRows: Record<string, unknown>[]
-  supportRows: Record<string, unknown>[]
-  primaryCursor: IdCreatedAtCursor | null
-  supportCursor: IdCreatedAtCursor | null
-  primaryHasMore: boolean
-  supportHasMore: boolean
-}> {
-  const [primary, support] = await Promise.all([
-    cursors.primaryCursor
-      ? fetchActiveRowsPage('bodyshop_assignments', cursors.primaryCursor)
-      : Promise.resolve({ rows: [], nextCursor: null, hasMore: false }),
-    cursors.supportCursor
-      ? fetchActiveRowsPage('bodyshop_floor_support_assignments', cursors.supportCursor)
-      : Promise.resolve({ rows: [], nextCursor: null, hasMore: false }),
-  ])
-  return {
-    primaryRows: primary.rows,
-    supportRows: support.rows,
-    primaryCursor: primary.nextCursor,
-    supportCursor: support.nextCursor,
-    primaryHasMore: primary.hasMore,
-    supportHasMore: support.hasMore,
-  }
-}
-
 async function fetchAllActiveRows(table: 'bodyshop_assignments' | 'bodyshop_floor_support_assignments') {
-  const rows: Record<string, unknown>[] = []
-  let cursor: IdCreatedAtCursor | null = null
-  for (let i = 0; i < 80; i += 1) {
-    const page = await fetchActiveRowsPage(table, cursor)
-    rows.push(...page.rows)
-    if (!page.hasMore || !page.nextCursor) break
-    cursor = page.nextCursor
-  }
-  return rows
+  return fetchActiveTableRowsLegacyFull(table)
 }
 
 function metricsForEmployee(

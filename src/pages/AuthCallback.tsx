@@ -13,7 +13,7 @@ export default function AuthCallback() {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
-    const flowType = hashParams.get('type')
+    const flowType = hashParams.get('type') ?? params.get('type')
 
     const handle = async () => {
       if (code) {

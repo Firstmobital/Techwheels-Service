@@ -20,7 +20,9 @@ import {
   listBodyshopFloorInchargeEmployees,
   isFloorInchargeReassignmentBlocked,
   canEditBodyshopFloorAssignments,
+  carMatchesBodyshopFloorInchargeScope,
   loadBodyshopFloorInchargeScope,
+  normalizeBodyshopPhysicalFloor,
   type BodyshopFloorInchargeScope,
 } from '../lib/bodyshopFloorInchargeScope'
 import { bodyshopFloorAgeSummary } from '../lib/bodyshopFloorAge'
@@ -1344,8 +1346,18 @@ export default function BodyshopFloorPage() {
     if (branchFilter !== 'all')
       list = list.filter((c) => (c.branch ?? 'Unknown') === branchFilter)
 
-    if (floorFilter !== 'all')
-      list = list.filter((c) => c.bodyshop_floor === floorFilter)
+    if (floorFilter !== 'all') {
+      const want = normalizeBodyshopPhysicalFloor(floorFilter) ?? floorFilter
+      list = list.filter((c) => (normalizeBodyshopPhysicalFloor(c.bodyshop_floor) ?? c.bodyshop_floor) === want)
+    }
+
+    list = list.filter((c) =>
+      carMatchesBodyshopFloorInchargeScope(
+        c.bodyshop_floor,
+        assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_code ?? null,
+        inchargeScope,
+      ),
+    )
 
     if (roleFilter !== 'all')
       list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
@@ -1377,7 +1389,7 @@ export default function BodyshopFloorPage() {
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcCommittedByJc, riByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcCommittedByJc, riByJc, inchargeScope])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 

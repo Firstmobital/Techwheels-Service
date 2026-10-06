@@ -211,3 +211,25 @@ export async function loadBodyshopFloorInchargeScope(): Promise<BodyshopFloorInc
     lockedBodyshopFloor,
   }
 }
+
+export function shouldRestrictBodyshopFloorList(scope: BodyshopFloorInchargeScope): boolean {
+  if (scope.isAdmin || scope.canModifyBodyshopFloor) return false
+  return scope.isBodyshopFloorIncharge && scope.lockedBodyshopFloor != null
+}
+
+export function carMatchesBodyshopFloorInchargeScope(
+  carBodyshopFloor: string | null | undefined,
+  supervisorEmployeeCode: string | null | undefined,
+  scope: BodyshopFloorInchargeScope,
+): boolean {
+  if (!shouldRestrictBodyshopFloorList(scope)) return true
+  if (scope.lockedBodyshopFloor) {
+    const car = normalizeBodyshopPhysicalFloor(carBodyshopFloor) ?? String(carBodyshopFloor ?? '').trim()
+    if (!car) return true
+    return car === scope.lockedBodyshopFloor
+  }
+  const me = String(scope.employeeCode ?? '').trim().toUpperCase()
+  const sup = String(supervisorEmployeeCode ?? '').trim().toUpperCase()
+  if (me && sup) return sup === me
+  return false
+}

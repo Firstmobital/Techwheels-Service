@@ -18,9 +18,7 @@ import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
 import {
   fetchBodyshopAssignmentsForJobCards,
-  fetchBodyshopRepairCardsPage,
 } from '../../lib/api/bodyshopFloorList'
-import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
@@ -259,17 +257,23 @@ export default function BodyshopRepairScreen() {
     else setRefreshing(true)
     setLoadError(null)
     try {
-      const { rows: cardRows, pageError } = await collectListPages((cursor) =>
-        fetchBodyshopRepairCardsPage({
-          cursor,
-          pageSize: 100,
-          searchQuery: search.trim() || null,
-        }),
-      )
-      const cardList = cardRows as unknown as RepairCard[]
+      const { data, error } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(2000)
+      if (error) throw error
+      let cardList = (data ?? []) as RepairCard[]
+      const q = search.trim().toLowerCase()
+      if (q) {
+        cardList = cardList.filter(
+          (c) =>
+            String(c.job_card_no ?? '').toLowerCase().includes(q)
+            || String(c.reg_number ?? '').toLowerCase().includes(q)
+            || String(c.customer_name ?? '').toLowerCase().includes(q),
+        )
+      }
       setCards(cardList)
-      const partial = formatPartialListLoadError(pageError, cardList.length)
-      if (partial) setLoadError(partial)
 
       const { data: empData } = await supabase
         .from('employee_master')
@@ -1329,18 +1333,7 @@ export default function BodyshopRepairScreen() {
         ListHeaderComponent={filterHeader}
         stickyHeaderIndices={undefined}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} />}
-        onEndReached={() => { void loadMoreCards() }}
-        onEndReachedThreshold={0.35}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 80, gap: 10 }}
-        ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator style={{ marginVertical: 16 }} color="#2563eb" />
-          ) : listHasMore ? (
-            <TouchableOpacity style={S.loadMoreBtn} onPress={() => void loadMoreCards()}>
-              <Text style={S.loadMoreBtnText}>Load more</Text>
-            </TouchableOpacity>
-          ) : null
-        }
         ListEmptyComponent={<View style={S.empty}><Text style={S.emptyIcon}>🔧</Text><Text style={S.emptyText}>No vehicles match these filters</Text></View>}
         renderItem={({ item: card }) => {
           const group = getDisplayGroup(card.current_stage)

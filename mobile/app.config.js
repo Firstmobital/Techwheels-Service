@@ -3,6 +3,10 @@ const path = require('path')
 
 const appJson = require('./app.json')
 
+const PRODUCTION_SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
+const PRODUCTION_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptZG5kY3Boa21hbGpod2d6cXhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTQwNTIsImV4cCI6MjA5MzYzMDA1Mn0.ZvYw9-2fsrQQbqgIUfiWlIlvklZZtnkJSJ-V-LvgDE0'
+
 const envValue = (...keys) => {
   for (const key of keys) {
     const value = process.env[key]
@@ -44,8 +48,8 @@ module.exports = ({ config }) => {
     },
     extra: {
       ...(merged.extra || {}),
-      supabaseUrl: envValue('EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'),
-      supabaseAnonKey: envValue('EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'),
+      supabaseUrl: envValue('EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL') || PRODUCTION_SUPABASE_URL,
+      supabaseAnonKey: envValue('EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY') || PRODUCTION_SUPABASE_ANON_KEY,
       awsRegion: envValue('EXPO_PUBLIC_AWS_REGION', 'AWS_REGION'),
       awsAccessKeyId: envValue('EXPO_PUBLIC_AWS_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'),
       awsSecretAccessKey: envValue('EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY'),

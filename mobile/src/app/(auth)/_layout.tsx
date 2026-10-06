@@ -1,11 +1,14 @@
-import { Redirect, Stack } from 'expo-router'
+import { Redirect, Stack, useSegments } from 'expo-router'
 import { ActivityIndicator, View } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 
 export default function AuthLayout() {
+  const segments = useSegments()
   const { loading, session } = useAuth()
   const { loading: customerLoading, token } = useCustomerSession()
+  const recoveryFlow =
+    segments.includes('auth-callback') || segments.includes('password-update')
 
   if (loading || customerLoading) {
     return (
@@ -19,7 +22,7 @@ export default function AuthLayout() {
     return <Redirect href="/(customer)" />
   }
 
-  if (session) {
+  if (session && !recoveryFlow) {
     return <Redirect href="/(tabs)/home" />
   }
 
@@ -32,6 +35,7 @@ export default function AuthLayout() {
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
       <Stack.Screen name="password-reset" />
+      <Stack.Screen name="password-update" />
       <Stack.Screen name="auth-callback" />
     </Stack>
   )

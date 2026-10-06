@@ -2,10 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { supabase as sb } from '@/lib/supabase'
 import { runWithOptimisticRollback } from '@/hooks/useOptimisticAction'
-import {
-  fetchClaimTrackerPage,
-} from '@/lib/api/claimTrackerPage'
-import { collectListPages, formatPartialListLoadError } from '@/lib/pagination/listPage'
+import { fetchClaimTrackerLegacyFull } from '@/lib/staff/staffListLoadLegacy'
 
 interface ClaimRow {
   job_card_id:        string
@@ -86,15 +83,7 @@ export function ClaimTrackerView() {
     setLoading(true)
     setError(null)
     try {
-      const { rows, pageError } = await collectListPages((cursor) =>
-        fetchClaimTrackerPage({
-          cursor,
-          pageSize: 100,
-          includeHidden: showHidden,
-        }),
-      )
-      const partial = formatPartialListLoadError(pageError, rows.length)
-      if (partial) setError(partial)
+      const rows = await fetchClaimTrackerLegacyFull(showHidden)
       const base: ClaimRow[] = rows.map(r => ({
         ...r,
         has_ppt_pre: Boolean(r.has_ppt_pre),
@@ -310,9 +299,6 @@ export function ClaimTrackerView() {
       </View>
 
       {visible.map(renderCard)}
-          )}
-        </TouchableOpacity>
-      ) : null}
 
       {showHidden && hidden.length > 0 && (
         <View>

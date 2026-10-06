@@ -15,10 +15,7 @@ import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
-import {
-  fetchDriverServiceBookingsPage,
-} from '../../lib/api/driverTasksPage'
-import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { fetchDriverServiceBookingsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 
 interface DriverBookingTask {
@@ -126,9 +123,7 @@ export default function DriverTasksScreen() {
 
   const loadTasks = useCallback(async () => {
     try {
-      const rows = await collectListPages((cursor) =>
-        fetchDriverServiceBookingsPage({ cursor, pageSize: 100 }),
-      )
+      const rows = await fetchDriverServiceBookingsLegacyFull()
       const batch = rows as unknown as DriverBookingTask[]
       setTasks(batch)
       const names = Array.from(new Set(batch.map(b => b.driver_name).filter(Boolean))) as string[]

@@ -15,6 +15,7 @@ import {
   type FloorWorkVehicleMeta,
 } from '../bodyshopFloorWork/display'
 import { driveUrlFromUniversalResponse, postUniversalDriveWithRetry } from './postUniversalDriveUpload'
+import { enqueueFloorWorkDriveAutoSync } from './floorWorkDriveSyncQueue'
 import { fail, ok, type ApiResult } from './types'
 
 const LOG_TABLE = 'bodyshop_floor_role_daily_logs'
@@ -54,6 +55,24 @@ export async function fetchRoleDailyLogsForDate(
     }
   }
   return ok([...byId.values()])
+}
+
+/** Recent worker logs for one job card (admin / incharge read-only). */
+export async function fetchRoleDailyLogsForJobCard(
+  jobCardNumber: string,
+  limit = 48,
+): Promise<ApiResult<BodyshopFloorRoleDailyLogRow[]>> {
+  const jc = normalizeBodyshopFloorWorkJc(jobCardNumber)
+  if (!jc) return ok([])
+  const { data, error } = await supabase
+    .from(LOG_TABLE)
+    .select('*')
+    .eq('job_card_number', jc)
+    .order('update_date', { ascending: false })
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+  if (error) return fail(error.message)
+  return ok((data ?? []) as BodyshopFloorRoleDailyLogRow[])
 }
 
 export async function fetchRoleDailyLogPhotos(logIds: number[]): Promise<ApiResult<BodyshopFloorRoleDailyLogPhotoRow[]>> {
@@ -309,6 +328,41 @@ export async function upsertRoleDailyLog(input: {
   return ok(data as BodyshopFloorRoleDailyLogRow)
 }
 
+export async function pushFloorWorkPhotoToGoogleDrive(input: {
+  photoId: number
+  storagePath: string
+  fileSizeBytes: number
+  regNumber?: string | null
+  jobCardNumber?: string | null
+}): Promise<BodyshopFloorRoleDailyLogPhotoRow | null> {
+  const reg = String(input.regNumber ?? '').trim().toUpperCase() || undefined
+  const jc = normalizeBodyshopFloorWorkJc(input.jobCardNumber ?? '')
+  const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry({
+    resource_type: 'bodyshop_floor_work_photo',
+    resource_id: input.photoId,
+    bucket_id: AUTODOC_BUCKET,
+    object_name: input.storagePath,
+    file_type: 'bodyshop_floor_work_photo',
+    file_size_mb: Number((input.fileSizeBytes / (1024 * 1024)).toFixed(3)),
+    registration_no: reg,
+    job_card_number: jc || undefined,
+  })
+  if (!driveRes.ok || drivePayload?.error || drivePayload?.ok === false) {
+    throw new Error(String(drivePayload?.error ?? `Drive upload failed (${driveRes.status})`))
+  }
+  const driveUrl = driveUrlFromUniversalResponse(drivePayload)
+  const driveFileId = String(drivePayload.drive_file_id ?? drivePayload.fileId ?? '').trim() || null
+  if (driveUrl) {
+    await supabase
+      .from(PHOTO_TABLE)
+      .update({ drive_url: driveUrl, ...(driveFileId ? { drive_file_id: driveFileId } : {}) })
+      .eq('id', input.photoId)
+  }
+  const { data, error } = await supabase.from(PHOTO_TABLE).select('*').eq('id', input.photoId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data ?? null) as BodyshopFloorRoleDailyLogPhotoRow | null
+}
+
 export async function uploadRoleDailyLogPhoto(input: {
   logId: number
   dealerCode: string
@@ -348,23 +402,20 @@ export async function uploadRoleDailyLogPhoto(input: {
     .single()
   if (error || !data?.id) return fail(error?.message ?? 'Failed to save photo metadata')
 
-  void postUniversalDriveWithRetry({
-    resource_type: 'bodyshop_floor_work_photo',
-    resource_id: data.id,
-    bucket_id: AUTODOC_BUCKET,
-    object_name: path,
-    file_type: 'bodyshop_floor_work_photo',
-    file_size_mb: Number((input.file.size / (1024 * 1024)).toFixed(3)),
-    registration_no: regNumber ?? undefined,
-  }).then(({ res: driveRes, body: drivePayload }) => {
-    if (!driveRes.ok || drivePayload?.error) return
-    const driveUrl = driveUrlFromUniversalResponse(drivePayload)
-    if (driveUrl) {
-      void supabase.from(PHOTO_TABLE).update({ drive_url: driveUrl }).eq('id', data.id)
-    }
-  })
-
-  return ok(data as BodyshopFloorRoleDailyLogPhotoRow)
+  try {
+    const synced = await pushFloorWorkPhotoToGoogleDrive({
+      photoId: data.id,
+      storagePath: path,
+      fileSizeBytes: input.file.size,
+      regNumber,
+      jobCardNumber: jc,
+    })
+    return ok((synced ?? data) as BodyshopFloorRoleDailyLogPhotoRow)
+  } catch (driveErr) {
+    console.warn('[bodyshop-floor-work] Drive sync failed; photo kept in Supabase', driveErr)
+    enqueueFloorWorkDriveAutoSync([data as BodyshopFloorRoleDailyLogPhotoRow], jc)
+    return ok(data as BodyshopFloorRoleDailyLogPhotoRow)
+  }
 }
 
 export async function openRoleDailyLogPhoto(photo: BodyshopFloorRoleDailyLogPhotoRow): Promise<ApiResult<string>> {

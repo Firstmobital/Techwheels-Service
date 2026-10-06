@@ -19,11 +19,10 @@ import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
 import {
   fetchBodyshopAssignmentsForJobCards,
-  fetchBodyshopRepairCardsPage,
   fetchBodyshopSupportAssignmentsForJobCards,
   type BodyshopRepairCardListRow,
 } from '../../lib/api/bodyshopFloorList'
-import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
@@ -47,6 +46,7 @@ import {
   listBodyshopFloorInchargeEmployees,
   isFloorInchargeReassignmentBlocked,
   canEditBodyshopFloorAssignments,
+  carMatchesBodyshopFloorInchargeScope,
   loadBodyshopFloorInchargeScope,
   normalizeBodyshopPhysicalFloor,
   BODYSHOP_PHYSICAL_FLOORS,
@@ -700,35 +700,12 @@ export default function BodyshopFloorScreen() {
       const liveOnFloor = vehicleListMode === 'live_on_floor'
       const searchQuery = search.trim() || null
 
-      const loadFloorRows = (floor: string | null) =>
-        collectListPages((cursor) =>
-          fetchBodyshopRepairCardsPage({
-            cursor,
-            pageSize: 100,
-            searchQuery,
-            bodyshopFloor: floor,
-            liveOnFloor,
-          }),
-        )
-
-      const floorPageSets = [await loadFloorRows(floorForQuery)]
+      const mergedRows = await fetchBodyshopRepairCardsLegacyFull({
+        searchQuery,
+        bodyshopFloor: floorForQuery,
+        liveOnFloor,
+      })
       if (seq !== loadSeq.current) return
-      const seenIds = new Set<number>()
-      const mergedRows: BodyshopRepairCardListRow[] = []
-      const pageErrors: string[] = []
-      for (const page of floorPageSets) {
-        if (page.pageError) pageErrors.push(page.pageError)
-        for (const row of page.rows) {
-          if (seenIds.has(row.id)) continue
-          seenIds.add(row.id)
-          mergedRows.push(row)
-        }
-      }
-      const listErr = formatPartialListLoadError(
-        pageErrors.length ? pageErrors.join('; ') : null,
-        mergedRows.length,
-      )
-      if (listErr) setLoadError(listErr)
       const carList = await buildFloorCarsFromRaw(mergedRows)
       if (seq !== loadSeq.current) return
       setCars(carList)
@@ -886,6 +863,13 @@ export default function BodyshopFloorScreen() {
         (c.sa_name ?? '').toLowerCase().includes(q)
       )
     }
+    list = list.filter((c) =>
+      carMatchesBodyshopFloorInchargeScope(
+        c.bodyshop_floor,
+        assignments[jcKey(c.job_card_no)]?.FLOOR_INCHARGE?.employee_code ?? null,
+        inchargeScope,
+      ),
+    )
     return list
   }, [scopeCars, branchFilter, search, inchargeScope, assignments])
 

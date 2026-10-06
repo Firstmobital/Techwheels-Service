@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getLinkedEmployeeContext } from '../lib/api/bodyshopFloorWorkContext'
+import { loadBodyshopFloorInchargeScope } from '../lib/bodyshopFloorInchargeScope'
+import {
+  filterFloorWorkTasksForInchargeFloor,
+  shouldUseFloorWorkAdminOverview,
+} from '../lib/bodyshopFloorWork/inchargeOverview'
 import {
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
   listAllWorkTasksForAdmin,
@@ -23,7 +28,23 @@ import {
   type FloorWorkPhotoWithLog,
 } from '../lib/api/bodyshopFloorRoleWorkLog'
 import type { BodyshopFloorRoleDailyLogPhotoRow } from '../lib/bodyshopFloorRoleWorkLog'
-import { BodyshopFloorWorkPhotoGallery } from '../components/BodyshopFloorWorkPhotoGallery'
+import {
+  enqueueFloorWorkDriveAutoSync,
+  floorWorkPhotoNeedsDriveSync,
+  kickFloorWorkDriveAutoSync,
+  subscribeFloorWorkDriveAutoSync,
+} from '../lib/api/floorWorkDriveSyncQueue'
+
+function mergeFloorWorkDrivePhotoRows(
+  prev: BodyshopFloorRoleDailyLogPhotoRow[],
+  synced: BodyshopFloorRoleDailyLogPhotoRow[],
+): BodyshopFloorRoleDailyLogPhotoRow[] {
+  if (synced.length === 0) return prev
+  const byId = new Map(synced.map((p) => [p.id, p]))
+  return prev.map((p) => byId.get(p.id) ?? p)
+}
+import { BodyshopFloorWorkVehicleDetailPanel } from '../components/BodyshopFloorWorkVehicleDetailPanel'
+import { floorWorkVehicleStatusHeadline } from '../lib/bodyshopFloorWork/vehiclePipelineStatus'
 import Icon from '../components/Icon'
 import { getDealerContext } from '../lib/api'
 import {
@@ -384,8 +405,8 @@ export default function BodyshopFloorWorkPage() {
       const ctx = await getLinkedEmployeeContext()
       if (ctx.error || !ctx.data) throw new Error(ctx.error ?? 'Employee link missing')
       const myCode = String(ctx.data.employeeCode ?? '').trim().toUpperCase()
-      const adminOverview =
-        Boolean(ctx.data.isAdminOverview) || Boolean(ctx.data.isFloorWorkAdminView)
+      const inchargeScope = await loadBodyshopFloorInchargeScope()
+      const adminOverview = shouldUseFloorWorkAdminOverview(ctx.data, inchargeScope)
       setIsAdminOverview(adminOverview)
       setEmployeeCode(myCode)
       setEmployeeName(ctx.data.employeeName)
@@ -519,6 +540,31 @@ export default function BodyshopFloorWorkPage() {
     })
   }, [selectedTask, logsByKey, employeeCode])
 
+  const queueVisibleFloorWorkDriveSync = useCallback(() => {
+    if (!selectedTask) return
+    const pending = savedPhotos.filter(floorWorkPhotoNeedsDriveSync)
+    if (pending.length > 0) enqueueFloorWorkDriveAutoSync(pending, selectedTask.jobCardNumber)
+    else kickFloorWorkDriveAutoSync()
+  }, [selectedTask, savedPhotos])
+
+  useEffect(() => {
+    return subscribeFloorWorkDriveAutoSync((synced) => {
+      setSavedPhotos((prev) => mergeFloorWorkDrivePhotoRows(prev, synced))
+    })
+  }, [])
+
+  useEffect(() => {
+    queueVisibleFloorWorkDriveSync()
+  }, [queueVisibleFloorWorkDriveSync])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') queueVisibleFloorWorkDriveSync()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [queueVisibleFloorWorkDriveSync])
+
   async function saveWorkerLog() {
     if (!selectedTask) return
     const selected = selectedTask
@@ -635,7 +681,8 @@ export default function BodyshopFloorWorkPage() {
       </p>
 
       <>
-          <div className="card" style={{ marginBottom: 16 }}>
+          <div className="bfw-layout">
+          <div className="bfw-layout__list card" style={{ marginBottom: 0 }}>
             <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My vehicles — your pipeline step'}</h2>
             {!isAdminOverview ? (
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
@@ -741,10 +788,12 @@ export default function BodyshopFloorWorkPage() {
               >
                 {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
                   const card = cardByJc[jobCardNumber]
+                  const assignRow = assignmentByJc[jobCardNumber]
                   const stepPending = vehicleHasPendingPipelineSteps(jobCardNumber, rowTasks)
                   const photoCount = photoCountByJc[jobCardNumber] ?? 0
                   const active = selectedJc === jobCardNumber
                   const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)
+                  const statusLine = floorWorkVehicleStatusHeadline(assignRow, card?.qcStatus)
                   return (
                     <button
                       key={jobCardNumber}
@@ -786,6 +835,9 @@ export default function BodyshopFloorWorkPage() {
                         {floorWorkStandingLine(card) ?? 'Time on floor —'}
                         {' · '}{floorWorkFloorDayLabel(floorDay)}
                       </p>
+                      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: 'var(--primary, #0d9488)' }}>
+                        {statusLine}
+                      </p>
                       {rowTasks.length > 0 ? (
                         <p style={{ margin: '0 0 8px', fontSize: 12, lineHeight: 1.4 }}>
                           {isAdminOverview ? 'Roles: ' : 'Role: '}
@@ -819,84 +871,90 @@ export default function BodyshopFloorWorkPage() {
               </div>
             ) : null}
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
-              Click a card — add update + photos, then Done to move the vehicle to the next role.
+              Click a vehicle — summary &amp; pipeline on the right (desktop). Workers: add photos + Done on your active step.
             </p>
           </div>
 
-          {selectedJc ? (
-            <div className="card">
-              <h2 style={{ fontSize: 16, marginTop: 0 }}>
-                {floorWorkVehicleTitle(cardByJc[selectedJc], selectedJc)}
-              </h2>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-                {floorWorkVehicleSubtitle(cardByJc[selectedJc], selectedJc)}
-                {selectedTask ? (
-                  <>
-                    {' · Your role: '}
-                    {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selectedTask.floorRole]}
-                    {selectedTask.isSupport ? ' (support)' : ''}
-                  </>
-                ) : isAdminOverview ? (
-                  <> · Admin view — all role photos below</>
-                ) : null}
-              </p>
-
-              {selectedTask && canEditSelectedTask ? (
-                <>
-                  <h3 style={{ fontSize: 14, margin: '0 0 8px' }}>Work update (optional)</h3>
-                  <textarea
-                    className="inp"
-                    rows={4}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Optional — what work did you finish?"
-                  />
-                  <label className="field" style={{ marginTop: 10 }}>
-                    <span className="label">Work photos (required before Done)</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => setPendingPhotos(Array.from(e.target.files ?? []))}
-                    />
-                  </label>
-                  {pendingPhotos.length > 0 ? (
-                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>{pendingPhotos.length} new photo(s) on submit</p>
+          <div className="bfw-layout__detail">
+            {selectedJc ? (
+              <div className="card bfw-layout__detail-inner">
+                <BodyshopFloorWorkVehicleDetailPanel
+                  jobCardNumber={selectedJc}
+                  vehicleMeta={cardByJc[selectedJc]}
+                  assignmentRow={assignmentByJc[selectedJc]}
+                  qcStatus={cardByJc[selectedJc]?.qcStatus}
+                  allPhotos={selectedVehiclePhotos}
+                  loadingPhotos={loadingSelectedPhotos}
+                  photosError={selectedPhotosError}
+                >
+                  {selectedTask ? (
+                    <div className="bfw-worker-form">
+                      <h3 className="bfw-detail__section-title">
+                        Your step
+                        {' · '}
+                        {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selectedTask.floorRole]}
+                        {selectedTask.isSupport ? ' (support)' : ''}
+                      </h3>
+                      {canEditSelectedTask ? (
+                        <>
+                          <p className="bfw-detail__muted">Optional note + work photos, then Done to send to the next role.</p>
+                          <textarea
+                            className="inp"
+                            rows={3}
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="What work did you finish?"
+                          />
+                          <label className="field" style={{ marginTop: 10 }}>
+                            <span className="label">Work photos (required before Done)</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={(e) => setPendingPhotos(Array.from(e.target.files ?? []))}
+                            />
+                          </label>
+                          {pendingPhotos.length > 0 ? (
+                            <p className="bfw-detail__muted">{pendingPhotos.length} new photo(s) on submit</p>
+                          ) : null}
+                          {savedPhotos.length > 0 ? (
+                            <p className="bfw-detail__muted">{savedPhotos.length} photo(s) saved for this step.</p>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="btn btn--primary"
+                            style={{ marginTop: 12 }}
+                            disabled={saving}
+                            onClick={() => void saveWorkerLog()}
+                          >
+                            {saving ? 'Saving…' : 'Done — send to next step'}
+                          </button>
+                        </>
+                      ) : isAdminOverview ? (
+                        <p className="bfw-detail__muted">
+                          Admin read-only: this vehicle is not on an active pipeline step for upload. Use work updates and
+                          photo sections below to review what each worker submitted.
+                        </p>
+                      ) : (
+                        <p className="bfw-detail__muted">
+                          Not your turn yet — an earlier pipeline step must finish first, or QC is in progress.
+                        </p>
+                      )}
+                    </div>
                   ) : null}
-                  {savedPhotos.length > 0 ? (
-                    <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-                      {savedPhotos.length} photo(s) saved for this step — open from gallery below.
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn--primary"
-                    style={{ marginTop: 12 }}
-                    disabled={saving}
-                    onClick={() => void saveWorkerLog()}
-                  >
-                    {saving ? 'Saving…' : 'Done — send to next step'}
-                  </button>
-                </>
-              ) : isAdminOverview && selectedTask ? (
-                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
-                  Admin: this row is not the active pipeline step — use the gallery below to view photos (View / preview), or pick the vehicle when that role is active to upload like denter/painter.
+                </BodyshopFloorWorkVehicleDetailPanel>
+              </div>
+            ) : (
+              <div className="card bfw-layout__placeholder">
+                <h2 style={{ fontSize: 16, marginTop: 0 }}>Vehicle details</h2>
+                <p style={{ color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
+                  Select a vehicle from the list to see pipeline status (Denting / Painting / …), who is working, worker notes,
+                  and all photos — desktop-friendly layout.
                 </p>
-              ) : null}
-
-              {selectedPhotosError ? (
-                <p style={{ fontSize: 13, color: 'var(--danger, #b91c1c)' }}>{selectedPhotosError}</p>
-              ) : null}
-              {loadingSelectedPhotos ? (
-                <p style={{ fontSize: 13, color: 'var(--muted)' }}>Loading photos…</p>
-              ) : (
-                <BodyshopFloorWorkPhotoGallery
-                  photos={selectedVehiclePhotos}
-                  title={`All floor work photos — ${selectedVehiclePhotos.length} total (A→Z / oldest first)`}
-                />
-              )}
-            </div>
-          ) : null}
+              </div>
+            )}
+          </div>
+          </div>
         </>
     </div>
   )

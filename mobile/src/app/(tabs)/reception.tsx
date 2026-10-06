@@ -20,8 +20,7 @@ import { useAuth } from '../../context/AuthContext'
 import { getReceptionRevisitContext, type ReceptionRevisitContext } from '../../lib/api/receptionRevisit'
 import { getReceptionUpdationContext, type ReceptionUpdationContext } from '../../lib/api/receptionUpdation'
 import { lookupVehicleByRegNumber, type VehicleLookupResult } from '../../lib/api/vehicleLookup'
-import { fetchReceptionEntriesListPage } from '../../lib/api/receptionListPage'
-import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { fetchReceptionEntriesLegacyFull } from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 
 // ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
@@ -327,29 +326,25 @@ export default function ReceptionScreen() {
   const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const updationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchEntriesPage = useCallback(
+  const reloadEntries = useCallback(
     async (searchQuery: string): Promise<string | null> => {
       const range = getMobileReceptionRange(listMode)
-      const { rows, pageError } = await collectListPages((cursor) =>
-        fetchReceptionEntriesListPage({
-          createdAtFrom: range.from,
-          createdAtTo: range.to,
-          cursor,
-          pageSize: 100,
-          searchQuery: searchQuery.trim() || null,
-        }),
-      )
+      const rows = await fetchReceptionEntriesLegacyFull({
+        createdAtFrom: range.from,
+        createdAtTo: range.to,
+        searchQuery: searchQuery.trim() || null,
+      })
       const enriched = await enrichEntries(rows as unknown as ReceptionEntry[])
       setEntries(enriched)
-      return formatPartialListLoadError(pageError, enriched.length)
-      setEntries((prev) => (opts.reset ? enriched : [...prev, ...enriched]))
-      setListCursor(page.nextCursor)
-      setListHasMore(page.hasMore)
+      return null
     },
     [listMode],
   )
+
+  const loadAll = useCallback(async (isRefresh = false) => {
     const seq = ++loadSeqRef.current
     if (!isRefresh) setLoading(true)
+    else setRefreshing(true)
     setLoadError(null)
     try {
       const [empRes, modelsRes, listErr] = await Promise.all([
@@ -358,30 +353,43 @@ export default function ReceptionScreen() {
           .select('employee_code,employee_name,department,fuel_type,role,location')
           .eq('is_active', true)
           .order('employee_name'),
-        supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
-        fetchEntriesPage(search),
+        supabase
+          .from('settings_model_options')
+          .select('model_name')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true })
+          .order('model_name', { ascending: true }),
+        reloadEntries(search),
       ])
       if (seq !== loadSeqRef.current) return
       if (listErr) setLoadError(listErr)
-        supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
-        fetchEntriesPage({ reset: true, searchQuery: search, cursor: null }),
-      ])
 
       const empData = (empRes.data ?? []) as Employee[]
       const seenCodes = new Set<string>()
-      setEmployees(empData
-        .filter(e =>
-          isServiceAdvisorRole(e.role) &&
-          String(e.employee_code ?? '').trim().length > 0
-        )
-        .filter(e => {
-          const code = String(e.employee_code ?? '').trim().toUpperCase()
-          if (seenCodes.has(code)) return false
-          seenCodes.add(code)
-          return true
-        })
+      setEmployees(
+        empData
+          .filter(
+            (e) =>
+              isServiceAdvisorRole(e.role) && String(e.employee_code ?? '').trim().length > 0,
+          )
+          .filter((e) => {
+            const code = String(e.employee_code ?? '').trim().toUpperCase()
+            if (seenCodes.has(code)) return false
+            seenCodes.add(code)
+            return true
+          }),
       )
 
+      if (modelsRes.data && modelsRes.data.length > 0) {
+        setModelOptions([
+          ...new Set(
+            (modelsRes.data as { model_name: string }[])
+              .map((r) => String(r.model_name ?? '').trim())
+              .filter(Boolean),
+          ),
+        ])
+      }
+    } catch (e) {
       if (seq !== loadSeqRef.current) return
       setLoadError(e instanceof Error ? e.message : 'Reception load failed')
       console.warn('Reception load failed:', e)
@@ -390,23 +398,8 @@ export default function ReceptionScreen() {
         setLoading(false)
         setRefreshing(false)
       }
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
     }
-  }, [fetchEntriesPage, search])
-
-  const loadMoreEntries = useCallback(async () => {
-    if (loadingMore || !listHasMore || !listCursor) return
-    setLoadingMore(true)
-    try {
-      await fetchEntriesPage({ reset: false, searchQuery: search, cursor: listCursor })
-    } catch (e) {
-      console.warn('Reception load more failed:', e)
-    } finally {
-      setLoadingMore(false)
-    }
-          await fetchEntriesPage(search)
+  }, [reloadEntries, search])
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
 
@@ -421,7 +414,8 @@ export default function ReceptionScreen() {
       void (async () => {
         setLoading(true)
         try {
-          await fetchEntriesPage({ reset: true, searchQuery: search, cursor: null })
+          const listErr = await reloadEntries(search)
+          if (listErr) setLoadError(listErr)
         } finally {
           setLoading(false)
         }
@@ -430,7 +424,7 @@ export default function ReceptionScreen() {
     return () => {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
     }
-  }, [search, fetchEntriesPage])
+  }, [search, reloadEntries])
 
   useEffect(() => {
     let mounted = true
@@ -970,8 +964,6 @@ export default function ReceptionScreen() {
               <Text style={s.delBtnText}>🗑️  Delete</Text>
             </TouchableOpacity>
           )}
-      <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
-
         </View>
       </View>
     )
@@ -1027,22 +1019,31 @@ export default function ReceptionScreen() {
                 ? `All (${locFiltered.length})`
                 : ft === 'EV'
                   ? `EV (${locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === 'EV').length})`
-          contentContainerStyle={{ padding: 12, paddingBottom: 80, flexGrow: 1 }}
-          onEndReached={() => { void loadMoreEntries() }}
-          onEndReachedThreshold={0.35}
-          contentContainerStyle={{ padding: 12, paddingBottom: 80, flexGrow: 1 }}
-          ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator style={{ marginVertical: 16 }} color="#2563eb" />
-            ) : listHasMore ? (
-              <TouchableOpacity
-                style={[s.addBtn, { alignSelf: 'center', marginVertical: 12 }]}
-                onPress={() => void loadMoreEntries()}
-              >
-                <Text style={s.addBtnText}>Load more</Text>
-              </TouchableOpacity>
-            ) : null
+                  : `PV (${locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === 'PV').length})`}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
+
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563eb" />
+      ) : (
+        <FlatList
+          data={displayEntries}
+          keyExtractor={(e) => String(e.id)}
+          renderItem={({ item }) => <EntryCard entry={item} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                void loadAll(true)
+              }}
+            />
           }
+          contentContainerStyle={{ padding: 12, paddingBottom: 80, flexGrow: 1 }}
           ListEmptyComponent={
             <View style={s.empty}>
               <Text style={s.emptyIcon}>🏁</Text>
