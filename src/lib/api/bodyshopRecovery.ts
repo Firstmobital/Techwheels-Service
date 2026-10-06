@@ -247,6 +247,7 @@ export function settlementCardFromRecoveryRow(row: DoRecoveryRow): RepairCard {
     survay_info_updated_by: null,
     survay_info_updated_at: null,
     bodyshop_floor: null,
+    bodyshop_floor_since_at: null,
     claim_intimation_no: null,
     surveyor_name: null,
     surveyor_contact: null,

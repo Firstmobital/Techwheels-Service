@@ -809,7 +809,6 @@ export default function BodyshopFloorPage() {
 
   // Data
   const [cars, setCars]               = useState<AccidentCar[]>([])
-  const [repairCardIdByJc, setRepairCardIdByJc] = useState<Record<string, number>>({})
   const [employees, setEmployees]     = useState<Employee[]>([])
   // assignments keyed by JC_NUMBER (uppercase)  →  per-role map
   const [assignments, setAssignments] = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
@@ -999,7 +998,6 @@ export default function BodyshopFloorPage() {
 
       if (sentByJc.size === 0) {
         setCars([])
-        setRepairCardIdByJc({})
         jcKeysForSecondary = []
       } else if (vehicleListMode === 'live_on_floor') {
         const entryIds = Array.from(new Set(
@@ -1076,13 +1074,6 @@ export default function BodyshopFloorPage() {
         jcKeysForSecondary = Array.from(latestByJc.keys())
       }
 
-      if (sentByJc.size > 0) {
-        const idMap: Record<string, number> = {}
-        latestByJc.forEach((meta, jc) => {
-          if (meta.repairCardId != null) idMap[jc] = meta.repairCardId
-        })
-        setRepairCardIdByJc(idMap)
-      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
       jcKeysForSecondary = []

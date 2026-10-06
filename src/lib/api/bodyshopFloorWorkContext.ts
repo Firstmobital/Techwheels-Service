@@ -68,7 +68,7 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
       link = {
         employee_code: plain.employee_code,
         dealer_code: plain.dealer_code,
-        employee_master: em ?? null,
+        employee_master: em ? [em] : [],
       }
     }
   }
@@ -103,7 +103,12 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
     return fail('No employee linked to your login. Ask admin to map user → employee code in Admin.')
   }
 
-  const em = link?.employee_master as { employee_name?: string | null; role?: string | null } | null
+  const emRaw = link?.employee_master as
+    | { employee_name?: string | null; role?: string | null }
+    | { employee_name?: string | null; role?: string | null }[]
+    | null
+    | undefined
+  const em = Array.isArray(emRaw) ? emRaw[0] : emRaw ?? null
   const ctx: LinkedEmployeeContext = {
     employeeCode: code,
     employeeName: String(em?.employee_name ?? '').trim() || null,

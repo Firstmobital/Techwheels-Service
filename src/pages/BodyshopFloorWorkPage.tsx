@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getLinkedEmployeeContext } from '../lib/api/bodyshopFloorWorkContext'
 import { loadBodyshopFloorInchargeScope } from '../lib/bodyshopFloorInchargeScope'
-import {
-  filterFloorWorkTasksForInchargeFloor,
-  shouldUseFloorWorkAdminOverview,
-} from '../lib/bodyshopFloorWork/inchargeOverview'
+import { shouldUseFloorWorkAdminOverview } from '../lib/bodyshopFloorWork/inchargeOverview'
 import {
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
   listAllWorkTasksForAdmin,
