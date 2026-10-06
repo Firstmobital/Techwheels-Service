@@ -1068,7 +1068,6 @@ export default function BodyshopRepairPage() {
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [bodyshopDocsLoadError, setBodyshopDocsLoadError] = useState<string | null>(null)
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
-  const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const pendingDocActionRef = useRef<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
@@ -3028,11 +3027,9 @@ export default function BodyshopRepairPage() {
   function startBodyshopDocUpload(docKey: BodyshopDocKey, mode: 'upload' | 'replace') {
     const action = { docKey, mode }
     pendingDocActionRef.current = action
-    setPendingDocAction(action)
     const input = bodyshopDocInputRef.current
     if (!input) {
       pendingDocActionRef.current = null
-      setPendingDocAction(null)
       toast_('Upload control is not ready. Open SA → Docs and try again.', false)
       return
     }
@@ -3042,7 +3039,6 @@ export default function BodyshopRepairPage() {
   async function handleBodyshopDocFilePicked(files: FileList | null) {
     const action = pendingDocActionRef.current
     pendingDocActionRef.current = null
-    setPendingDocAction(null)
 
     if (!action || !selected || !files || files.length === 0) return
 

@@ -28,6 +28,8 @@ function mergeMeta(
     systemJobCardNo: patch.systemJobCardNo ?? prev.systemJobCardNo,
     floorSinceAt: patch.floorSinceAt ?? prev.floorSinceAt,
     bodyshopFloor: patch.bodyshopFloor ?? prev.bodyshopFloor,
+    qcStatus: patch.qcStatus ?? prev.qcStatus,
+    repairCardId: patch.repairCardId ?? prev.repairCardId,
   }
 }
 
@@ -122,7 +124,7 @@ export async function fetchRepairCardVehicleByJcs(
     const chunk = keys.slice(i, i + JC_CHUNK)
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .select('job_card_no, reg_number, customer_name')
+      .select('id, job_card_no, reg_number, customer_name, qc_status')
       .in('job_card_no', chunk)
     if (error) throw new Error(error.message)
     for (const c of data ?? []) {
@@ -132,6 +134,8 @@ export async function fetchRepairCardVehicleByJcs(
         reg: c.reg_number ?? null,
         customer: c.customer_name ?? null,
         systemJobCardNo: jc,
+        qcStatus: c.qc_status ?? null,
+        repairCardId: typeof c.id === 'number' ? c.id : null,
       })
     }
   }
@@ -147,7 +151,7 @@ export async function fetchRepairCardVehicleByJcs(
     const chunk = regSearch.slice(i, i + JC_CHUNK)
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .select('job_card_no, reg_number, customer_name')
+      .select('id, job_card_no, reg_number, customer_name, qc_status')
       .in('reg_number', chunk)
     if (error) throw new Error(error.message)
     for (const c of data ?? []) {
@@ -159,6 +163,8 @@ export async function fetchRepairCardVehicleByJcs(
             reg: c.reg_number ?? null,
             customer: c.customer_name ?? null,
             systemJobCardNo: normKey(String(c.job_card_no ?? '')),
+            qcStatus: c.qc_status ?? null,
+            repairCardId: typeof c.id === 'number' ? c.id : null,
           })
         }
       }

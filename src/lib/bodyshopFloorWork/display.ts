@@ -9,6 +9,8 @@ export type FloorWorkVehicleMeta = {
   /** When this vehicle was first assigned on Bodyshop Floor (assignment row). */
   floorSinceAt?: string | null
   bodyshopFloor?: string | null
+  qcStatus?: string | null
+  repairCardId?: number | null
 }
 
 export function isSystemJobCardKey(value: string): boolean {

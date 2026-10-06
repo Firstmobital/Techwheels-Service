@@ -167,7 +167,7 @@ export function normalizeQcStatus(raw: unknown): string {
 }
 
 export function isWorkerQcTurn(
-  task: Pick<BodyshopFloorWorkTask, 'jobCardNumber' | 'floorRole' | 'assignedEmployeeCode'>,
+  task: Pick<BodyshopFloorWorkTask, 'jobCardNumber' | 'floorRole' | 'assignedEmployeeCode' | 'isSupport'>,
   row: AssignmentRow | undefined,
   qcStatus: unknown,
 ): boolean {
