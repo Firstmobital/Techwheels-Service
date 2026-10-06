@@ -678,51 +678,40 @@ export default function BodyshopFloorWorkPage() {
       </p>
 
       <>
-          <div className="bfw-layout">
-          <div className="bfw-layout__list card" style={{ marginBottom: 0 }}>
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My vehicles — your pipeline step'}</h2>
-            {!isAdminOverview ? (
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
-                Your assigned vehicles this month, only when it is your turn in the pipeline
-                (Dentor → Painter → Technician → Rubbing). Submit to complete your step.
-              </p>
-            ) : null}
-            {vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0 ? (
-              <>
-                <div className="bfw-filters">
-                  <div className="bfw-filters__top">
-                    {isAdminOverview ? (
-                      <div className="bsf-search">
-                        <Icon name="search" size={16} />
-                        <input
-                          className="bsf-search__input"
-                          type="search"
-                          placeholder="Search reg / customer / JC…"
-                          value={vehicleSearch}
-                          onChange={(e) => setVehicleSearch(e.target.value)}
-                        />
-                      </div>
-                    ) : null}
-                    <div className="bsf-group">
-                      <span className="bsf-label">Month on floor</span>
-                      <select
-                        className="sel sel--advisor-filter"
-                        value={floorMonthFilter}
-                        onChange={(e) => setFloorMonthFilter(e.target.value)}
-                        aria-label="Month on floor"
-                      >
-                        {monthFilterOptions.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
+          {(vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0) ? (
+            <div className="card bfw-toolbar">
+              <div className="bfw-filters bfw-filters--toolbar">
+                <div className="bfw-filters__main">
+                  {isAdminOverview ? (
+                    <div className="bsf-search bfw-filters__search">
+                      <Icon name="search" size={16} />
+                      <input
+                        className="bsf-search__input"
+                        type="search"
+                        placeholder="Search reg / customer / JC…"
+                        value={vehicleSearch}
+                        onChange={(e) => setVehicleSearch(e.target.value)}
+                      />
                     </div>
+                  ) : null}
+                  <div className="bsf-group">
+                    <span className="bsf-label">Month on floor</span>
+                    <select
+                      className="sel sel--advisor-filter"
+                      value={floorMonthFilter}
+                      onChange={(e) => setFloorMonthFilter(e.target.value)}
+                      aria-label="Month on floor"
+                    >
+                      {monthFilterOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                   </div>
-
                   {isAdminOverview ? (
                     <>
-                      <div className="bfw-filters__row">
-                        <div className="bsf-group">
-                          <span className="bsf-label">On floor (IST)</span>
+                      <div className="bsf-group bfw-filters__chip-group">
+                        <span className="bsf-label">On floor (IST)</span>
+                        <div className="bfw-filters__chips">
                           {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
                             <button
                               key={key}
@@ -736,10 +725,9 @@ export default function BodyshopFloorWorkPage() {
                           ))}
                         </div>
                       </div>
-
-                      <div className="bfw-filters__row">
-                        <div className="bsf-group">
-                          <span className="bsf-label">Pipeline step</span>
+                      <div className="bsf-group bfw-filters__chip-group">
+                        <span className="bsf-label">Pipeline step</span>
+                        <div className="bfw-filters__chips">
                           {(['all', 'pending', 'done'] as const).map((key) => (
                             <button
                               key={key}
@@ -756,12 +744,23 @@ export default function BodyshopFloorWorkPage() {
                     </>
                   ) : null}
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 12 }}>
-                  Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
-                  {' · '}Sorted: on floor today → yesterday → longer wait
-                  {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
-                </p>
-              </>
+              </div>
+              <p className="bfw-toolbar__meta">
+                Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
+                {' · '}Sorted: on floor today → yesterday → longer wait
+                {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="bfw-stack">
+          <section className="card bfw-stack__list">
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My vehicles — your pipeline step'}</h2>
+            {!isAdminOverview ? (
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
+                Your assigned vehicles this month, only when it is your turn in the pipeline
+                (Dentor → Painter → Technician → Rubbing). Submit to complete your step.
+              </p>
             ) : null}
             {vehicleRows.length === 0 ? (
               <p style={{ color: 'var(--muted)' }}>
@@ -776,13 +775,7 @@ export default function BodyshopFloorWorkPage() {
                       : 'No vehicles match this month or search. Try “All months” in the month filter.'}
               </p>
             ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                  gap: 12,
-                }}
-              >
+              <div className="bfw-vehicle-grid">
                 {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
                   const card = cardByJc[jobCardNumber]
                   const assignRow = assignmentByJc[jobCardNumber]
@@ -868,13 +861,13 @@ export default function BodyshopFloorWorkPage() {
               </div>
             ) : null}
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
-              Click a vehicle — summary &amp; pipeline on the right (desktop). Workers: add photos + Done on your active step.
+              Click a vehicle — full pipeline, worker notes and photos appear below.
             </p>
-          </div>
+          </section>
 
-          <div className="bfw-layout__detail">
+          <section className="card bfw-stack__detail">
             {selectedJc ? (
-              <div className="card bfw-layout__detail-inner">
+              <div className="bfw-stack__detail-inner">
                 <BodyshopFloorWorkVehicleDetailPanel
                   jobCardNumber={selectedJc}
                   vehicleMeta={cardByJc[selectedJc]}
@@ -942,15 +935,15 @@ export default function BodyshopFloorWorkPage() {
                 </BodyshopFloorWorkVehicleDetailPanel>
               </div>
             ) : (
-              <div className="card bfw-layout__placeholder">
+              <div className="bfw-stack__placeholder">
                 <h2 style={{ fontSize: 16, marginTop: 0 }}>Vehicle details</h2>
                 <p style={{ color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
-                  Select a vehicle from the list to see pipeline status (Denting / Painting / …), who is working, worker notes,
-                  and all photos — desktop-friendly layout.
+                  Select a vehicle from the list above to see pipeline status (Denting / Painting / …), who is working,
+                  worker notes, and all photos.
                 </p>
               </div>
             )}
-          </div>
+          </section>
           </div>
         </>
     </div>
