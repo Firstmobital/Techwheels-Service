@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
-import { ACCOUNTS_PAYMENT_MODES } from '../lib/api/accounts'
+import { ACCOUNTS_PAYMENT_MODES, asiaKolkataTodayDate } from '../lib/api/accounts'
 import {
   applyDmsInvoiceAndAlignPayer,
   getBodyshopSettlement,
@@ -36,6 +36,23 @@ function formatWhen(iso: string | null | undefined) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return String(iso)
   return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function formatTxnDateYmd(ymd: string | null | undefined) {
+  const raw = String(ymd ?? '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '—'
+  return new Date(`${raw}T00:00:00+05:30`).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  })
+}
+
+function formatLineReceivedWhen(line: { txn_date?: string | null; created_at?: string | null }) {
+  const txn = String(line.txn_date ?? '').trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(txn)) return formatTxnDateYmd(txn)
+  return formatWhen(line.created_at)
 }
 
 function numOrNull(raw: string) {
@@ -101,6 +118,7 @@ export function BodyshopSettlementPanel({
   const [doReceiptAmt, setDoReceiptAmt] = useState('')
   const [doNote, setDoNote] = useState('')
   const [custNote, setCustNote] = useState('')
+  const [custPaymentReceivedDate, setCustPaymentReceivedDate] = useState(() => asiaKolkataTodayDate())
   const [doError, setDoError] = useState<string | null>(null)
   const [custError, setCustError] = useState<string | null>(null)
 
@@ -131,6 +149,10 @@ export function BodyshopSettlementPanel({
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id])
+
+  useEffect(() => {
+    if (accountsReceipt) setCustPaymentReceivedDate(asiaKolkataTodayDate())
+  }, [accountsReceipt, card.id])
 
   const header = payload?.header
   const kind = header?.customer_settlement_kind ?? card.customer_settlement_kind
@@ -330,6 +352,17 @@ export function BodyshopSettlementPanel({
       toast(modeError, false)
       return
     }
+    let txnDate: string | null = null
+    if (accountsReceipt) {
+      const receivedDate = custPaymentReceivedDate.trim()
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate)) {
+        const msg = 'Enter the payment received date.'
+        setCustError(msg)
+        toast(msg, false)
+        return
+      }
+      txnDate = receivedDate
+    }
     setCustError(null)
     setSavingCust(true)
     try {
@@ -337,6 +370,7 @@ export function BodyshopSettlementPanel({
       const next = await postCustomerAmount({
         repairCardId: card.id,
         amount: amt,
+        txnDate,
         reference: note,
         remarks: note,
         paymentMode: custPaymentMode,
@@ -346,6 +380,7 @@ export function BodyshopSettlementPanel({
       setCustAmt('')
       setCustPaymentMode('')
       setCustNote('')
+      if (accountsReceipt) setCustPaymentReceivedDate(asiaKolkataTodayDate())
       toast(kind === 'refund' ? 'Refund posted' : 'Customer receipt posted')
     } catch (e: unknown) {
       const msg = settlementRpcError(e)
@@ -732,6 +767,24 @@ export function BodyshopSettlementPanel({
                 ))}
               </select>
             </label>
+            {accountsReceipt && (
+              <label className="brx-field">
+                <span className="brx-field-label">
+                  Payment received date
+                  {Number(numOrNull(custAmt) ?? 0) > 0 && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
+                </span>
+                <input
+                  className="inp"
+                  type="date"
+                  value={custPaymentReceivedDate}
+                  required
+                  onChange={(e) => {
+                    setCustPaymentReceivedDate(e.target.value)
+                    if (custError) setCustError(null)
+                  }}
+                />
+              </label>
+            )}
             <label className="brx-field brx-grid-full">
               <span className="brx-field-label">Reference / Remark</span>
               <input
@@ -813,7 +866,7 @@ export function BodyshopSettlementPanel({
           <table className="brx-settle-table">
             <thead>
               <tr>
-                <th>When</th>
+                <th>{accountsReceipt ? 'Received Date' : 'When'}</th>
                 <th>Source</th>
                 <th>Type</th>
                 <th>Mode</th>
@@ -826,7 +879,7 @@ export function BodyshopSettlementPanel({
             <tbody>
               {lines.map((line) => (
                 <tr key={line.id} className={line.is_reversed || line.line_type === 'reversal' ? 'is-reversed' : undefined}>
-                  <td>{formatWhen(line.created_at)}</td>
+                  <td>{accountsReceipt ? formatLineReceivedWhen(line) : formatWhen(line.created_at)}</td>
                   <td>{partyLabel(line.party)}</td>
                   <td>{line.component}{line.line_type === 'reversal' ? ' · reversal' : ''}{line.is_reversed ? ' · reversed' : ''}</td>
                   <td>{customerPaymentModeDisplay(line)}</td>

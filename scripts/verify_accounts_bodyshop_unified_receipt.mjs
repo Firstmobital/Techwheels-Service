@@ -124,6 +124,20 @@ const afterReverse = recalc(header, reversed)
 assertEqual('reverse.insurance_due', afterReverse.insurance_due_amount, 11195)
 assertEqual('reverse.overall', afterReverse.derived_payment_status, 'partial')
 
+const excessHeader = { invoice_amount: 50000, do_amount: 45136 }
+const excessLines = [{ party: 'customer', line_type: 'receipt', amount: 5000, is_reversed: false }]
+const excessOnly = recalc(excessHeader, excessLines)
+assertEqual('excess.diff', excessOnly.customer_diff_amount, 4864)
+assertEqual('excess.posted', excessOnly.customer_posted_amount, 5000)
+assertEqual('excess.remaining', excessOnly.customer_remaining_amount, -136)
+assertEqual('excess.cust_status', excessOnly.customer_payment_status, 'received')
+
+const partialHeader = { invoice_amount: 50000, do_amount: 45136 }
+const partialLines = [{ party: 'customer', line_type: 'receipt', amount: 2000, is_reversed: false }]
+const partialCust = recalc(partialHeader, partialLines)
+assertEqual('partial.remaining', partialCust.customer_remaining_amount, 2864)
+assertEqual('partial.cust_status', partialCust.customer_payment_status, 'partial')
+
 console.log(JSON.stringify({
   ok: true,
   invoice: header.invoice_amount,
@@ -132,4 +146,6 @@ console.log(JSON.stringify({
   after_customer_2200: afterCust,
   after_remaining_do: finalState,
   after_reverse_remaining_do: afterReverse,
+  excess_customer_receipt_5000_on_4864_diff: excessOnly,
+  partial_customer_receipt_2000: partialCust,
 }, null, 2))
