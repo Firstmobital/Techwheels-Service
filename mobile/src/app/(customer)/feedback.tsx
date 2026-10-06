@@ -44,8 +44,11 @@ export default function CustomerFeedbackScreen() {
       setToast({ ok: false, msg: 'Please share a brief comment about your service experience.' })
       return
     }
+    const prevText = text
+    const prevRating = rating
+    setText('')
     setSubmitting(true)
-    setToast(null)
+    setToast({ ok: true, msg: 'Thank you! Saving your feedback…' })
     try {
       await customerSubmitFeedback(token, selected.reg_number, {
         text: text.trim(),
@@ -58,9 +61,10 @@ export default function CustomerFeedbackScreen() {
         model: selected.model,
       })
       setToast({ ok: true, msg: 'Thank you! Your feedback has been recorded.' })
-      setText('')
     } catch (err) {
-      setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to submit feedback' })
+      setText(prevText)
+      setRating(prevRating)
+      setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to submit feedback. Try again.' })
     } finally {
       setSubmitting(false)
     }

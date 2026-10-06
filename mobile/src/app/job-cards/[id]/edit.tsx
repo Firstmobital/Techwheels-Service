@@ -99,6 +99,7 @@ export default function EditJobCardScreen() {
       return
     }
 
+    const prevForm = form
     setSaving(true)
     const result = await updateJobCard(jobCardId, {
       jcNumber: form.jcNumber,
@@ -110,6 +111,7 @@ export default function EditJobCardScreen() {
     setSaving(false)
 
     if (result.error) {
+      setForm(prevForm)
       Alert.alert('Save Failed', result.error)
       return
     }

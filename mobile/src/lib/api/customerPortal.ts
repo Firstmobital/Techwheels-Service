@@ -1,7 +1,11 @@
 import { Linking } from 'react-native'
 import { getSupabaseBaseUrl } from '../env'
 import type { CustomerVisitKind } from '../customer/mechanicalServiceType'
-import { resolveCustomerVisitKind } from '../customer/mechanicalServiceType'
+import {
+  isActiveBodyshopRepairCard,
+  isBodyshopReceptionServiceType,
+  resolveCustomerVisitKind,
+} from '../customer/mechanicalServiceType'
 import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabase'
 import { logCustomerQuery } from './customerPortalQueryLog'
 
@@ -204,18 +208,20 @@ export async function customerGetVisitContext(
   }
 
   const serverVisitKind = String(res.visit_kind ?? '').trim()
-  let repair_card: Record<string, unknown> | null = null
-  let visitKind: CustomerVisitKind
+  const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
+  const accidentReception = isBodyshopReceptionServiceType(String(job?.service_type ?? ''))
+  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
 
-  if (serverVisitKind === 'mechanical') {
-    visitKind = 'mechanical'
-  } else {
-    const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
-    repair_card = res.repair_card ?? null
+  const mustLoadBodyshopCard =
+    accidentReception ||
+    serverVisitKind === 'bodyshop' ||
+    String(job?.source ?? '').trim() === 'bodyshop'
+
+  if (mustLoadBodyshopCard || serverVisitKind !== 'mechanical') {
     const rpcHasId = Boolean(repair_card && Number(repair_card.id || 0) > 0)
-    if (opts?.bypassCache || !rpcHasId) {
+    if (opts?.bypassCache || !rpcHasId || jcNo || accidentReception) {
       const sessionCard = await customerGetRepairCard(sessionToken, reg, {
-        bypassCache: opts?.bypassCache,
+        bypassCache: opts?.bypassCache ?? accidentReception,
         jobCardNo: jcNo,
       }).catch(() => null)
       if (sessionCard) {
@@ -226,10 +232,38 @@ export async function customerGetVisitContext(
     } else if (repair_card && !parseBodyshopEstimateDocument(repair_card)) {
       repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
     }
-    visitKind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
-    if (visitKind !== 'bodyshop') {
-      repair_card = null
+  }
+
+  if (
+    serverVisitKind === 'mechanical' &&
+    !accidentReception &&
+    String(job?.source ?? '').trim() === 'reception'
+  ) {
+    const bodyshopCard = repair_card
+      ?? (await customerGetRepairCard(sessionToken, reg, {
+        bypassCache: opts?.bypassCache,
+        jobCardNo: jcNo,
+      }).catch(() => null))
+    if (
+      bodyshopCard &&
+      isActiveBodyshopRepairCard(bodyshopCard) &&
+      resolveCustomerVisitKind(job, serverVisitKind, bodyshopCard) === 'bodyshop'
+    ) {
+      repair_card = bodyshopCard
     }
+  }
+
+  let visitKind = resolveCustomerVisitKind(job, serverVisitKind, repair_card)
+  if (visitKind === 'bodyshop' && !repair_card) {
+    repair_card =
+      (await customerGetRepairCard(sessionToken, reg, {
+        bypassCache: true,
+        jobCardNo: jcNo,
+      }).catch(() => null)) ??
+      (await resolveLatestRepairCardRow(reg, jcNo, null).catch(() => null))
+  }
+  if (visitKind !== 'bodyshop') {
+    repair_card = null
   }
 
   const payload: CustomerVisitContextPayload = {
@@ -1410,7 +1444,8 @@ export async function customerGetRepairCard(
     console.warn('customer_get_repair_card RPC note:', rpcErr)
   }
 
-  if (rpcCard && Number(rpcCard.id || 0) > 0 && !opts?.bypassCache) {
+  const jcHint = String(opts?.jobCardNo ?? '').trim()
+  if (rpcCard && Number(rpcCard.id || 0) > 0 && !opts?.bypassCache && !jcHint) {
     const row = await attachEstimateDocumentToRepairCard(
       sessionToken,
       regNumber || normReg,

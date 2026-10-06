@@ -2,6 +2,7 @@ import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { LegalLinks } from '../../components/LegalLinks'
 import { useAuth } from '../../context/AuthContext'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 
 export default function ProfileScreen() {
   const router = useRouter()
@@ -27,99 +28,100 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ paddingBottom: 24 }}>
-      <View className="px-4 pt-4 pb-3">
-        <Text className="text-2xl font-bold text-slate-900">Profile</Text>
-        <Text className="text-slate-600 text-sm mt-1">Account and platform-level controls.</Text>
-      </View>
-
-      <View className="px-4">
-        <View className="bg-white border border-slate-200 rounded-2xl p-4">
-          <View className="h-14 w-14 rounded-full bg-blue-100 items-center justify-center mb-3">
-            <Text className="text-2xl">👤</Text>
+    <StaffScreenShell title="Profile" subtitle="Account and platform-level controls.">
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+        <View className="px-4 pt-4">
+          <View className="bg-white border border-slate-200 rounded-2xl p-4">
+            <View className="h-14 w-14 rounded-full bg-blue-100 items-center justify-center mb-3">
+              <Text className="text-2xl">👤</Text>
+            </View>
+            <Text className="text-slate-900 font-semibold">{user?.email || 'Not signed in'}</Text>
+            <Text className="text-slate-500 text-sm mt-1">Role: {String(role)}</Text>
           </View>
-          <Text className="text-slate-900 font-semibold">{user?.email || 'Not signed in'}</Text>
-          <Text className="text-slate-500 text-sm mt-1">Role: {String(role)}</Text>
+
+          <TouchableOpacity
+            className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-3 flex-row items-center justify-between"
+            onPress={() => router.push('/(tabs)/settings')}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+          >
+            <View>
+              <Text className="text-slate-900 font-semibold">Open Settings</Text>
+              <Text className="text-slate-500 text-xs mt-0.5">Notifications, app preferences, account settings</Text>
+            </View>
+            <Text className="text-slate-400">→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-2 flex-row items-center justify-between"
+            onPress={() => router.push('/(tabs)/admin')}
+            accessibilityRole="button"
+            accessibilityLabel="Open admin"
+          >
+            <View>
+              <Text className="text-slate-900 font-semibold">Open Admin</Text>
+              <Text className="text-slate-500 text-xs mt-0.5">User management and platform controls</Text>
+            </View>
+            <Text className="text-slate-400">→</Text>
+          </TouchableOpacity>
+
+          <Text className="text-slate-500 text-xs font-semibold uppercase tracking-wide mt-5 mb-2">Support</Text>
+
+          {!user ? (
+            <View className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <Text className="text-amber-900 font-semibold">Sign in required</Text>
+              <Text className="text-amber-800 text-xs mt-0.5">
+                Sign in with a linked employee account to raise help tickets.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
+                onPress={() => router.push('/help-tickets/new')}
+                accessibilityRole="button"
+                accessibilityLabel="Raise a help ticket"
+              >
+                <View>
+                  <Text className="text-slate-900 font-semibold">Raise a ticket</Text>
+                  <Text className="text-slate-500 text-xs mt-0.5">
+                    Get help from support for app or process issues
+                  </Text>
+                </View>
+                <Text className="text-slate-400">→</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-2 flex-row items-center justify-between"
+                onPress={() => router.push('/help-tickets')}
+                accessibilityRole="button"
+                accessibilityLabel="View my help tickets"
+              >
+                <View>
+                  <Text className="text-slate-900 font-semibold">My tickets</Text>
+                  <Text className="text-slate-500 text-xs mt-0.5">Track replies and verify resolutions</Text>
+                </View>
+                <Text className="text-slate-400">→</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          <Text className="text-slate-500 text-xs font-semibold uppercase tracking-wide mt-5 mb-2">Legal</Text>
+          <View className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+            <LegalLinks />
+          </View>
+
+          <TouchableOpacity
+            className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mt-4"
+            onPress={handleLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
+            <Text className="text-red-700 font-semibold">Logout</Text>
+            <Text className="text-red-600 text-xs mt-0.5">End your session and return to login</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-3 flex-row items-center justify-between"
-          onPress={() => router.push('/(tabs)/settings')}
-        >
-          <View>
-            <Text className="text-slate-900 font-semibold">Open Settings</Text>
-            <Text className="text-slate-500 text-xs mt-0.5">Notifications, app preferences, account settings</Text>
-          </View>
-          <Text className="text-slate-400">→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-2 flex-row items-center justify-between"
-          onPress={() => router.push('/(tabs)/admin')}
-        >
-          <View>
-            <Text className="text-slate-900 font-semibold">Open Admin</Text>
-            <Text className="text-slate-500 text-xs mt-0.5">User management and platform controls</Text>
-          </View>
-          <Text className="text-slate-400">→</Text>
-        </TouchableOpacity>
-
-        <Text className="text-slate-500 text-xs font-semibold uppercase tracking-wide mt-5 mb-2">
-          Support
-        </Text>
-
-        {!user ? (
-          <View className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-            <Text className="text-amber-900 font-semibold">Sign in required</Text>
-            <Text className="text-amber-800 text-xs mt-0.5">
-              Sign in with a linked employee account to raise help tickets.
-            </Text>
-          </View>
-        ) : (
-          <>
-            <TouchableOpacity
-              className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
-              onPress={() => router.push('/help-tickets/new')}
-            >
-              <View>
-                <Text className="text-slate-900 font-semibold">Raise a ticket</Text>
-                <Text className="text-slate-500 text-xs mt-0.5">
-                  Get help from support for app or process issues
-                </Text>
-              </View>
-              <Text className="text-slate-400">→</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-2 flex-row items-center justify-between"
-              onPress={() => router.push('/help-tickets')}
-            >
-              <View>
-                <Text className="text-slate-900 font-semibold">My tickets</Text>
-                <Text className="text-slate-500 text-xs mt-0.5">
-                  Track replies and verify resolutions
-                </Text>
-              </View>
-              <Text className="text-slate-400">→</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        <Text className="text-slate-500 text-xs font-semibold uppercase tracking-wide mt-5 mb-2">
-          Legal
-        </Text>
-        <View className="bg-white border border-slate-200 rounded-xl px-4 py-3">
-          <LegalLinks />
-        </View>
-
-        <TouchableOpacity
-          className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mt-4"
-          onPress={handleLogout}
-        >
-          <Text className="text-red-700 font-semibold">Logout</Text>
-          <Text className="text-red-600 text-xs mt-0.5">End your session and return to login</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </StaffScreenShell>
   )
 }

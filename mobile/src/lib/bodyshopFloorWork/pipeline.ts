@@ -15,6 +15,18 @@ export const BODYSHOP_FLOOR_WORK_PIPELINE_STEPS: BodyshopFloorWorkLogRole[][] = 
   ['RUBBING'],
 ]
 
+/** Primary lane must be assigned (or Not Required) before the vehicle advances. */
+const REQUIRED_PRIMARY_BY_STEP: BodyshopFloorWorkLogRole[] = [
+  'DENTOR',
+  'PAINTER',
+  'TECHNICIAN',
+  'RUBBING',
+]
+
+function pipelineSlotConfigured(row: AssignmentRow, role: BodyshopFloorWorkLogRole): boolean {
+  return normCode(row[ROLE_COLUMNS[role].code]) !== ''
+}
+
 const ROLE_COLUMNS: Record<BodyshopFloorWorkLogRole, { code: string; workStatus: string }> = {
   DENTOR: { code: 'dentor_employee_code', workStatus: 'dentor_work_status' },
   DENTOR_HELPER: { code: 'dentor_helper_employee_code', workStatus: 'dentor_helper_work_status' },
@@ -58,19 +70,16 @@ export function resolveActivePipelineStepIndex(row: AssignmentRow | undefined): 
   if (String(row.bs_floor_completed_at ?? '').trim()) return null
 
   for (let i = 0; i < BODYSHOP_FLOOR_WORK_PIPELINE_STEPS.length; i += 1) {
+    const primary = REQUIRED_PRIMARY_BY_STEP[i]
+    if (!pipelineSlotConfigured(row, primary)) return i
+
     const step = BODYSHOP_FLOOR_WORK_PIPELINE_STEPS[i]
-    let anyAssigned = false
-    let allFinished = true
     for (const role of step) {
       if (!isRoleSlotActiveOnAssignment(row, role)) continue
-      anyAssigned = true
       if (!isBodyshopFloorRoleWorkFinished(row[ROLE_COLUMNS[role].workStatus])) {
-        allFinished = false
-        break
+        return i
       }
     }
-    if (!anyAssigned) continue
-    if (!allFinished) return i
   }
   return null
 }
@@ -95,14 +104,6 @@ export function isFloorWorkTaskAtActivePipelineStep(
   return !isBodyshopFloorRoleWorkFinished(row?.[ROLE_COLUMNS[task.floorRole].workStatus])
 }
 
-function hasAnyActivePipelineRole(row: AssignmentRow | undefined): boolean {
-  if (!row) return false
-  for (const role of BODYSHOP_FLOOR_WORK_LOG_ROLES) {
-    if (isRoleSlotActiveOnAssignment(row, role)) return true
-  }
-  return false
-}
-
 export function buildAssignmentRowByJobCard(rows: AssignmentRow[]): Record<string, AssignmentRow> {
   const map: Record<string, AssignmentRow> = {}
   for (const row of rows) {
@@ -125,8 +126,14 @@ export function isNotRequiredAssignmentCode(code: unknown): boolean {
 export function arePipelineWorkStepsFinished(row: AssignmentRow | undefined): boolean {
   if (!row) return false
   if (String(row.bs_floor_completed_at ?? '').trim()) return true
-  if (!hasAnyActivePipelineRole(row)) return false
-  return resolveActivePipelineStepIndex(row) === null
+  for (const role of REQUIRED_PRIMARY_BY_STEP) {
+    if (!pipelineSlotConfigured(row, role)) return false
+  }
+  for (const role of BODYSHOP_FLOOR_WORK_LOG_ROLES) {
+    if (!isRoleSlotActiveOnAssignment(row, role)) continue
+    if (!isBodyshopFloorRoleWorkFinished(row[ROLE_COLUMNS[role].workStatus])) return false
+  }
+  return true
 }
 
 /** Last pipeline stage with a real assignee — that worker submits QC (usually Rubbing). */
@@ -145,7 +152,7 @@ export function normalizeQcStatus(raw: unknown): string {
 }
 
 export function isWorkerQcTurn(
-  task: Pick<BodyshopFloorWorkTask, 'jobCardNumber' | 'floorRole' | 'assignedEmployeeCode'>,
+  task: Pick<BodyshopFloorWorkTask, 'jobCardNumber' | 'floorRole' | 'assignedEmployeeCode' | 'isSupport'>,
   row: AssignmentRow | undefined,
   qcStatus: unknown,
 ): boolean {
@@ -207,18 +214,25 @@ export function pickFloorWorkDetailTask(
   return tasksOnVehicle[0] ?? null
 }
 
-/** Whether this user may submit photos / Done for the task (admin only when step is active or QC). */
+/** Whether this user may submit photos / Done for the task (active pipeline lane or QC turn). */
 export function canSubmitFloorWorkTask(
   task: BodyshopFloorWorkTask,
   assignRow: AssignmentRow | undefined,
   qcStatus: unknown,
   options?: { isAdminOverview?: boolean },
 ): boolean {
-  if (options?.isAdminOverview) {
-    return (
-      isFloorWorkTaskAtActivePipelineStep(task, assignRow)
-      || isWorkerQcTurn(task, assignRow, qcStatus)
-    )
-  }
-  return true
+  return (
+    isFloorWorkTaskAtActivePipelineStep(task, assignRow)
+    || isWorkerQcTurn(task, assignRow, qcStatus)
+  )
+}
+
+/** Denter / painter / rubbing: upload photos only on their active pipeline step (not during QC pass/fail UI). */
+export function canUploadFloorWorkPhotos(
+  task: BodyshopFloorWorkTask,
+  assignRow: AssignmentRow | undefined,
+  qcStatus: unknown,
+): boolean {
+  if (isWorkerQcTurn(task, assignRow, qcStatus)) return false
+  return isFloorWorkTaskAtActivePipelineStep(task, assignRow)
 }

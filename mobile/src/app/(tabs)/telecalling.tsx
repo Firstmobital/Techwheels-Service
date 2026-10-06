@@ -13,6 +13,9 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffNavigationChrome } from '../../components/staff/StaffScreenShell'
+import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase, SUPABASE_URL } from '../../lib/supabase'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -221,6 +224,7 @@ export default function TelecallingScreen() {
   const [editStatus, setEditStatus] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const optimistic = useOptimisticAction()
   const [notes, setNotes] = useState('')
   const [showBookingModal, setShowBookingModal] = useState(false)
   const [showCallbackModal, setShowCallbackModal] = useState(false)
@@ -303,25 +307,45 @@ export default function TelecallingScreen() {
 
   const handleUpdateStatus = async (status: string, bDate?: string, cbDate?: string) => {
     if (!currentAssignment || !activeCampaign) return
-    setBusy(true); setError(null)
-    try {
-      await callEdge('update_status', {
-        assignment_id: currentAssignment.id,
-        campaign_id: activeCampaign.id,
-        status,
-        call_notes: notes || undefined,
-        booking_date: status === 'booked' ? (bDate || bookingDate) : undefined,
-        callback_date: status === 'callback_later' ? (cbDate || callbackDate) : undefined,
-      })
-      setCurrentAssignment(null)
-      setNotes('')
-      setBookingDate('')
-      setCallbackDate('')
-      setShowBookingModal(false)
-      setShowCallbackModal(false)
-      refreshQueue()
-      refreshSummary()
-    } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+    const prevAssignment = currentAssignment
+    const prevNotes = notes
+    const prevBookingDate = bookingDate
+    const prevCallbackDate = callbackDate
+    await optimistic.run(`status-${currentAssignment.id}`, {
+      apply: () => {
+        setBusy(true)
+        setError(null)
+        setCurrentAssignment(null)
+        setNotes('')
+        setBookingDate('')
+        setCallbackDate('')
+        setShowBookingModal(false)
+        setShowCallbackModal(false)
+      },
+      rollback: () => {
+        setCurrentAssignment(prevAssignment)
+        setNotes(prevNotes)
+        setBookingDate(prevBookingDate)
+        setCallbackDate(prevCallbackDate)
+        setBusy(false)
+      },
+      execute: async () => {
+        await callEdge('update_status', {
+          assignment_id: prevAssignment.id,
+          campaign_id: activeCampaign.id,
+          status,
+          call_notes: prevNotes || undefined,
+          booking_date: status === 'booked' ? (bDate || prevBookingDate) : undefined,
+          callback_date: status === 'callback_later' ? (cbDate || prevCallbackDate) : undefined,
+        })
+      },
+      onSuccess: () => {
+        refreshQueue()
+        refreshSummary()
+        setBusy(false)
+      },
+      errorMessage: (e) => (e instanceof Error ? e.message : 'Update failed'),
+    })
   }
 
   const handleSendWhatsApp = async (type: 'not_reachable' | 'reminder') => {
@@ -405,10 +429,17 @@ export default function TelecallingScreen() {
 
   return (
     <SafeAreaView style={s.flex1bg} edges={['top']}>
-      {/* ── Header ── */}
-      <View style={s.header}>
+      {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
+      <StaffNavigationChrome title="Telecalling" subtitle={activeCampaign ? activeCampaign.campaign_name : 'No active campaign'} />
+
+      <View style={[s.header, { paddingTop: 0, borderTopWidth: 0 }]}>
         <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>📞 Telecalling</Text>
           {activeCampaign ? (
             <TouchableOpacity onPress={() => setShowCampaignPicker(true)} style={s.campaignBadge}>
               <Text style={s.campaignBadgeText} numberOfLines={1}>

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,7 @@ import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import {
   CustomerCard,
   CustomerToast,
+  ModernErrorCard,
   PrimaryButton,
   dash,
   formatInr,
@@ -56,6 +57,7 @@ export default function CustomerEstimateScreen() {
   const [bodyshopEstimateAmount, setBodyshopEstimateAmount] = useState<number | null>(null)
   const [openingWorkshopDoc, setOpeningWorkshopDoc] = useState(false)
   const [workshopPreviewUri, setWorkshopPreviewUri] = useState<string | null>(null)
+  const lastDecideRef = useRef<{ decision: 'approve' | 'reject'; reasonText: string } | null>(null)
 
   const mechEstimateUrl = mechCase?.estimate_drive_url || selected?.estimate_drive_url
   const mechEstimatePath = mechCase?.estimate_storage_path || selected?.estimate_storage_path
@@ -194,6 +196,7 @@ export default function CustomerEstimateScreen() {
 
     const reasonText = rejectReason.trim()
     if (decision === 'reject' && !reasonText) return
+    lastDecideRef.current = { decision, reasonText }
 
     // ── Optimistic Update Snapshot ─────────────────────────────────────────
     const prevRows = [...rows]
@@ -265,7 +268,20 @@ export default function CustomerEstimateScreen() {
       </View>
 
       {toast ? <CustomerToast ok={toast.ok} message={toast.msg} /> : null}
-      {error ? <CustomerToast ok={false} message={error} /> : null}
+      {error ? (
+        <ModernErrorCard
+          message={error}
+          onRetry={() => {
+            const last = lastDecideRef.current
+            if (last) {
+              setRejectReason(last.reasonText)
+              void decide(last.decision)
+            } else {
+              void load(true)
+            }
+          }}
+        />
+      ) : null}
 
       {loading ? (
         <ActivityIndicator color="#2563eb" />

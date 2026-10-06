@@ -62,15 +62,32 @@ export default function HelpTicketDetailScreen() {
   }, [reload])
 
   const onSend = async () => {
-    if (!ticketId || !message.trim()) return
+    if (!ticketId || !message.trim() || !detail) return
+    const body = message.trim()
+    const prevDetail = detail
+    const optimisticMsg = {
+      id: `pending-${Date.now()}`,
+      ticket_id: ticketId,
+      created_at: new Date().toISOString(),
+      created_by_employee_code: detail.viewer.employee_code,
+      created_by_name: 'You',
+      created_by_role: null,
+      message_text: body,
+      message_type: 'comment',
+      visibility: 'public' as const,
+      sequence_number: detail.messages.length + 1,
+    }
+    setDetail({ ...detail, messages: [...detail.messages, optimisticMsg] })
+    setMessage('')
     setBusy(true)
     setError(null)
     setSuccess(null)
     try {
-      await sendHelpTicketMessage({ ticketId, messageText: message.trim() })
-      setMessage('')
+      await sendHelpTicketMessage({ ticketId, messageText: body })
       await reload('refresh')
     } catch (err) {
+      setDetail(prevDetail)
+      setMessage(body)
       setError(err instanceof Error ? err.message : 'Failed to send message')
     } finally {
       setBusy(false)
@@ -78,15 +95,25 @@ export default function HelpTicketDetailScreen() {
   }
 
   const onVerify = async (verified: boolean) => {
-    if (!ticketId) return
+    if (!ticketId || !detail) return
+    const prevDetail = detail
+    setDetail({
+      ...detail,
+      ticket: {
+        ...detail.ticket,
+        status: verified ? 'closed' : 'open',
+        verification_status: verified ? 'verified' : 'pending',
+      },
+    })
     setBusy(true)
     setError(null)
-    setSuccess(null)
+    setSuccess(verified ? 'Marked as verified and closed.' : 'Ticket reopened.')
     try {
       await verifyHelpTicketResolution({ ticketId, verified })
-      setSuccess(verified ? 'Marked as verified and closed.' : 'Ticket reopened.')
       await reload('refresh')
     } catch (err) {
+      setDetail(prevDetail)
+      setSuccess(null)
       setError(err instanceof Error ? err.message : 'Failed to update resolution')
     } finally {
       setBusy(false)

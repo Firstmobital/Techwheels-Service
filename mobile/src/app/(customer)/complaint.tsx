@@ -65,8 +65,22 @@ export default function CustomerComplaintScreen() {
       setToast({ ok: false, msg: 'Please describe at least one problem with your vehicle.' })
       return
     }
+    const prevHistory = complaintHistory
+    const optimisticEntry = {
+      id: `pending-${Date.now()}`,
+      text: validProblems.join('; '),
+      sa_name: selected.sa_display_name || selected.sa_name || undefined,
+      branch: selected.branch || undefined,
+      created_at: new Date().toISOString(),
+    }
+    setComplaintHistory((prev) => [optimisticEntry, ...prev])
+    setProblems([''])
+    setComments('')
     setSubmitting(true)
-    setToast(null)
+    setToast({
+      ok: true,
+      msg: `✅ ${validProblems.length} Problem(s) registered — syncing…`,
+    })
     try {
       const km = Number(kmReading)
       await customerSubmitComplaint(token, selected.reg_number, {
@@ -84,11 +98,11 @@ export default function CustomerComplaintScreen() {
         msg: `✅ ${validProblems.length} Problem(s) registered successfully! Your Service Advisor (${selected.sa_display_name || selected.sa_name || 'Advisor'
           }) has been notified to inspect and prepare the estimate.`,
       })
-      setProblems([''])
-      setComments('')
       void loadPastData()
     } catch (err) {
-      setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to submit problem.' })
+      setComplaintHistory(prevHistory)
+      setProblems(validProblems.length ? validProblems : [''])
+      setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to submit problem. Tap submit to retry.' })
     } finally {
       setSubmitting(false)
     }

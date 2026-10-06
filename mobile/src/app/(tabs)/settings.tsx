@@ -7,7 +7,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, Switch, Alert,
   RefreshControl, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import { useAuth } from '../../context/AuthContext'
 import { useRouter } from 'expo-router'
 import { getDealerSettings, saveDealerSetting } from '../../lib/api/dealerSettings'
@@ -152,16 +152,21 @@ export default function SettingsScreen() {
       return
     }
 
+    const prevEmail = reportEmail
+    setReportEmail(trimmed)
+    setEmailEditMode(false)
+    setEmailSaved(true)
     setSavingEmail(true)
     const result = await saveDealerSetting('report_email', trimmed, user?.email)
     setSavingEmail(false)
 
     if (result.error) {
+      setReportEmail(prevEmail)
+      setEmailEditMode(true)
+      setEmailInput(trimmed)
+      setEmailSaved(false)
       Alert.alert('Save Failed', result.error)
     } else {
-      setReportEmail(trimmed)
-      setEmailEditMode(false)
-      setEmailSaved(true)
       setTimeout(() => setEmailSaved(false), 3000)
     }
   }
@@ -187,21 +192,12 @@ export default function SettingsScreen() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }} edges={['top']}>
+    <StaffScreenShell title="Settings" subtitle="Manage account and preferences">
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: C.bg }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={80}
       >
-        {/* ── Header ── */}
-        <View style={{
-          backgroundColor: C.card, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
-          borderBottomWidth: 1, borderBottomColor: C.border,
-        }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: C.text }}>Settings</Text>
-          <Text style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>Manage account and preferences</Text>
-        </View>
-
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -398,6 +394,6 @@ export default function SettingsScreen() {
 
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </StaffScreenShell>
   )
 }

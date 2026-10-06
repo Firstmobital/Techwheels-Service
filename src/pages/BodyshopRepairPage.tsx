@@ -26,6 +26,7 @@ import {
   REPAIR_LOOKUP_MIN_CHARS, REPAIR_LOOKUP_DEBOUNCE_MS,
   type RepairCard, type CustomerType,
 } from '../lib/api/bodyshopRepair'
+import { bodyshopFloorAgeSummary, isBodyshopFloorAssigned } from '../lib/bodyshopFloorAge'
 import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/settings'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
@@ -2494,6 +2495,11 @@ export default function BodyshopRepairPage() {
 
       if (!selected.survay_info_by) patch.survay_info_by = actor
       if (!selected.survay_info_at) patch.survay_info_at = now
+
+      const wasOnFloor = isBodyshopFloorAssigned(selected.bodyshop_floor)
+      if (!wasOnFloor && !String(selected.bodyshop_floor_since_at ?? '').trim()) {
+        patch.bodyshop_floor_since_at = now
+      }
 
       if (Object.keys(editPatch).length > 0) {
         Object.assign(patch, editPatch)
@@ -7184,7 +7190,17 @@ export default function BodyshopRepairPage() {
                       <div className="brx-floor-head-v">{floorParentStatus === 'Hold' ? 'On Hold' : floorParentStatus}</div>
                     </div>
                     <div className="brx-floor-head-meta">
-                      Assigned roles: {floorRoleSnapshots.filter((r) => r.assigned).length} / {FLOOR_ROLES.length}
+                      {(() => {
+                        const age = bodyshopFloorAgeSummary(selected ?? {})
+                        return age.label ? (
+                          <span className="brx-floor-head-age" style={{ color: age.color ?? undefined }}>
+                            {age.label}
+                          </span>
+                        ) : null
+                      })()}
+                      <span>
+                        Assigned roles: {floorRoleSnapshots.filter((r) => r.assigned).length} / {FLOOR_ROLES.length}
+                      </span>
                     </div>
                   </div>
 

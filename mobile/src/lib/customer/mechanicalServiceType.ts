@@ -19,7 +19,35 @@ export function isMechanicalServiceType(serviceType: string | null | undefined):
   return MECHANICAL_SET.has(normalized)
 }
 
+/** Reception / intake types that are always bodyshop (Accident, Rusting, etc.). */
+export function isBodyshopReceptionServiceType(serviceType: string | null | undefined): boolean {
+  const st = String(serviceType ?? '').trim()
+  if (!st) return false
+  const stLower = st.toLowerCase()
+  if (st === 'Accident' || st === 'Rusting' || st === 'Body & Paint' || st === 'Accidental') return true
+  return (
+    stLower.includes('accident') ||
+    stLower.includes('bodyshop') ||
+    stLower.includes('body paint') ||
+    stLower.includes('claim') ||
+    stLower.includes('rusting')
+  )
+}
+
 export type CustomerVisitKind = 'mechanical' | 'bodyshop' | 'other'
+
+/** Active bodyshop repair on this registration (not delivered/closed). */
+export function isActiveBodyshopRepairCard(
+  repairCard: Record<string, unknown> | null | undefined
+): boolean {
+  if (!repairCard || !Number(repairCard.id || 0)) return false
+  const status = String(repairCard.overall_status ?? '').trim().toLowerCase()
+  if (status === 'delivered' || status === 'closed') return false
+  if (repairCard.delivered_at) return false
+  if (status === 'active') return true
+  const stage = Number(repairCard.current_stage ?? 0)
+  return stage > 0 && stage < 18
+}
 
 /**
  * Mechanical customer UI only when visit context says mechanical — never from stale vehicle.service_type
@@ -30,10 +58,24 @@ export function isEffectiveMechanicalCustomerVisit(params: {
   kind: CustomerVisitKind
   isBodyshop: boolean
   repairCard?: Record<string, unknown> | null | undefined
+  job?: Record<string, unknown> | null | undefined
 }): boolean {
   if (!params.visitReady) return false
+  if (isBodyshopReceptionServiceType(String(params.job?.service_type ?? ''))) return false
   if (params.isBodyshop || params.kind === 'bodyshop') return false
   return params.kind === 'mechanical'
+}
+
+export function isEffectiveBodyshopCustomerVisit(params: {
+  visitReady: boolean
+  kind: CustomerVisitKind
+  repairCard?: Record<string, unknown> | null | undefined
+  job?: Record<string, unknown> | null | undefined
+}): boolean {
+  if (!params.visitReady) return false
+  if (isBodyshopReceptionServiceType(String(params.job?.service_type ?? ''))) return true
+  if (params.kind === 'bodyshop') return true
+  return Boolean(params.repairCard && Number(params.repairCard.id || 0) > 0)
 }
 
 /** Prefer `serverVisitKind` from `customer_get_active_job` / `customer_get_visit_context`. */
@@ -42,9 +84,20 @@ export function resolveCustomerVisitKind(
   serverVisitKind?: string | null,
   repairCard?: Record<string, unknown> | null | undefined
 ): CustomerVisitKind {
+  if (job && isBodyshopReceptionServiceType(String(job.service_type ?? ''))) {
+    return 'bodyshop'
+  }
+
   const fromServer = String(serverVisitKind ?? '').trim()
-  // Active reception job wins over stale bodyshop cards on the same registration.
+  // Open reception row can classify as mechanical while an active bodyshop card is the real visit.
   if (fromServer === 'mechanical') {
+    if (
+      repairCard &&
+      isActiveBodyshopRepairCard(repairCard) &&
+      String(job?.source ?? '').trim() === 'reception'
+    ) {
+      return 'bodyshop'
+    }
     return 'mechanical'
   }
   if (fromServer === 'bodyshop') {
@@ -58,8 +111,7 @@ export function resolveCustomerVisitKind(
   if (!job) return 'other'
 
   const st = String(job.service_type ?? '').trim()
-  const stLower = st.toLowerCase()
-  if (st === 'Accident' || stLower.includes('accident') || stLower.includes('bodyshop') || stLower.includes('claim')) {
+  if (isBodyshopReceptionServiceType(st)) {
     return 'bodyshop'
   }
   if (isMechanicalServiceType(st)) {

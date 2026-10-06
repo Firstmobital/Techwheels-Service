@@ -14,7 +14,7 @@ LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT coalesce(upper(trim(p_code)), '') <> ''
-     AND upper(trim(p_code)) <> 'NOT_REQUIRED';
+     AND upper(trim(p_code)) <> 'NOT_REQUIRED'; 
 $$;
 
 CREATE OR REPLACE FUNCTION public._bodyshop_floor_pipeline_step_done(v_row public.bodyshop_assignments, p_step int)

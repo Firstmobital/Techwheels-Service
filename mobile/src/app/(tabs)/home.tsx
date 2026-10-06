@@ -3,9 +3,8 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from 'expo-router'
-import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Icon, type IconName } from '../../components/ui/Icon'
+import { Icon } from '../../components/ui/Icon'
 import { getHomeDashboardMetrics, type HomeDashboardMetrics } from '../../lib/api/homeDashboard'
 import {
   fetchBodyshopFloorWorkerHomeMetrics,
@@ -16,30 +15,9 @@ import {
 } from '../../lib/api/bodyshopFloorWorkerHome'
 import { getStaffAdvisorChatUnreadCount } from '../../lib/api/advisorChat'
 import { registerStaffPush } from '../../lib/notifications/pushRegistration'
-
-type ModuleRow = {
-  key: string
-  label: string
-  icon: IconName
-  iconBg: string
-  description: string
-  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling' | '/(tabs)/bodyshop-repair' | '/(tabs)/bodyshop-floor' | '/(tabs)/bodyshop-floor-work' | '/(tabs)/driver-tasks'
-}
-
-const MODULES: ModuleRow[] = [
-  { key: 'driver_tasks', label: 'Driver Tasks', icon: 'navigation', iconBg: 'bg-emerald-100', description: 'Doorstep pickup & drop navigation', route: '/(tabs)/driver-tasks' },
-  { key: 'autodoc', label: 'Body & Paint', icon: 'edit', iconBg: 'bg-orange-100', description: 'Job cards · damage · claims', route: '/(tabs)/autodoc' },
-  { key: 'reports', label: 'Reports', icon: 'file-text', iconBg: 'bg-blue-100', description: '28 revenue & ops reports', route: '/(tabs)/reports' },
-  { key: 'import', label: 'Import Data', icon: 'cloud-upload', iconBg: 'bg-purple-100', description: 'Bulk CSV / XLSX upload', route: '/(tabs)/import' },
-  { key: 'admin', label: 'Admin', icon: 'users', iconBg: 'bg-slate-100', description: 'Users, roles & branches', route: '/(tabs)/admin' },
-  { key: 'settings', label: 'Settings', icon: 'settings', iconBg: 'bg-amber-100', description: 'Preferences & device', route: '/(tabs)/settings' },
-  { key: 'reception', label: 'Reception', icon: 'check-circle', iconBg: 'bg-green-100', description: 'Vehicle intake & entries', route: '/(tabs)/reception' },
-  { key: 'floor-incharge', label: 'Floor Incharge', icon: 'grid', iconBg: 'bg-indigo-100', description: 'Technician assignments · bay · status', route: '/(tabs)/floor-incharge' },
-  { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
-  { key: 'bodyshop-repair', label: 'Bodyshop Repair', icon: 'package', iconBg: 'bg-violet-100', description: '18-stage accident repair pipeline', route: '/(tabs)/bodyshop-repair' },
-  { key: 'bodyshop-floor', label: 'Bodyshop Floor', icon: 'sliders', iconBg: 'bg-rose-100', description: '9-role floor assignment · QC · approvals', route: '/(tabs)/bodyshop-floor' },
-  { key: 'bodyshop-floor-work', label: 'Floor Work', icon: 'edit', iconBg: 'bg-orange-100', description: 'Work update · photos · Done → next step', route: '/(tabs)/bodyshop-floor-work' },
-]
+import { useStaffNavigationMenu } from '../../hooks/useStaffNavigationMenu'
+import { filterStaffHomeModules, type StaffHomeModule } from '../../lib/staffHomeModules'
+import { StaffDrawerMenu } from '../../components/staff/StaffDrawerMenu'
 
 const DEFAULT_METRICS: HomeDashboardMetrics = {
   revenueToday: 0,
@@ -78,75 +56,19 @@ function formatRelativeUpdateTime(isoDate: string | null): string {
   return `Updated ${days}d ago`
 }
 
-
 export default function PlatformHomeScreen() {
   const router = useRouter()
-  const { user } = useAuth()
-  const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
-
-  // Load module permissions from Supabase
-  useEffect(() => {
-    let mounted = true
-    async function loadPermissions() {
-      if (!user) return
-      try {
-        const [{ data: profile }, { data: permissionRows }] = await Promise.all([
-          supabase.from('users').select('role, name, dealer_code').eq('id', user.id).maybeSingle(),
-          supabase.rpc('get_all_my_permissions'),
-        ])
-        const rawMods = ((permissionRows ?? []) as Array<{ module_name?: string }>)
-          .map(r => String(r.module_name ?? '').trim().toLowerCase())
-          .filter(Boolean)
-        const mods = new Set<string>(rawMods)
-
-        const userRole = String((profile as { role?: string } | null)?.role || user.user_metadata?.role || '').toLowerCase()
-
-        // Admins get everything
-        if (userRole === 'admin') {
-          ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor','bodyshop_floor_work','driver_tasks','driver_management','service_booking'].forEach(m => mods.add(m))
-        }
-
-        // Driver role or permission aliases (driver_management, driver_tasks, driver)
-        if (
-          userRole === 'driver' ||
-          mods.has('driver_management') ||
-          mods.has('driver_tasks') ||
-          mods.has('driver') ||
-          mods.has('service_booking')
-        ) {
-          mods.add('driver_tasks')
-          mods.add('driver_management')
-        }
-
-        if (mounted) setAllowedModules(mods)
-      } catch (err) {
-        console.warn('Error loading user permissions:', err)
-      }
-    }
-    void loadPermissions()
-    return () => { mounted = false }
-  }, [user])
+  const { showMenu, openMenu, closeMenu, allowedModules, displayName } = useStaffNavigationMenu()
   const [metrics, setMetrics] = useState<HomeDashboardMetrics>(DEFAULT_METRICS)
   const [floorWorkerHome, setFloorWorkerHome] = useState<BodyshopFloorWorkerHomeMetrics | null>(null)
   const [showFloorWorkerHome, setShowFloorWorkerHome] = useState(false)
   const [homeIncomeLoading, setHomeIncomeLoading] = useState(false)
   const [chatUnread, setChatUnread] = useState(0)
 
-  const displayName = useMemo(() => {
-    const fromMetadata = String(user?.user_metadata?.full_name ?? '').trim()
-    if (fromMetadata) return fromMetadata
-
-    const email = String(user?.email ?? '').trim()
-    if (!email) return 'Team'
-
-    const username = email.split('@')[0] || 'Team'
-    return username.replace(/[._-]+/g, ' ')
-  }, [user?.email, user?.user_metadata])
-
   const userInitials = useMemo(() => {
     return displayName
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2)
@@ -204,31 +126,6 @@ export default function PlatformHomeScreen() {
     }, [loadDashboard])
   )
 
-  // Map mobile module key → DB module_name aliases
-  const MODULE_KEY_TO_DB: Record<string, string[]> = {
-    autodoc:        ['bodyshop_tracker', 'autodoc'],
-    reports:        ['reports'],
-    import:         ['import'],
-    admin:          ['admin'],
-    settings:       ['settings'],
-    reception:      ['reception'],
-    'floor-incharge':   ['floor_incharge'],
-    'telecalling':      ['telecalling'],
-    'bodyshop-repair':  ['bodyshop_repair'],
-    'bodyshop-floor':   ['bodyshop_floor'],
-    'bodyshop-floor-work': ['bodyshop_floor_work'],
-    driver_tasks:       ['driver_tasks', 'driver_management', 'driver'],
-  }
-
-  const isDriverOnly = useMemo(() => {
-    if (allowedModules.size === 0) return false
-    if (allowedModules.has('admin')) return false
-    const nonDriverMods = Array.from(allowedModules).filter(
-      m => m !== 'driver_tasks' && m !== 'driver_management' && m !== 'driver'
-    )
-    return (allowedModules.has('driver_tasks') || allowedModules.has('driver_management')) && nonDriverMods.length === 0
-  }, [allowedModules])
-
   const modulesWithStatus = useMemo(() => {
     const statusByKey: Record<string, string> = {
       autodoc: `${metrics.openJobCards} active`,
@@ -238,22 +135,13 @@ export default function PlatformHomeScreen() {
       settings: '',
     }
 
-    return MODULES
-      .filter(module => {
-        // If permissions not loaded yet, show nothing (avoid flash)
-        if (allowedModules.size === 0) return false
-        // Admin always sees everything
-        if (allowedModules.has('admin')) return true
-        const dbNames = MODULE_KEY_TO_DB[module.key]
-        return dbNames ? dbNames.some(name => allowedModules.has(name)) : false
-      })
-      .map((module) => ({
-        ...module,
-        status: statusByKey[module.key] ?? '',
-      }))
+    return filterStaffHomeModules(allowedModules).map((module) => ({
+      ...module,
+      status: statusByKey[module.key] ?? '',
+    }))
   }, [metrics.activeUsers, metrics.importDatasets, metrics.latestImportUpdatedAt, metrics.openJobCards, allowedModules])
 
-  const openModule = (tile: ModuleRow) => {
+  const openModule = (tile: StaffHomeModule) => {
     if (!tile.route) {
       return
     }
@@ -262,57 +150,83 @@ export default function PlatformHomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
+      <StaffDrawerMenu
+        visible={showMenu}
+        onClose={closeMenu}
+        allowedModules={allowedModules}
+        userDisplayName={displayName}
+      />
+
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 28 }}>
-        
         {/* BLUE HERO HEADER */}
         <View className="bg-blue-600 px-4 pt-4 pb-6">
-          {/* Top Row: Logo + Initials */}
           <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-11 w-11 rounded-full bg-blue-500 items-center justify-center border-2 border-blue-400">
-                <Icon name="settings" size={22} color="#ffffff" strokeWidth={2.2} />
-              </View>
-              <View>
-                <Text className="text-white text-lg font-bold">Techwheels</Text>
+            <View className="flex-row items-center gap-2 flex-1 min-w-0">
+              <TouchableOpacity
+                onPress={openMenu}
+                accessibilityRole="button"
+                accessibilityLabel="Open navigation menu"
+                className="h-10 w-10 rounded-xl bg-blue-500 border border-blue-400 items-center justify-center"
+              >
+                <Icon name="menu" size={20} color="#ffffff" strokeWidth={2.4} />
+              </TouchableOpacity>
+              <View className="flex-1 min-w-0">
+                <Text className="text-white text-lg font-bold" numberOfLines={1}>
+                  Techwheels
+                </Text>
                 <Text className="text-blue-100 text-xs tracking-wider">SERVICE PLATFORM</Text>
               </View>
             </View>
             <View className="flex-row items-center gap-3">
               <TouchableOpacity
                 accessibilityRole="button"
-                accessibilityLabel="Chats"
+                accessibilityLabel="Open advisor chats"
                 className="h-10 w-10 rounded-full bg-blue-500 items-center justify-center"
                 onPress={() => router.push('/(tabs)/chat')}
               >
                 <Icon name="message-square" size={20} color="#ffffff" strokeWidth={2} />
                 {chatUnread > 0 ? (
-                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{chatUnread > 9 ? '9+' : chatUnread}</Text>
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      minWidth: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: '#ef4444',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingHorizontal: 4,
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+                      {chatUnread > 9 ? '9+' : chatUnread}
+                    </Text>
                   </View>
                 ) : null}
               </TouchableOpacity>
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Open profile"
                 className="h-10 w-10 rounded-full bg-blue-500 items-center justify-center"
-                onPress={() => router.push('/(tabs)/alerts')}
+                onPress={() => router.push('/(tabs)/profile')}
               >
-                <Icon name="bell" size={20} color="#ffffff" strokeWidth={2} />
-              </TouchableOpacity>
-              <View className="h-10 w-10 rounded-full bg-blue-500 items-center justify-center">
                 <Text className="text-white text-sm font-bold">{userInitials}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Greeting with Emoji */}
           <View className="mb-4">
             <Text className="text-blue-100 text-sm">Good morning,</Text>
             <Text className="text-white text-3xl font-bold mt-0.5">{displayName} 👋</Text>
           </View>
 
-          {/* Search Bar inside blue header */}
           <TouchableOpacity
             className="bg-blue-500 border border-blue-400 rounded-2xl px-4 py-3 flex-row items-center"
             onPress={() => router.push('/(tabs)/search')}
+            accessibilityRole="button"
+            accessibilityLabel="Search modules, job cards, and reports"
           >
             <Icon name="search" size={18} color="#cbd5e1" strokeWidth={2} />
             <Text className="text-blue-200 flex-1 ml-3 text-[15px]">Search module, job card, report...</Text>
@@ -345,9 +259,7 @@ export default function PlatformHomeScreen() {
                 </View>
               </View>
               <View className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
-                <Text className="text-emerald-800 text-xs font-semibold uppercase tracking-wide">
-                  Bodyshop income
-                </Text>
+                <Text className="text-emerald-800 text-xs font-semibold uppercase tracking-wide">Bodyshop income</Text>
                 {homeIncomeLoading ? (
                   <Text className="text-emerald-700 text-lg font-bold mt-2">Loading…</Text>
                 ) : (
@@ -390,7 +302,6 @@ export default function PlatformHomeScreen() {
           )}
         </View>
 
-        {/* Service Modules List Section */}
         <View className="px-4 pb-4">
           <Text className="text-slate-600 text-xs font-bold tracking-wide uppercase mb-3">Service Modules</Text>
 
@@ -401,6 +312,8 @@ export default function PlatformHomeScreen() {
               activeOpacity={0.7}
               onPress={() => openModule(module)}
               disabled={!module.route}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${module.label}`}
             >
               <View className={`h-12 w-12 rounded-full ${module.iconBg} items-center justify-center mr-3`}>
                 <Icon name={module.icon} size={22} color="#1e293b" strokeWidth={1.8} />
@@ -413,17 +326,16 @@ export default function PlatformHomeScreen() {
                 <Text className="text-slate-500 text-xs">{module.description}</Text>
               </View>
               <View className="items-end gap-2">
-                {module.status && (
+                {module.status ? (
                   <Text className="text-slate-600 text-xs bg-slate-100 px-2 py-1 rounded-full font-medium">
                     {module.status}
                   </Text>
-                )}
+                ) : null}
                 <Icon name="arrow-right" size={16} color="#cbd5e1" strokeWidth={2} />
               </View>
             </TouchableOpacity>
           ))}
         </View>
-
       </ScrollView>
     </SafeAreaView>
   )

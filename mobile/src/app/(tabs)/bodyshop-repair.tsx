@@ -11,7 +11,17 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffNavigationChrome, StaffInlineMenuButton } from '../../components/staff/StaffScreenShell'
+import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
+import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
+import {
+  fetchBodyshopAssignmentsForJobCards,
+  fetchBodyshopRepairCardsPage,
+} from '../../lib/api/bodyshopFloorList'
+import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
 
@@ -232,11 +242,13 @@ export default function BodyshopRepairScreen() {
   const [pipelineGroupFilter, setPipelineGroupFilter] = useState<string>('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [search,       setSearch]       = useState('')
+  const [loadError,    setLoadError]    = useState<string | null>(null)
 
   const [selectedCard, setSelectedCard] = useState<RepairCard | null>(null)
   const [activeTab,    setActiveTab]    = useState<RepairTab>('overview')
   const [patch,        setPatch]        = useState<Partial<RepairCard>>({})
   const [saving,       setSaving]       = useState(false)
+  const optimistic = useOptimisticAction()
   const [qcOtherOpen,  setQcOtherOpen]  = useState(false)
   const [qcOtherSearch,setQcOtherSearch]= useState('')
 
@@ -245,14 +257,19 @@ export default function BodyshopRepairScreen() {
   const loadAll = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
+    setLoadError(null)
     try {
-      const { data, error } = await supabase
-        .from('bodyshop_repair_cards')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1000)
-      if (error) throw error
-      setCards((data ?? []) as RepairCard[])
+      const { rows: cardRows, pageError } = await collectListPages((cursor) =>
+        fetchBodyshopRepairCardsPage({
+          cursor,
+          pageSize: 100,
+          searchQuery: search.trim() || null,
+        }),
+      )
+      const cardList = cardRows as unknown as RepairCard[]
+      setCards(cardList)
+      const partial = formatPartialListLoadError(pageError, cardList.length)
+      if (partial) setLoadError(partial)
 
       const { data: empData } = await supabase
         .from('employee_master')
@@ -261,13 +278,11 @@ export default function BodyshopRepairScreen() {
         .limit(500)
       setEmployees((empData ?? []) as Array<{ employee_name: string; department: string | null }>)
 
-      const { data: assData } = await supabase
-        .from('bodyshop_assignments')
-        .select('job_card_number, supervisor_employee_name, supervisor_work_status, dentor_employee_name, dentor_work_status, painter_employee_name, painter_work_status, technician_employee_name, technician_work_status, dentor_helper_employee_name, dentor_helper_work_status, painter_helper_employee_name, painter_helper_work_status, rubbing_employee_name, rubbing_work_status, edp_employee_name, edp_work_status, parts_incharge_employee_name, parts_incharge_work_status')
-        .eq('is_active', true)
-        .limit(1000)
+      const assRows = await fetchBodyshopAssignmentsForJobCards<Record<string, string | null>>(
+        cardList.map(c => String(c.job_card_no ?? '')),
+      )
       const assMap: Record<string, FloorRoleInfo[]> = {}
-      ;(assData ?? []).forEach((row: Record<string, string | null>) => {
+      assRows.forEach((row) => {
         const jc = String(row.job_card_number ?? '').trim().toUpperCase()
         assMap[jc] = [
           { role: 'Floor Incharge',  employeeName: row.supervisor_employee_name,     workStatus: row.supervisor_work_status },
@@ -288,7 +303,7 @@ export default function BodyshopRepairScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [search])
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
 
@@ -333,35 +348,41 @@ export default function BodyshopRepairScreen() {
 
   async function saveDocDecision(docKey: string, approved: boolean) {
     if (!selectedCard) return
+    const cardId = selectedCard.id
     const currentRejected = Array.isArray(selectedCard.doc_rejected_keys)
       ? selectedCard.doc_rejected_keys.map(String)
       : []
     const nextRejected = approved
       ? currentRejected.filter((k) => k !== docKey)
       : [...new Set([...currentRejected, docKey])]
-    
+
     const updatePayload = {
       [docKey]: approved,
       doc_rejected_keys: nextRejected,
     } as Partial<RepairCard>
 
+    const prevSelected = selectedCard
+    const prevCards = cards
     const merged = { ...selectedCard, ...updatePayload }
-    setSelectedCard(merged)
-    setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
 
-    setSaving(true)
-    try {
-      const { error } = await supabase
-        .from('bodyshop_repair_cards')
-        .update(updatePayload)
-        .eq('id', selectedCard.id)
-      if (error) throw error
-      showToast(approved ? 'Document Approved ✓' : 'Document Rejected ✕', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Decision update failed', 'error')
-    } finally {
-      setSaving(false)
-    }
+    await optimistic.run(`doc-${docKey}`, {
+      apply: () => {
+        setSelectedCard(merged)
+        setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+      },
+      rollback: () => {
+        setSelectedCard(prevSelected)
+        setCards(prevCards)
+      },
+      execute: async () => {
+        const { error } = await supabase
+          .from('bodyshop_repair_cards')
+          .update(updatePayload)
+          .eq('id', cardId)
+        if (error) throw error
+      },
+      onSuccess: () => showToast(approved ? 'Document Approved ✓' : 'Document Rejected ✕', 'success'),
+    })
   }
 
   async function openUploadedDoc(docKey: string) {
@@ -412,18 +433,28 @@ export default function BodyshopRepairScreen() {
       setPatch({})
       return
     }
-    setSaving(true)
-    try {
-      const { error } = await supabase.from('bodyshop_repair_cards').update(nextPatch).eq('id', selectedCard.id)
-      if (error) throw error
-      const merged = { ...selectedCard, ...nextPatch }
-      setSelectedCard(merged)
-      setCards(prev => prev.map(c => c.id === merged.id ? merged : c))
-      setPatch({})
-      showToast('Saved', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Save failed', 'error')
-    } finally { setSaving(false) }
+    const prevSelected = selectedCard
+    const prevCards = cards
+    const prevPatch = patch
+    const merged = { ...selectedCard, ...nextPatch }
+
+    await optimistic.run('save-patch', {
+      apply: () => {
+        setSelectedCard(merged)
+        setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+        setPatch({})
+      },
+      rollback: () => {
+        setSelectedCard(prevSelected)
+        setCards(prevCards)
+        setPatch(prevPatch)
+      },
+      execute: async () => {
+        const { error } = await supabase.from('bodyshop_repair_cards').update(nextPatch).eq('id', selectedCard.id)
+        if (error) throw error
+      },
+      onSuccess: () => showToast('Saved', 'success'),
+    })
   }
 
   async function advanceStage(card: RepairCard) {
@@ -435,20 +466,29 @@ export default function BodyshopRepairScreen() {
       `Move from Stage ${card.current_stage} (${STAGE_LABELS[card.current_stage] ?? ''}) → Stage ${nextStage} (${STAGE_LABELS[nextStage] ?? ''})?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Confirm', style: 'default', onPress: async () => {
-          setSaving(true)
-          try {
+        { text: 'Confirm', style: 'default', onPress: () => {
+          void (async () => {
             const update = { current_stage: nextStage, current_stage_name: STAGE_LABELS[nextStage] ?? null }
-            const { error } = await supabase.from('bodyshop_repair_cards').update(update).eq('id', card.id)
-            if (error) throw error
             const merged: RepairCard = { ...card, ...update }
-            setSelectedCard(merged)
-            setCards(prev => prev.map(c => c.id === merged.id ? merged : c))
-            setPatch({})
-            showToast(`Advanced to Stage ${nextStage}`, 'success')
-          } catch (err) {
-            showToast(err instanceof Error ? err.message : 'Failed', 'error')
-          } finally { setSaving(false) }
+            const prevSelected = selectedCard
+            const prevCards = cards
+            await optimistic.run(`stage-${card.id}`, {
+              apply: () => {
+                setSelectedCard(merged)
+                setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+                setPatch({})
+              },
+              rollback: () => {
+                setSelectedCard(prevSelected)
+                setCards(prevCards)
+              },
+              execute: async () => {
+                const { error } = await supabase.from('bodyshop_repair_cards').update(update).eq('id', card.id)
+                if (error) throw error
+              },
+              onSuccess: () => showToast(`Advanced to Stage ${nextStage}`, 'success'),
+            })
+          })()
         }},
       ]
     )
@@ -666,9 +706,17 @@ export default function BodyshopRepairScreen() {
 
     return (
       <SafeAreaView style={S.root}>
-        {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
+        {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
+      {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
 
         <View style={S.detailHeader}>
+          <StaffInlineMenuButton />
           <TouchableOpacity onPress={() => { setSelectedCard(null); setPatch({}) }} style={S.backBtn}>
             <Text style={S.backBtnText}>‹ Back</Text>
           </TouchableOpacity>
@@ -1257,20 +1305,22 @@ export default function BodyshopRepairScreen() {
   // ── List view ──────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={S.root}>
+      {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
       {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
 
-      <View style={S.topBar}>
-        <View style={{ flex: 1 }}>
-          <Text style={S.screenTitle}>Bodyshop Repair</Text>
-          <Text style={S.screenSubtitle}>
-            {filtered.length} shown
-            {pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={() => loadAll(true)} style={S.refreshBtn}>
-          <Text style={S.refreshBtnText}>↻</Text>
-        </TouchableOpacity>
-      </View>
+      <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
+
+      <StaffNavigationChrome
+        title="Bodyshop Repair"
+        subtitle={`${filtered.length} shown${pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}`}
+        rightAction={<StaffRefreshButton onPress={() => loadAll(true)} />}
+      />
 
       <FlatList
         style={S.listFlex}
@@ -1279,7 +1329,18 @@ export default function BodyshopRepairScreen() {
         ListHeaderComponent={filterHeader}
         stickyHeaderIndices={undefined}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} />}
+        onEndReached={() => { void loadMoreCards() }}
+        onEndReachedThreshold={0.35}
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 80, gap: 10 }}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator style={{ marginVertical: 16 }} color="#2563eb" />
+          ) : listHasMore ? (
+            <TouchableOpacity style={S.loadMoreBtn} onPress={() => void loadMoreCards()}>
+              <Text style={S.loadMoreBtnText}>Load more</Text>
+            </TouchableOpacity>
+          ) : null
+        }
         ListEmptyComponent={<View style={S.empty}><Text style={S.emptyIcon}>🔧</Text><Text style={S.emptyText}>No vehicles match these filters</Text></View>}
         renderItem={({ item: card }) => {
           const group = getDisplayGroup(card.current_stage)
@@ -1394,4 +1455,13 @@ const S = StyleSheet.create({
   formCard:         { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e7e3d9', padding: 14, marginBottom: 8 },
   input:            { backgroundColor: '#f6f4ee', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#1a1b21' },
   segChip:          { padding: 9, borderRadius: 8, alignItems: 'center', backgroundColor: '#f6f4ee', borderWidth: 1, borderColor: '#e7e3d9' },
+  loadMoreBtn: {
+    alignSelf: 'center',
+    marginVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#2a4cd0',
+  },
+  loadMoreBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 })

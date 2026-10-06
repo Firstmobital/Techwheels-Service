@@ -12,7 +12,6 @@ export type FloorFlowStepId =
   | 'QC'
   | 'RI'
   | 'EDP'
-  | 'PARTS_INCHARGE'
 
 export type FloorFlowStepState = 'locked' | 'active' | 'done' | 'skipped'
 
@@ -27,7 +26,6 @@ export const BODYSHOP_FLOOR_DETAIL_STEP_ORDER: FloorFlowStepId[] = [
   'QC',
   'RI',
   'EDP',
-  'PARTS_INCHARGE',
 ]
 
 export type FloorFlowRoleAssignment = {
@@ -54,6 +52,15 @@ export function isFloorFlowRoleStepComplete(ass: FloorFlowRoleAssignment): boole
   return ws === 'completed' || ws === 'not_required'
 }
 
+export function isFloorFlowRoleAssigned(ass: FloorFlowRoleAssignment): boolean {
+  if (!ass) return false
+  if (isFloorFlowRoleNotRequired(ass)) return false
+  const code = String(ass.employee_code ?? '').trim()
+  if (!code || code.toUpperCase() === NOT_REQUIRED_CODE) return false
+  if (String(ass.employee_name ?? '').trim().toLowerCase() === 'not required') return false
+  return true
+}
+
 function normalizeRiStatus(raw: unknown): string {
   return String(raw ?? 'pending').trim().toLowerCase() || 'pending'
 }
@@ -63,6 +70,17 @@ export type FloorFlowStepView = {
   state: FloorFlowStepState
   lockReason?: string
 }
+
+/** Assign anytime from Bodyshop Floor — work order is enforced in Floor Work (Done). */
+const PARALLEL_FLOOR_ASSIGN_STEPS = new Set<FloorFlowStepId>([
+  'FLOOR_INCHARGE',
+  'DENTOR',
+  'DENTOR_HELPER',
+  'PAINTER',
+  'PAINTER_HELPER',
+  'TECHNICIAN',
+  'RUBBING',
+])
 
 export function computeBodyshopFloorFlowSteps(input: {
   assignRow: Record<string, unknown> | undefined
@@ -77,21 +95,29 @@ export function computeBodyshopFloorFlowSteps(input: {
   const ri = normalizeRiStatus(input.riStatus)
 
   const out: FloorFlowStepView[] = []
-  let chainOpen = true
 
   for (const id of BODYSHOP_FLOOR_DETAIL_STEP_ORDER) {
-    if (id === 'QC') {
-      if (!chainOpen) {
-        out.push({ id, state: 'locked', lockReason: 'Complete earlier steps first' })
+    if (PARALLEL_FLOOR_ASSIGN_STEPS.has(id)) {
+      const ass = input.roleAt(id as Exclude<FloorFlowStepId, 'QC' | 'RI'>)
+      if (isFloorFlowRoleNotRequired(ass)) {
+        out.push({ id, state: 'skipped' })
         continue
       }
+      if (isFloorFlowRoleStepComplete(ass)) {
+        out.push({ id, state: 'done' })
+        continue
+      }
+      out.push({ id, state: 'active' })
+      continue
+    }
+
+    if (id === 'QC') {
       if (!pipelineDone) {
         out.push({
           id,
           state: 'locked',
-          lockReason: 'Finish Dentor → Painter → Technician → Rubbing (Floor Work Done)',
+          lockReason: 'Finish Dentor → Painter → Technician → Rubbing in Floor Work (photo + Done)',
         })
-        chainOpen = false
         continue
       }
       if (qc === 'pass') {
@@ -99,18 +125,12 @@ export function computeBodyshopFloorFlowSteps(input: {
         continue
       }
       out.push({ id, state: 'active' })
-      chainOpen = false
       continue
     }
 
     if (id === 'RI') {
-      if (!chainOpen) {
-        out.push({ id, state: 'locked', lockReason: 'Pass QC first' })
-        continue
-      }
       if (qc !== 'pass') {
         out.push({ id, state: 'locked', lockReason: 'QC must pass before Re-Inspection' })
-        chainOpen = false
         continue
       }
       if (ri === 'completed') {
@@ -118,41 +138,29 @@ export function computeBodyshopFloorFlowSteps(input: {
         continue
       }
       out.push({ id, state: 'active' })
-      chainOpen = false
       continue
     }
 
-    const ass = input.roleAt(id)
-    const skipped = isFloorFlowRoleNotRequired(ass)
-    const done = isFloorFlowRoleStepComplete(ass)
-
-    if (id === 'EDP' && ri !== 'completed') {
-      out.push({ id, state: 'locked', lockReason: 'Complete RI before EDP' })
-      chainOpen = false
-      continue
+    if (id === 'EDP') {
+      if (ri !== 'completed') {
+        out.push({ id, state: 'locked', lockReason: 'Complete RI before EDP' })
+        continue
+      }
+      const ass = input.roleAt('EDP')
+      if (isFloorFlowRoleNotRequired(ass)) {
+        out.push({ id, state: 'skipped' })
+        continue
+      }
+      if (isFloorFlowRoleStepComplete(ass)) {
+        out.push({ id, state: 'done' })
+        continue
+      }
+      if (!isFloorFlowRoleAssigned(ass)) {
+        out.push({ id, state: 'locked' })
+        continue
+      }
+      out.push({ id, state: 'active' })
     }
-
-    if (id === 'PARTS_INCHARGE' && !chainOpen) {
-      out.push({ id, state: 'locked', lockReason: 'Complete EDP first' })
-      continue
-    }
-
-    if (!chainOpen) {
-      out.push({ id, state: 'locked', lockReason: 'Complete previous steps first' })
-      continue
-    }
-
-    if (skipped) {
-      out.push({ id, state: 'skipped' })
-      continue
-    }
-    if (done) {
-      out.push({ id, state: 'done' })
-      continue
-    }
-
-    out.push({ id, state: 'active' })
-    chainOpen = false
   }
 
   return out
@@ -174,7 +182,6 @@ export function floorFlowStepLabel(id: FloorFlowStepId): string {
     TECHNICIAN: 'Technician',
     RUBBING: 'Rubbing',
     EDP: 'EDP',
-    PARTS_INCHARGE: 'Parts Incharge',
   }
   return labels[id as Exclude<FloorFlowStepId, 'QC' | 'RI'>] ?? id
 }

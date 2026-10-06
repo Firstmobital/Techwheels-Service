@@ -667,11 +667,18 @@ export default async function handler(req: Request) {
           extended_warranty_end_date, extended_warranty_product, extended_warranty_order_status,
           last_insurance_expiry_date, last_insurance_comapny
         )`
-      let q = serviceClient.from('telecall_assignments').select(CUST_SEL).eq('assigned_to', userEmail).in('status', ['assigned', 'calling', 'callback_later', 'booked'])
-      if (campaign_id) q = q.eq('campaign_id', campaign_id)
-      const { data: queue, error: queueErr } = await q.order('assigned_at', { ascending: false })
-      if (queueErr) throw new Error(`Failed to fetch queue: ${queueErr.message}`)
-      return new Response(JSON.stringify({ success: true, queue: queue || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      const queue: unknown[] = []
+      const pageSize = 1000
+      for (let from = 0; from < 20000; from += pageSize) {
+        let pageQuery = serviceClient.from('telecall_assignments').select(CUST_SEL).eq('assigned_to', userEmail).in('status', ['assigned', 'calling', 'callback_later', 'booked'])
+        if (campaign_id) pageQuery = pageQuery.eq('campaign_id', campaign_id)
+        const { data: batch, error: queueErr } = await pageQuery.order('assigned_at', { ascending: false }).range(from, from + pageSize - 1)
+        if (queueErr) throw new Error(`Failed to fetch queue: ${queueErr.message}`)
+        const rows = batch || []
+        queue.push(...rows)
+        if (rows.length < pageSize) break
+      }
+      return new Response(JSON.stringify({ success: true, queue }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // ── ACTION: my_summary ────────────────────────────────────────────────

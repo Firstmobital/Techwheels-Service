@@ -514,7 +514,39 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
     setNewName(''); setNewEmail(''); setNewRole('staff'); setNewBranch('')
     setNewDealerCode(''); setNewDealerName('')
     await loadUsers()
-    showToastMsg('User created — confirmation email sent')
+
+    if (userId) {
+      const { error: mailErr } = await supabase.functions.invoke('send-auth-access-email', {
+        body: {
+          userId,
+          type: 'signup',
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (mailErr) {
+        const message = await extractFunctionErrorMessage(mailErr)
+        showToastMsg(`User created, but login email failed: ${message}. Use Email or Temp Password.`, 'error')
+        return
+      }
+    }
+    showToastMsg('User created — login email sent')
+  }
+
+  async function sendAccessEmail(u: AppUser, type: 'recovery' | 'signup' | 'invite' = 'recovery') {
+    setSaving(true)
+    const { error } = await supabase.functions.invoke('send-auth-access-email', {
+      body: {
+        userId: u.id,
+        type,
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    setSaving(false)
+    if (error) {
+      showToastMsg(await extractFunctionErrorMessage(error), 'error')
+      return
+    }
+    showToastMsg(type === 'recovery' ? 'Password reset email sent' : 'Login email sent')
   }
 
   // ── Activate / Deactivate ─────────────────────────────────────────────────
@@ -1094,6 +1126,13 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
                           </button>
                           <button
                             className="tbtn"
+                            onClick={() => void sendAccessEmail(u, 'recovery')}
+                            title="Send password reset link via Techwheels email (Resend)"
+                          >
+                            <Icon name="mail" size={13} strokeWidth={1.9} /> Email
+                          </button>
+                          <button
+                            className="tbtn"
                             onClick={() => openTempPasswordModal(u)}
                           >
                             <Icon name="key" size={13} strokeWidth={1.9} /> Pwd
@@ -1487,7 +1526,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
               </div>
             </div>
           </div>
-          <p className="mt-3 text-xs text-gray-400">User will receive a confirmation email to set their password.</p>
+          <p className="mt-3 text-xs text-gray-400">After create, a login link is emailed from service@techwheels.in (Resend). If it fails, use Email or Temp Password on the user row.</p>
           <div className="mt-5 flex justify-end gap-3">
             <button onClick={() => setShowAddUser(false)} className={BTN_SECONDARY}>Cancel</button>
             <button onClick={createUser} disabled={saving} className={BTN_PRIMARY}>

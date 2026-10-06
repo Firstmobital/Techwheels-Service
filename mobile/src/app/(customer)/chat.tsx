@@ -99,13 +99,26 @@ export default function CustomerAdvisorChatScreen() {
   async function onSend() {
     const body = draft.trim()
     if (!token || !regNumber || !body || sending) return
+    const prevMessages = messages
+    const tempId = `pending-${Date.now()}`
+    const optimisticMsg: CustomerAdvisorMessage = {
+      id: tempId,
+      chat_id: messages[0]?.chat_id ?? '',
+      body,
+      author_side: 'customer',
+      author_name: 'You',
+      created_at: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, optimisticMsg])
+    setDraft('')
     setSending(true)
     setError(null)
     try {
       await customerSendAdvisorMessage(token, regNumber, body, contactKey)
-      setDraft('')
       await load(false)
     } catch (err) {
+      setMessages(prevMessages)
+      setDraft(body)
       setError(err instanceof Error ? err.message : 'Unable to send message.')
     } finally {
       setSending(false)
@@ -194,7 +207,22 @@ export default function CustomerAdvisorChatScreen() {
       )}
 
       {error ? (
-        <Text style={{ color: '#B91C1C', paddingHorizontal: 16, paddingTop: 6 }}>{error}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 6 }}>
+          <Text style={{ flex: 1, color: '#B91C1C', fontSize: 12 }}>{error}</Text>
+          <TouchableOpacity
+            onPress={() => void onSend()}
+            disabled={sending || !draft.trim()}
+            style={{
+              backgroundColor: '#dc2626',
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              borderRadius: 8,
+              opacity: sending || !draft.trim() ? 0.5 : 1,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       <View

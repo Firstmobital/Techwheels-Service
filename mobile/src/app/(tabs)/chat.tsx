@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import { Icon } from '../../components/ui/Icon'
 import {
   getStaffAdvisorChat,
@@ -118,14 +118,27 @@ export default function StaffChatScreen() {
   async function onSend() {
     const body = draft.trim()
     if (!openId || !body || sending) return
+    const prevMessages = messages
+    const tempId = `pending-${Date.now()}`
+    const optimisticMsg = {
+      id: tempId,
+      chat_id: openId,
+      body,
+      author_side: 'staff' as const,
+      author_name: 'You',
+      created_at: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, optimisticMsg])
+    setDraft('')
     setSending(true)
     setError(null)
     try {
       await sendStaffAdvisorChat(openId, body)
-      setDraft('')
       await openThread(openId)
       await loadThreads()
     } catch (err) {
+      setMessages(prevMessages)
+      setDraft(body)
       setError(err instanceof Error ? err.message : 'Unable to send message.')
     } finally {
       setSending(false)
@@ -133,39 +146,54 @@ export default function StaffChatScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
+    <StaffScreenShell
+      title={selected ? selected.reg_number : 'Chats'}
+      subtitle={selected ? subtitle(selected) : 'New and unanswered customer messages'}
+      leadingExtra={
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={openId ? 'Back to chat list' : 'Go back'}
+          onPress={() => {
+            if (openId) {
+              setOpenId(null)
+              setMessages([])
+              return
+            }
+            router.back()
+          }}
+          hitSlop={8}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: '#f1f5f9',
+            borderWidth: 1,
+            borderColor: '#e2e8f0',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon name="arrow-left" size={20} color="#0f172a" />
+        </TouchableOpacity>
+      }
+    >
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: '#f8fafc' }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={() => {
-              if (openId) {
-                setOpenId(null)
-                setMessages([])
-                return
-              }
-              router.back()
-            }}
-            hitSlop={8}
-          >
-            <Icon name="arrow-left" size={20} color="#0f172a" />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 17, fontWeight: '800', color: '#0f172a' }} numberOfLines={1}>
-              {selected ? selected.reg_number : 'Chats'}
-            </Text>
-            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }} numberOfLines={1}>
-              {selected ? subtitle(selected) : 'New and unanswered customer messages'}
-            </Text>
+        {error ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 }}>
+            <Text style={{ flex: 1, color: '#dc2626', fontSize: 12 }}>{error}</Text>
+            <TouchableOpacity
+              onPress={() => void onSend()}
+              disabled={sending || !draft.trim()}
+              style={{ backgroundColor: '#dc2626', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, opacity: sending || !draft.trim() ? 0.5 : 1 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>Retry</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-
-        {error ? <Text style={{ color: '#dc2626', paddingHorizontal: 16, paddingTop: 8 }}>{error}</Text> : null}
+        ) : null}
 
         {loading && threads.length === 0 ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -205,7 +233,13 @@ export default function StaffChatScreen() {
                 maxLength={2000}
                 style={{ flex: 1, minHeight: 42, maxHeight: 110, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 }}
               />
-              <TouchableOpacity onPress={() => void onSend()} disabled={sending || !draft.trim()} style={{ backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center', opacity: sending || !draft.trim() ? 0.5 : 1 }}>
+              <TouchableOpacity
+                onPress={() => void onSend()}
+                disabled={sending || !draft.trim()}
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+                style={{ backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center', opacity: sending || !draft.trim() ? 0.5 : 1 }}
+              >
                 <Text style={{ color: '#fff', fontWeight: '800' }}>Send</Text>
               </TouchableOpacity>
             </View>
@@ -238,6 +272,6 @@ export default function StaffChatScreen() {
           </ScrollView>
         )}
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </StaffScreenShell>
   )
 }

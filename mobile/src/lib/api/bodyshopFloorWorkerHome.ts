@@ -12,6 +12,11 @@ import { fetchMonthlyBodyshopEarningsByCode } from '../bodyshopMonthlyEarnings'
 import { normalizeEmployeeCode } from '../payroll/earningsFormulas'
 import type { BodyshopSupportRow } from '../bodyshopEarnings'
 import { hasBusinessRole } from '../businessRoles'
+import {
+  fetchBodyshopActiveAssignmentsPage,
+  fetchBodyshopActiveSupportAssignmentsPage,
+} from './bodyshopFloorList'
+import type { IdCreatedAtCursor } from '../pagination/listPage'
 
 export function isBodyshopFloorWorkerBusinessRole(roleRaw: string | null | undefined): boolean {
   return (
@@ -147,19 +152,76 @@ async function fetchActiveEmployees() {
   return rows
 }
 
+async function fetchActiveRowsPage(
+  table: 'bodyshop_assignments' | 'bodyshop_floor_support_assignments',
+  cursor: IdCreatedAtCursor | null,
+) {
+  if (table === 'bodyshop_assignments') {
+    return fetchBodyshopActiveAssignmentsPage(cursor)
+  }
+  return fetchBodyshopActiveSupportAssignmentsPage(cursor)
+}
+
+/** First page only — use {@link fetchNextActiveBodyshopAssignmentRows} for load-more. */
+export async function fetchActiveBodyshopAssignmentRowsPage(): Promise<{
+  primaryRows: Record<string, unknown>[]
+  supportRows: Record<string, unknown>[]
+  primaryCursor: IdCreatedAtCursor | null
+  supportCursor: IdCreatedAtCursor | null
+  primaryHasMore: boolean
+  supportHasMore: boolean
+}> {
+  const [primary, support] = await Promise.all([
+    fetchActiveRowsPage('bodyshop_assignments', null),
+    fetchActiveRowsPage('bodyshop_floor_support_assignments', null),
+  ])
+  return {
+    primaryRows: primary.rows,
+    supportRows: support.rows,
+    primaryCursor: primary.nextCursor,
+    supportCursor: support.nextCursor,
+    primaryHasMore: primary.hasMore,
+    supportHasMore: support.hasMore,
+  }
+}
+
+export async function fetchNextActiveBodyshopAssignmentRows(cursors: {
+  primaryCursor: IdCreatedAtCursor | null
+  supportCursor: IdCreatedAtCursor | null
+}): Promise<{
+  primaryRows: Record<string, unknown>[]
+  supportRows: Record<string, unknown>[]
+  primaryCursor: IdCreatedAtCursor | null
+  supportCursor: IdCreatedAtCursor | null
+  primaryHasMore: boolean
+  supportHasMore: boolean
+}> {
+  const [primary, support] = await Promise.all([
+    cursors.primaryCursor
+      ? fetchActiveRowsPage('bodyshop_assignments', cursors.primaryCursor)
+      : Promise.resolve({ rows: [], nextCursor: null, hasMore: false }),
+    cursors.supportCursor
+      ? fetchActiveRowsPage('bodyshop_floor_support_assignments', cursors.supportCursor)
+      : Promise.resolve({ rows: [], nextCursor: null, hasMore: false }),
+  ])
+  return {
+    primaryRows: primary.rows,
+    supportRows: support.rows,
+    primaryCursor: primary.nextCursor,
+    supportCursor: support.nextCursor,
+    primaryHasMore: primary.hasMore,
+    supportHasMore: support.hasMore,
+  }
+}
+
 async function fetchAllActiveRows(table: 'bodyshop_assignments' | 'bodyshop_floor_support_assignments') {
-  const pageSize = 1000
   const rows: Record<string, unknown>[] = []
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq('is_active', true)
-      .range(from, from + pageSize - 1)
-    if (error) throw new Error(error.message)
-    const batch = (data ?? []) as Record<string, unknown>[]
-    rows.push(...batch)
-    if (batch.length < pageSize) break
+  let cursor: IdCreatedAtCursor | null = null
+  for (let i = 0; i < 80; i += 1) {
+    const page = await fetchActiveRowsPage(table, cursor)
+    rows.push(...page.rows)
+    if (!page.hasMore || !page.nextCursor) break
+    cursor = page.nextCursor
   }
   return rows
 }

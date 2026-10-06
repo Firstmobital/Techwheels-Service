@@ -1,4 +1,4 @@
-﻿/**
+/**
  * mobile/src/app/(tabs)/reception.tsx
  * Mobile mirror of web ReceptionPage — business logic 100% identical to web.
  * UI is mobile-specific (React Native). All data columns, filtering, validation,
@@ -11,12 +11,18 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffNavigationChrome } from '../../components/staff/StaffScreenShell'
+import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
 import { isServiceAdvisorRole } from '../../lib/businessRoles'
 import { useAuth } from '../../context/AuthContext'
 import { getReceptionRevisitContext, type ReceptionRevisitContext } from '../../lib/api/receptionRevisit'
 import { getReceptionUpdationContext, type ReceptionUpdationContext } from '../../lib/api/receptionUpdation'
 import { lookupVehicleByRegNumber, type VehicleLookupResult } from '../../lib/api/vehicleLookup'
+import { fetchReceptionEntriesListPage } from '../../lib/api/receptionListPage'
+import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 
 // ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
@@ -227,45 +233,23 @@ function normalizeKm(v: string): number | null {
 
 // ─── Supabase helpers (mirrors web reception.ts) ──────────────────────────────
 
-// Mobile reception shows recent entries only. 30-day default prevents full-table scans.
 const MOBILE_RECEPTION_LOOKBACK_DAYS = 30
 
-function getMobileLookbackFrom(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - MOBILE_RECEPTION_LOOKBACK_DAYS)
-  return d.toISOString()
+function getIstDayBounds(dayKey: string): { from: string; to: string } {
+  return {
+    from: new Date(`${dayKey}T00:00:00+05:30`).toISOString(),
+    to: new Date(`${dayKey}T23:59:59.999+05:30`).toISOString(),
+  }
 }
 
-async function fetchAllEntries(): Promise<ReceptionEntry[]> {
-  const PAGE = 100
-  const rows: ReceptionEntry[] = []
-  let cursorCreatedAt: string | null = null
-  let cursorId: number | null = null
-  const lookbackFrom = getMobileLookbackFrom()
-  const lookbackTo = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-
-  while (true) {
-    const { data, error } = await supabase.rpc('list_reception_entries_page', {
-      p_created_at_from: lookbackFrom,
-      p_created_at_to: lookbackTo,
-      p_page_size: PAGE,
-      p_cursor_created_at: cursorCreatedAt,
-      p_cursor_id: cursorId,
-      p_service_types: null,
-      p_search_query: null,
-      p_require_non_empty_jc: false,
-    })
-
-    if (error) { console.warn('fetchAllEntries error:', error.message); break }
-    const batch = (Array.isArray(data) ? data : data ? [data] : []) as ReceptionEntry[]
-    rows.push(...batch)
-    if (batch.length < PAGE) break
-    const last = batch[batch.length - 1]
-    cursorCreatedAt = last.created_at ?? null
-    cursorId = last.id ?? null
-    if (!cursorCreatedAt || cursorId === null) break
+function getMobileReceptionRange(listMode: 'today' | 'month'): { from: string; to: string } {
+  const to = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  if (listMode === 'today') {
+    return { ...getIstDayBounds(getTodayKey()), to }
   }
-  return rows
+  const d = new Date()
+  d.setDate(d.getDate() - MOBILE_RECEPTION_LOOKBACK_DAYS)
+  return { from: d.toISOString(), to }
 }
 
 async function getEmployeeNameByCode(code: string): Promise<string | null> {
@@ -305,6 +289,7 @@ async function enrichEntries(entries: ReceptionEntry[]): Promise<ReceptionEntry[
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ReceptionScreen() {
+  const optimistic = useOptimisticAction()
   const { user } = useAuth()
 
   const [entries, setEntries] = useState<ReceptionEntry[]>([])
@@ -320,6 +305,9 @@ export default function ReceptionScreen() {
   const [selectedFuelType, setSelectedFuelType] = useState<string>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string>('all')
   const [search, setSearch] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const loadSeqRef = useRef(0)
 
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -339,46 +327,110 @@ export default function ReceptionScreen() {
   const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const updationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Load data ──────────────────────────────────────────────────────────────
-  const loadAll = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true)
-    const [entriesRaw, empRes, modelsRes] = await Promise.all([
-      fetchAllEntries(),
-      supabase
-        .from('employee_master')
-        .select('employee_code,employee_name,department,fuel_type,role,location')
-        .eq('is_active', true)
-        .order('employee_name'),
-      supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
-    ])
-    const enriched = await enrichEntries(entriesRaw)
-    setEntries(enriched)
-
-    // Exact web: only SA roles (supports comma-separated Business Roles)
-    const empData = (empRes.data ?? []) as Employee[]
-    // Deduplicate by employee_code (take first occurrence) — matches web listReceptionEmployees
-    const seenCodes = new Set<string>()
-    setEmployees(empData
-      .filter(e =>
-        isServiceAdvisorRole(e.role) &&
-        String(e.employee_code ?? '').trim().length > 0
+  const fetchEntriesPage = useCallback(
+    async (searchQuery: string): Promise<string | null> => {
+      const range = getMobileReceptionRange(listMode)
+      const { rows, pageError } = await collectListPages((cursor) =>
+        fetchReceptionEntriesListPage({
+          createdAtFrom: range.from,
+          createdAtTo: range.to,
+          cursor,
+          pageSize: 100,
+          searchQuery: searchQuery.trim() || null,
+        }),
       )
-      .filter(e => {
-        const code = String(e.employee_code ?? '').trim().toUpperCase()
-        if (seenCodes.has(code)) return false
-        seenCodes.add(code)
-        return true
-      })
-    )
+      const enriched = await enrichEntries(rows as unknown as ReceptionEntry[])
+      setEntries(enriched)
+      return formatPartialListLoadError(pageError, enriched.length)
+      setEntries((prev) => (opts.reset ? enriched : [...prev, ...enriched]))
+      setListCursor(page.nextCursor)
+      setListHasMore(page.hasMore)
+    },
+    [listMode],
+  )
+    const seq = ++loadSeqRef.current
+    if (!isRefresh) setLoading(true)
+    setLoadError(null)
+    try {
+      const [empRes, modelsRes, listErr] = await Promise.all([
+        supabase
+          .from('employee_master')
+          .select('employee_code,employee_name,department,fuel_type,role,location')
+          .eq('is_active', true)
+          .order('employee_name'),
+        supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
+        fetchEntriesPage(search),
+      ])
+      if (seq !== loadSeqRef.current) return
+      if (listErr) setLoadError(listErr)
+        supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
+        fetchEntriesPage({ reset: true, searchQuery: search, cursor: null }),
+      ])
 
-    if (modelsRes.data && modelsRes.data.length > 0)
-      setModelOptions([...new Set((modelsRes.data as { model_name: string }[]).map(r => String(r.model_name ?? '').trim()).filter(Boolean))])
+      const empData = (empRes.data ?? []) as Employee[]
+      const seenCodes = new Set<string>()
+      setEmployees(empData
+        .filter(e =>
+          isServiceAdvisorRole(e.role) &&
+          String(e.employee_code ?? '').trim().length > 0
+        )
+        .filter(e => {
+          const code = String(e.employee_code ?? '').trim().toUpperCase()
+          if (seenCodes.has(code)) return false
+          seenCodes.add(code)
+          return true
+        })
+      )
 
-    setLoading(false)
-    setRefreshing(false)
-  }, [])
+      if (seq !== loadSeqRef.current) return
+      setLoadError(e instanceof Error ? e.message : 'Reception load failed')
+      console.warn('Reception load failed:', e)
+    } finally {
+      if (seq === loadSeqRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [fetchEntriesPage, search])
+
+  const loadMoreEntries = useCallback(async () => {
+    if (loadingMore || !listHasMore || !listCursor) return
+    setLoadingMore(true)
+    try {
+      await fetchEntriesPage({ reset: false, searchQuery: search, cursor: listCursor })
+    } catch (e) {
+      console.warn('Reception load more failed:', e)
+    } finally {
+      setLoadingMore(false)
+    }
+          await fetchEntriesPage(search)
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
+
+  const searchFetchSkipRef = useRef(true)
+  useEffect(() => {
+    if (searchFetchSkipRef.current) {
+      searchFetchSkipRef.current = false
+      return
+    }
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      void (async () => {
+        setLoading(true)
+        try {
+          await fetchEntriesPage({ reset: true, searchQuery: search, cursor: null })
+        } finally {
+          setLoading(false)
+        }
+      })()
+    }, 400)
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
+  }, [search, fetchEntriesPage])
 
   useEffect(() => {
     let mounted = true
@@ -450,6 +502,8 @@ export default function ReceptionScreen() {
       (e.owner_name ?? '').toLowerCase().includes(q)
     )
   }, [stFiltered, search])
+
+  const serverSearchActive = search.trim().length > 0
 
   // ── SA dropdown — STRICT fuel_type filter: EV shows EV SAs only, PV shows PV SAs only ────
   // Rule: fuel_type MUST be selected first; model inference never overrides explicit fuel selection
@@ -635,9 +689,6 @@ export default function ReceptionScreen() {
       return
     }
 
-    setSaving(true)
-
-    // normalizePayload — fuel_type stored in portal column
     const payload = {
       reg_number:       form.reg_number.trim().toUpperCase(),
       model:            form.model.trim() || null,
@@ -651,106 +702,153 @@ export default function ReceptionScreen() {
       portal:           form.fuel_type || null,
     }
 
-    // Exact web: resolve sa_name from employee_master
     const saName = await getEmployeeNameByCode(payload.sa_employee_code)
     if (!saName) {
       setFormError(`Employee code '${payload.sa_employee_code}' not found`)
-      setSaving(false)
       return
     }
 
-    let resultData: ReceptionEntry | null = null
-    let resultError: string | null = null
+    const isCreate = editingId === null
+    const editId = editingId
+    const prevEntries = entries
+    const prevForm = form
+    const prevShowModal = showModal
+    const serviceTypeForAccident = form.service_type
 
-    if (editingId === null) {
-      const { data, error } = await supabase.rpc('create_reception_entry', {
-        p_reg_number: payload.reg_number,
-        p_model: payload.model,
-        p_service_type: payload.service_type,
-        p_sa_employee_code: payload.sa_employee_code,
-        p_owner_name: payload.owner_name,
-        p_owner_phone: payload.owner_phone,
-        p_source: payload.source,
-        p_km_reading: payload.km_reading,
-        p_branch: payload.branch,
-        p_portal: payload.portal,
-      })
-      resultData = (Array.isArray(data) ? data[0] : data) as ReceptionEntry | null
-      resultError = error?.message ?? null
-    } else {
-      const { data, error } = await supabase.rpc('update_reception_entry', {
-        p_reception_entry_id: editingId,
-        p_reg_number: payload.reg_number,
-        p_model: payload.model,
-        p_service_type: payload.service_type,
-        p_sa_employee_code: payload.sa_employee_code,
-        p_owner_name: payload.owner_name,
-        p_owner_phone: payload.owner_phone,
-        p_source: payload.source,
-        p_km_reading: payload.km_reading,
-        p_branch: payload.branch,
-        p_portal: payload.portal,
-      })
-      resultData = (Array.isArray(data) ? data[0] : data) as ReceptionEntry | null
-      resultError = error?.message ?? null
-    }
+    await optimistic.run('reception-save', {
+      apply: () => {
+        setSaving(true)
+        setShowModal(false)
+        setForm(EMPTY_FORM)
+        setEditingId(null)
+        if (!isCreate && editId !== null) {
+          setEntries(prev => prev.map(e => e.id === editId ? {
+            ...e,
+            reg_number: payload.reg_number,
+            model: payload.model ?? e.model,
+            service_type: payload.service_type,
+            sa_employee_code: payload.sa_employee_code,
+            sa_name: saName,
+            sa_display_name: saName,
+            owner_name: payload.owner_name,
+            owner_phone: payload.owner_phone,
+            km_reading: payload.km_reading,
+            source: payload.source,
+            portal: payload.portal,
+          } : e))
+        } else {
+          const optimisticEntry = {
+            id: -Date.now(),
+            jc_number: '…',
+            created_at: new Date().toISOString(),
+            reg_number: payload.reg_number,
+            model: payload.model,
+            service_type: payload.service_type,
+            sa_employee_code: payload.sa_employee_code,
+            sa_name: saName,
+            sa_display_name: saName,
+            owner_name: payload.owner_name,
+            owner_phone: payload.owner_phone,
+            km_reading: payload.km_reading,
+            source: payload.source,
+            portal: payload.portal,
+            branch: null,
+          } as ReceptionEntry
+          setEntries(prev => [optimisticEntry, ...prev])
+        }
+      },
+      rollback: () => {
+        setEntries(prevEntries)
+        setForm(prevForm)
+        setEditingId(editId)
+        setShowModal(prevShowModal)
+        setSaving(false)
+      },
+      execute: async () => {
+        let resultData: ReceptionEntry | null = null
+        if (isCreate) {
+          const { data, error } = await supabase.rpc('create_reception_entry', {
+            p_reg_number: payload.reg_number,
+            p_model: payload.model,
+            p_service_type: payload.service_type,
+            p_sa_employee_code: payload.sa_employee_code,
+            p_owner_name: payload.owner_name,
+            p_owner_phone: payload.owner_phone,
+            p_source: payload.source,
+            p_km_reading: payload.km_reading,
+            p_branch: payload.branch,
+            p_portal: payload.portal,
+          })
+          resultData = (Array.isArray(data) ? data[0] : data) as ReceptionEntry | null
+          if (error) throw new Error(error.message)
+        } else if (editId !== null) {
+          const { data, error } = await supabase.rpc('update_reception_entry', {
+            p_reception_entry_id: editId,
+            p_reg_number: payload.reg_number,
+            p_model: payload.model,
+            p_service_type: payload.service_type,
+            p_sa_employee_code: payload.sa_employee_code,
+            p_owner_name: payload.owner_name,
+            p_owner_phone: payload.owner_phone,
+            p_source: payload.source,
+            p_km_reading: payload.km_reading,
+            p_branch: payload.branch,
+            p_portal: payload.portal,
+          })
+          resultData = (Array.isArray(data) ? data[0] : data) as ReceptionEntry | null
+          if (error) throw new Error(error.message)
+        }
 
-    setSaving(false)
-
-    if (resultError) { setFormError(resultError); return }
-
-    // ── Exact web: auto-create bodyshop_repair_card for Accident ─────────────
-    if (editingId === null && form.service_type === 'Accident' && resultData) {
-      const entry = resultData
-      const jcNo = String(entry.jc_number ?? '').trim().toUpperCase()
-      const receptionEntryId = Number(entry.id)
-      let existingCard: { id: number } | null = null
-
-      if (isFinite(receptionEntryId)) {
-        const { data: byRec } = await supabase
-          .from('bodyshop_repair_cards')
-          .select('id')
-          .eq('reception_entry_id', receptionEntryId)
-          .order('updated_at', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(1)
-        existingCard = ((byRec ?? []) as { id: number }[])[0] ?? null
-      }
-
-      if (!existingCard && jcNo) {
-        const { data: byJc } = await supabase
-          .from('bodyshop_repair_cards')
-          .select('id')
-          .eq('job_card_no', jcNo)
-          .order('updated_at', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(1)
-        existingCard = ((byJc ?? []) as { id: number }[])[0] ?? null
-      }
-
-      if (!existingCard) {
-        await supabase.from('bodyshop_repair_cards').insert({
-          reception_entry_id: isFinite(receptionEntryId) ? receptionEntryId : null,
-          job_card_no:        jcNo || '',
-          reg_number:         form.reg_number.trim().toUpperCase(),
-          customer_name:      form.owner_name.trim() || null,
-          customer_phone:     normalizePhone(form.owner_phone),
-          customer_type:      null,
-          branch:             entry.branch ?? null,
-          sa_name:            saName,
-          current_stage:      1,
-          current_stage_name: 'Vehicle Receiving',
-          overall_status:     'active',
-          received_at:        new Date().toISOString(),
-        })
-      }
-    }
-
-    setShowModal(false)
-    setForm(EMPTY_FORM)
-    setEditingId(null)
-    Alert.alert('Success', editingId === null ? 'Entry created successfully' : 'Entry updated successfully')
-    await loadAll()
+        if (isCreate && serviceTypeForAccident === 'Accident' && resultData) {
+          const entry = resultData
+          const jcNo = String(entry.jc_number ?? '').trim().toUpperCase()
+          const receptionEntryId = Number(entry.id)
+          let existingCard: { id: number } | null = null
+          if (isFinite(receptionEntryId)) {
+            const { data: byRec } = await supabase
+              .from('bodyshop_repair_cards')
+              .select('id')
+              .eq('reception_entry_id', receptionEntryId)
+              .order('updated_at', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
+            existingCard = ((byRec ?? []) as { id: number }[])[0] ?? null
+          }
+          if (!existingCard && jcNo) {
+            const { data: byJc } = await supabase
+              .from('bodyshop_repair_cards')
+              .select('id')
+              .eq('job_card_no', jcNo)
+              .order('updated_at', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
+            existingCard = ((byJc ?? []) as { id: number }[])[0] ?? null
+          }
+          if (!existingCard) {
+            await supabase.from('bodyshop_repair_cards').insert({
+              reception_entry_id: isFinite(receptionEntryId) ? receptionEntryId : null,
+              job_card_no: jcNo || '',
+              reg_number: payload.reg_number,
+              customer_name: payload.owner_name,
+              customer_phone: payload.owner_phone,
+              customer_type: null,
+              branch: entry.branch ?? null,
+              sa_name: saName,
+              current_stage: 1,
+              current_stage_name: 'Vehicle Receiving',
+              overall_status: 'active',
+              received_at: new Date().toISOString(),
+            })
+          }
+        }
+        await loadAll()
+      },
+      onSuccess: () => {
+        setSaving(false)
+        Alert.alert('Success', isCreate ? 'Entry created successfully' : 'Entry updated successfully')
+      },
+      errorMessage: (err) => (err instanceof Error ? err.message : 'Save failed'),
+    })
   }
 
   async function handleDelete(id: number) {
@@ -872,6 +970,8 @@ export default function ReceptionScreen() {
               <Text style={s.delBtnText}>🗑️  Delete</Text>
             </TouchableOpacity>
           )}
+      <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
+
         </View>
       </View>
     )
@@ -879,25 +979,38 @@ export default function ReceptionScreen() {
 
   return (
     <SafeAreaView style={s.root}>
+      {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
 
-      {/* ── Compact header: Today Entry | Reception | + New Entry ── */}
-      <View style={s.header}>
-        <View style={s.headerLeft}>
-          <Text style={s.headerLeftLabel}>Today Entry</Text>
-          <Text style={s.headerLeftCount}>{todayEntries.length}</Text>
-        </View>
-        <Text style={s.headerTitle}>Reception</Text>
-        <TouchableOpacity style={s.addBtn} onPress={openAdd}>
-          <Text style={s.addBtnText}>+ New Entry</Text>
-        </TouchableOpacity>
-      </View>
+      <StaffNavigationChrome
+        title="Reception"
+        subtitle={`${todayEntries.length} entries today`}
+        rightAction={
+          <TouchableOpacity
+            style={s.addBtn}
+            onPress={openAdd}
+            accessibilityRole="button"
+            accessibilityLabel="Create new reception entry"
+          >
+            <Text style={s.addBtnText}>+ New Entry</Text>
+          </TouchableOpacity>
+        }
+      />
 
-      {/* Search */}
       <View style={s.searchRow}>
-        <TextInput style={s.searchInput}
-          placeholder="🔍 Search reg / name / model / SA / JC..."
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search reg / name / model / SA / JC..."
           placeholderTextColor="#94a3b8"
-          value={search} onChangeText={setSearch} clearButtonMode="while-editing"
+          value={search}
+          onChangeText={setSearch}
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search reception entries"
         />
       </View>
 
@@ -914,22 +1027,22 @@ export default function ReceptionScreen() {
                 ? `All (${locFiltered.length})`
                 : ft === 'EV'
                   ? `EV (${locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === 'EV').length})`
-                  : `PV (${locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === 'PV').length})`}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* List */}
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563eb" />
-      ) : (
-        <FlatList
-          data={displayEntries}
-          keyExtractor={e => String(e.id)}
-          renderItem={({ item }) => <EntryCard entry={item} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAll(true) }} />}
           contentContainerStyle={{ padding: 12, paddingBottom: 80, flexGrow: 1 }}
+          onEndReached={() => { void loadMoreEntries() }}
+          onEndReachedThreshold={0.35}
+          contentContainerStyle={{ padding: 12, paddingBottom: 80, flexGrow: 1 }}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator style={{ marginVertical: 16 }} color="#2563eb" />
+            ) : listHasMore ? (
+              <TouchableOpacity
+                style={[s.addBtn, { alignSelf: 'center', marginVertical: 12 }]}
+                onPress={() => void loadMoreEntries()}
+              >
+                <Text style={s.addBtnText}>Load more</Text>
+              </TouchableOpacity>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={s.empty}>
               <Text style={s.emptyIcon}>🏁</Text>

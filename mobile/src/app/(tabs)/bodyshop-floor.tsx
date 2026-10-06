@@ -4,7 +4,7 @@
  * Business logic: 100% mirrors web (same DB tables, columns, rules).
  * UI: Mobile-native React Native cards using floor-incharge.tsx as structural template.
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator, Alert, FlatList, Modal,
   RefreshControl, ScrollView, StyleSheet, Text,
@@ -12,7 +12,19 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffNavigationChrome, StaffInlineMenuButton } from '../../components/staff/StaffScreenShell'
+import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
+import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
+import {
+  fetchBodyshopAssignmentsForJobCards,
+  fetchBodyshopRepairCardsPage,
+  fetchBodyshopSupportAssignmentsForJobCards,
+  type BodyshopRepairCardListRow,
+} from '../../lib/api/bodyshopFloorList'
+import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
   BODYSHOP_FLOOR_LIVE_LIST_LABEL,
@@ -20,14 +32,6 @@ import {
   type BodyshopFloorVehicleListMode,
 } from '../../lib/bodyshopFloorLive'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
-import type { BodyshopFloorDailyUpdateRow } from '../../lib/bodyshopFloorDailyUpdate'
-import {
-  dailyUpdateMapKey,
-  floorDailyUpdateSummary,
-} from '../../lib/bodyshopFloorDailyUpdate'
-import { fetchBodyshopFloorDailyUpdatesForJcs } from '../../lib/api/bodyshopFloorDailyUpdate'
-import { FloorDailyUpdatePanel } from '../../components/bodyshop/FloorDailyUpdatePanel'
-import { WorkerRoleUpdatesPanel } from '../../components/bodyshop/WorkerRoleUpdatesPanel'
 import { BodyshopFloorStepTracker } from '../../components/bodyshop/BodyshopFloorStepTracker'
 import { arePipelineWorkStepsFinished } from '../../lib/bodyshopFloorWork/pipeline'
 import {
@@ -36,6 +40,18 @@ import {
   isEdpAssignmentAllowed,
   type FloorFlowStepId,
 } from '../../lib/bodyshopFloorWork/floorFlowSteps'
+import { isBodyshopWorkerPipelineAssignRole } from '../../lib/bodyshopFloorWork/workerPipelineAssignRoles'
+import { bodyshopFloorAgeSummary } from '../../lib/bodyshopFloorAge'
+import {
+  filterBodyshopFloorInchargeCandidates,
+  listBodyshopFloorInchargeEmployees,
+  isFloorInchargeReassignmentBlocked,
+  canEditBodyshopFloorAssignments,
+  loadBodyshopFloorInchargeScope,
+  normalizeBodyshopPhysicalFloor,
+  BODYSHOP_PHYSICAL_FLOORS,
+  type BodyshopFloorInchargeScope,
+} from '../../lib/bodyshopFloorInchargeScope'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,10 +81,13 @@ interface FloorCar {
   current_stage: number
   overall_status: string
   sa_name: string | null
+  sa_employee_code: string | null
+  dealer_code: string | null
   model: string | null
   customer_phone: string | null
-  /** Repair card created — fallback when floor assignment row has no timestamp */
   created_at: string | null
+  bodyshop_floor_since_at: string | null
+  survay_info_updated_at: string | null
 }
 
 interface Employee {
@@ -76,6 +95,8 @@ interface Employee {
   employee_name: string
   role: string | null
   department: string | null
+  fuel_type: string | null
+  location: string | null
 }
 
 interface DBAssignmentRow {
@@ -152,6 +173,7 @@ interface DBAssignmentRow {
   parts_incharge_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
+  updated_at?: string | null
 }
 
 interface BSAssignment {
@@ -222,6 +244,9 @@ const ALL_ROLES: BSRole[] = [
   'RUBBING', 'EDP', 'PARTS_INCHARGE',
 ]
 
+/** Roles shown in Bodyshop Floor pipeline UI (Parts Incharge excluded). */
+const BODYSHOP_FLOOR_PIPELINE_ROLES: BSRole[] = ALL_ROLES.filter((r) => r !== 'PARTS_INCHARGE')
+
 const ROLES_WITHOUT_SUPPORT = new Set<BSRole>(['FLOOR_INCHARGE', 'PARTS_INCHARGE'])
 
 const ROLE_META: Record<BSRole, { label: string; initial: string; bg: string; color: string }> = {
@@ -263,15 +288,13 @@ const STATUS_OPTIONS = [
   { value: 'completed',      label: 'Completed',  bg: '#e4f4ec', color: '#1c8f63' },
 ]
 
-/** Main floor list filters — counts shown for the selected floor (or all floors). */
-const PRIMARY_ASSIGNMENT_TABS: { key: AssignmentView; label: string }[] = [
+/** Same status chips as the admin Bodyshop Floor page. */
+const LIST_STATUS_TABS: { key: AssignmentView; label: string }[] = [
+  { key: 'all', label: 'All' },
   { key: 'unassigned', label: 'Unassigned' },
-  { key: 'assigned', label: 'Assigned' },
   { key: 'work_inprocess', label: 'In Process' },
-  { key: 'completed', label: 'Done' },
-]
-
-const QC_RI_TABS: { key: AssignmentView; label: string }[] = [
+  { key: 'hold', label: 'On Hold' },
+  { key: 'completed', label: 'Completed' },
   { key: 'qc', label: 'QC' },
   { key: 'ri', label: 'RI' },
 ]
@@ -313,21 +336,51 @@ function mapRowToRoleMap(row: DBAssignmentRow): Record<BSRole, BSAssignment | un
     const cols = ROLE_COLUMNS[role]
     const code = row[cols.code] as string | null
     const name = row[cols.name] as string | null
-    if (!code || !name) continue
+    const workStatus = (row[cols.status] as string | null) ?? ''
+    const notRequired =
+      String(code ?? '').trim().toUpperCase() === NOT_REQUIRED_CODE
+      || String(name ?? '').trim().toLowerCase() === 'not required'
+      || String(workStatus).trim().toLowerCase() === NOT_REQUIRED_STATUS
+    if (!String(code ?? '').trim() && !notRequired) continue
     m[role] = {
       id: row.id,
       job_card_number: row.job_card_number,
       role,
-      employee_code: code,
-      employee_name: name,
-      work_status: (row[cols.status] as string | null) ?? 'work_inprocess',
-      remark: (row[cols.remark] as string | null) ?? null,
-      in_ts: (row[cols.inTs] as string | null) ?? row.assigned_at,
-      out_ts: (row[cols.outTs] as string | null) ?? null,
-      completed_by: (row[cols.completedBy] as string | null) ?? null,
+      employee_code: notRequired ? NOT_REQUIRED_CODE : String(code ?? '').trim(),
+      employee_name: notRequired ? NOT_REQUIRED_NAME : String(name ?? code ?? '').trim(),
+      work_status: notRequired ? NOT_REQUIRED_STATUS : (workStatus || 'work_inprocess'),
+      remark: notRequired ? null : ((row[cols.remark] as string | null) ?? null),
+      in_ts: notRequired ? null : ((row[cols.inTs] as string | null) ?? row.assigned_at),
+      out_ts: notRequired ? null : ((row[cols.outTs] as string | null) ?? null),
+      completed_by: notRequired ? null : ((row[cols.completedBy] as string | null) ?? null),
     }
   }
   return m
+}
+
+function mergeAssignmentRowIntoMaps(
+  assMap: Record<string, Record<BSRole, BSAssignment | undefined>>,
+  rawByJc: Record<string, DBAssignmentRow>,
+  floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }>,
+  row: DBAssignmentRow,
+) {
+  const k = jcKey(row.job_card_number)
+  const partial = mapRowToRoleMap(row)
+  if (!assMap[k]) {
+    assMap[k] = emptyRoleMap()
+  }
+  const prevRaw = rawByJc[k]
+  if (!prevRaw || String(row.updated_at ?? '') >= String(prevRaw.updated_at ?? '')) {
+    rawByJc[k] = row
+    floorMap[k] = {
+      completedAt: row.bs_floor_completed_at ?? null,
+      completedBy: row.bs_floor_completed_by ?? null,
+      enteredAt: row.assigned_at ?? row.created_at ?? floorMap[k]?.enteredAt ?? null,
+    }
+  }
+  for (const role of ALL_ROLES) {
+    if (partial[role]) assMap[k][role] = partial[role]
+  }
 }
 
 function getRowId(roleMap: Record<BSRole, BSAssignment | undefined> | undefined): number | null {
@@ -418,37 +471,6 @@ function fmtTs(v: string | null | undefined): string {
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-/** Calendar days since an ISO timestamp (local midnight), for unassigned ageing on floor */
-function calendarDaysSince(iso: string | null | undefined): number | null {
-  const raw = String(iso ?? '').trim()
-  if (!raw) return null
-  const d = new Date(raw)
-  if (isNaN(d.getTime())) return null
-  const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  return Math.max(0, Math.floor((today.getTime() - startDay.getTime()) / 86400000))
-}
-
-function floorAgeColor(days: number): string {
-  if (days >= 5) return '#c33b53'
-  if (days >= 3) return '#c9751b'
-  return '#82858f'
-}
-
-function floorAgeLabel(days: number): string {
-  if (days <= 0) return 'On floor today'
-  if (days === 1) return 'On floor 1 day'
-  return `On floor ${days} days`
-}
-
-function resolveFloorSinceIso(
-  car: FloorCar,
-  enteredAt: string | null | undefined,
-): string | null {
-  return enteredAt ?? car.created_at ?? null
-}
-
 function parseQcNames(raw: string | null | undefined): string[] {
   const str = String(raw ?? '').trim()
   if (!str) return []
@@ -487,10 +509,119 @@ function normalizeRiDoneBy(raw: string | null | undefined): string {
   return value
 }
 
+/** Workshop dealer code is the numeric segment (3000840), not the branch name or SA suffix. */
+function dealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | undefined): string | null {
+  const parts = String(saEmployeeCode ?? '').split('_').map((p) => p.trim()).filter(Boolean)
+  const numeric = parts.find((p) => /^\d{6,}$/.test(p))
+  if (numeric) return numeric
+  const last = parts[parts.length - 1]
+  return last ? last.toUpperCase() : null
+}
+
+function assignmentDealerCode(car: FloorCar): string {
+  const explicit = String(car.dealer_code ?? '').trim()
+  if (explicit && explicit.toUpperCase() !== 'UNKNOWN') return explicit
+  return dealerCodeFromSaEmployeeCode(car.sa_employee_code) ?? 'UNKNOWN'
+}
+
+function assignFailureMessage(err: unknown): string {
+  const raw = err && typeof err === 'object' && 'message' in err
+    ? String((err as { message?: unknown }).message ?? '')
+    : err instanceof Error
+      ? err.message
+      : ''
+  if (/row-level security/i.test(raw)) {
+    return 'Could not assign. This job card is outside your dealer access.'
+  }
+  return raw.trim() || 'Failed to assign'
+}
+
 function labelForRiDoneBy(raw: string | null | undefined): string {
   const value = normalizeRiDoneBy(raw)
   const match = RI_DONE_BY_OPTIONS.find(opt => opt.value === value)
   return match?.label ?? (value || '—')
+}
+
+async function buildFloorCarsFromRaw(rawCards: BodyshopRepairCardListRow[]): Promise<FloorCar[]> {
+  const entryIds = Array.from(new Set(
+    rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null && v > 0),
+  ))
+  type ReceptionRow = {
+    id: number
+    model: string | null
+    owner_phone: string | null
+    owner_name: string | null
+    dealer_code: string | null
+  }
+  const receptionByEntryId: Record<number, ReceptionRow> = {}
+  const chunkSize = 400
+  for (let i = 0; i < entryIds.length; i += chunkSize) {
+    const chunk = entryIds.slice(i, i + chunkSize)
+    const { data: entryData, error: entryErr } = await supabase.rpc('get_reception_entries_by_ids', {
+      p_ids: chunk,
+    })
+    if (entryErr) throw entryErr
+    ;(entryData ?? []).forEach((r: ReceptionRow) => {
+      receptionByEntryId[r.id] = r
+    })
+  }
+
+  return rawCards
+    .filter(c => c.job_card_no)
+    .map(c => ({
+      id: c.id,
+      job_card_no: c.job_card_no!,
+      reg_number: c.reg_number,
+      customer_name: c.customer_name,
+      branch: c.branch,
+      bodyshop_floor: normalizeBodyshopPhysicalFloor(c.bodyshop_floor) ?? c.bodyshop_floor,
+      bodyshop_floor_since_at: c.bodyshop_floor_since_at ?? null,
+      survay_info_updated_at: c.survay_info_updated_at ?? null,
+      additional_approval: c.additional_approval,
+      qc_status: c.qc_status,
+      qc_fail_reason: c.qc_fail_reason,
+      qc_checked_by: c.qc_checked_by,
+      qc_checked_at: c.qc_checked_at,
+      reinspection_status: c.reinspection_status,
+      reinspection_type: c.reinspection_type,
+      reinspection_by: c.reinspection_by,
+      reinspection_at: c.reinspection_at,
+      current_stage: c.current_stage,
+      overall_status: c.overall_status,
+      sa_name: c.sa_name,
+      sa_employee_code: c.sa_employee_code ?? null,
+      dealer_code: c.reception_entry_id != null
+        ? (receptionByEntryId[c.reception_entry_id]?.dealer_code ?? null)
+        : null,
+      model: c.reception_entry_id != null ? (receptionByEntryId[c.reception_entry_id]?.model ?? null) : null,
+      customer_phone: c.reception_entry_id != null
+        ? (receptionByEntryId[c.reception_entry_id]?.owner_phone ?? c.customer_phone ?? null)
+        : (c.customer_phone ?? null),
+      created_at: c.created_at ?? null,
+    }))
+}
+
+function qcRiStateFromCars(carList: FloorCar[]): { qc: Record<string, QcState>; ri: Record<string, RiState> } {
+  const nextQc: Record<string, QcState> = {}
+  const nextRi: Record<string, RiState> = {}
+  carList.forEach(c => {
+    const k = jcKey(c.job_card_no)
+    nextQc[k] = {
+      repairCardId: c.id,
+      qc_status: String(c.qc_status ?? 'pending').toLowerCase() || 'pending',
+      qc_fail_reason: String(c.qc_fail_reason ?? ''),
+      qc_checked_by: String(c.qc_checked_by ?? ''),
+      qc_checked_at: String(c.qc_checked_at ?? ''),
+    }
+    nextRi[k] = {
+      repairCardId: c.id,
+      reinspection_status: String(c.reinspection_status ?? 'pending').trim().toLowerCase() || 'pending',
+      reinspection_type: normalizeRiDoneBy(c.reinspection_type),
+      reinspection_by: String(c.reinspection_by ?? ''),
+      reinspection_at: String(c.reinspection_at ?? ''),
+    }
+  })
+  return { qc: nextQc, ri: nextRi }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -499,10 +630,10 @@ export default function BodyshopFloorScreen() {
   const [loading,    setLoading]    = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [toast,      setToast]      = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const optimistic = useOptimisticAction()
 
   // Data
   const [cars,              setCars]              = useState<FloorCar[]>([])
-  const [dailyUpdatesByJc,  setDailyUpdatesByJc]  = useState<Record<string, BodyshopFloorDailyUpdateRow>>({})
   const [employees,         setEmployees]         = useState<Employee[]>([])
   const [assignments,       setAssignments]       = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
   const [assignmentRawByJc, setAssignmentRawByJc] = useState<Record<string, DBAssignmentRow>>({})
@@ -516,7 +647,10 @@ export default function BodyshopFloorScreen() {
   const [vehicleListMode, setVehicleListMode] = useState<BodyshopFloorVehicleListMode>('live_on_floor')
   const [branchFilter,   setBranchFilter]   = useState('all')
   const [floorFilter,    setFloorFilter]    = useState('all')
+  const loadSeq = useRef(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search,         setSearch]         = useState('')
+  const searchReloadSkipRef = useRef(true)
 
   // Detail
   const [selectedCar,  setSelectedCar]  = useState<FloorCar | null>(null)
@@ -542,154 +676,85 @@ export default function BodyshopFloorScreen() {
   // Additional approval decision
   const [approvalModal, setApprovalModal] = useState<{ car: FloorCar; partIndex: number; decision: 'approved' | 'rejected' } | null>(null)
 
+  const [inchargeScope, setInchargeScope] = useState<BodyshopFloorInchargeScope>({
+    isAdmin: false,
+    isBodyshopFloorIncharge: false,
+    canModifyBodyshopFloor: false,
+    canModifyBodyshopFloorWork: false,
+    employeeCode: null,
+    lockedBodyshopFloor: null,
+  })
+
   // ── Load ─────────────────────────────────────────────────────────────────
 
   const loadAll = useCallback(async (isRefresh = false) => {
+    const seq = ++loadSeq.current
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
+    setLoadError(null)
     try {
-      // 1. Repair cards (all active/floor vehicles)
-      const { data: cardData, error: cardErr } = await supabase
-        .from('bodyshop_repair_cards')
-        .select('id, job_card_no, reg_number, customer_name, customer_phone, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, overall_status, sa_name, reception_entry_id, created_at')
-        .order('created_at', { ascending: false })
-      if (cardErr) throw cardErr
+      const scope = await loadBodyshopFloorInchargeScope()
+      if (seq !== loadSeq.current) return
+      setInchargeScope(scope)
+      const floorForQuery = floorFilter !== 'all' ? floorFilter : null
+      const liveOnFloor = vehicleListMode === 'live_on_floor'
+      const searchQuery = search.trim() || null
 
-      const rawCards = (cardData ?? []) as Array<{
-        id: number; job_card_no: string | null; reg_number: string | null
-        customer_name: string | null; branch: string | null; bodyshop_floor: string | null
-        additional_approval: string | null; qc_status: string | null; qc_fail_reason: string | null
-        qc_checked_by: string | null; qc_checked_at: string | null
-        reinspection_status: string | null; reinspection_type: string | null
-        reinspection_by: string | null; reinspection_at: string | null
-        current_stage: number
-        overall_status: string; sa_name: string | null; reception_entry_id: number | null
-        customer_phone: string | null
-        created_at: string | null
-      }>
+      const loadFloorRows = (floor: string | null) =>
+        collectListPages((cursor) =>
+          fetchBodyshopRepairCardsPage({
+            cursor,
+            pageSize: 100,
+            searchQuery,
+            bodyshopFloor: floor,
+            liveOnFloor,
+          }),
+        )
 
-      // Reception meta (model, customer phone) — chunked for large floor lists
-      const entryIds = Array.from(new Set(
-        rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null && v > 0),
-      ))
-      type ReceptionRow = {
-        id: number
-        model: string | null
-        owner_phone: string | null
-        owner_name: string | null
+      const floorPageSets = [await loadFloorRows(floorForQuery)]
+      if (seq !== loadSeq.current) return
+      const seenIds = new Set<number>()
+      const mergedRows: BodyshopRepairCardListRow[] = []
+      const pageErrors: string[] = []
+      for (const page of floorPageSets) {
+        if (page.pageError) pageErrors.push(page.pageError)
+        for (const row of page.rows) {
+          if (seenIds.has(row.id)) continue
+          seenIds.add(row.id)
+          mergedRows.push(row)
+        }
       }
-      const receptionByEntryId: Record<number, ReceptionRow> = {}
-      const chunkSize = 400
-      for (let i = 0; i < entryIds.length; i += chunkSize) {
-        const chunk = entryIds.slice(i, i + chunkSize)
-        const { data: entryData, error: entryErr } = await supabase.rpc('get_reception_entries_by_ids', {
-          p_ids: chunk,
-        })
-        if (entryErr) throw entryErr
-        ;(entryData ?? []).forEach((r: ReceptionRow) => {
-          receptionByEntryId[r.id] = r
-        })
-      }
-
-      const carList: FloorCar[] = rawCards
-        .filter(c => c.job_card_no)
-        .map(c => ({
-          id: c.id,
-          job_card_no: c.job_card_no!,
-          reg_number: c.reg_number,
-          customer_name: c.customer_name,
-          branch: c.branch,
-          bodyshop_floor: c.bodyshop_floor,
-          additional_approval: c.additional_approval,
-          qc_status: c.qc_status,
-          qc_fail_reason: c.qc_fail_reason,
-          qc_checked_by: c.qc_checked_by,
-          qc_checked_at: c.qc_checked_at,
-          reinspection_status: c.reinspection_status,
-          reinspection_type: c.reinspection_type,
-          reinspection_by: c.reinspection_by,
-          reinspection_at: c.reinspection_at,
-          current_stage: c.current_stage,
-          overall_status: c.overall_status,
-          sa_name: c.sa_name,
-          model: c.reception_entry_id != null ? (receptionByEntryId[c.reception_entry_id]?.model ?? null) : null,
-          customer_phone: c.reception_entry_id != null
-            ? (receptionByEntryId[c.reception_entry_id]?.owner_phone ?? c.customer_phone ?? null)
-            : (c.customer_phone ?? null),
-          created_at: c.created_at ?? null,
-        }))
+      const listErr = formatPartialListLoadError(
+        pageErrors.length ? pageErrors.join('; ') : null,
+        mergedRows.length,
+      )
+      if (listErr) setLoadError(listErr)
+      const carList = await buildFloorCarsFromRaw(mergedRows)
+      if (seq !== loadSeq.current) return
       setCars(carList)
 
-      try {
-        const dailyRows = await fetchBodyshopFloorDailyUpdatesForJcs(carList.map(c => c.job_card_no))
-        const dailyMap: Record<string, BodyshopFloorDailyUpdateRow> = {}
-        dailyRows.forEach(row => {
-          dailyMap[dailyUpdateMapKey(row.job_card_number)] = row
-        })
-        setDailyUpdatesByJc(dailyMap)
-      } catch (dailyErr) {
-        console.warn('bodyshop_floor_daily_updates:', dailyErr)
-        setDailyUpdatesByJc({})
-      }
+      const { qc, ri } = qcRiStateFromCars(carList)
+      setQcByJc(qc)
+      setRiByJc(ri)
 
-      // QC + RI state
-      const nextQc: Record<string, QcState> = {}
-      const nextRi: Record<string, RiState> = {}
-      carList.forEach(c => {
-        const k = jcKey(c.job_card_no)
-        nextQc[k] = {
-          repairCardId: c.id,
-          qc_status: String(c.qc_status ?? 'pending').toLowerCase() || 'pending',
-          qc_fail_reason: String(c.qc_fail_reason ?? ''),
-          qc_checked_by: String(c.qc_checked_by ?? ''),
-          qc_checked_at: String(c.qc_checked_at ?? ''),
-        }
-        nextRi[k] = {
-          repairCardId: c.id,
-          reinspection_status: String(c.reinspection_status ?? 'pending').trim().toLowerCase() || 'pending',
-          reinspection_type: normalizeRiDoneBy(c.reinspection_type),
-          reinspection_by: String(c.reinspection_by ?? ''),
-          reinspection_at: String(c.reinspection_at ?? ''),
-        }
-      })
-      setQcByJc(nextQc)
-      setRiByJc(nextRi)
-
-      // 2. Employees
-      const { data: empData } = await supabase
-        .from('employee_master')
-        .select('employee_code, employee_name, department, role')
-        .eq('is_active', true)
-        .limit(500)
-      setEmployees((empData ?? []) as Employee[])
-
-      // 3. Assignments
-      const { data: assData, error: assErr } = await supabase
-        .from('bodyshop_assignments')
-        .select('*')
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-      if (assErr) throw assErr
+      const jcs = carList.map(c => c.job_card_no)
+      const [assRows, supRows] = await Promise.all([
+        fetchBodyshopAssignmentsForJobCards<DBAssignmentRow>(jcs),
+        fetchBodyshopSupportAssignmentsForJobCards<SupportAssignment>(jcs),
+      ])
 
       const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
       const rawByJc: Record<string, DBAssignmentRow> = {}
       const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
       const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
-      for (const row of (assData ?? []) as DBAssignmentRow[]) {
-        const k = jcKey(row.job_card_number)
-        if (!assMap[k]) {
-          rawByJc[k] = row
-          assMap[k] = mapRowToRoleMap(row)
-          floorMap[k] = {
-            completedAt: row.bs_floor_completed_at ?? null,
-            completedBy: row.bs_floor_completed_by ?? null,
-            enteredAt: row.assigned_at ?? row.created_at ?? null,
-          }
-          drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
-          for (const role of ALL_ROLES) {
-            const a = assMap[k][role]
-            drafts[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
-          }
+      for (const row of assRows) {
+        mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
+      }
+      for (const k of Object.keys(assMap)) {
+        drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
+        for (const role of ALL_ROLES) {
+          const a = assMap[k][role]
+          drafts[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
         }
       }
       setAssignments(assMap)
@@ -697,14 +762,8 @@ export default function BodyshopFloorScreen() {
       setBsFloorStatus(floorMap)
       setStageDrafts(drafts)
 
-      // 4. Support assignments
-      const { data: supData } = await supabase
-        .from('bodyshop_floor_support_assignments')
-        .select('*')
-        .eq('is_active', true)
-        .order('assigned_at', { ascending: false })
       const supMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
-      for (const s of (supData ?? []) as SupportAssignment[]) {
+      for (const s of supRows) {
         const k = jcKey(s.job_card_number)
         const role = s.support_role
         if (!supMap[k]) {
@@ -713,15 +772,33 @@ export default function BodyshopFloorScreen() {
         supMap[k][role].push(s)
       }
       setSupportAssignments(supMap)
+
+      // 2. Employees
+      const { data: empData } = await supabase
+        .from('employee_master')
+        .select('employee_code, employee_name, department, role, fuel_type, location')
+        .eq('is_active', true)
+        .or('department.ilike.%body%,role.ilike.%floor%incharge%')
+        .order('employee_name')
+        .limit(1000)
+      setEmployees((empData ?? []) as Employee[])
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [floorFilter, search, vehicleListMode])
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
+
+  useEffect(() => {
+    if (searchReloadSkipRef.current) {
+      searchReloadSkipRef.current = false
+      return
+    }
+    void loadAll(true)
+  }, [search, floorFilter, vehicleListMode, loadAll])
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -735,7 +812,11 @@ export default function BodyshopFloorScreen() {
         m[r].push(e)
       }
     })
-    ALL_ROLES.forEach(r => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
+    m.FLOOR_INCHARGE = listBodyshopFloorInchargeEmployees(employees)
+    ALL_ROLES.forEach(r => {
+      if (r === 'FLOOR_INCHARGE') return
+      m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name))
+    })
     return m
   }, [employees])
 
@@ -750,11 +831,16 @@ export default function BodyshopFloorScreen() {
 
   function hasAnyAssignment(c: FloorCar) {
     const m = assignments[jcKey(c.job_card_no)]
-    return m ? ALL_ROLES.some(r => Boolean(m[r])) : false
+    if (!m) return false
+    return BODYSHOP_FLOOR_PIPELINE_ROLES.some((r) => Boolean(m[r]))
   }
   function hasStatus(c: FloorCar, status: string) {
     const m = assignments[jcKey(c.job_card_no)]
-    return m ? ALL_ROLES.some(r => m[r]?.work_status === status) : false
+    if (!m) return false
+    return BODYSHOP_FLOOR_PIPELINE_ROLES.some((r) => {
+      const row = m[r]
+      return Boolean(row) && !isNotRequiredAssignment(row) && row?.work_status === status
+    })
   }
   function isBsCompleted(c: FloorCar) {
     return Boolean(bsFloorStatus[jcKey(c.job_card_no)]?.completedAt)
@@ -768,13 +854,17 @@ export default function BodyshopFloorScreen() {
     return status === 'completed'
   }
   function isInQcQueue(c: FloorCar) {
-    if (isQcPassed(c)) return false
-    if (isBsCompleted(c)) return true
-    const row = assignmentRawByJc[jcKey(c.job_card_no)]
-    return row ? arePipelineWorkStepsFinished(row as unknown as Record<string, unknown>) : false
+    return isBsCompleted(c) && !isQcPassed(c)
   }
   function isInRiQueue(c: FloorCar) {
     return isBsCompleted(c) && isQcPassed(c) && !isRiCompleted(c)
+  }
+  /** Same bucket as the card label: Completed, then On Hold, then any assigned role, else Unassigned. */
+  function listStatus(c: FloorCar): 'completed' | 'hold' | 'work_inprocess' | 'unassigned' {
+    if (isBsCompleted(c)) return 'completed'
+    if (hasStatus(c, 'hold')) return 'hold'
+    if (hasAnyAssignment(c)) return 'work_inprocess'
+    return 'unassigned'
   }
 
   const scopeCars = useMemo(() => (
@@ -797,12 +887,12 @@ export default function BodyshopFloorScreen() {
       )
     }
     return list
-  }, [scopeCars, branchFilter, search])
+  }, [scopeCars, branchFilter, search, inchargeScope, assignments])
 
   const floorCountsByKey = useMemo(() => {
     const out: Record<string, number> = { all: baseScopedCars.length }
     for (const c of baseScopedCars) {
-      const f = String(c.bodyshop_floor ?? '').trim()
+      const f = normalizeBodyshopPhysicalFloor(c.bodyshop_floor)
       if (!f) continue
       out[f] = (out[f] ?? 0) + 1
     }
@@ -811,49 +901,36 @@ export default function BodyshopFloorScreen() {
 
   const assignmentScopeCars = useMemo(() => {
     if (floorFilter === 'all') return baseScopedCars
-    return baseScopedCars.filter(c => c.bodyshop_floor === floorFilter)
+    return baseScopedCars.filter((c) => {
+      const carFloor = normalizeBodyshopPhysicalFloor(c.bodyshop_floor) ?? String(c.bodyshop_floor ?? '').trim()
+      const want = normalizeBodyshopPhysicalFloor(floorFilter) ?? floorFilter
+      return carFloor === want
+    })
   }, [baseScopedCars, floorFilter])
 
   const primaryCounts = useMemo(() => ({
     all: assignmentScopeCars.length,
-    unassigned: assignmentScopeCars.filter(c => !hasAnyAssignment(c)).length,
-    assigned: assignmentScopeCars.filter(c => hasAnyAssignment(c)).length,
-    work_inprocess: assignmentScopeCars.filter(
-      c => !isBsCompleted(c) && (hasStatus(c, 'work_inprocess') || hasStatus(c, 'hold')),
-    ).length,
-    completed: assignmentScopeCars.filter(c => isBsCompleted(c)).length,
-    qc: assignmentScopeCars.filter(c => isInQcQueue(c)).length,
-    ri: assignmentScopeCars.filter(c => isInRiQueue(c)).length,
+    unassigned: assignmentScopeCars.filter((c) => listStatus(c) === 'unassigned').length,
+    assigned: assignmentScopeCars.filter((c) => hasAnyAssignment(c)).length,
+    work_inprocess: assignmentScopeCars.filter((c) => listStatus(c) === 'work_inprocess').length,
+    hold: assignmentScopeCars.filter((c) => listStatus(c) === 'hold').length,
+    completed: assignmentScopeCars.filter((c) => listStatus(c) === 'completed').length,
+    qc: assignmentScopeCars.filter((c) => isInQcQueue(c)).length,
+    ri: assignmentScopeCars.filter((c) => isInRiQueue(c)).length,
+    approvals: assignmentScopeCars.filter((c) => pendingApprovalCount(c.additional_approval) > 0).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [assignmentScopeCars, assignments, bsFloorStatus, assignmentRawByJc, qcByJc, riByJc])
+  }), [assignmentScopeCars, assignments, bsFloorStatus, qcByJc, riByJc])
 
   const filtered = useMemo(() => {
-    let list = [...assignmentScopeCars]
-    if (assignmentView === 'unassigned') {
-      return list.filter(c => !hasAnyAssignment(c))
-    }
-    if (assignmentView === 'assigned') {
-      return list.filter(c => hasAnyAssignment(c))
-    }
-    if (assignmentView === 'work_inprocess') {
-      return list.filter(c => !isBsCompleted(c) && (hasStatus(c, 'work_inprocess') || hasStatus(c, 'hold')))
-    }
-    if (assignmentView === 'completed') {
-      return list.filter(c => isBsCompleted(c))
-    }
-    if (assignmentView === 'hold') {
-      return list.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold'))
-    }
-    if (assignmentView === 'qc') {
-      return list.filter(c => isInQcQueue(c))
-    }
-    if (assignmentView === 'ri') {
-      return list.filter(c => isInRiQueue(c))
-    }
-    if (assignmentView === 'approvals') {
-      return list.filter(c => pendingApprovalCount(c.additional_approval) > 0)
-    }
-    return list
+    if (assignmentView === 'unassigned') return assignmentScopeCars.filter((c) => listStatus(c) === 'unassigned')
+    if (assignmentView === 'assigned') return assignmentScopeCars.filter((c) => hasAnyAssignment(c))
+    if (assignmentView === 'work_inprocess') return assignmentScopeCars.filter((c) => listStatus(c) === 'work_inprocess')
+    if (assignmentView === 'hold') return assignmentScopeCars.filter((c) => listStatus(c) === 'hold')
+    if (assignmentView === 'completed') return assignmentScopeCars.filter((c) => listStatus(c) === 'completed')
+    if (assignmentView === 'qc') return assignmentScopeCars.filter((c) => isInQcQueue(c))
+    if (assignmentView === 'ri') return assignmentScopeCars.filter((c) => isInRiQueue(c))
+    if (assignmentView === 'approvals') return assignmentScopeCars.filter((c) => pendingApprovalCount(c.additional_approval) > 0)
+    return assignmentScopeCars
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentScopeCars, assignmentView, assignments, bsFloorStatus, qcByJc, riByJc])
 
@@ -861,10 +938,7 @@ export default function BodyshopFloorScreen() {
     () => Array.from(new Set(scopeCars.map((c) => bodyshopBranchLabel(c.branch)))).sort(),
     [scopeCars],
   )
-  const floors = useMemo(
-    () => Array.from(new Set(baseScopedCars.map(c => c.bodyshop_floor ?? '').filter(Boolean))).sort(),
-    [baseScopedCars],
-  )
+  const floors = useMemo(() => [...BODYSHOP_PHYSICAL_FLOORS], [])
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -889,10 +963,17 @@ export default function BodyshopFloorScreen() {
   }
 
   async function assignRole(car: FloorCar, role: BSRole, empCode: string) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can change assignments', 'error')
+      return
+    }
     if (!empCode) return
     const isNotRequired = empCode === NOT_REQUIRED_CODE
     const emp = isNotRequired ? null : empByRole[role].find(e => e.employee_code === empCode)
-    if (!isNotRequired && !emp) return
+    if (!isNotRequired && !emp) {
+      showToast('Employee not found — refresh and try again', 'error')
+      return
+    }
     const k = jcKey(car.job_card_no)
     if (role === 'EDP' && !isEdpAssignmentAllowed(riByJc[k]?.reinspection_status ?? car.reinspection_status)) {
       showToast('Complete Re-Inspection (RI) before assigning EDP', 'error')
@@ -902,28 +983,35 @@ export default function BodyshopFloorScreen() {
       showToast('Floor is completed — assignments are locked', 'error')
       return
     }
-    setSaving(`${k}-${role}`)
-    try {
-      const roleMap = assignments[k]
-      const existingRoleAssignment = roleMap?.[role]
-      const existingRowId = getRowId(roleMap)
-      const cols = ROLE_COLUMNS[role]
-      const { data: { user } } = await supabase.auth.getUser()
-      const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
-      const payload: Record<string, unknown> = {
-        [cols.code]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
-        [cols.name]: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
-        [cols.status]: isNotRequired ? NOT_REQUIRED_STATUS : draft.work_status,
-        [cols.inTs]: isNotRequired ? null : (existingRoleAssignment?.in_ts ?? new Date().toISOString()),
-        [cols.remark]: isNotRequired ? null : (draft.remark.trim() || null),
-        [cols.outTs]: isNotRequired ? null : (existingRoleAssignment?.out_ts ?? null),
-        [cols.completedBy]: isNotRequired ? null : (existingRoleAssignment?.completed_by ?? null),
-        assigned_at: new Date().toISOString(),
-        assigned_by: user?.email ?? null,
-        is_active: true,
-      }
+    const existingFi = assignments[k]?.FLOOR_INCHARGE
+    const changingFi =
+      role === 'FLOOR_INCHARGE'
+      && !isNotRequired
+      && Boolean(existingFi?.employee_code)
+      && String(existingFi?.employee_code).trim().toUpperCase() !== empCode.trim().toUpperCase()
+    if (
+      changingFi
+      && isFloorInchargeReassignmentBlocked({
+        bsFloorCompleted: Boolean(bsFloorStatus[k]?.completedAt),
+        floorInchargeAssignment: existingFi,
+        assignRow: assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
+        actor: {
+          isAdmin: inchargeScope.isAdmin || inchargeScope.canModifyBodyshopFloor,
+          isBodyshopFloorIncharge: inchargeScope.isBodyshopFloorIncharge || inchargeScope.canModifyBodyshopFloor,
+        },
+      })
+    ) {
+      showToast('Only Admin or Floor Incharge can change the Floor Incharge assignment.', 'error')
+      return
+    }
+    const roleMap = assignments[k]
+    const existingRoleAssignment = roleMap?.[role]
+    const existingRowId = getRowId(roleMap)
+    const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
 
-      if (isNotRequired && !existingRowId) {
+    if (isNotRequired && !existingRowId) {
+      setSaving(`${k}-${role}`)
+      try {
         const synthetic: BSAssignment = {
           id: -1,
           job_card_number: k,
@@ -946,108 +1034,318 @@ export default function BodyshopFloorScreen() {
         }))
         showToast(`${ROLE_META[role].label} marked Not Required`, 'success')
         setEmpPickerRole(null)
-        return
+        setExpandedRole(null)
+      } finally {
+        setSaving(null)
       }
+      return
+    }
 
-      let result
-      if (existingRowId) {
-        result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existingRowId).select().single()
-      } else {
-        const insertPayload: Record<string, unknown> = {
-          ...payload,
-          job_card_number: k,
-          repair_card_id: car.id,
-          dealer_code: car.branch ?? 'UNKNOWN',
+    const prevAssignmentsK = roleMap
+    const prevStageDraftsK = stageDrafts[k]
+    const prevRaw = assignmentRawByJc[k]
+    const optimisticSlot: BSAssignment = {
+      id: existingRowId ?? -1,
+      job_card_number: k,
+      role,
+      employee_code: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
+      employee_name: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
+      work_status: isNotRequired
+        ? NOT_REQUIRED_STATUS
+        : isBodyshopWorkerPipelineAssignRole(role)
+          ? 'work_inprocess'
+          : draft.work_status,
+      remark: isNotRequired ? null : (draft.remark.trim() || null),
+      in_ts: isNotRequired ? null : (existingRoleAssignment?.in_ts ?? new Date().toISOString()),
+      out_ts: isNotRequired ? null : (existingRoleAssignment?.out_ts ?? null),
+      completed_by: isNotRequired ? null : (existingRoleAssignment?.completed_by ?? null),
+    }
+
+    await optimistic.run(`${k}-${role}`, {
+      apply: () => {
+        setSaving(`${k}-${role}`)
+        setAssignments(prev => ({
+          ...prev,
+          [k]: { ...(prev[k] ?? emptyRoleMap()), [role]: optimisticSlot },
+        }))
+        setStageDrafts(prev => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? {}),
+            [role]: isNotRequired
+              ? { work_status: NOT_REQUIRED_STATUS, remark: '' }
+              : {
+                  work_status: optimisticSlot.work_status ?? 'work_inprocess',
+                  remark: optimisticSlot.remark ?? '',
+                },
+          },
+        }))
+      },
+      rollback: () => {
+        setAssignments(prev => {
+          const next = { ...prev }
+          if (prevAssignmentsK) next[k] = prevAssignmentsK
+          else delete next[k]
+          return next
+        })
+        setStageDrafts(prev => ({
+          ...prev,
+          [k]: prevStageDraftsK ?? (prev[k] ?? {}),
+        }))
+        if (prevRaw !== undefined) {
+          setAssignmentRawByJc(prev => ({ ...prev, [k]: prevRaw }))
         }
-        const localMap = assignments[k]
-        if (localMap) {
-          for (const r of ALL_ROLES) {
-            if (r === role) continue
-            const slot = localMap[r]
-            if (!isNotRequiredAssignment(slot)) continue
-            Object.assign(insertPayload, notRequiredPayloadForRole(r))
+        setSaving(null)
+      },
+      execute: async () => {
+        const cols = ROLE_COLUMNS[role]
+        const { data: { user } } = await supabase.auth.getUser()
+        const payload: Record<string, unknown> = {
+          [cols.code]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
+          [cols.name]: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
+          [cols.status]: optimisticSlot.work_status,
+          [cols.inTs]: optimisticSlot.in_ts,
+          [cols.remark]: optimisticSlot.remark,
+          [cols.outTs]: optimisticSlot.out_ts,
+          [cols.completedBy]: optimisticSlot.completed_by,
+          assigned_at: new Date().toISOString(),
+          assigned_by: user?.email ?? null,
+          is_active: true,
+        }
+
+        let result
+        if (existingRowId) {
+          result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existingRowId).select().single()
+        } else {
+          const insertPayload: Record<string, unknown> = {
+            ...payload,
+            job_card_number: k,
+            repair_card_id: car.id,
+            dealer_code: assignmentDealerCode(car),
           }
+          const localMap = assignments[k]
+          if (localMap) {
+            for (const r of ALL_ROLES) {
+              if (r === role) continue
+              const slot = localMap[r]
+              if (!isNotRequiredAssignment(slot)) continue
+              Object.assign(insertPayload, notRequiredPayloadForRole(r))
+            }
+          }
+          result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
         }
-        result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
-      }
-      if (result.error) throw result.error
+        if (result.error) throw result.error
 
-      if (isNotRequired && !ALWAYS_REQUIRED_ROLES.has(role)) {
-        await supabase
-          .from('bodyshop_floor_support_assignments')
-          .update({ is_active: false })
-          .eq('job_card_number', k)
-          .eq('support_role', role)
-          .eq('is_active', true)
-      }
+        if (isNotRequired && !ALWAYS_REQUIRED_ROLES.has(role)) {
+          await supabase
+            .from('bodyshop_floor_support_assignments')
+            .update({ is_active: false })
+            .eq('job_card_number', k)
+            .eq('support_role', role)
+            .eq('is_active', true)
+        }
 
-      const updatedRow = result.data as DBAssignmentRow
-      setAssignmentRawByJc(prev => ({ ...prev, [k]: updatedRow }))
-      const newRoleMap = mapRowToRoleMap(updatedRow)
-      setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
-      setBsFloorStatus(prev => ({
-        ...prev,
-        [k]: {
-          completedAt: updatedRow.bs_floor_completed_at ?? null,
-          completedBy: updatedRow.bs_floor_completed_by ?? null,
-          enteredAt: prev[k]?.enteredAt ?? updatedRow.assigned_at ?? updatedRow.created_at ?? null,
-        },
-      }))
-      setStageDrafts(prev => ({
-        ...prev,
-        [k]: {
-          ...(prev[k] ?? {}),
-          [role]: isNotRequired
-            ? { work_status: NOT_REQUIRED_STATUS, remark: '' }
-            : { work_status: newRoleMap[role]?.work_status ?? 'work_inprocess', remark: newRoleMap[role]?.remark ?? '' },
-        },
-      }))
-      showToast(`${ROLE_META[role].label}: ${isNotRequired ? 'Not Required' : emp!.employee_name}`, 'success')
-      setEmpPickerRole(null)
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
-    } finally { setSaving(null) }
+        const updatedRow = result.data as DBAssignmentRow
+        setAssignmentRawByJc(prev => ({ ...prev, [k]: updatedRow }))
+        const newRoleMap = mapRowToRoleMap(updatedRow)
+        setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
+        setBsFloorStatus(prev => ({
+          ...prev,
+          [k]: {
+            completedAt: updatedRow.bs_floor_completed_at ?? null,
+            completedBy: updatedRow.bs_floor_completed_by ?? null,
+            enteredAt: prev[k]?.enteredAt ?? updatedRow.assigned_at ?? updatedRow.created_at ?? null,
+          },
+        }))
+        setStageDrafts(prev => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? {}),
+            [role]: isNotRequired
+              ? { work_status: NOT_REQUIRED_STATUS, remark: '' }
+              : {
+                  work_status: newRoleMap[role]?.work_status ?? 'work_inprocess',
+                  remark: newRoleMap[role]?.remark ?? '',
+                },
+          },
+        }))
+      },
+      onSuccess: () => {
+        showToast(`${ROLE_META[role].label}: ${isNotRequired ? 'Not Required' : emp!.employee_name}`, 'success')
+        setEmpPickerRole(null)
+        setExpandedRole(null)
+        setSaving(null)
+      },
+      errorMessage: assignFailureMessage,
+    })
   }
 
-  async function saveStage(car: FloorCar, role: BSRole) {
+  function isStageDraftDirty(k: string, role: BSRole): boolean {
+    const assignment = assignments[k]?.[role]
+    if (!assignment?.id || assignment.id <= 0) return false
+    if (isNotRequiredAssignment(assignment)) return false
+    const draft = stageDrafts[k]?.[role]
+    if (!draft) return false
+    const status = String(assignment.work_status ?? 'work_inprocess').trim()
+    const remark = String(assignment.remark ?? '').trim()
+    return draft.work_status.trim() !== status || draft.remark.trim() !== remark
+  }
+
+  async function reloadAssignmentsForJc(jobCardNo: string) {
+    const k = jcKey(jobCardNo)
+    const trimmed = String(jobCardNo ?? '').trim()
+    if (!trimmed) return
+    const { data, error } = await supabase
+      .from('bodyshop_assignments')
+      .select('*')
+      .eq('is_active', true)
+      .ilike('job_card_number', trimmed)
+      .order('updated_at', { ascending: false })
+    if (error) throw error
+    const matching = ((data ?? []) as DBAssignmentRow[]).filter(r => jcKey(r.job_card_number) === k)
+    if (matching.length === 0) return
+    const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
+    const rawByJc: Record<string, DBAssignmentRow> = {}
+    const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
+    for (const row of matching) {
+      mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
+    }
+    const merged = assMap[k]
+    if (!merged) return
+    setAssignments(prev => ({ ...prev, [k]: merged }))
+    if (rawByJc[k]) setAssignmentRawByJc(prev => ({ ...prev, [k]: rawByJc[k] }))
+    if (floorMap[k]) setBsFloorStatus(prev => ({ ...prev, [k]: floorMap[k] }))
+    setStageDrafts(prev => {
+      const next = { ...prev, [k]: { ...(prev[k] ?? {}) } as Record<BSRole, { work_status: string; remark: string }> }
+      for (const role of ALL_ROLES) {
+        const a = merged[role]
+        next[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
+      }
+      return next
+    })
+  }
+
+  async function flushPendingSavesForCar(car: FloorCar) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) return
+    for (const role of BODYSHOP_FLOOR_PIPELINE_ROLES) {
+      if (!isStageDraftDirty(jcKey(car.job_card_no), role)) continue
+      await saveStage(car, role, { silent: true })
+    }
+  }
+
+  async function handleDetailBack() {
+    const car = selectedCar
+    if (!car) {
+      setSelectedCar(null)
+      setExpandedRole(null)
+      return
+    }
+    try {
+      if (saving) {
+        showToast('Please wait — save in progress', 'error')
+        return
+      }
+      await flushPendingSavesForCar(car)
+      await reloadAssignmentsForJc(car.job_card_no)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not refresh assignments', 'error')
+    } finally {
+      setSelectedCar(null)
+      setExpandedRole(null)
+      setEmpPickerRole(null)
+      setSupportPickerRole(null)
+    }
+  }
+
+  async function saveStage(car: FloorCar, role: BSRole, opts?: { silent?: boolean }) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      if (!opts?.silent) showToast('Only Floor Incharge or Admin can save stage changes', 'error')
+      return
+    }
     const k = jcKey(car.job_card_no)
     const assignment = assignments[k]?.[role]
-    if (!assignment?.id || assignment.id <= 0) { showToast('Assign person first', 'error'); return }
+    if (!assignment?.id || assignment.id <= 0) {
+      if (!opts?.silent) showToast('Assign person first', 'error')
+      return
+    }
     if (isNotRequiredAssignment(assignment)) return
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
-    if (draft.work_status === 'hold' && !draft.remark.trim()) {
-      showToast('Hold reason is required when status is Hold', 'error'); return
+    if (isBodyshopWorkerPipelineAssignRole(role) && draft.work_status === 'completed') {
+      if (!opts?.silent) showToast('Dentor / Painter / Rubbing step completes only from Floor Work (photo + Done).', 'error')
+      return
     }
-    setSaving(`${k}-${role}-stage`)
-    try {
-      const cols = ROLE_COLUMNS[role]
-      const { data: { user } } = await supabase.auth.getUser()
-      const update: Record<string, unknown> = {
-        [cols.status]: draft.work_status,
-        [cols.remark]: draft.remark.trim() || null,
+    if (role === 'FLOOR_INCHARGE' && draft.work_status === 'completed') {
+      const row = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
+      if (!arePipelineWorkStepsFinished(row)) {
+        if (!opts?.silent) showToast('All workers must finish Floor Work (Done) before Floor Incharge can be marked Completed.', 'error')
+        return
       }
-      if (draft.work_status === 'completed' && !assignment.out_ts) {
-        update[cols.outTs] = new Date().toISOString()
-        update[cols.completedBy] = user?.email ?? null
-      }
-      const result = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id).select().single()
-      if (result.error) throw result.error
-      const updatedRow = result.data as DBAssignmentRow
-      setAssignmentRawByJc(prev => ({ ...prev, [k]: updatedRow }))
-      const newRoleMap = mapRowToRoleMap(updatedRow)
-      setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
-      setBsFloorStatus(prev => ({
-        ...prev,
-        [k]: {
-          completedAt: updatedRow.bs_floor_completed_at ?? null,
-          completedBy: updatedRow.bs_floor_completed_by ?? null,
-          enteredAt: prev[k]?.enteredAt ?? updatedRow.assigned_at ?? updatedRow.created_at ?? null,
-        },
-      }))
-      showToast('Stage saved', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to save', 'error')
-    } finally { setSaving(null) }
+    }
+    if (draft.work_status === 'hold' && !draft.remark.trim()) {
+      if (!opts?.silent) showToast('Hold reason is required when status is Hold', 'error')
+      return
+    }
+    const prevAssignmentsK = assignments[k]
+    const prevRaw = assignmentRawByJc[k]
+    const prevBsFloor = bsFloorStatus[k]
+    const completedOutTs =
+      draft.work_status === 'completed' && !assignment.out_ts ? new Date().toISOString() : assignment.out_ts
+    const optimisticAssignment: BSAssignment = {
+      ...assignment,
+      work_status: draft.work_status,
+      remark: draft.remark.trim() || null,
+      out_ts: completedOutTs ?? null,
+    }
+
+    await optimistic.run(`${k}-${role}-stage`, {
+      apply: () => {
+        setSaving(`${k}-${role}-stage`)
+        setAssignments(prev => ({
+          ...prev,
+          [k]: { ...(prev[k] ?? emptyRoleMap()), [role]: optimisticAssignment },
+        }))
+      },
+      rollback: () => {
+        if (prevAssignmentsK) {
+          setAssignments(prev => ({ ...prev, [k]: prevAssignmentsK }))
+        }
+        if (prevRaw !== undefined) setAssignmentRawByJc(prev => ({ ...prev, [k]: prevRaw }))
+        if (prevBsFloor !== undefined) setBsFloorStatus(prev => ({ ...prev, [k]: prevBsFloor }))
+        setSaving(null)
+      },
+      execute: async () => {
+        const cols = ROLE_COLUMNS[role]
+        const { data: { user } } = await supabase.auth.getUser()
+        const update: Record<string, unknown> = {
+          [cols.status]: draft.work_status,
+          [cols.remark]: draft.remark.trim() || null,
+        }
+        if (draft.work_status === 'completed' && !assignment.out_ts) {
+          update[cols.outTs] = completedOutTs
+          update[cols.completedBy] = user?.email ?? null
+        }
+        const result = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id).select().single()
+        if (result.error) throw result.error
+        const updatedRow = result.data as DBAssignmentRow
+        setAssignmentRawByJc(prev => ({ ...prev, [k]: updatedRow }))
+        const newRoleMap = mapRowToRoleMap(updatedRow)
+        setAssignments(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
+        setBsFloorStatus(prev => ({
+          ...prev,
+          [k]: {
+            completedAt: updatedRow.bs_floor_completed_at ?? null,
+            completedBy: updatedRow.bs_floor_completed_by ?? null,
+            enteredAt: prev[k]?.enteredAt ?? updatedRow.assigned_at ?? updatedRow.created_at ?? null,
+          },
+        }))
+      },
+      onSuccess: () => {
+        if (!opts?.silent) showToast('Stage saved', 'success')
+        setSaving(null)
+      },
+      errorMessage: (err) => (err instanceof Error ? err.message : 'Failed to save'),
+      rethrow: Boolean(opts?.silent),
+    })
   }
 
   async function addSupport(car: FloorCar, role: BSRole, emp: Employee) {
@@ -1060,40 +1358,78 @@ export default function BodyshopFloorScreen() {
     if (existing.some(s => s.employee_code === emp.employee_code)) {
       showToast(`${emp.employee_name} already assigned`, 'error'); return
     }
-    setSaving(`${k}-${role}-support`)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const result = await supabase.from('bodyshop_floor_support_assignments').insert({
-        job_card_number: k, support_role: role,
-        employee_code: emp.employee_code, employee_name: emp.employee_name,
-        assigned_at: new Date().toISOString(), assigned_by: user?.email ?? null, is_active: true,
-      }).select().single()
-      if (result.error) throw result.error
-      const newS = result.data as SupportAssignment
-      setSupportAssignments(prev => ({
-        ...prev,
-        [k]: {
-          ...(prev[k] ?? { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }),
-          [role]: [newS, ...(prev[k]?.[role] ?? [])],
-        },
-      }))
-      showToast(`Support added: ${emp.employee_name}`, 'success')
-      setSupportPickerRole(null)
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed', 'error')
-    } finally { setSaving(null) }
+    const prevSupport = supportAssignments[k]
+    const optimisticSupport: SupportAssignment = {
+      id: -1,
+      job_card_number: k,
+      support_role: role,
+      employee_code: emp.employee_code,
+      employee_name: emp.employee_name,
+      assigned_at: new Date().toISOString(),
+      is_active: true,
+    }
+    await optimistic.run(`${k}-${role}-support`, {
+      apply: () => {
+        setSaving(`${k}-${role}-support`)
+        setSupportAssignments(prev => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }),
+            [role]: [optimisticSupport, ...(prev[k]?.[role] ?? [])],
+          },
+        }))
+      },
+      rollback: () => {
+        setSupportAssignments(prev => ({ ...prev, [k]: prevSupport ?? prev[k] }))
+        setSaving(null)
+      },
+      execute: async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        const result = await supabase.from('bodyshop_floor_support_assignments').insert({
+          job_card_number: k, support_role: role,
+          employee_code: emp.employee_code, employee_name: emp.employee_name,
+          assigned_at: new Date().toISOString(), assigned_by: user?.email ?? null, is_active: true,
+        }).select().single()
+        if (result.error) throw result.error
+        const newS = result.data as SupportAssignment
+        setSupportAssignments(prev => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }),
+            [role]: [newS, ...(prev[k]?.[role] ?? []).filter(s => s.id !== -1)],
+          },
+        }))
+      },
+      onSuccess: () => {
+        showToast(`Support added: ${emp.employee_name}`, 'success')
+        setSupportPickerRole(null)
+        setSaving(null)
+      },
+    })
   }
 
   async function removeSupport(car: FloorCar, role: BSRole, id: number) {
     const k = jcKey(car.job_card_no)
-    try {
-      await supabase.from('bodyshop_floor_support_assignments').update({ is_active: false }).eq('id', id)
-      setSupportAssignments(prev => ({
-        ...prev,
-        [k]: { ...(prev[k] ?? { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }), [role]: (prev[k]?.[role] ?? []).filter(s => s.id !== id) },
-      }))
-      showToast('Support removed', 'success')
-    } catch { showToast('Failed to remove support', 'error') }
+    const prevSupport = supportAssignments[k]
+    await optimistic.run(`${k}-support-rm-${id}`, {
+      apply: () => {
+        setSupportAssignments(prev => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }),
+            [role]: (prev[k]?.[role] ?? []).filter(s => s.id !== id),
+          },
+        }))
+      },
+      rollback: () => {
+        setSupportAssignments(prev => ({ ...prev, [k]: prevSupport ?? prev[k] }))
+      },
+      execute: async () => {
+        const { error } = await supabase.from('bodyshop_floor_support_assignments').update({ is_active: false }).eq('id', id)
+        if (error) throw error
+      },
+      onSuccess: () => showToast('Support removed', 'success'),
+    })
   }
 
   async function saveQc(car: FloorCar) {
@@ -1103,16 +1439,52 @@ export default function BodyshopFloorScreen() {
     const checkers = parseQcNames(draft.qc_checked_by)
     if (!checkers.length) { showToast('Select at least one QC checker', 'error'); return }
     if (draft.qc_status === 'fail' && !draft.qc_fail_reason.trim()) { showToast('Fail reason required', 'error'); return }
+    const prevCars = cars
+    const prevSelected = selectedCar
+    const prevQc = qcByJc[k]
+    const prevBs = bsFloorStatus[k]
+    const prevRaw = assignmentRawByJc[k]
+    const now = new Date().toISOString()
+    const repairCardId = draft.repairCardId ?? car.id
+    const checkerJoined = joinQcNames(checkers)
     setSaving(`${k}-qc`)
+    patchQc(k, {
+      qc_status: draft.qc_status || 'pending',
+      qc_fail_reason: draft.qc_status === 'fail' ? draft.qc_fail_reason.trim() : '',
+      qc_checked_by: checkerJoined,
+      qc_checked_at: now,
+    })
+    setCars(prev => prev.map(c => c.id === repairCardId ? {
+      ...c,
+      qc_status: draft.qc_status || 'pending',
+      qc_checked_by: checkerJoined,
+      qc_checked_at: now,
+      qc_fail_reason: draft.qc_status === 'fail' ? draft.qc_fail_reason.trim() : null,
+      current_stage: draft.qc_status === 'pass' ? 14 : 13,
+    } : c))
+    if (draft.qc_status === 'pass') {
+      const rowId = getRowId(assignments[k])
+      if (rowId && !bsFloorStatus[k]?.completedAt) {
+        setBsFloorStatus(prev => ({
+          ...prev,
+          [k]: { completedAt: now, completedBy: prev[k]?.completedBy ?? null, enteredAt: prev[k]?.enteredAt ?? null },
+        }))
+        if (assignmentRawByJc[k]) {
+          setAssignmentRawByJc(prev => ({ ...prev, [k]: { ...prev[k], bs_floor_completed_at: now } }))
+        }
+      }
+      setQcPickerOpen(false)
+      setAssignmentView('ri')
+    } else {
+      setQcPickerOpen(false)
+    }
     try {
-      const now = new Date().toISOString()
-      const repairCardId = draft.repairCardId ?? car.id
       const payload: Record<string, unknown> = {
         qc_status: draft.qc_status || 'pending',
         qc_fail_reason: draft.qc_status === 'fail' ? draft.qc_fail_reason.trim() : null,
-        qc_checked_by: joinQcNames(checkers),
+        qc_checked_by: checkerJoined,
         qc_checked_at: now,
-        qc_passed_by: draft.qc_status === 'pass' ? joinQcNames(checkers) : null,
+        qc_passed_by: draft.qc_status === 'pass' ? checkerJoined : null,
         qc_passed_at: draft.qc_status === 'pass' ? now : null,
         current_stage: draft.qc_status === 'pass' ? 14 : 13,
         current_stage_name: draft.qc_status === 'pass' ? 'Re-Inspection' : 'Quality Check',
@@ -1122,7 +1494,7 @@ export default function BodyshopFloorScreen() {
       patchQc(k, {
         qc_status: String(result.data?.qc_status ?? draft.qc_status),
         qc_fail_reason: String(result.data?.qc_fail_reason ?? ''),
-        qc_checked_by: String(result.data?.qc_checked_by ?? joinQcNames(checkers)),
+        qc_checked_by: String(result.data?.qc_checked_by ?? checkerJoined),
         qc_checked_at: String(result.data?.qc_checked_at ?? now),
       })
       setRiByJc(prev => ({
@@ -1133,16 +1505,15 @@ export default function BodyshopFloorScreen() {
       setCars(prev => prev.map(c => c.id === repairCardId ? {
         ...c,
         qc_status: String(result.data?.qc_status ?? draft.qc_status),
-        qc_checked_by: joinQcNames(checkers),
+        qc_checked_by: checkerJoined,
         qc_checked_at: now,
         qc_fail_reason: draft.qc_status === 'fail' ? draft.qc_fail_reason.trim() : null,
         current_stage: draft.qc_status === 'pass' ? 14 : 13,
       } : c))
       if (draft.qc_status === 'pass') {
         const rowId = getRowId(assignments[k])
-        if (rowId && !bsFloorStatus[k]?.completedAt) {
+        if (rowId && !prevBs?.completedAt) {
           const { data: { user } } = await supabase.auth.getUser()
-          const now = new Date().toISOString()
           const floorRes = await supabase
             .from('bodyshop_assignments')
             .update({ bs_floor_completed_at: now, bs_floor_completed_by: user?.email ?? null })
@@ -1167,12 +1538,15 @@ export default function BodyshopFloorScreen() {
           }
         }
         showToast('QC passed — complete RI below', 'success')
-        setAssignmentView('ri')
       } else {
         showToast('QC details saved', 'success')
       }
-      setQcPickerOpen(false)
     } catch (err) {
+      setCars(prevCars)
+      setSelectedCar(prevSelected)
+      if (prevQc !== undefined) patchQc(k, prevQc)
+      setBsFloorStatus(prev => ({ ...prev, [k]: prevBs ?? prev[k] }))
+      if (prevRaw !== undefined) setAssignmentRawByJc(prev => ({ ...prev, [k]: prevRaw }))
       showToast(err instanceof Error ? err.message : 'Failed to save QC', 'error')
     } finally { setSaving(null) }
   }
@@ -1187,150 +1561,238 @@ export default function BodyshopFloorScreen() {
     if (!doneByType) { showToast('Select RI Done By', 'error'); return }
     if (doneByType === 'other' && !doneByName) { showToast('Enter the name for RI Done By (Other)', 'error'); return }
 
-    setSaving(`${k}-ri`)
-    try {
-      const now = new Date().toISOString()
-      const repairCardId = draft.repairCardId ?? qcByJc[k]?.repairCardId ?? car.id
-      const resolvedBy = doneByType === 'other'
-        ? doneByName
-        : (doneByName || labelForRiDoneBy(doneByType))
+    const now = new Date().toISOString()
+    const repairCardId = draft.repairCardId ?? qcByJc[k]?.repairCardId ?? car.id
+    const resolvedBy = doneByType === 'other' ? doneByName : (doneByName || labelForRiDoneBy(doneByType))
+    const riCompleted = status === 'completed'
+    const nextStage = riCompleted ? 15 : 14
+    const prevCars = cars
+    const prevSelected = selectedCar
+    const prevRi = riByJc[k]
 
-      const riCompleted = status === 'completed'
-      const payload: Record<string, unknown> = {
-        reinspection_status: status,
-        reinspection_type: doneByType,
-        reinspection_by: resolvedBy,
-        reinspection_at: now,
-        current_stage: riCompleted ? 15 : 14,
-        current_stage_name: riCompleted ? 'Billing' : 'Re-Inspection',
-      }
-      const result = await supabase
-        .from('bodyshop_repair_cards')
-        .update(payload)
-        .eq('id', repairCardId)
-        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage')
-        .single()
-      if (result.error) throw result.error
-
-      const nextStage = Number(result.data?.current_stage ?? (riCompleted ? 15 : 14))
-      patchRi(k, {
-        repairCardId: Number(result.data?.id ?? repairCardId),
-        reinspection_status: String(result.data?.reinspection_status ?? status),
-        reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
-        reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
-        reinspection_at: String(result.data?.reinspection_at ?? now),
-      })
-      setCars(prev => prev.map(c => c.id === repairCardId ? {
-        ...c,
-        reinspection_status: String(result.data?.reinspection_status ?? status),
-        reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
-        reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
-        reinspection_at: String(result.data?.reinspection_at ?? now),
-        current_stage: nextStage,
-      } : c))
-      if (selectedCar?.id === repairCardId) {
-        setSelectedCar(prev => prev ? {
-          ...prev,
+    await optimistic.run(`${k}-ri`, {
+      apply: () => {
+        setSaving(`${k}-ri`)
+        patchRi(k, {
+          repairCardId,
+          reinspection_status: status,
+          reinspection_type: doneByType,
+          reinspection_by: resolvedBy,
+          reinspection_at: now,
+        })
+        setCars(prev => prev.map(c => c.id === repairCardId ? {
+          ...c,
+          reinspection_status: status,
+          reinspection_type: doneByType,
+          reinspection_by: resolvedBy,
+          reinspection_at: now,
+          current_stage: nextStage,
+        } : c))
+        if (selectedCar?.id === repairCardId) {
+          setSelectedCar(prev => prev ? {
+            ...prev,
+            reinspection_status: status,
+            reinspection_type: doneByType,
+            reinspection_by: resolvedBy,
+            reinspection_at: now,
+            current_stage: nextStage,
+          } : prev)
+        }
+      },
+      rollback: () => {
+        setCars(prevCars)
+        setSelectedCar(prevSelected)
+        if (prevRi !== undefined) patchRi(k, prevRi)
+        else setRiByJc(prev => { const n = { ...prev }; delete n[k]; return n })
+        setSaving(null)
+      },
+      execute: async () => {
+        const payload: Record<string, unknown> = {
+          reinspection_status: status,
+          reinspection_type: doneByType,
+          reinspection_by: resolvedBy,
+          reinspection_at: now,
+          current_stage: nextStage,
+          current_stage_name: riCompleted ? 'Billing' : 'Re-Inspection',
+        }
+        const result = await supabase
+          .from('bodyshop_repair_cards')
+          .update(payload)
+          .eq('id', repairCardId)
+          .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage')
+          .single()
+        if (result.error) throw result.error
+        const serverStage = Number(result.data?.current_stage ?? nextStage)
+        patchRi(k, {
+          repairCardId: Number(result.data?.id ?? repairCardId),
           reinspection_status: String(result.data?.reinspection_status ?? status),
           reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
           reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
           reinspection_at: String(result.data?.reinspection_at ?? now),
-          current_stage: nextStage,
-        } : prev)
-      }
-      showToast(riCompleted ? 'RI completed — moved to Billing' : 'RI details saved', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to save RI', 'error')
-    } finally { setSaving(null) }
+        })
+        setCars(prev => prev.map(c => c.id === repairCardId ? {
+          ...c,
+          reinspection_status: String(result.data?.reinspection_status ?? status),
+          reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+          reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+          reinspection_at: String(result.data?.reinspection_at ?? now),
+          current_stage: serverStage,
+        } : c))
+        if (selectedCar?.id === repairCardId) {
+          setSelectedCar(prev => prev ? {
+            ...prev,
+            reinspection_status: String(result.data?.reinspection_status ?? status),
+            reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+            reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+            reinspection_at: String(result.data?.reinspection_at ?? now),
+            current_stage: serverStage,
+          } : prev)
+        }
+      },
+      onSuccess: () => {
+        showToast(riCompleted ? 'RI completed — moved to Billing' : 'RI details saved', 'success')
+        setSaving(null)
+      },
+    })
   }
 
   async function markFloorCompleted(car: FloorCar) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can mark floor complete', 'error')
+      return
+    }
     const k = jcKey(car.job_card_no)
     const rowId = getRowId(assignments[k])
     if (!rowId) { showToast('Assign at least one role first', 'error'); return }
     if (bsFloorStatus[k]?.completedAt) { showToast('Already marked completed', 'success'); return }
-    setSaving(`${k}-bs-floor`)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const now = new Date().toISOString()
-      const result = await supabase.from('bodyshop_assignments').update({ bs_floor_completed_at: now, bs_floor_completed_by: user?.email ?? null }).eq('id', rowId).select('bs_floor_completed_at, bs_floor_completed_by').single()
-      if (result.error) throw result.error
-      setBsFloorStatus(prev => ({
-        ...prev,
-        [k]: {
-          completedAt: result.data?.bs_floor_completed_at ?? now,
-          completedBy: result.data?.bs_floor_completed_by ?? null,
-          enteredAt: prev[k]?.enteredAt ?? null,
-        },
-      }))
-      setAssignmentRawByJc(prev => {
-        const row = prev[k]
-        if (!row) return prev
-        return {
+    const assignRow = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
+    if (!arePipelineWorkStepsFinished(assignRow)) {
+      showToast('Mark floor complete only after all Floor Work steps are Done (Dentor → Rubbing).', 'error')
+      return
+    }
+    const prevBs = bsFloorStatus[k]
+    const prevRaw = assignmentRawByJc[k]
+    const now = new Date().toISOString()
+    await optimistic.run(`${k}-bs-floor`, {
+      apply: () => {
+        setSaving(`${k}-bs-floor`)
+        setBsFloorStatus(prev => ({
+          ...prev,
+          [k]: { completedAt: now, completedBy: prev[k]?.completedBy ?? null, enteredAt: prev[k]?.enteredAt ?? null },
+        }))
+        setAssignmentRawByJc(prev => {
+          const row = prev[k]
+          if (!row) return prev
+          return { ...prev, [k]: { ...row, bs_floor_completed_at: now } }
+        })
+      },
+      rollback: () => {
+        setBsFloorStatus(prev => ({ ...prev, [k]: prevBs ?? prev[k] }))
+        if (prevRaw !== undefined) setAssignmentRawByJc(prev => ({ ...prev, [k]: prevRaw }))
+        setSaving(null)
+      },
+      execute: async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        const result = await supabase.from('bodyshop_assignments').update({ bs_floor_completed_at: now, bs_floor_completed_by: user?.email ?? null }).eq('id', rowId).select('bs_floor_completed_at, bs_floor_completed_by').single()
+        if (result.error) throw result.error
+        setBsFloorStatus(prev => ({
           ...prev,
           [k]: {
-            ...row,
-            bs_floor_completed_at: result.data?.bs_floor_completed_at ?? now,
-            bs_floor_completed_by: result.data?.bs_floor_completed_by ?? null,
+            completedAt: result.data?.bs_floor_completed_at ?? now,
+            completedBy: result.data?.bs_floor_completed_by ?? null,
+            enteredAt: prev[k]?.enteredAt ?? null,
           },
-        }
-      })
-      showToast('Floor work marked completed', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed', 'error')
-    } finally { setSaving(null) }
+        }))
+        setAssignmentRawByJc(prev => {
+          const row = prev[k]
+          if (!row) return prev
+          return {
+            ...prev,
+            [k]: {
+              ...row,
+              bs_floor_completed_at: result.data?.bs_floor_completed_at ?? now,
+              bs_floor_completed_by: result.data?.bs_floor_completed_by ?? null,
+            },
+          }
+        })
+      },
+      onSuccess: () => {
+        showToast('Floor work marked completed', 'success')
+        setSaving(null)
+      },
+    })
   }
 
   async function decideApproval(car: FloorCar, partIndex: number, decision: 'approved' | 'rejected') {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const now = new Date().toISOString()
-      // Parse current payload, update this part's decision, write back
-      let parsed: Record<string, unknown> = {}
-      try { parsed = JSON.parse(car.additional_approval ?? '{}') } catch { /* ignore */ }
-      const decisionParts = Array.isArray((parsed as any)?.decision?.parts) ? [...(parsed as any).decision.parts] : []
-      const existingIdx = decisionParts.findIndex((d: any) => Number(d.part_index) === partIndex)
-      const partEntry = { part_index: partIndex, status: decision, decided_at: now, decided_by: user?.email ?? null }
-      if (existingIdx >= 0) decisionParts[existingIdx] = partEntry
-      else decisionParts.push(partEntry)
-
-      const newPayload = {
-        ...parsed,
-        decision: { ...((parsed as any).decision ?? {}), parts: decisionParts, decided_at: now, decided_by: user?.email ?? null },
-      }
-      const newRaw = JSON.stringify(newPayload)
-      const result = await supabase.from('bodyshop_repair_cards').update({ additional_approval: newRaw }).eq('id', car.id).select('additional_approval').single()
-      if (result.error) throw result.error
-      // Update local state
-      setCars(prev => prev.map(c => c.id === car.id ? { ...c, additional_approval: result.data?.additional_approval ?? newRaw } : c))
-      if (selectedCar?.id === car.id) setSelectedCar(prev => prev ? { ...prev, additional_approval: result.data?.additional_approval ?? newRaw } : prev)
-      showToast(`Part ${decision}`, 'success')
-      setApprovalModal(null)
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed', 'error')
+    const prevCars = cars
+    const prevSelected = selectedCar
+    const now = new Date().toISOString()
+    let parsed: Record<string, unknown> = {}
+    try { parsed = JSON.parse(car.additional_approval ?? '{}') } catch { /* ignore */ }
+    const decisionParts = Array.isArray((parsed as { decision?: { parts?: unknown[] } }).decision?.parts)
+      ? [...(parsed as { decision: { parts: unknown[] } }).decision.parts]
+      : []
+    const existingIdx = decisionParts.findIndex((d: unknown) => Number((d as { part_index?: number }).part_index) === partIndex)
+    const partEntry = { part_index: partIndex, status: decision, decided_at: now, decided_by: null as string | null }
+    if (existingIdx >= 0) decisionParts[existingIdx] = partEntry
+    else decisionParts.push(partEntry)
+    const newPayload = {
+      ...parsed,
+      decision: { ...((parsed as { decision?: Record<string, unknown> }).decision ?? {}), parts: decisionParts, decided_at: now, decided_by: null },
     }
+    const newRaw = JSON.stringify(newPayload)
+
+    await optimistic.run(`approval-${car.id}-${partIndex}`, {
+      apply: () => {
+        setCars(prev => prev.map(c => c.id === car.id ? { ...c, additional_approval: newRaw } : c))
+        if (selectedCar?.id === car.id) setSelectedCar(prev => prev ? { ...prev, additional_approval: newRaw } : prev)
+        setApprovalModal(null)
+      },
+      rollback: () => {
+        setCars(prevCars)
+        setSelectedCar(prevSelected)
+      },
+      execute: async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        const fullEntry = { part_index: partIndex, status: decision, decided_at: now, decided_by: user?.email ?? null }
+        const parts = Array.isArray((parsed as { decision?: { parts?: unknown[] } }).decision?.parts)
+          ? [...(parsed as { decision: { parts: { part_index?: number }[] } }).decision.parts]
+          : []
+        const idx = parts.findIndex((d) => Number(d.part_index) === partIndex)
+        if (idx >= 0) parts[idx] = fullEntry
+        else parts.push(fullEntry)
+        const serverRaw = JSON.stringify({
+          ...parsed,
+          decision: { ...((parsed as { decision?: Record<string, unknown> }).decision ?? {}), parts, decided_at: now, decided_by: user?.email ?? null },
+        })
+        const result = await supabase.from('bodyshop_repair_cards').update({ additional_approval: serverRaw }).eq('id', car.id).select('additional_approval').single()
+        if (result.error) throw result.error
+        const finalRaw = result.data?.additional_approval ?? serverRaw
+        setCars(prev => prev.map(c => c.id === car.id ? { ...c, additional_approval: finalRaw } : c))
+        if (selectedCar?.id === car.id) setSelectedCar(prev => prev ? { ...prev, additional_approval: finalRaw } : prev)
+      },
+      onSuccess: () => showToast(`Part ${decision}`, 'success'),
+    })
   }
 
   // ── Helper: summary for list card ─────────────────────────────────────────
   function carSummary(car: FloorCar) {
     const k = jcKey(car.job_card_no)
     const roleMap = assignments[k]
-    const assigned = roleMap ? ALL_ROLES.filter(r => Boolean(roleMap[r])) : []
-    const anyHold = roleMap ? ALL_ROLES.some(r => roleMap[r]?.work_status === 'hold') : false
-    const bsComp = isBsCompleted(car)
+    const assigned = roleMap ? BODYSHOP_FLOOR_PIPELINE_ROLES.filter(r => Boolean(roleMap[r])) : []
     const pending = pendingApprovalCount(car.additional_approval)
 
+    const status = listStatus(car)
     let statusLabel = 'Unassigned'
     let statusBg = '#f6f4ee'; let statusColor = '#82858f'
-    if (bsComp) { statusLabel = 'Completed'; statusBg = '#e4f4ec'; statusColor = '#1c8f63' }
-    else if (anyHold) { statusLabel = 'Hold'; statusBg = '#fbefdd'; statusColor = '#c9751b' }
-    else if (assigned.length === ALL_ROLES.length) { statusLabel = 'In Process'; statusBg = '#e9f0fd'; statusColor = '#2f63cf' }
-    else if (assigned.length > 0) { statusLabel = `Assigned`; statusBg = '#e9effe'; statusColor = '#2a4cd0' }
+    if (status === 'completed') { statusLabel = 'Completed'; statusBg = '#e4f4ec'; statusColor = '#1c8f63' }
+    else if (status === 'hold') { statusLabel = 'On Hold'; statusBg = '#fbefdd'; statusColor = '#c9751b' }
+    else if (status === 'work_inprocess') { statusLabel = 'In Process'; statusBg = '#e9f0fd'; statusColor = '#2f63cf' }
 
-    const sinceIso = resolveFloorSinceIso(car, bsFloorStatus[k]?.enteredAt)
-    const floorDays = sinceIso != null ? calendarDaysSince(sinceIso) : null
-    const floorAgeText = floorDays != null ? floorAgeLabel(floorDays) : null
-    const floorAgeTint = floorDays != null ? floorAgeColor(floorDays) : null
+    const floorAge = bodyshopFloorAgeSummary(car)
+    const floorAgeText = floorAge.label
+    const floorAgeTint = floorAge.color
+    const floorAgeDays = floorAge.days
 
     return {
       assignedCount: assigned.length,
@@ -1340,6 +1802,7 @@ export default function BodyshopFloorScreen() {
       pendingApprovals: pending,
       floorAgeText,
       floorAgeTint,
+      floorAgeDays,
     }
   }
 
@@ -1351,13 +1814,13 @@ export default function BodyshopFloorScreen() {
     const primary = assignments[k]
     const support = supportAssignments[k]
     if (primary) {
-      ALL_ROLES.forEach(r => {
+      BODYSHOP_FLOOR_PIPELINE_ROLES.forEach(r => {
         const n = String(primary[r]?.employee_name ?? '').trim()
         if (n) names.push(n)
       })
     }
     if (support) {
-      ALL_ROLES.forEach(r => {
+      BODYSHOP_FLOOR_PIPELINE_ROLES.forEach(r => {
         ;(support[r] ?? []).forEach(s => { const n = String(s.employee_name ?? '').trim(); if (n) names.push(n) })
       })
     }
@@ -1379,8 +1842,18 @@ export default function BodyshopFloorScreen() {
     const k = jcKey(car.job_card_no)
     const roleMap = assignments[k]
     const bsComp = isBsCompleted(car)
-    const assignedCount = roleMap ? ALL_ROLES.filter(r => Boolean(roleMap[r])).length : 0
-    const anyHold = roleMap ? ALL_ROLES.some(r => roleMap[r]?.work_status === 'hold') : false
+    const assignedCount = roleMap ? BODYSHOP_FLOOR_PIPELINE_ROLES.filter(r => Boolean(roleMap[r])).length : 0
+    const anyHold = roleMap ? BODYSHOP_FLOOR_PIPELINE_ROLES.some(r => roleMap[r]?.work_status === 'hold') : false
+    const canEditFloor = canEditBodyshopFloorAssignments(inchargeScope)
+    const fiReassignBlocked = isFloorInchargeReassignmentBlocked({
+      bsFloorCompleted: bsComp,
+      floorInchargeAssignment: roleMap?.FLOOR_INCHARGE,
+      assignRow: assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
+      actor: {
+        isAdmin: inchargeScope.isAdmin || inchargeScope.canModifyBodyshopFloor,
+        isBodyshopFloorIncharge: inchargeScope.isBodyshopFloorIncharge || inchargeScope.canModifyBodyshopFloor,
+      },
+    })
     const qc = qcByJc[k] ?? { repairCardId: car.id, qc_status: 'pending', qc_fail_reason: '', qc_checked_by: '', qc_checked_at: '' }
     const ri = riByJc[k] ?? emptyRiState()
     const pipelineWorkDone = arePipelineWorkStepsFinished(assignmentRawByJc[k] as unknown as Record<string, unknown>)
@@ -1467,9 +1940,12 @@ export default function BodyshopFloorScreen() {
     }
 
     // Emp picker employees
-    const empPickerCandidates = empPickerRole
+    let empPickerCandidates = empPickerRole
       ? empByRole[empPickerRole].filter(e => !empPickerSearch || e.employee_name.toLowerCase().includes(empPickerSearch.toLowerCase()) || e.employee_code.toLowerCase().includes(empPickerSearch.toLowerCase()))
       : []
+    if (empPickerRole === 'FLOOR_INCHARGE') {
+      empPickerCandidates = filterBodyshopFloorInchargeCandidates(empPickerCandidates, car.bodyshop_floor)
+    }
     const supPickerCandidates = supportPickerRole
       ? empByRole[supportPickerRole].filter(e => {
           if (!e) return false
@@ -1481,11 +1957,19 @@ export default function BodyshopFloorScreen() {
 
     return (
       <SafeAreaView style={S.root}>
+        {optimistic.failure ? (
+          <OptimisticActionErrorBar
+            message={optimistic.failure.message}
+            onRetry={() => void optimistic.retry()}
+            onDismiss={optimistic.clearFailure}
+          />
+        ) : null}
         {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
 
         {/* Header */}
         <View style={S.detailHeader}>
-          <TouchableOpacity onPress={() => { setSelectedCar(null); setExpandedRole(null) }} style={S.backBtn}>
+          <StaffInlineMenuButton />
+          <TouchableOpacity onPress={() => { void handleDetailBack() }} style={S.backBtn}>
             <Text style={S.backBtnText}>‹ Back</Text>
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
@@ -1510,15 +1994,6 @@ export default function BodyshopFloorScreen() {
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 80 }}>
 
-          <FloorDailyUpdatePanel
-            jobCardNumber={car.job_card_no}
-            repairCardId={car.id}
-            initialRow={dailyUpdatesByJc[k] ?? null}
-            onSaved={(row) => setDailyUpdatesByJc(prev => ({ ...prev, [k]: row }))}
-          />
-
-          <WorkerRoleUpdatesPanel jobCardNumber={car.job_card_no} />
-
           <BodyshopFloorStepTracker steps={flowSteps} />
 
           {/* Status banner */}
@@ -1529,7 +2004,7 @@ export default function BodyshopFloorScreen() {
           ) : (
             <View style={[S.banner, { backgroundColor: anyHold ? '#fbefdd' : '#e9f0fd', borderColor: anyHold ? '#f1dcb8' : '#cadcf8' }]}>
               <Text style={{ fontSize: 13, fontWeight: '600', color: anyHold ? '#c9751b' : '#2f63cf' }}>
-                {assignedCount}/{ALL_ROLES.length} roles assigned · {anyHold ? 'One or more roles on Hold' : 'Work in progress'}
+                {assignedCount}/{BODYSHOP_FLOOR_PIPELINE_ROLES.length} roles assigned · {anyHold ? 'One or more roles on Hold' : 'Work in progress'}
               </Text>
             </View>
           )}
@@ -1543,7 +2018,7 @@ export default function BodyshopFloorScreen() {
           ) : null}
 
           {/* Mark floor completed (legacy — prefer worker QC) */}
-          {!bsComp && assignedCount > 0 && !pipelineWorkDone && (
+          {!bsComp && assignedCount > 0 && pipelineWorkDone && canEditFloor && (
             <TouchableOpacity style={[S.markDoneBtn, saving?.includes('-bs-floor') && { opacity: 0.5 }]} disabled={!!saving} onPress={() => markFloorCompleted(car)}>
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✓ Mark Floor Work Completed</Text>
             </TouchableOpacity>
@@ -1552,7 +2027,7 @@ export default function BodyshopFloorScreen() {
           {/* Role Assignment + QC + RI in pipeline order (Rubbing → QC → RI → EDP) */}
           <Text style={S.sectionTitle}>Floor pipeline steps</Text>
           <Text style={{ fontSize: 11, color: '#82858f', marginBottom: 10, lineHeight: 16 }}>
-            Steps unlock in order. After Rubbing (Floor Work Done) → QC → RI → then EDP. Dentor / Painter work in the Floor Work app.
+            Assign all roles here anytime. Workers advance only from Floor Work (photo + Done). Then QC → RI → EDP.
           </Text>
           {BODYSHOP_FLOOR_DETAIL_STEP_ORDER.map((stepId) => {
             const step = flowStepById[stepId]
@@ -1677,7 +2152,7 @@ export default function BodyshopFloorScreen() {
 
             const role = stepId as BSRole
             const assignment = roleMap?.[role]
-            const stepLocked = step?.state === 'locked'
+            const stepLocked = stepId === 'EDP' && step?.state === 'locked'
             const draft = stageDrafts[k]?.[role] ?? { work_status: assignment?.work_status ?? 'work_inprocess', remark: assignment?.remark ?? '' }
             const support = supportAssignments[k]?.[role] ?? []
             const isExpanded = expandedRole === role
@@ -1688,16 +2163,15 @@ export default function BodyshopFloorScreen() {
             const hasDraftChanges = assignment && !notRequired && (draft.work_status !== assignment.work_status || draft.remark !== (assignment.remark ?? ''))
             const isSaving = saving === `${k}-${role}-stage`
 
-            const stepLabel =
-              step?.state === 'locked'
-                ? 'Locked'
-                : step?.state === 'done'
-                  ? 'Done'
-                  : step?.state === 'skipped'
-                    ? 'Skipped'
-                    : step?.state === 'active'
-                      ? 'Active'
-                      : null
+            const stepLabel = stepLocked
+              ? 'Locked'
+              : notRequired
+                ? 'Not Required'
+                : !assignment
+                  ? 'Unassigned'
+                  : step?.state === 'done'
+                    ? 'Complete'
+                    : (STATUS_OPTIONS.find(o => o.value === assignment.work_status)?.label ?? assignment.work_status)
 
             return (
               <View key={role} style={[S.roleCard, notRequired && S.roleCardNotRequired, stepLocked && { opacity: 0.9 }]}>
@@ -1732,7 +2206,11 @@ export default function BodyshopFloorScreen() {
                     <>
                     {/* Assign employee */}
                     <Text style={S.fieldLabel}>Assign Employee</Text>
-                    <TouchableOpacity style={S.selectBtn} onPress={() => { setEmpPickerRole(role); setEmpPickerSearch('') }} disabled={bsComp || stepLocked}>
+                    <TouchableOpacity
+                      style={S.selectBtn}
+                      onPress={() => { setEmpPickerRole(role); setEmpPickerSearch('') }}
+                      disabled={!canEditFloor || bsComp || stepLocked || (role === 'FLOOR_INCHARGE' && fiReassignBlocked)}
+                    >
                       <Text style={[S.selectBtnText, !assignment && { color: '#82858f' }]}>
                         {notRequired ? NOT_REQUIRED_NAME : (assignment?.employee_name ?? 'Select employee...')}
                       </Text>
@@ -1744,12 +2222,25 @@ export default function BodyshopFloorScreen() {
                     ) : (
                     <>
                     {/* Work Status */}
+                    {isBodyshopWorkerPipelineAssignRole(role) ? (
+                      <Text style={{ fontSize: 11, color: '#82858f', marginTop: 10, lineHeight: 16 }}>
+                        Pipeline step advances when this person uses Floor Work (photo + Done). You can assign or set Hold here — not Completed.
+                      </Text>
+                    ) : null}
                     <Text style={[S.fieldLabel, { marginTop: 12 }]}>Work Status</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
-                      {STATUS_OPTIONS.map(opt => {
+                      {STATUS_OPTIONS.filter((opt) => {
+                        if (isBodyshopWorkerPipelineAssignRole(role) && opt.value === 'completed') return false
+                        if (
+                          role === 'FLOOR_INCHARGE'
+                          && opt.value === 'completed'
+                          && !pipelineWorkDone
+                        ) return false
+                        return true
+                      }).map(opt => {
                         const active = draft.work_status === opt.value
                         return (
-                          <TouchableOpacity key={opt.value} style={{ flex: 1 }} disabled={!assignment} onPress={() => patchDraft(k, role, { work_status: opt.value })}>
+                          <TouchableOpacity key={opt.value} style={{ flex: 1 }} disabled={!canEditFloor || !assignment} onPress={() => patchDraft(k, role, { work_status: opt.value })}>
                             <View style={[S.statusChip, active && { backgroundColor: opt.bg, borderColor: opt.color }]}>
                               <Text style={{ fontSize: 11, fontWeight: active ? '700' : '500', color: active ? opt.color : '#82858f' }}>{opt.label}</Text>
                             </View>
@@ -1762,7 +2253,7 @@ export default function BodyshopFloorScreen() {
                     <Text style={[S.fieldLabel, { marginTop: 10 }]}>{draft.work_status === 'hold' ? 'Hold Reason *' : 'Remark'}</Text>
                     <TextInput
                       style={S.remarkInput}
-                      editable={Boolean(assignment)}
+                      editable={canEditFloor && Boolean(assignment)}
                       multiline
                       placeholder="Optional remark..."
                       placeholderTextColor="#a7a99f"
@@ -1778,7 +2269,7 @@ export default function BodyshopFloorScreen() {
                       </View>
                     )}
 
-                    {hasDraftChanges && (
+                    {hasDraftChanges && canEditFloor && (
                       <TouchableOpacity style={[S.saveBtn, (isSaving || !!saving) && { opacity: 0.5 }]} disabled={!!saving} onPress={() => saveStage(car, role)}>
                         {isSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Save</Text>}
                       </TouchableOpacity>
@@ -1937,83 +2428,41 @@ export default function BodyshopFloorScreen() {
   // ── List view ──────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={S.root}>
+      {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
       {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
 
-      {/* Top bar */}
-      <View style={S.topBar}>
-        <View>
-          <Text style={S.screenTitle}>Bodyshop Floor</Text>
-          <Text style={S.screenSubtitle}>
-            {floorFilter !== 'all'
-              ? `${floorFilter}: ${primaryCounts.all}`
-              : vehicleListMode === 'live_on_floor'
-                ? `${primaryCounts.all} · ${BODYSHOP_FLOOR_LIVE_LIST_LABEL}`
-                : `${primaryCounts.all} vehicles (all pipeline)`}
-            {assignmentView !== 'all' ? ` · showing ${filtered.length}` : ''}
-          </Text>
+      <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
+
+      <StaffNavigationChrome
+        title="Bodyshop Floor"
+        subtitle={`${primaryCounts.all} cards${assignmentView !== 'all' ? ` · ${filtered.length} shown` : ''}`}
+        rightAction={<StaffRefreshButton onPress={() => loadAll(true)} />}
+      />
+
+      <View style={S.listFiltersBlock}>
+        <View style={S.searchRow}>
+          <TextInput
+            style={S.searchInput}
+            placeholder="Search JC, reg, customer…"
+            placeholderTextColor="#a7a99f"
+            value={search}
+            onChangeText={setSearch}
+            clearButtonMode="while-editing"
+            accessibilityLabel="Search job cards by JC, registration, or customer"
+          />
         </View>
-        <TouchableOpacity onPress={() => loadAll(true)} style={S.refreshBtn}>
-          <Text style={S.refreshBtnText}>↻</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Vehicle list scope */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        nestedScrollEnabled
-        style={[S.filterScrollRow, { marginTop: 0 }]}
-        contentContainerStyle={S.filterScrollContent}
-      >
-        {([
-          { key: 'live_on_floor' as const, label: BODYSHOP_FLOOR_LIVE_LIST_LABEL },
-          { key: 'intake_period' as const, label: 'All pipeline cards' },
-        ]).map(opt => {
-          const active = vehicleListMode === opt.key
-          return (
-            <TouchableOpacity
-              key={opt.key}
-              onPress={() => setVehicleListMode(opt.key)}
-              style={[S.filterChip, active && S.filterChipBranchActive]}
-            >
-              <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{opt.label}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
-
-      {/* Search */}
-      <View style={{ paddingHorizontal: 14, paddingBottom: 8 }}>
-        <TextInput style={S.searchInput} placeholder="Search JC / reg / model / customer..." placeholderTextColor="#a7a99f" value={search} onChangeText={setSearch} clearButtonMode="while-editing" />
-      </View>
-
-      {/* Branch filters */}
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        style={S.filterScrollRow}
-        contentContainerStyle={S.filterScrollContent}
-      >
-        {['all', ...branches].map(b => {
-          const active = branchFilter === b
-          return (
-            <TouchableOpacity key={b} onPress={() => setBranchFilter(active && b !== 'all' ? 'all' : b)}
-              style={[S.filterChip, active && S.filterChipBranchActive]}>
-              <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>
-                {b === 'all' ? 'All Branches' : b}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
-
-      {/* Floor filters + count badge per floor */}
-      {floors.length > 0 ? (
+        <Text style={S.filterRowLabel}>Floor</Text>
         <ScrollView
           horizontal
+          showsHorizontalScrollIndicator
           nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
           style={S.filterScrollRow}
           contentContainerStyle={S.filterScrollContent}
         >
@@ -2021,13 +2470,9 @@ export default function BodyshopFloorScreen() {
             onPress={() => setFloorFilter('all')}
             style={[S.filterChip, S.filterChipWithBadge, floorFilter === 'all' && S.filterChipFloorActive]}
           >
-            <Text style={[S.filterChipText, floorFilter === 'all' && S.filterChipTextActive]} numberOfLines={1}>
-              All Floors
-            </Text>
+            <Text style={[S.filterChipText, floorFilter === 'all' && S.filterChipTextActive]}>All floors</Text>
             <View style={[S.filterCountBadge, floorFilter === 'all' && S.filterCountBadgeActive]}>
-              <Text style={[S.filterCountBadgeText, floorFilter === 'all' && S.filterCountBadgeTextActive]}>
-                {floorCountsByKey.all ?? 0}
-              </Text>
+              <Text style={[S.filterCountBadgeText, floorFilter === 'all' && S.filterCountBadgeTextActive]}>{floorCountsByKey.all ?? 0}</Text>
             </View>
           </TouchableOpacity>
           {floors.map(f => {
@@ -2039,7 +2484,7 @@ export default function BodyshopFloorScreen() {
                 onPress={() => setFloorFilter(active ? 'all' : f)}
                 style={[S.filterChip, S.filterChipWithBadge, active && S.filterChipFloorActive]}
               >
-                <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{f}</Text>
+                <Text style={[S.filterChipText, active && S.filterChipTextActive]}>{f}</Text>
                 <View style={[S.filterCountBadge, active && S.filterCountBadgeActive]}>
                   <Text style={[S.filterCountBadgeText, active && S.filterCountBadgeTextActive]}>{n}</Text>
                 </View>
@@ -2047,68 +2492,85 @@ export default function BodyshopFloorScreen() {
             )
           })}
         </ScrollView>
-      ) : null}
 
-      {floorFilter !== 'all' ? (
-        <View style={S.floorTotalBanner}>
-          <Text style={S.floorTotalLabel}>{floorFilter}</Text>
-          <Text style={S.floorTotalNumber}>{primaryCounts.all}</Text>
-        </View>
-      ) : null}
-
-      {/* Assignment status — scoped to selected floor */}
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        style={[S.filterScrollRow, S.filterScrollRowLast]}
-        contentContainerStyle={S.filterScrollContent}
-      >
-        <TouchableOpacity
-          onPress={() => setAssignmentView('all')}
-          style={[S.viewTab, S.viewTabWithCount, assignmentView === 'all' && S.viewTabActive]}
+        <Text style={S.filterRowLabel}>List & location</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          nestedScrollEnabled
+          style={S.filterScrollRow}
+          contentContainerStyle={S.filterScrollContent}
         >
-          <Text style={[S.viewTabText, assignmentView === 'all' && S.viewTabTextActive]}>All</Text>
-          <Text style={[S.viewTabCount, assignmentView === 'all' && S.viewTabCountActive]}>{primaryCounts.all}</Text>
-        </TouchableOpacity>
-        {PRIMARY_ASSIGNMENT_TABS.map(tab => {
-          const active = assignmentView === tab.key
-          const cnt = primaryCounts[tab.key as keyof typeof primaryCounts] ?? 0
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => setAssignmentView(active ? 'all' : tab.key)}
-              style={[S.viewTab, S.viewTabWithCount, active && S.viewTabActive]}
-            >
-              <Text style={[S.viewTabText, active && S.viewTabTextActive]} numberOfLines={1}>{tab.label}</Text>
-              <Text style={[S.viewTabCount, active && S.viewTabCountActive]}>{cnt}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+          {([
+            { key: 'live_on_floor' as const, label: 'Live floor' },
+            { key: 'intake_period' as const, label: 'All pipeline' },
+          ]).map(opt => {
+            const active = vehicleListMode === opt.key
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => setVehicleListMode(opt.key)}
+                style={[S.filterChip, active && S.filterChipBranchActive]}
+              >
+                <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{opt.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+          {branches.length > 0 ? (
+            <>
+              <View style={S.filterDivider} />
+              {['all', ...branches].map(b => {
+                const active = branchFilter === b
+                return (
+                  <TouchableOpacity
+                    key={`br-${b}`}
+                    onPress={() => setBranchFilter(active && b !== 'all' ? 'all' : b)}
+                    style={[S.filterChip, active && S.filterChipBranchActive]}
+                  >
+                    <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>
+                      {b === 'all' ? 'All branches' : b}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </>
+          ) : null}
+        </ScrollView>
 
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        style={[S.filterScrollRow, { marginBottom: 8 }]}
-        contentContainerStyle={S.filterScrollContent}
-      >
-        {QC_RI_TABS.map(tab => {
-          const active = assignmentView === tab.key
-          const cnt = primaryCounts[tab.key as keyof typeof primaryCounts] ?? 0
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => setAssignmentView(active ? 'all' : tab.key)}
-              style={[S.viewTab, S.viewTabWithCount, active && S.viewTabActive, tab.key === 'ri' && active && { backgroundColor: '#1c8f63', borderColor: '#1c8f63' }]}
-            >
-              <Text style={[S.viewTabText, active && S.viewTabTextActive]}>{tab.label}</Text>
-              <Text style={[S.viewTabCount, active && S.viewTabCountActive]}>{cnt}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+        <Text style={S.filterRowLabel}>Status</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          nestedScrollEnabled
+          style={S.filterScrollRowLast}
+          contentContainerStyle={S.filterScrollContent}
+        >
+          {LIST_STATUS_TABS.map(tab => {
+            const active = assignmentView === tab.key
+            const cnt = primaryCounts[tab.key as keyof typeof primaryCounts] ?? 0
+            const riActive = tab.key === 'ri' && active
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                onPress={() => setAssignmentView(active && tab.key !== 'all' ? 'all' : tab.key)}
+                style={[
+                  S.filterChip,
+                  S.filterChipWithBadge,
+                  active && S.statusChipCompactActive,
+                  riActive && { backgroundColor: '#1c8f63', borderColor: '#1c8f63' },
+                ]}
+              >
+                <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>
+                  {tab.label}
+                </Text>
+                <View style={[S.filterCountBadge, active && S.filterCountBadgeActive]}>
+                  <Text style={[S.filterCountBadgeText, active && S.filterCountBadgeTextActive]}>{cnt}</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      </View>
 
       {/* List */}
       <FlatList
@@ -2117,21 +2579,35 @@ export default function BodyshopFloorScreen() {
         keyExtractor={item => String(item.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} />}
         contentContainerStyle={{ padding: 14, paddingBottom: 80, gap: 10 }}
-        ListEmptyComponent={<View style={S.empty}><Text style={S.emptyIcon}>🚗</Text><Text style={S.emptyText}>No vehicles found</Text></View>}
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator style={{ marginTop: 40 }} color="#2563eb" />
+          ) : (
+            <View style={S.empty}><Text style={S.emptyIcon}>🚗</Text><Text style={S.emptyText}>No vehicles found</Text></View>
+          )
+        }
         renderItem={({ item: car }) => {
           const {
             assignedCount, statusLabel, statusBg, statusColor, pendingApprovals,
-            floorAgeText, floorAgeTint,
+            floorAgeText, floorAgeDays,
           } = carSummary(car)
           const advisorLabel = String(car.sa_name ?? '').trim() || '—'
           const phoneLabel = String(car.customer_phone ?? '').trim() || '—'
-          const dailyRow = dailyUpdatesByJc[jcKey(car.job_card_no)] ?? null
-          const dailySummary = floorDailyUpdateSummary(dailyRow)
           return (
             <TouchableOpacity style={S.card} onPress={() => { setSelectedCar(car); setExpandedRole(null) }} activeOpacity={0.8}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <Text style={S.cardJc}>{car.job_card_no}</Text>
-                {car.bodyshop_floor && <View style={S.floorBadge}><Text style={S.floorBadgeText}>{car.bodyshop_floor}</Text></View>}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, gap: 8 }}>
+                <Text style={[S.cardJc, { flex: 1 }]} numberOfLines={1}>{car.job_card_no}</Text>
+                {floorAgeText ? (
+                  <View style={[
+                    S.floorBadge,
+                    floorAgeDays != null && floorAgeDays >= 3 ? S.ageBadgeLate : S.ageBadgeFresh,
+                  ]}>
+                    <Text style={[
+                      S.floorBadgeText,
+                      floorAgeDays != null && floorAgeDays >= 3 ? S.ageBadgeLateText : S.ageBadgeFreshText,
+                    ]}>{floorAgeText}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={S.cardReg}>{[
                 car.reg_number?.trim().toUpperCase() !== car.job_card_no?.trim().toUpperCase() ? car.reg_number : null,
@@ -2143,20 +2619,6 @@ export default function BodyshopFloorScreen() {
                 {'  ·  '}
                 Mob: <Text style={S.cardMetaStrong}>{phoneLabel}</Text>
               </Text>
-              {floorAgeText ? (
-                <Text style={[S.cardFloorAge, { color: floorAgeTint ?? '#82858f' }]} numberOfLines={2}>
-                  {floorAgeText}
-                </Text>
-              ) : null}
-              {dailySummary.pending ? (
-                <View style={[S.statusPill, { backgroundColor: '#fbefdd', borderColor: '#f1dcb8', marginTop: 6, alignSelf: 'flex-start' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#c9751b' }}>Today&apos;s update pending</Text>
-                </View>
-              ) : dailySummary.preview ? (
-                <Text style={{ fontSize: 11, color: '#4b4e59', marginTop: 6 }} numberOfLines={2}>
-                  Today: {dailySummary.preview}
-                </Text>
-              ) : null}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <View style={[S.statusPill, { backgroundColor: statusBg, borderColor: statusColor }]}>
                   <Text style={{ fontSize: 11, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
@@ -2182,23 +2644,70 @@ const S = StyleSheet.create({
   toast:            { position: 'absolute', top: 60, left: 16, right: 16, zIndex: 999, backgroundColor: '#1c8f63', borderRadius: 10, padding: 12 },
   toastError:       { backgroundColor: '#c33b53' },
   toastText:        { color: '#fff', fontWeight: '700', fontSize: 13 },
-  topBar:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 14, paddingBottom: 10 },
-  screenTitle:      { fontSize: 20, fontWeight: '800', color: '#1a1b21' },
-  screenSubtitle:   { fontSize: 12.5, color: '#82858f', fontWeight: '500', marginTop: 2 },
-  refreshBtn:       { padding: 8 },
-  refreshBtnText:   { fontSize: 20, color: '#2a4cd0' },
-  searchInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13.5, color: '#1a1b21' },
+  listFiltersBlock: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e7e3d9',
+    backgroundColor: '#f4f2ec',
+  },
+  topBar:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingTop: 6, paddingBottom: 2 },
+  screenTitle:      { fontSize: 17, fontWeight: '800', color: '#1a1b21' },
+  screenSubtitle:   { fontSize: 11, color: '#82858f', fontWeight: '500', marginTop: 1 },
+  refreshBtn:       { padding: 6 },
+  refreshBtnText:   { fontSize: 18, color: '#2a4cd0' },
+  searchRow:        { paddingHorizontal: 12, paddingBottom: 6 },
+  searchInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#1a1b21' },
   listFlex:         { flex: 1 },
-  filterScrollRow:  { flexGrow: 0, flexShrink: 0, marginBottom: 6 },
-  filterScrollRowLast: { marginBottom: 10 },
+  filterRowLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6b6e78',
+    paddingHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  filterScrollRow:  { flexGrow: 0, flexShrink: 0, marginBottom: 2 },
+  filterScrollRowLast: { flexGrow: 0, flexShrink: 0, marginBottom: 10 },
   filterScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 14,
-    paddingRight: 28,
+    paddingLeft: 12,
+    paddingRight: 24,
     gap: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
   },
+  filterDivider: { width: 1, height: 22, backgroundColor: '#d9d4c7', marginHorizontal: 2 },
+  filterChipCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#fbfaf6',
+    borderWidth: 1,
+    borderColor: '#e7e3d9',
+    flexShrink: 0,
+  },
+  filterChipInlineCount: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  filterChipTextCompact: { fontSize: 11, fontWeight: '600', color: '#4b4e59' },
+  filterChipCountInline: { fontSize: 11, fontWeight: '800', color: '#41617f' },
+  statusChipCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e7e3d9',
+    backgroundColor: '#fff',
+    flexShrink: 0,
+  },
+  statusChipCompactActive: { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
+  statusChipCompactLabel: { fontSize: 11, fontWeight: '700', color: '#4b4e59' },
+  statusChipCompactLabelActive: { color: '#fff' },
+  statusChipCompactCount: { fontSize: 11, fontWeight: '800', color: '#1a1b21' },
   viewTab:          { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#e7e3d9', backgroundColor: '#fff', flexShrink: 0 },
   viewTabActive:    { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
   viewTabText:      { fontSize: 11.5, fontWeight: '700', color: '#4b4e59' },
@@ -2207,7 +2716,7 @@ const S = StyleSheet.create({
   chipActive:       { backgroundColor: '#1a1b21', borderColor: '#1a1b21' },
   chipText:         { fontSize: 11.5, fontWeight: '700', color: '#4b4e59' },
   chipTextActive:   { color: '#fff' },
-  filterChip:       { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: '#fbfaf6', borderWidth: 1, borderColor: '#e7e3d9', flexShrink: 0 },
+  filterChip:       { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d9d4c7', flexShrink: 0, minHeight: 38, justifyContent: 'center' },
   filterChipBranchActive: { backgroundColor: '#1a1b21', borderColor: '#1a1b21' },
   filterChipFloorActive:  { backgroundColor: '#41617f', borderColor: '#41617f' },
   filterChipWithBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -2223,7 +2732,7 @@ const S = StyleSheet.create({
   filterCountBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
   filterCountBadgeText: { fontSize: 11, fontWeight: '800', color: '#41617f' },
   filterCountBadgeTextActive: { color: '#fff' },
-  filterChipText:   { fontSize: 11.5, fontWeight: '600', color: '#4b4e59' },
+  filterChipText:   { fontSize: 13, fontWeight: '600', color: '#1a1b21' },
   filterChipTextActive: { color: '#fff', fontWeight: '700' },
   floorTotalBanner: {
     flexDirection: 'row',
@@ -2252,6 +2761,10 @@ const S = StyleSheet.create({
   statusPill:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1 },
   floorBadge:       { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, backgroundColor: '#e9eef3', borderWidth: 1, borderColor: '#c8d4e0' },
   floorBadgeText:   { fontSize: 10.5, fontWeight: '700', color: '#41617f' },
+  ageBadgeFresh:    { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' },
+  ageBadgeFreshText:{ color: '#1c8f63' },
+  ageBadgeLate:     { backgroundColor: '#fbe9ec', borderColor: '#c33b53' },
+  ageBadgeLateText: { color: '#c33b53' },
   empty:            { alignItems: 'center', marginTop: 60, gap: 8 },
   emptyIcon:        { fontSize: 40 },
   emptyText:        { fontSize: 14, color: '#82858f' },
@@ -2293,4 +2806,13 @@ const S = StyleSheet.create({
   confirmOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   confirmSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   confirmBtn:       { flex: 1, alignItems: 'center', padding: 13, borderRadius: 10 },
+  loadMoreBtn: {
+    alignSelf: 'center',
+    marginVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#2a4cd0',
+  },
+  loadMoreBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 })

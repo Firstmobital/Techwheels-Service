@@ -11,10 +11,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
+import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Icon } from '../../components/ui/Icon'
+import {
+  fetchDriverServiceBookingsPage,
+} from '../../lib/api/driverTasksPage'
+import { collectListPages, formatPartialListLoadError } from '../../lib/pagination/listPage'
+import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 
 interface DriverBookingTask {
   id: number
@@ -121,21 +126,14 @@ export default function DriverTasksScreen() {
 
   const loadTasks = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('service_bookings')
-        .select('*')
-        .or('pickup_required.eq.true,drop_required.eq.true,driver_name.not.is.null')
-        .order('appointment_date', { ascending: true })
-        .order('id', { ascending: false })
-
-      if (error) {
-        console.warn('Driver tasks fetch error:', error.message)
-      } else if (data) {
-        setTasks(data as DriverBookingTask[])
-        const names = Array.from(new Set(data.map(b => b.driver_name).filter(Boolean))) as string[]
-        setDriverNames(names)
-      }
-    } catch (err: any) {
+      const rows = await collectListPages((cursor) =>
+        fetchDriverServiceBookingsPage({ cursor, pageSize: 100 }),
+      )
+      const batch = rows as unknown as DriverBookingTask[]
+      setTasks(batch)
+      const names = Array.from(new Set(batch.map(b => b.driver_name).filter(Boolean))) as string[]
+      setDriverNames(names)
+    } catch (err: unknown) {
       console.warn('Driver tasks catch:', err)
     } finally {
       setLoading(false)
@@ -433,30 +431,14 @@ export default function DriverTasksScreen() {
   }, [todayStr, tomorrowStr, dayAfterStr])
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
-      {/* Header */}
-      <View className="bg-white border-b border-slate-200 px-4 py-3">
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-xl font-black text-slate-900">🚗 Driver Tasks</Text>
-            <View className="flex-row items-center gap-1.5 mt-0.5">
-              <View className="w-2 h-2 rounded-full bg-emerald-500" />
-              <Text className="text-slate-700 text-xs font-bold">
-                {currentDriverName ? currentDriverName : 'Driver Workspace'}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            onPress={onRefresh}
-            className="w-9 h-9 rounded-full bg-slate-100 items-center justify-center border border-slate-200 active:bg-slate-200"
-          >
-            <Icon name="rotate-cw" size={16} color="#475569" />
-          </TouchableOpacity>
-        </View>
-
-        {/* For Admin Only: Driver Switcher */}
-        {isAdminUser && driverNames.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2.5">
+    <StaffScreenShell
+      title="Driver Tasks"
+      subtitle={currentDriverName ? currentDriverName : 'Driver workspace'}
+      rightAction={<StaffRefreshButton onPress={onRefresh} />}
+    >
+      <View className="flex-1 bg-slate-50">
+        {isAdminUser && driverNames.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-4 pt-2.5">
             <View className="flex-row gap-1.5 py-1">
               <TouchableOpacity
                 onPress={() => setSelectedDriverFilter('all')}
@@ -499,10 +481,10 @@ export default function DriverTasksScreen() {
               })}
             </View>
           </ScrollView>
-        )}
+        ) : null}
 
         {/* Clean Date Filter Horizontal Tabs (English) */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2.5">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2.5 px-4">
           <View className="flex-row gap-2 py-0.5">
             <TouchableOpacity
               onPress={() => setActiveDateTab('today')}
@@ -661,7 +643,6 @@ export default function DriverTasksScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
 
       {/* Main Task FlatList */}
       {loading ? (
@@ -708,6 +689,7 @@ export default function DriverTasksScreen() {
           }
         />
       )}
-    </SafeAreaView>
+      </View>
+    </StaffScreenShell>
   )
 }

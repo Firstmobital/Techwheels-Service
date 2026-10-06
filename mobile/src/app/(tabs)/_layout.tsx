@@ -13,7 +13,7 @@ const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
   profile: { icon: 'user', label: 'Profile' },
 }
 
-const VISIBLE_TABS = ['home', 'search', 'new', 'alerts', 'profile']
+const VISIBLE_TABS = ['home', 'search', 'new', 'profile']
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets()
@@ -48,6 +48,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
         const options = descriptors[route.key]?.options ?? {}
         const config = TAB_CONFIG[route.name] || { icon: 'home', label: route.name }
         const label = options.tabBarLabel ?? options.title ?? config.label
+        const tabAccessibilityLabel = `${String(label)} tab`
         const isCenter = route.name === 'new'
 
         const onPress = () => {
@@ -67,6 +68,9 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             key={route.key}
             onPress={onPress}
             onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+            accessibilityRole="button"
+            accessibilityLabel={tabAccessibilityLabel}
+            accessibilityState={{ selected: focused }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             activeOpacity={0.7}
             style={{
@@ -207,8 +211,8 @@ export default function TabsLayout() {
         name="alerts"
         options={{
           title: 'Alerts',
-          tabBarLabel: 'Alerts',
           headerShown: false,
+          href: null,
         }}
       />
       <Tabs.Screen

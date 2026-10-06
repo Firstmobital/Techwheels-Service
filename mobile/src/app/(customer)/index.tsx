@@ -21,7 +21,10 @@ import {
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetGatePass } from '../../lib/api/customerPortal'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
-import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
+import {
+  isEffectiveBodyshopCustomerVisit,
+  isEffectiveMechanicalCustomerVisit,
+} from '../../lib/customer/mechanicalServiceType'
 import { mechanicalStatusLabel } from '../../lib/customer/mechanicalCustomerUi'
 import { AppState } from 'react-native'
 import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../../lib/customer/customerAdvisorPoll'
@@ -128,14 +131,21 @@ export default function CustomerDashboardScreen() {
   const approvedEstimate =
     approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
+  const isEffectiveBodyshop = isEffectiveBodyshopCustomerVisit({
+    visitReady,
+    kind: visitKind,
+    repairCard,
+    job,
+  })
   const isEffectiveMechanical = isEffectiveMechanicalCustomerVisit({
     visitReady,
     kind: visitKind,
-    isBodyshop,
+    isBodyshop: isBodyshop || isEffectiveBodyshop,
     repairCard,
+    job,
   })
   const mechanicalStatus = isEffectiveMechanical ? mechanicalStatusLabel(mechCase) : null
-  const showBodyshopFields = visitReady && (isBodyshop || Boolean(repairCard))
+  const showBodyshopFields = isEffectiveBodyshop
   const homeContentReady = visitReady && Boolean(selected)
   return (
     <CustomerScreen title="" subtitle="">

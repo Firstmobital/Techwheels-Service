@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 
 interface AdminMenuItem {
   title: string
@@ -110,21 +111,19 @@ export default function AdminScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-gray-50"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      {/* Header */}
-      <View className="bg-white border-b border-gray-200 px-4 pt-4 pb-4">
-        <View className="flex-row items-center justify-between mb-1">
-          <Text className="text-2xl font-bold text-gray-800">Admin Panel</Text>
-          <View className="bg-red-100 rounded px-3 py-1">
-            <Text className="text-xs font-semibold text-red-700">ADMIN</Text>
-          </View>
+    <StaffScreenShell
+      title="Admin"
+      subtitle="System administration and management"
+      rightAction={
+        <View className="bg-red-100 rounded px-3 py-1">
+          <Text className="text-xs font-semibold text-red-700">ADMIN</Text>
         </View>
-        <Text className="text-sm text-gray-600">System administration and management</Text>
-      </View>
-
+      }
+    >
+      <ScrollView
+        className="flex-1 bg-gray-50"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       {/* Alert Banner */}
       <View className="px-4 pt-4 pb-2">
         <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex-row">
@@ -194,5 +193,6 @@ export default function AdminScreen() {
         </View>
       </View>
     </ScrollView>
+    </StaffScreenShell>
   )
 }

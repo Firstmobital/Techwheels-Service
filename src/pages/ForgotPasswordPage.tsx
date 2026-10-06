@@ -3,6 +3,21 @@ import { AuthShell } from '../components/AuthShell'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
 
+type FunctionInvokeError = Error & { context?: Response }
+
+async function extractFunctionErrorMessage(error: unknown): Promise<string> {
+  if (!(error instanceof Error)) return 'Failed to send reset email'
+  const functionError = error as FunctionInvokeError
+  const fallbackMessage = functionError.message || 'Failed to send reset email'
+  if (!functionError.context) return fallbackMessage
+  try {
+    const payload = (await functionError.context.json()) as { error?: string; message?: string }
+    return payload.error ?? payload.message ?? fallbackMessage
+  } catch {
+    return fallbackMessage
+  }
+}
+
 interface Props {
   onSwitchToLogin: () => void
 }
@@ -31,14 +46,19 @@ export default function ForgotPasswordPage({ onSwitchToLogin }: Props) {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback`,
+    const redirectTo = `${window.location.origin}/auth/callback`
+    const { data, error } = await supabase.functions.invoke('deliver-password-reset-email', {
+      body: { email: email.trim(), redirectTo },
     })
 
     setLoading(false)
 
     if (error) {
-      setError(error.message)
+      setError(await extractFunctionErrorMessage(error))
+      return
+    }
+    if (data && typeof data === 'object' && 'error' in data && data.error) {
+      setError(String(data.error))
       return
     }
 

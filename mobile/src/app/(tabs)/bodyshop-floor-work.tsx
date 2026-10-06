@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -13,8 +14,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { MaterialIcons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
+import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
+import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
 import { getLinkedEmployeeContext } from '../../lib/api/bodyshopFloorWorkContext'
 import {
@@ -39,9 +44,9 @@ import {
   type FloorWorkVehicleMeta,
 } from '../../lib/bodyshopFloorWork/display'
 import {
-  activePipelineStepLabel,
   buildAssignmentRowByJobCard,
   canSubmitFloorWorkTask,
+  canUploadFloorWorkPhotos,
   isFloorWorkTaskAtActivePipelineStep,
   isFloorWorkTaskStepCompleted,
   isFloorWorkTaskVisible,
@@ -60,8 +65,6 @@ import {
   type AdminFloorWorkerCard,
   type AdminRosterPerson,
 } from '../../lib/api/bodyshopFloorWorkerHome'
-
-const FLOOR_WORK_LIST_PAGE_SIZE = 20
 import {
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
   listAllWorkTasksForAdmin,
@@ -253,6 +256,7 @@ export default function BodyshopFloorWorkScreen() {
   const [note, setNote] = useState('')
   const [photoUris, setPhotoUris] = useState<Array<{ uri: string; mime?: string }>>([])
   const [savedPhotos, setSavedPhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
+  const [photoThumbs, setPhotoThumbs] = useState<Record<number, string>>({})
   const [vehicleByJc, setVehicleByJc] = useState<Record<string, FloorWorkVehicleMeta>>({})
   const [saving, setSaving] = useState(false)
   const [isAdminOverview, setIsAdminOverview] = useState(false)
@@ -270,9 +274,9 @@ export default function BodyshopFloorWorkScreen() {
   const [incomeLoading, setIncomeLoading] = useState(false)
   const [allVehiclePhotos, setAllVehiclePhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
   const [loadingAllPhotos, setLoadingAllPhotos] = useState(false)
-  const [listLimit, setListLimit] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
   const [workerQcFailReason, setWorkerQcFailReason] = useState('')
+  const optimistic = useOptimisticAction()
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
 
@@ -383,10 +387,7 @@ export default function BodyshopFloorWorkScreen() {
     return ordered
   }, [visibleTasks, isAdminOverview, selectedAdminEmployee, adminEmployeeScopedTasks, assignmentByJc, qcStatusForTask])
 
-  const pagedTasks = useMemo(
-    () => visibleListTasks.slice(0, listLimit),
-    [visibleListTasks, listLimit],
-  )
+  const pagedTasks = visibleListTasks
 
   const adminEmployeeVehicleStats = useMemo(() => {
     if (!isAdminOverview || !selectedAdminEmployee) return null
@@ -411,10 +412,6 @@ export default function BodyshopFloorWorkScreen() {
     adminEmployeeScopedTasks,
     vehicleStepPendingForAdmin,
   ])
-
-  useEffect(() => {
-    setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
-  }, [assignmentMonthFilter, selectedAdminEmployee?.employeeCode])
 
   const adminIncomeMonthLoaded = useRef(false)
 
@@ -482,14 +479,6 @@ export default function BodyshopFloorWorkScreen() {
     }
   }, [])
 
-  const loadMoreList = useCallback(() => {
-    if (listLimit >= visibleListTasks.length) return
-    const next = Math.min(listLimit + FLOOR_WORK_LIST_PAGE_SIZE, visibleListTasks.length)
-    setListLimit(next)
-    const jcs = uniqueJcsFromTasks(visibleListTasks.slice(0, next), next)
-    void enrichVehicleMetaBatch(jcs)
-  }, [listLimit, visibleListTasks, uniqueJcsFromTasks, enrichVehicleMetaBatch])
-
   const load = useCallback(async () => {
     setError(null)
     try {
@@ -524,10 +513,6 @@ export default function BodyshopFloorWorkScreen() {
       const assignmentMap = buildAssignmentRowByJobCard(assRows)
       if (!adminOverview) {
         setWorkerAssignedSlotCount(taskList.length)
-        taskList = taskList.filter((t) => {
-          const meta = minimal[t.jobCardNumber]
-          return isFloorWorkTaskVisible(t, assignmentMap[t.jobCardNumber], meta?.qcStatus)
-        })
         setAssignmentMonthFilter(currentIstYearMonth(today))
       } else {
         setWorkerAssignedSlotCount(0)
@@ -548,17 +533,22 @@ export default function BodyshopFloorWorkScreen() {
       if (allJcs.length > 0) {
         minimal = await attachQcStatusToVehicleMeta(minimal, allJcs)
       }
+      if (!adminOverview) {
+        taskList = taskList.filter((t) => {
+          const meta = minimal[t.jobCardNumber]
+          return isFloorWorkTaskVisible(t, assignmentMap[t.jobCardNumber], meta?.qcStatus)
+        })
+      }
       taskList = filterTasksByFloorWorkGoLive(taskList, minimal, assignmentMap)
 
       setAssignmentByJc(assignmentMap)
       setTasks(taskList)
 
       metaLoadedJcsRef.current = new Set()
-      setListLimit(FLOOR_WORK_LIST_PAGE_SIZE)
       if (allJcs.length > 0) {
         setVehicleByJc(minimal)
         const sorted = sortFloorWorkTasksByFloorDayRecency(taskList, minimal, today)
-        void enrichVehicleMetaBatch(uniqueJcsFromTasks(sorted, FLOOR_WORK_LIST_PAGE_SIZE))
+        void enrichVehicleMetaBatch(uniqueJcsFromTasks(sorted, sorted.length))
       } else {
         setVehicleByJc({})
       }
@@ -698,6 +688,30 @@ export default function BodyshopFloorWorkScreen() {
       .catch(() => setSavedPhotos([]))
   }, [selected, logsByKey, employeeCode])
 
+  useEffect(() => {
+    const photos = isAdminOverview ? [...savedPhotos, ...allVehiclePhotos] : savedPhotos
+    if (photos.length === 0) {
+      setPhotoThumbs({})
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const next: Record<number, string> = {}
+      await Promise.all(
+        photos.map(async (photo) => {
+          const { data } = await supabase.storage
+            .from(photo.storage_bucket)
+            .createSignedUrl(photo.storage_path, 3600)
+          if (data?.signedUrl) next[photo.id] = data.signedUrl
+        }),
+      )
+      if (!cancelled) setPhotoThumbs(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [savedPhotos, allVehiclePhotos, isAdminOverview])
+
   async function addPhotosFromCamera() {
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
@@ -718,6 +732,7 @@ export default function BodyshopFloorWorkScreen() {
     const res = await ImagePicker.launchImageLibraryAsync({
       quality: 0.8,
       allowsMultipleSelection: true,
+      selectionLimit: 0,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     })
     if (res.canceled || !res.assets?.length) return
@@ -735,6 +750,13 @@ export default function BodyshopFloorWorkScreen() {
     ])
   }
 
+  const selectedWorkerQcTurn = useMemo(() => {
+    if (!selected) return false
+    const row = assignmentByJc[selected.jobCardNumber]
+    const meta = vehicleByJc[selected.jobCardNumber]
+    return isWorkerQcTurn(selected, row, meta?.qcStatus)
+  }, [selected, assignmentByJc, vehicleByJc])
+
   const canSubmitSelected = useMemo(() => {
     if (!selected) return false
     const row = assignmentByJc[selected.jobCardNumber]
@@ -742,11 +764,11 @@ export default function BodyshopFloorWorkScreen() {
     return canSubmitFloorWorkTask(selected, row, meta?.qcStatus, { isAdminOverview })
   }, [selected, isAdminOverview, assignmentByJc, vehicleByJc])
 
-  const selectedWorkerQcTurn = useMemo(() => {
+  const canUploadPhotosSelected = useMemo(() => {
     if (!selected) return false
     const row = assignmentByJc[selected.jobCardNumber]
     const meta = vehicleByJc[selected.jobCardNumber]
-    return isWorkerQcTurn(selected, row, meta?.qcStatus)
+    return canUploadFloorWorkPhotos(selected, row, meta?.qcStatus)
   }, [selected, assignmentByJc, vehicleByJc])
 
   async function submitWorkerQc(decision: WorkerQcDecision) {
@@ -764,62 +786,91 @@ export default function BodyshopFloorWorkScreen() {
       return
     }
     const checker = String(selected.employeeName ?? employeeName ?? employeeCode).trim()
-    setSaving(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const result = await saveWorkerQcFromFloorWork({
-        repairCardId,
-        jobCardNumber: selected.jobCardNumber,
-        assignmentRowId: assignmentId,
-        decision,
-        checkerName: checker,
-        failReason: workerQcFailReason,
-        actorEmail: user?.email ?? null,
-      })
-      setVehicleByJc((prev) => ({
-        ...prev,
-        [selected.jobCardNumber]: {
-          ...(prev[selected.jobCardNumber] ?? { reg: null, customer: null }),
-          qcStatus: result.qc_status,
-        },
-      }))
-      const jc = selected.jobCardNumber
-      const passQc = decision === 'pass' ? 'pass' : result.qc_status
-      const now = new Date().toISOString()
-      const nextRow =
-        decision === 'pass' && row ? { ...row, bs_floor_completed_at: now } : row
-      setAssignmentByJc((prev) => ({
-        ...prev,
-        [jc]: nextRow ?? prev[jc],
-      }))
-      setWorkerQcFailReason('')
-      setTasks((prev) =>
-        prev.filter((t) => {
-          const assignRow =
-            t.jobCardNumber === jc ? (nextRow ?? assignmentByJc[t.jobCardNumber]) : assignmentByJc[t.jobCardNumber]
-          const qc =
-            t.jobCardNumber === jc
-              ? passQc
-              : vehicleByJc[t.jobCardNumber]?.qcStatus
-          return isFloorWorkTaskVisible(t, assignRow, qc)
-        }),
-      )
-      setSelected(null)
-      Alert.alert(
-        decision === 'pass' ? 'QC passed' : 'QC failed',
-        decision === 'pass'
-          ? 'Floor incharge can complete Re-Inspection on Bodyshop Floor.'
-          : 'Fail reason saved. Fix work and submit QC again.',
-      )
-    } catch (e) {
-      Alert.alert('QC failed', e instanceof Error ? e.message : 'Could not save QC')
-    } finally {
-      setSaving(false)
-    }
+    const failReasonSnapshot = workerQcFailReason
+    const jc = selected.jobCardNumber
+    const optimisticQc = decision === 'pass' ? 'pass' : 'fail'
+    const prevVehicleByJc = vehicleByJc
+    const prevAssignmentByJc = assignmentByJc
+    const prevTasks = tasks
+    const prevSelected = selected
+    const now = new Date().toISOString()
+    const optimisticNextRow = decision === 'pass' && row ? { ...row, bs_floor_completed_at: now } : row
+
+    await optimistic.run(`qc-${jc}`, {
+      apply: () => {
+        setSaving(true)
+        setVehicleByJc((prev) => ({
+          ...prev,
+          [jc]: {
+            ...(prev[jc] ?? { reg: null, customer: null }),
+            qcStatus: optimisticQc,
+          },
+        }))
+        if (optimisticNextRow) {
+          setAssignmentByJc((prev) => ({ ...prev, [jc]: optimisticNextRow }))
+        }
+        setTasks((prev) =>
+          prev.filter((t) => {
+            const assignRow =
+              t.jobCardNumber === jc ? (optimisticNextRow ?? assignmentByJc[t.jobCardNumber]) : assignmentByJc[t.jobCardNumber]
+            const qc = t.jobCardNumber === jc ? optimisticQc : vehicleByJc[t.jobCardNumber]?.qcStatus
+            return isFloorWorkTaskVisible(t, assignRow, qc)
+          }),
+        )
+        setSelected(null)
+      },
+      rollback: () => {
+        setVehicleByJc(prevVehicleByJc)
+        setAssignmentByJc(prevAssignmentByJc)
+        setTasks(prevTasks)
+        setSelected(prevSelected)
+        setSaving(false)
+      },
+      execute: async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        const result = await saveWorkerQcFromFloorWork({
+          repairCardId,
+          jobCardNumber: jc,
+          assignmentRowId: assignmentId,
+          decision,
+          checkerName: checker,
+          failReason: failReasonSnapshot,
+          actorEmail: user?.email ?? null,
+        })
+        setVehicleByJc((prev) => ({
+          ...prev,
+          [jc]: {
+            ...(prev[jc] ?? { reg: null, customer: null }),
+            qcStatus: result.qc_status,
+          },
+        }))
+        const passQc = decision === 'pass' ? 'pass' : result.qc_status
+        const nextRow = decision === 'pass' && row ? { ...row, bs_floor_completed_at: now } : row
+        setAssignmentByJc((prev) => ({ ...prev, [jc]: nextRow ?? prev[jc] }))
+        setTasks((prev) =>
+          prev.filter((t) => {
+            const assignRow =
+              t.jobCardNumber === jc ? (nextRow ?? assignmentByJc[t.jobCardNumber]) : assignmentByJc[t.jobCardNumber]
+            const qc = t.jobCardNumber === jc ? passQc : vehicleByJc[t.jobCardNumber]?.qcStatus
+            return isFloorWorkTaskVisible(t, assignRow, qc)
+          }),
+        )
+      },
+      onSuccess: () => {
+        setWorkerQcFailReason('')
+        setSaving(false)
+        Alert.alert(
+          decision === 'pass' ? 'QC passed' : 'QC failed',
+          decision === 'pass'
+            ? 'Floor incharge can complete Re-Inspection on Bodyshop Floor.'
+            : 'Fail reason saved. Fix work and submit QC again.',
+        )
+      },
+    })
   }
 
   async function save() {
-    if (!selected || !canSubmitSelected) return
+    if (!selected || !canUploadPhotosSelected) return
     const slotCode = workTaskEmployeeCode(selected, employeeCode)
     if (!slotCode) return
     const trimmed = note.trim()
@@ -917,18 +968,30 @@ export default function BodyshopFloorWorkScreen() {
     }
   }
 
+  const floorWorkSubtitle = isAdminOverview
+    ? selectedAdminEmployee
+      ? `${selectedAdminEmployee.employeeName} · ${selectedAdminEmployee.roleLabel}`
+      : `Admin · floor team · ${today} (IST)`
+    : `${employeeName ?? employeeCode} · ${today} (IST)`
+
   if (loading) {
     return (
-      <SafeAreaView style={S.centered}>
-        <ActivityIndicator size="large" color="#2a4cd0" />
-      </SafeAreaView>
+      <StaffScreenShell title="Floor Work" subtitle="Loading assignments…">
+        <View style={S.centered}>
+          <ActivityIndicator size="large" color="#2a4cd0" />
+        </View>
+      </StaffScreenShell>
     )
   }
 
   if (error) {
     return (
-      <SafeAreaView style={{ flex: 1, padding: 20, backgroundColor: '#f4f2ec' }}>
-        <Text style={S.screenTitle}>Floor Work</Text>
+      <StaffScreenShell
+        title="Floor Work"
+        subtitle={floorWorkSubtitle}
+        rightAction={<StaffRefreshButton onPress={() => void onRefresh()} />}
+      >
+        <View style={{ flex: 1, padding: 20, backgroundColor: '#f4f2ec' }}>
         <Text style={{ color: '#DC2626', marginBottom: 12, fontWeight: '700' }}>{error}</Text>
         <Text style={{ color: '#4b4e59', lineHeight: 22, marginBottom: 12 }}>
           Common reasons: login not linked to employee code, slow network, or session expired. Pull down after Retry or sign in again.
@@ -936,10 +999,11 @@ export default function BodyshopFloorWorkScreen() {
         <Text style={{ color: '#82858f', lineHeight: 20, marginBottom: 16 }}>
           Admin: module <Text style={{ fontWeight: '700' }}>bodyshop_floor_work</Text>, user → employee mapping, role DENTOR/PAINTER in Employee Master.
         </Text>
-        <TouchableOpacity onPress={() => void onRefresh()} style={S.loadMoreBtn}>
+        <TouchableOpacity onPress={() => void onRefresh()} style={S.loadMoreBtn} accessibilityRole="button" accessibilityLabel="Retry loading">
           <Text style={S.loadMoreBtnText}>Retry</Text>
         </TouchableOpacity>
-      </SafeAreaView>
+        </View>
+      </StaffScreenShell>
     )
   }
 
@@ -968,23 +1032,19 @@ export default function BodyshopFloorWorkScreen() {
   )
 
   return (
-    <SafeAreaView style={S.root} edges={['top']}>
-      <View style={S.topBar}>
-        <View style={{ flex: 1 }}>
-          <Text style={S.screenTitle}>Floor Work</Text>
-          <Text style={S.screenSubtitle}>
-            {isAdminOverview
-              ? selectedAdminEmployee
-                ? `${selectedAdminEmployee.employeeName} · ${selectedAdminEmployee.roleLabel}`
-                : `Admin · floor team · ${today} (IST)`
-              : `${employeeName ?? employeeCode} · ${today} (IST)`}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={() => void onRefresh()} style={S.refreshBtn} accessibilityLabel="Refresh">
-          <Text style={S.refreshBtnText}>↻</Text>
-        </TouchableOpacity>
-      </View>
-
+    <StaffScreenShell
+      title="Floor Work"
+      subtitle={floorWorkSubtitle}
+      rightAction={<StaffRefreshButton onPress={() => void onRefresh()} />}
+    >
+      <View style={S.root}>
+      {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
       {!selected && !isAdminOverview ? (
         <View style={S.incomeBanner}>
           <Text style={S.incomeBannerLabel}>Bodyshop income · {currentIstYearMonth(today)}</Text>
@@ -1054,15 +1114,6 @@ export default function BodyshopFloorWorkScreen() {
             {floorWorkStandingLine(vehicleByJc[selected.jobCardNumber]) ? (
               <Text style={S.standingLine}>{floorWorkStandingLine(vehicleByJc[selected.jobCardNumber])}</Text>
             ) : null}
-            {canSubmitSelected && !selectedWorkerQcTurn && isFloorWorkTaskAtActivePipelineStep(selected, assignmentByJc[selected.jobCardNumber]) ? (
-              <View style={S.stepBanner}>
-                <Text style={S.stepBannerTitle}>Your turn — {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selected.floorRole]}</Text>
-                <Text style={S.stepBannerHint}>
-                  Pipeline: Dentor → Painter → Technician → Rubbing → QC. Active lane:{' '}
-                  {activePipelineStepLabel(assignmentByJc[selected.jobCardNumber]) ?? '—'}. Add at least one photo, tap Done — Floor Incharge sees it on Bodyshop Floor under Worker updates.
-                </Text>
-              </View>
-            ) : null}
             {selectedWorkerQcTurn && canSubmitSelected ? (
               <View style={S.qcPanel}>
                 <Text style={S.qcPanelTitle}>Quality check — your turn</Text>
@@ -1096,73 +1147,90 @@ export default function BodyshopFloorWorkScreen() {
                 />
               </View>
             ) : null}
-            {canSubmitSelected && !selectedWorkerQcTurn ? (
-              <>
-            <Text style={S.fieldLabel}>Work update (optional)</Text>
-            <TextInput
-              style={S.noteInput}
-              multiline
-              placeholder="Optional — short note about the work"
-              placeholderTextColor="#a8abb4"
-              value={note}
-              onChangeText={setNote}
-            />
-            <TouchableOpacity onPress={pickPhotos} style={S.photoLink}>
-              <Text style={S.photoLinkText}>
-                + Photo — Camera or Gallery ({photoUris.length} new)
+            {canUploadPhotosSelected ? (
+              <View style={S.photoBlock}>
+                <TouchableOpacity
+                  onPress={pickPhotos}
+                  style={S.cameraBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add photos"
+                >
+                  <MaterialIcons name="photo-camera" size={28} color="#fff" />
+                </TouchableOpacity>
+                <Text style={S.cameraHint}>Tap the camera. You can add several photos at once.</Text>
+                {photoUris.length > 0 ? (
+                  <View style={S.thumbRow}>
+                    {photoUris.map((photo, index) => (
+                      <View key={`${photo.uri}-${index}`} style={S.thumbWrap}>
+                        <Image source={{ uri: photo.uri }} style={S.thumb} />
+                        <TouchableOpacity
+                          style={S.thumbRemove}
+                          onPress={() => setPhotoUris((prev) => prev.filter((_, i) => i !== index))}
+                          accessibilityLabel="Remove photo"
+                        >
+                          <Text style={S.thumbRemoveText}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ) : !isAdminOverview && canSubmitSelected === false && selected && !selectedWorkerQcTurn ? (
+              <Text style={S.adminViewOnlyHint}>
+                Photos unlock when this vehicle is on your pipeline step (Dentor → Painter → …). Ask Floor Incharge if you are assigned but do not see your turn.
               </Text>
-            </TouchableOpacity>
-              </>
             ) : null}
-              {isAdminOverview ? (
+              {isAdminOverview && (loadingAllPhotos || allVehiclePhotos.length > 0) ? (
                 <View style={S.savedPhotosBox}>
                   <Text style={S.savedPhotosHint}>
                     {loadingAllPhotos
                       ? 'Loading all floor photos for this vehicle…'
-                      : `All floor photos (${allVehiclePhotos.length}) — tap to open`}
+                      : `All floor photos (${allVehiclePhotos.length})`}
                   </Text>
-                  {allVehiclePhotos.map((p) => (
-                    <TouchableOpacity
-                      key={`all-${p.id}`}
-                      onPress={() =>
-                        void openRoleDailyLogPhoto(p).catch((e) =>
-                          Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
-                        )
-                      }
-                      style={S.savedPhotoRow}
-                    >
-                      <Text style={S.savedPhotoText}>
-                        {p.file_name ?? `Photo ${p.sort_order + 1}`}
-                        {p.drive_url ? ' · Drive' : ''}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  <View style={S.thumbRow}>
+                    {allVehiclePhotos.map((p) => (
+                      <TouchableOpacity
+                        key={`all-${p.id}`}
+                        onPress={() =>
+                          void openRoleDailyLogPhoto(p).catch((e) =>
+                            Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
+                          )
+                        }
+                      >
+                        {photoThumbs[p.id] ? (
+                          <Image source={{ uri: photoThumbs[p.id] }} style={S.thumb} />
+                        ) : (
+                          <View style={[S.thumb, S.thumbPlaceholder]} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               ) : null}
               {savedPhotos.length > 0 ? (
                 <View style={S.savedPhotosBox}>
-                  <Text style={S.savedPhotosHint}>
-                    Tap to open. Drive link appears after background sync.
-                  </Text>
-                  {savedPhotos.map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    onPress={() =>
-                      void openRoleDailyLogPhoto(p).catch((e) =>
-                        Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
-                      )
-                    }
-                    style={S.savedPhotoRow}
-                  >
-                    <Text style={S.savedPhotoText}>
-                      {p.file_name ?? `Photo ${p.sort_order + 1}`}
-                      {p.drive_url ? ' · Drive' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-            {canSubmitSelected && !selectedWorkerQcTurn ? (
+                  <Text style={S.savedPhotosHint}>Uploaded photos</Text>
+                  <View style={S.thumbRow}>
+                    {savedPhotos.map((p) => (
+                      <TouchableOpacity
+                        key={p.id}
+                        onPress={() =>
+                          void openRoleDailyLogPhoto(p).catch((e) =>
+                            Alert.alert('Photo', e instanceof Error ? e.message : 'Open failed'),
+                          )
+                        }
+                      >
+                        {photoThumbs[p.id] ? (
+                          <Image source={{ uri: photoThumbs[p.id] }} style={S.thumb} />
+                        ) : (
+                          <View style={[S.thumb, S.thumbPlaceholder]} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+            {canUploadPhotosSelected ? (
             <TouchableOpacity onPress={() => void save()} disabled={saving} style={[S.saveBtn, saving && S.saveBtnDisabled]}>
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={S.saveBtnText}>Done — send to next step</Text>}
             </TouchableOpacity>
@@ -1232,26 +1300,7 @@ export default function BodyshopFloorWorkScreen() {
                 : `${item.jobCardNumber}-${item.floorRole}-${item.isSupport}`
             }
             contentContainerStyle={S.listContent}
-            initialNumToRender={8}
-            maxToRenderPerBatch={8}
-            windowSize={5}
-            removeClippedSubviews
-            onEndReached={() => loadMoreList()}
-            onEndReachedThreshold={0.35}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#2a4cd0" />}
-            ListFooterComponent={
-              listLimit < visibleListTasks.length ? (
-                <TouchableOpacity
-                  onPress={() => loadMoreList()}
-                  disabled={loadingMoreMeta}
-                  style={S.loadMoreBtn}
-                >
-                  <Text style={S.loadMoreBtnText}>
-                    {loadingMoreMeta ? 'Loading…' : `Load more (${FLOOR_WORK_LIST_PAGE_SIZE})`}
-                  </Text>
-                </TouchableOpacity>
-              ) : null
-            }
             ListEmptyComponent={
               <View style={S.empty}>
                 <Text style={S.emptyIcon}>🚗</Text>
@@ -1333,7 +1382,8 @@ export default function BodyshopFloorWorkScreen() {
           />
         </>
       )}
-    </SafeAreaView>
+      </View>
+    </StaffScreenShell>
   )
 }
 
@@ -1539,8 +1589,32 @@ const S = StyleSheet.create({
     color: '#1a1b21',
     backgroundColor: '#fff',
   },
-  photoLink: { marginTop: 12 },
-  photoLinkText: { color: '#2a4cd0', fontWeight: '700', fontSize: 14 },
+  photoBlock: { marginTop: 16, alignItems: 'flex-start' },
+  cameraBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#2a4cd0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraHint: { marginTop: 8, fontSize: 12, color: '#5c5f69' },
+  thumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  thumbWrap: { position: 'relative' },
+  thumb: { width: 84, height: 84, borderRadius: 10, backgroundColor: '#eceae4' },
+  thumbPlaceholder: { borderWidth: 1, borderColor: '#e7e3d9' },
+  thumbRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbRemoveText: { color: '#fff', fontSize: 16, lineHeight: 18, fontWeight: '700' },
   savedPhotosBox: { marginTop: 12, backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e7e3d9' },
   savedPhotosHint: { fontSize: 11, color: '#82858f', marginBottom: 6 },
   savedPhotoRow: { paddingVertical: 6 },

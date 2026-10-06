@@ -8,6 +8,7 @@ import {
   type BodyshopFloorDailyUpdateRow,
 } from '../../lib/bodyshopFloorDailyUpdate'
 import { upsertBodyshopFloorDailyUpdate } from '../../lib/api/bodyshopFloorDailyUpdate'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 
 type Props = {
   jobCardNumber: string
@@ -22,6 +23,7 @@ export function FloorDailyUpdatePanel({ jobCardNumber, repairCardId, initialRow,
   const activeRow = isBodyshopFloorDailyUpdateActive(initialRow, today) ? initialRow : null
   const [note, setNote] = useState(String(activeRow?.note_text ?? ''))
   const [saving, setSaving] = useState(false)
+  const optimistic = useOptimisticAction()
 
   useEffect(() => {
     setNote(String(activeRow?.note_text ?? ''))
@@ -35,28 +37,58 @@ export function FloorDailyUpdatePanel({ jobCardNumber, repairCardId, initialRow,
       Alert.alert('Today\'s update', 'Please enter today\'s status or reason.')
       return
     }
-    setSaving(true)
+    const prevNote = note
+    const optimisticRow: BodyshopFloorDailyUpdateRow = activeRow
+      ? { ...activeRow, note_text: trimmed, updated_at: new Date().toISOString() }
+      : {
+          id: -1,
+          job_card_number: jobCardNumber,
+          repair_card_id: repairCardId,
+          dealer_code: '',
+          update_date: today,
+          note_text: trimmed,
+          voice_bucket: null,
+          voice_storage_path: null,
+          voice_mime: null,
+          voice_duration_sec: null,
+          created_by: null,
+          updated_by: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data: dealerCodeRaw, error: dealerErr } = await supabase.rpc('my_dealer_code')
-      if (dealerErr) throw new Error(dealerErr.message)
-      const dealerCode = String(dealerCodeRaw ?? '').trim()
-      if (!dealerCode) throw new Error('Dealer code missing on your account')
-
-      const row = await upsertBodyshopFloorDailyUpdate({
-        jobCardNumber,
-        repairCardId,
-        dealerCode,
-        noteText: trimmed,
-        actorEmail: user?.email ?? null,
+      await optimistic.run(`daily-${jobCardNumber}`, {
+        apply: () => {
+          setSaving(true)
+          onSaved(optimisticRow)
+        },
+        rollback: () => {
+          setNote(prevNote)
+          if (activeRow) onSaved(activeRow)
+          setSaving(false)
+        },
+        execute: async () => {
+          const { data: { user } } = await supabase.auth.getUser()
+          const { data: dealerCodeRaw, error: dealerErr } = await supabase.rpc('my_dealer_code')
+          if (dealerErr) throw new Error(dealerErr.message)
+          const dealerCode = String(dealerCodeRaw ?? '').trim()
+          if (!dealerCode) throw new Error('Dealer code missing on your account')
+          const row = await upsertBodyshopFloorDailyUpdate({
+            jobCardNumber,
+            repairCardId,
+            dealerCode,
+            noteText: trimmed,
+            actorEmail: user?.email ?? null,
+          })
+          onSaved(row)
+        },
+        onSuccess: () => setSaving(false),
+        rethrow: true,
       })
-      onSaved(row)
     } catch (err) {
       Alert.alert('Save failed', err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setSaving(false)
     }
-  }, [jobCardNumber, note, onSaved, repairCardId])
+  }, [activeRow, jobCardNumber, note, onSaved, repairCardId, today])
 
   if (compact && hasTodayContent && activeRow?.note_text) {
     return (

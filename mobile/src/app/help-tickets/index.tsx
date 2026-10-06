@@ -64,16 +64,30 @@ export default function MyHelpTicketsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async (activeFilter: FilterKey, mode: 'initial' | 'refresh' = 'initial') => {
+  const load = useCallback(async (
+    activeFilter: FilterKey,
+    mode: 'initial' | 'refresh' = 'initial',
+  ) => {
     if (mode === 'refresh') setRefreshing(true)
     else setLoading(true)
     setError(null)
     try {
-      const rows = await listMyHelpTickets({
-        status: statusForFilter(activeFilter),
-        limit: 50,
-      })
-      setTickets(rows)
+      const pageSize = 100
+      const all: HelpTicket[] = []
+      let cursor: string | null = null
+      for (let i = 0; i < 50; i += 1) {
+        const rows = await listMyHelpTickets({
+          status: statusForFilter(activeFilter),
+          limit: pageSize,
+          cursor,
+        })
+        all.push(...rows)
+        if (rows.length < pageSize) break
+        const next = rows[rows.length - 1]?.created_at ?? null
+        if (!next || next === cursor) break
+        cursor = next
+      }
+      setTickets(all)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load tickets'
       setError(

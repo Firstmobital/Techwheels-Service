@@ -12,7 +12,6 @@ function stepShortLabel(id: FloorFlowStepId): string {
   if (id === 'FLOOR_INCHARGE') return 'FI'
   if (id === 'DENTOR_HELPER') return 'DH'
   if (id === 'PAINTER_HELPER') return 'PH'
-  if (id === 'PARTS_INCHARGE') return 'PI'
   if (id === 'TECHNICIAN') return 'TC'
   return id.slice(0, 2)
 }
@@ -29,6 +28,8 @@ export function BodyshopFloorStepTracker({ steps }: Props) {
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.row}>
         {steps.map((step, idx) => {
+          const isDone = step.state === 'done'
+          const isActive = step.state === 'active'
           const tone =
             step.state === 'done'
               ? S.chipDone
@@ -41,7 +42,9 @@ export function BodyshopFloorStepTracker({ steps }: Props) {
             <View key={step.id} style={S.chipWrap}>
               {idx > 0 ? <Text style={S.arrow}>→</Text> : null}
               <View style={[S.chip, tone]}>
-                <Text style={[S.chipText, step.state === 'active' && S.chipTextActive]}>{stepShortLabel(step.id)}</Text>
+                <Text style={[S.chipText, isDone && S.chipTextOnBlue, isActive && S.chipTextBlue]}>
+                  {stepShortLabel(step.id)}
+                </Text>
               </View>
             </View>
           )
@@ -73,10 +76,11 @@ const S = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  chipDone: { backgroundColor: '#e4f4ec', borderColor: '#86efac' },
-  chipSkip: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
-  chipActive: { backgroundColor: '#e9f0fd', borderColor: '#2f63cf' },
+  chipDone: { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
+  chipSkip: { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' },
+  chipActive: { backgroundColor: '#e9f0fd', borderColor: '#2a4cd0' },
   chipLocked: { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' },
-  chipText: { fontSize: 11, fontWeight: '700', color: '#82858f' },
-  chipTextActive: { color: '#2f63cf' },
+  chipText: { fontSize: 11, fontWeight: '700', color: '#a7a99f' },
+  chipTextBlue: { color: '#2a4cd0' },
+  chipTextOnBlue: { color: '#fff' },
 })

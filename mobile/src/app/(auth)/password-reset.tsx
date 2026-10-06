@@ -28,12 +28,14 @@ export default function PasswordResetScreen() {
 
     setLoading(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: getStaffAuthRedirectUrl(),
+      const { data, error } = await supabase.functions.invoke('deliver-password-reset-email', {
+        body: { email: email.trim(), redirectTo: getStaffAuthRedirectUrl() },
       })
 
       if (error) {
         Alert.alert('Error', error.message)
+      } else if (data && typeof data === 'object' && 'error' in data && data.error) {
+        Alert.alert('Error', String(data.error))
       } else {
         Alert.alert('Success', 'Check your email for password reset instructions')
         router.replace('/(auth)/login')

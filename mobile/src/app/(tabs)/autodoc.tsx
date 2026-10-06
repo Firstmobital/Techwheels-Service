@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Body & Paint Dashboard (BP-01)
  * 
  * Redesigned to match reference artboard `bp` from design-refactor-bundle.
@@ -23,15 +23,15 @@ import {
 import { useRouter } from 'expo-router'
 import { ClaimTrackerView } from '../../components/ClaimTrackerView'
 import {
-  listJobCardSummaries,
+  listJobCardSummariesPage,
   type JobDashboardSummaryRow,
   type JobCardStatus,
 } from '../../lib/api/jobCards'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { useFocusEffect } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Icon, PrimaryButton } from '../../components/ui'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import { StatusPill } from '../../components/ui/StatusPill'
 import { Pipeline } from '../../components/ui/Pipeline'
 
@@ -132,7 +132,6 @@ function statusDotColor(status: JobCardStatus | null | undefined): string {
 
 export default function AutoDocScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { session, loading: authLoading } = useAuth()
   const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -143,7 +142,7 @@ export default function AutoDocScreen() {
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
   const [preSubmitReadyJobIds, setPreSubmitReadyJobIds] = useState<Set<string>>(new Set())
-
+  const [listCursor, setListCursor] = useState<JobCardSummaryPageCursor | null>(null)
   const loadJobCards = useCallback(async () => {
     try {
       const sessionRes = await supabase.auth.getSession()
@@ -156,53 +155,20 @@ export default function AutoDocScreen() {
       }
 
       setError(null)
-
-      const result = await listJobCardSummaries()
-      if (result.error) {
-        setError(result.error)
-        return
+      const all: JobDashboardSummaryRow[] = []
+      let cursor: { jcCreatedAt: string; jobCardId: string } | null = null
+      for (let i = 0; i < 50; i += 1) {
+        const result = await listJobCardSummariesPage(cursor)
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        const page = result.data ?? { rows: [], nextCursor: null, hasMore: false }
+        all.push(...page.rows)
+        if (!page.hasMore || !page.nextCursor) break
+        cursor = page.nextCursor
       }
-
-      const rows = result.data ?? []
-      if (rows.length > 0) {
-        setJobCards(rows)
-        return
-      }
-
-      // Hard fallback
-      const directRes = await supabase
-        .from('job_cards')
-        .select('id, jc_number, reg_number, complaint_date, status, km_reading')
-        .order('created_at', { ascending: false })
-        .limit(200)
-
-      if (directRes.error) {
-        setJobCards([])
-        return
-      }
-
-      const fallbackRows: JobDashboardSummaryRow[] = (directRes.data ?? []).map((row) => ({
-        job_card_id: row.id,
-        jc_number: row.jc_number,
-        reg_number: row.reg_number,
-        model: null,
-        vehicle_year: null,
-        colour: null,
-        complaint_date: row.complaint_date,
-        status: (row.status as JobCardStatus) ?? 'draft',
-        warranty_age_days: null,
-        tml_share_percent: null,
-        total_estimate_amount: 0,
-        panel_count: 0,
-        photo_count: 0,
-        has_ppt_pre: false,
-        has_ppt_post: false,
-        owner_name: null,
-        km_reading: row.km_reading,
-        panel_names: [],
-      }))
-
-      setJobCards(fallbackRows)
+      setJobCards(all)
     } catch (err: any) {
       const msg = String(err?.message ?? 'Failed to load Body & Paint')
       if (/refresh token|invalid refresh token|auth/i.test(msg)) {
@@ -215,6 +181,9 @@ export default function AutoDocScreen() {
       setRefreshing(false)
     }
   }, [session])
+      setLoadingMore(false)
+    }
+  }, [listCursor, session])
 
   useEffect(() => {
     if (authLoading) return
@@ -491,7 +460,8 @@ export default function AutoDocScreen() {
   }, [rowsWithStage, search, stageFilter])
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f4f2ec' }}>
+    <StaffScreenShell title="Body & Paint" subtitle="Job cards, workflow stages, and documentation.">
+      <View style={{ flex: 1, backgroundColor: '#f4f2ec' }}>
       {loading && !refreshing ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
           <ActivityIndicator size="large" color="#2a4cd0" />
@@ -509,16 +479,21 @@ export default function AutoDocScreen() {
         <ClaimTrackerView />
       ) : (
         <FlatList
-          data={filteredRows}
-          keyExtractor={(item, index) => `${item.row.job_card_id ?? item.row.jc_number ?? 'job'}-${index}`}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#1a1b21' }}>No job cards</Text>
+              <Text style={{ fontSize: 13, color: '#82858f', marginTop: 4 }}>Try another filter or pull to refresh</Text>
+            </View>
+          }
+              </View>
+            ) : null
+          }
           contentContainerStyle={{ paddingBottom: 120 }}
           ListHeaderComponent={
             <>
-              {/* Header */}
               <View
                 style={{
-                  paddingTop: Math.max(insets.top + 6, 16),
+                  paddingTop: 12,
                   paddingBottom: 10,
                   paddingHorizontal: 16,
                   backgroundColor: '#ffffff',
@@ -526,37 +501,12 @@ export default function AutoDocScreen() {
                   borderBottomColor: '#e7e3d9',
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                    <TouchableOpacity
-                      style={{ width: 38, height: 38, borderRadius: 999, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d9d4c7', justifyContent: 'center', alignItems: 'center' }}
-                      onPress={() => router.push('/(tabs)/home')}
-                    >
-                      <Icon name="chevron-left" size={20} color="#1a1b21" strokeWidth={2} />
-                    </TouchableOpacity>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 0.09, textTransform: 'uppercase', color: '#2a4cd0', marginBottom: 2 }}>Module</Text>
-                      <Text style={{ fontSize: 18, fontWeight: '600', color: '#1a1b21' }}>Body & Paint</Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity
-                      style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d9d4c7', justifyContent: 'center', alignItems: 'center' }}
-                      onPress={() => router.push('/(tabs)/alerts')}
-                    >
-                      <Icon name="bell" size={18} color="#1a1b21" strokeWidth={1.5} />
-                    </TouchableOpacity>
-                    <View
-                      style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: '#f4f2ec', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#d9d4c7' }}
-                    >
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#2a4cd0' }}>V</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Search */}
                 <View style={{ position: 'relative' }}>
-                  <View style={{ position: 'absolute', left: 13, top: '50%', zIndex: 10, transform: [{ translateY: -8.5 }] }}>
+                  <View
+                    style={{ position: 'absolute', left: 13, top: '50%', zIndex: 10, transform: [{ translateY: -8.5 }] }}
+                    importantForAccessibility="no-hide-descendants"
+                    accessibilityElementsHidden
+                  >
                     <Icon name="search" size={17} color="#82858f" strokeWidth={1.5} />
                   </View>
                   <TextInput
@@ -575,6 +525,7 @@ export default function AutoDocScreen() {
                     onChangeText={setSearch}
                     placeholder="Search JC, reg, model or owner"
                     placeholderTextColor="#a7a99f"
+                    accessibilityLabel="Search job cards by JC, registration, model, or owner"
                   />
                 </View>
               </View>
@@ -671,7 +622,11 @@ export default function AutoDocScreen() {
                   {filteredRows.length} Job Card{filteredRows.length === 1 ? '' : 's'}
                 </Text>
                 {stageFilter !== 'active_vehicles' && stageFilter !== 'today' && stageFilter !== 'completed' && (
-                  <TouchableOpacity onPress={() => setStageFilter('active_vehicles')}>
+                  <TouchableOpacity
+                    onPress={() => setStageFilter('active_vehicles')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear stage filter"
+                  >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Icon name="x" size={13} color="#2a4cd0" strokeWidth={2.5} />
                       <Text style={{ fontSize: 12, fontWeight: '700', color: '#2a4cd0', fontFamily: 'Plus Jakarta Sans' }}>Clear filter</Text>
@@ -814,11 +769,14 @@ export default function AutoDocScreen() {
             elevation: 12,
           }}
           onPress={() => router.push('/job-cards/create')}
+          accessibilityRole="button"
+          accessibilityLabel="Create new job card"
         >
           <Icon name="plus" size={20} color="#ffffff" strokeWidth={2.5} />
           <Text style={{ fontSize: 14.5, fontWeight: '700', color: '#ffffff', fontFamily: 'Plus Jakarta Sans' }}>New Job Card</Text>
         </TouchableOpacity>
       )}
-    </View>
+      </View>
+    </StaffScreenShell>
   )
 }

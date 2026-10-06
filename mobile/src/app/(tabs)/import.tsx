@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import Papa from 'papaparse'
@@ -637,18 +638,15 @@ export default function ImportScreen() {
   }, [cards])
 
   return (
-    <ScrollView
-      className="flex-1 bg-slate-50"
-      contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    <StaffScreenShell
+      title="Import Data"
+      subtitle="Upload spreadsheets for each portal branch — same model as web."
     >
-      <View className="mb-4">
-        <Text className="text-2xl font-bold text-slate-900">Import Data</Text>
-        <Text className="text-sm text-slate-600 mt-1">
-          Upload .xlsx or .csv files for each portal branch. Mobile UI, same import business model as web.
-        </Text>
-      </View>
-
+      <ScrollView
+        className="flex-1 bg-slate-50"
+        contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       <View className="mb-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
         <Text className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Parity Progress</Text>
         <Text className="text-sm text-blue-900 mt-1">
@@ -750,5 +748,6 @@ export default function ImportScreen() {
         )
       })}
     </ScrollView>
+    </StaffScreenShell>
   )
 }

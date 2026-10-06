@@ -86,14 +86,10 @@ export function parseBusinessRoles(raw: string | null | undefined): string[] {
   const text = String(raw ?? '').trim()
   if (!text) return []
 
-  if (/[;/|]/.test(text)) {
-    return []
-  }
-
   const seen = new Set<string>()
   const result: string[] = []
 
-  for (const part of text.split(',')) {
+  for (const part of text.split(/[,;|/]+/)) {
     const canonical = normalizeRoleToken(part)
     if (!canonical || seen.has(canonical)) continue
     seen.add(canonical)

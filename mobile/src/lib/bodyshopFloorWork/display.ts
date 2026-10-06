@@ -106,8 +106,8 @@ export function floorWorkVehicleSubtitle(meta: FloorWorkVehicleMeta | undefined,
   const customer = String(meta?.customer ?? '').trim()
   const model = String(meta?.model ?? '').trim()
   const parts: string[] = []
-  if (customer) parts.push(customer)
   if (model) parts.push(model)
+  if (customer) parts.push(customer)
   if (parts.length > 0) return parts.join(' · ')
   if (!reg) return 'Reg missing — update on Bodyshop Repair / Reception'
   return ''

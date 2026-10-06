@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
 import { REPORT_BRANCH_OPTIONS } from '../../lib/branches'
@@ -205,18 +206,15 @@ export default function ReportsScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-slate-50"
-      contentContainerStyle={{ paddingBottom: 24 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    <StaffScreenShell
+      title="Reports"
+      subtitle="Revenue and service analytics aligned with the web portal."
     >
-      <View className="px-4 pt-4 pb-2">
-        <Text className="text-2xl font-bold text-slate-900">Reports</Text>
-        <Text className="text-sm text-slate-600 mt-1">
-          Mobile parity shell wired to web report categories and report IDs.
-        </Text>
-      </View>
-
+      <ScrollView
+        className="flex-1 bg-slate-50"
+        contentContainerStyle={{ paddingBottom: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       {loading ? (
         <View className="px-4 py-10 items-center">
           <ActivityIndicator size="large" color="#2563eb" />
@@ -575,5 +573,6 @@ export default function ReportsScreen() {
         </>
       )}
     </ScrollView>
+    </StaffScreenShell>
   )
 }

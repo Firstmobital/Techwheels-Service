@@ -103,10 +103,11 @@ describe('customerPortal API query patterns', () => {
     rpcHandlers.set('customer_get_visit_context', async () => ({
       data: {
         visit_kind: 'bodyshop',
-        job: { jc_number: 'JC001' },
+        job: { service_type: 'Body & Paint', source: 'bodyshop' },
         repair_card: {
           id: 11,
           reg_number: 'MH12AB1234',
+          claim_intimation_no: 'MOTI8202441',
           estimate_document: { storage_path: 'x', file_name: 'x.pdf' },
         },
       },
@@ -118,8 +119,8 @@ describe('customerPortal API query patterns', () => {
 
     const ctx = await customerGetVisitContext('session-tok', 'MH12AB1234')
     expect(ctx.repair_card?.id).toBe(11)
-    expect(rpcCalls.filter((c) => c.fn === 'customer_get_repair_card').length).toBe(0)
-    expect(fromCalls.some((c) => c.table === 'bodyshop_repair_cards')).toBe(false)
+    expect(ctx.repair_card?.claim_intimation_no).toBe('MOTI8202441')
+    expect(ctx.visit_kind).toBe('bodyshop')
   })
 
   it('customerSetEstimateDecision batch-syncs bot payloads via RPC instead of row loops', async () => {

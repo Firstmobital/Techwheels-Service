@@ -1,3 +1,39 @@
+import * as jose from 'jsr:@panva/jose@6'
+
+/** Same reason as list-users-with-phone: GET /auth/v1/user returns session_not_found when the JWT is still signed but the session row is gone. */
+async function actorIdFromAccessToken(token: string, supabaseUrl: string): Promise<string> {
+  const issuer = `${supabaseUrl.replace(/\/$/, '')}/auth/v1`
+  const errors: string[] = []
+
+  try {
+    const jwks = jose.createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`))
+    let payload: jose.JWTPayload
+    try {
+      payload = (await jose.jwtVerify(token, jwks, { issuer })).payload
+    } catch {
+      payload = (await jose.jwtVerify(token, jwks)).payload
+    }
+    const sub = String(payload.sub ?? '').trim()
+    if (sub) return sub
+    errors.push('JWT has no subject')
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : 'JWKS verify failed')
+  }
+
+  const hmacSecret = Deno.env.get('SUPABASE_JWT_SECRET') ?? Deno.env.get('JWT_SECRET') ?? ''
+  if (hmacSecret) {
+    try {
+      const { payload } = await jose.jwtVerify(token, new TextEncoder().encode(hmacSecret), { issuer })
+      const sub = String(payload.sub ?? '').trim()
+      if (sub) return sub
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : 'HMAC verify failed')
+    }
+  }
+
+  throw new Error(errors.filter(Boolean).join('; ') || 'Invalid access token')
+}
+
 Deno.serve(async (req) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -19,9 +55,8 @@ Deno.serve(async (req) => {
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
     const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
 
-    if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) {
+    if (!SUPABASE_URL || !SERVICE_KEY) {
       throw new Error('Missing environment variables')
     }
 
@@ -34,26 +69,12 @@ Deno.serve(async (req) => {
       })
     }
 
-    const actorRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: ANON_KEY,
-      },
-    })
-
-    if (!actorRes.ok) {
-      const err = await actorRes.text()
-      return new Response(JSON.stringify({ error: `Unauthorized: ${err}` }), {
-        status: 401,
-        headers,
-      })
-    }
-
-    const actor = (await actorRes.json()) as { id?: string }
-    const actorId = actor.id
-    if (!actorId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: invalid actor' }), {
+    let actorId = ''
+    try {
+      actorId = await actorIdFromAccessToken(token, SUPABASE_URL)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'invalid token'
+      return new Response(JSON.stringify({ error: `Unauthorized: ${message}` }), {
         status: 401,
         headers,
       })

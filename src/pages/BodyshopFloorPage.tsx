@@ -12,10 +12,18 @@ import {
   isLiveOnFloorRepairCard,
   type BodyshopFloorVehicleListMode,
 } from '../lib/bodyshopFloorLive'
-import type { BodyshopFloorDailyUpdateRow } from '../lib/bodyshopFloorDailyUpdate'
-import { fetchBodyshopFloorDailyUpdatesForJcs } from '../lib/api/bodyshopFloorDailyUpdate'
-import BodyshopFloorDailyUpdatePanel, { bodyshopFloorDailySummary } from '../components/BodyshopFloorDailyUpdatePanel'
 import { parseBodyshopFloorRoles } from '../lib/businessRoles'
+import { arePipelineWorkStepsFinished } from '../lib/bodyshopFloorWork/pipeline'
+import { isBodyshopWorkerPipelineAssignRole } from '../lib/bodyshopFloorWork/workerPipelineAssignRoles'
+import {
+  filterBodyshopFloorInchargeCandidates,
+  listBodyshopFloorInchargeEmployees,
+  isFloorInchargeReassignmentBlocked,
+  canEditBodyshopFloorAssignments,
+  loadBodyshopFloorInchargeScope,
+  type BodyshopFloorInchargeScope,
+} from '../lib/bodyshopFloorInchargeScope'
+import { bodyshopFloorAgeSummary } from '../lib/bodyshopFloorAge'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +41,8 @@ interface AccidentCar {
   branch: string | null
   created_at: string | null
   bodyshop_floor: string | null
+  bodyshop_floor_since_at?: string | null
+  survay_info_updated_at?: string | null
 }
 
 async function fetchAccidentCarsByDateRange(range: DateRange): Promise<{ data: AccidentCar[] | null; error: unknown | null }> {
@@ -184,6 +194,8 @@ interface Employee {
   employee_name: string
   role: string | null
   department: string | null
+  fuel_type: string | null
+  location: string | null
 }
 
 type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP' | 'PARTS_INCHARGE'
@@ -330,6 +342,8 @@ const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
 }
 
 const ALL_ROLES: BSRole[] = ['FLOOR_INCHARGE', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING', 'EDP', 'PARTS_INCHARGE']
+
+const BODYSHOP_FLOOR_PIPELINE_ROLES: BSRole[] = ALL_ROLES.filter((r) => r !== 'PARTS_INCHARGE')
 
 // Roles that do NOT get a support assignment section
 const ROLES_WITHOUT_SUPPORT = new Set<BSRole>(['FLOOR_INCHARGE', 'PARTS_INCHARGE'])
@@ -793,11 +807,11 @@ export default function BodyshopFloorPage() {
 
   // Data
   const [cars, setCars]               = useState<AccidentCar[]>([])
-  const [dailyUpdatesByJc, setDailyUpdatesByJc] = useState<Record<string, BodyshopFloorDailyUpdateRow>>({})
   const [repairCardIdByJc, setRepairCardIdByJc] = useState<Record<string, number>>({})
   const [employees, setEmployees]     = useState<Employee[]>([])
   // assignments keyed by JC_NUMBER (uppercase)  →  per-role map
   const [assignments, setAssignments] = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
+  const [assignmentRawByJc, setAssignmentRawByJc] = useState<Record<string, DBPrimaryAssignmentRow>>({})
   // supportAssignments keyed by JC_NUMBER (uppercase) → per-role array
   const [supportAssignments, setSupportAssignments] = useState<Record<string, Record<SupportRole, SupportAssignment[]>>>({})
   // Inline picker state
@@ -840,16 +854,27 @@ export default function BodyshopFloorPage() {
     parts: [emptyAdditionalApprovalDraftPart()],
   })
 
+  const [inchargeScope, setInchargeScope] = useState<BodyshopFloorInchargeScope>({
+    isAdmin: false,
+    isBodyshopFloorIncharge: false,
+    canModifyBodyshopFloor: false,
+    canModifyBodyshopFloorWork: false,
+    employeeCode: null,
+    lockedBodyshopFloor: null,
+  })
+
   // ── Load ─────────────────────────────────────────────────────────────────
 
   async function loadAll() {
     setLoading(true); setDataError(false)
     let jcKeysForSecondary: string[] = []
     try {
+      const scope = await loadBodyshopFloorInchargeScope()
+      setInchargeScope(scope)
       // 1. All vehicles active on the Bodyshop Repair pipeline — Stage 11 (Floor Assignment) is treated as active for every one, no stage/floor gating
       const { data: sentCards, error: sentErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, reception_entry_id, job_card_no, reg_number, customer_name, branch, sa_name, bodyshop_floor, current_stage, overall_status, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at')
+        .select('id, reception_entry_id, job_card_no, reg_number, customer_name, branch, sa_name, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at, current_stage, overall_status, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at')
 
       if (sentErr) throw sentErr
 
@@ -864,6 +889,8 @@ export default function BodyshopFloorPage() {
         branch: string | null
         saName: string | null
         floor: 'Floor 2' | 'Floor 3' | null
+        bodyshopFloorSinceAt: string | null
+        survayInfoUpdatedAt: string | null
         additionalApproval: string | null
         qcStatus: string | null
         qcFailReason: string | null
@@ -885,6 +912,8 @@ export default function BodyshopFloorPage() {
         branch: string | null
         sa_name: string | null
         bodyshop_floor: 'Floor 2' | 'Floor 3' | null
+        bodyshop_floor_since_at: string | null
+        survay_info_updated_at: string | null
         current_stage: number | null
         overall_status: string | null
         additional_approval: string | null
@@ -923,6 +952,8 @@ export default function BodyshopFloorPage() {
             branch: row.branch,
             saName: row.sa_name,
             floor,
+            bodyshopFloorSinceAt: row.bodyshop_floor_since_at,
+            survayInfoUpdatedAt: row.survay_info_updated_at,
             additionalApproval: row.additional_approval,
             qcStatus: row.qc_status,
             qcFailReason: row.qc_fail_reason,
@@ -967,7 +998,6 @@ export default function BodyshopFloorPage() {
       if (sentByJc.size === 0) {
         setCars([])
         setRepairCardIdByJc({})
-        setDailyUpdatesByJc({})
         jcKeysForSecondary = []
       } else if (vehicleListMode === 'live_on_floor') {
         const entryIds = Array.from(new Set(
@@ -1006,6 +1036,8 @@ export default function BodyshopFloorPage() {
             branch: rec?.branch ?? meta.branch,
             created_at: rec?.created_at ?? meta.cardCreatedAt,
             bodyshop_floor: floor,
+            bodyshop_floor_since_at: meta.bodyshopFloorSinceAt,
+            survay_info_updated_at: meta.survayInfoUpdatedAt,
           })
         })
 
@@ -1029,7 +1061,13 @@ export default function BodyshopFloorPage() {
           .map((car) => {
             const jc = jcKey(car)
             const floor = (jc ? sentByJc.get(jc) : undefined) ?? null
-            return { ...car, bodyshop_floor: floor }
+            const meta = jc ? latestByJc.get(jc) : undefined
+            return {
+              ...car,
+              bodyshop_floor: floor,
+              bodyshop_floor_since_at: meta?.bodyshopFloorSinceAt ?? null,
+              survay_info_updated_at: meta?.survayInfoUpdatedAt ?? null,
+            }
           })
 
         setCars(carList)
@@ -1054,25 +1092,15 @@ export default function BodyshopFloorPage() {
     if (jcKeysForSecondary.length === 0) return
 
     try {
-      const dailyRes = await fetchBodyshopFloorDailyUpdatesForJcs(jcKeysForSecondary)
-      if (dailyRes.error) {
-        console.warn('bodyshop_floor_daily_updates:', dailyRes.error)
-        setDailyUpdatesByJc({})
-      } else {
-        const dMap: Record<string, BodyshopFloorDailyUpdateRow> = {}
-        for (const row of dailyRes.data ?? []) {
-          dMap[String(row.job_card_number).trim().toUpperCase()] = row
-        }
-        setDailyUpdatesByJc(dMap)
-      }
-
       const [{ data: empData }, { data: assData, error: assErr }, { data: supportData, error: supportErr }] =
         await Promise.all([
           supabase
             .from('employee_master')
-            .select('employee_code, employee_name, department, role')
+            .select('employee_code, employee_name, department, role, fuel_type, location')
             .eq('is_active', true)
-            .limit(500),
+            .or('department.ilike.%body%,role.ilike.%floor%incharge%')
+            .order('employee_name')
+            .limit(1000),
           supabase
             .from('bodyshop_assignments')
             .select('*')
@@ -1091,21 +1119,30 @@ export default function BodyshopFloorPage() {
         console.warn('bodyshop_assignments:', assErr.message)
         setDataError(true)
         setAssignments({})
+        setAssignmentRawByJc({})
         setBsFloorStatus({})
       } else {
         const map: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
+        const rawMap: Record<string, DBPrimaryAssignmentRow> = {}
         const floorMap: Record<string, { completedAt: string | null; completedBy: string | null }> = {}
         for (const row of (assData ?? []) as DBPrimaryAssignmentRow[]) {
-          const k = row.job_card_number.toUpperCase()
-          if (!map[k]) {
-            map[k] = mapRowToRoleMap(row)
+          const k = row.job_card_number.trim().toUpperCase()
+          const partial = mapRowToRoleMap(row)
+          if (!map[k]) map[k] = emptyRoleMap()
+          const prevRaw = rawMap[k]
+          if (!prevRaw || String(row.updated_at ?? '') >= String(prevRaw.updated_at ?? '')) {
+            rawMap[k] = row
             floorMap[k] = {
               completedAt: row.bs_floor_completed_at ?? null,
               completedBy: row.bs_floor_completed_by ?? null,
             }
           }
+          for (const role of ALL_ROLES) {
+            if (partial[role]) map[k][role] = partial[role]
+          }
         }
         setAssignments(map)
+        setAssignmentRawByJc(rawMap)
         setBsFloorStatus(floorMap)
 
         const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
@@ -1159,7 +1196,11 @@ export default function BodyshopFloorPage() {
         m[r].push(e)
       }
     })
-    ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
+    m.FLOOR_INCHARGE = listBodyshopFloorInchargeEmployees(employees)
+    ALL_ROLES.forEach((r) => {
+      if (r === 'FLOOR_INCHARGE') return
+      m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name))
+    })
     return m
   }, [employees])
 
@@ -1198,23 +1239,19 @@ export default function BodyshopFloorPage() {
     Array.from(new Set(cars.map((c) => c.branch ?? 'Unknown'))).sort(),
   [cars])
 
-  const floors = useMemo(() =>
-    Array.from(new Set(cars
-      .map((c) => String(c.bodyshop_floor ?? '').trim())
-      .filter((v): v is 'Floor 2' | 'Floor 3' => v === 'Floor 2' || v === 'Floor 3'))).sort(),
-  [cars])
+  const floors = useMemo(() => ['Floor 2', 'Floor 3'] as const, [])
 
   // ── Counts ───────────────────────────────────────────────────────────────
 
   function hasAnyAssignment(c: AccidentCar) {
     const m = assignments[jcKey(c)]
     if (!m) return false
-    return ALL_ROLES.some((r) => Boolean(m[r]))
+    return BODYSHOP_FLOOR_PIPELINE_ROLES.some((r) => Boolean(m[r]))
   }
   function hasStatus(c: AccidentCar, status: string) {
     const m = assignments[jcKey(c)]
     if (!m) return false
-    return ALL_ROLES.some((r) => m[r]?.work_status === status)
+    return BODYSHOP_FLOOR_PIPELINE_ROLES.some((r) => m[r]?.work_status === status)
   }
 
   function isBsFloorCompleted(c: AccidentCar) {
@@ -1242,6 +1279,14 @@ export default function BodyshopFloorPage() {
     return isBsFloorCompleted(c) && isQcPassed(c) && !isRiCompleted(c)
   }
 
+  /** Same bucket as the card label and the floor-incharge chips. */
+  function listStatus(c: AccidentCar): 'completed' | 'hold' | 'work_inprocess' | 'unassigned' {
+    if (isBsFloorCompleted(c)) return 'completed'
+    if (hasStatus(c, 'hold')) return 'hold'
+    if (hasAnyAssignment(c)) return 'work_inprocess'
+    return 'unassigned'
+  }
+
   function toggleExpanded(k: string) {
     setExpandedCards((prev) => {
       const next = new Set(prev)
@@ -1254,11 +1299,11 @@ export default function BodyshopFloorPage() {
 
   const counts = useMemo(() => ({
     all:            cars.length,
-    unassigned:     cars.filter((c) => !hasAnyAssignment(c)).length,
+    unassigned:     cars.filter((c) => listStatus(c) === 'unassigned').length,
     assigned:       cars.filter((c) =>  hasAnyAssignment(c)).length,
-    work_inprocess: cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess')).length,
-    hold:           cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold')).length,
-    completed:      cars.filter((c) => isBsFloorCompleted(c)).length,
+    work_inprocess: cars.filter((c) => listStatus(c) === 'work_inprocess').length,
+    hold:           cars.filter((c) => listStatus(c) === 'hold').length,
+    completed:      cars.filter((c) => listStatus(c) === 'completed').length,
     qc:             cars.filter((c) => isInQcQueue(c)).length,
     ri:             cars.filter((c) => isInRiQueue(c)).length,
     approvals:      cars.filter((c) => {
@@ -1277,9 +1322,10 @@ export default function BodyshopFloorPage() {
       if (!name) { noInchargeCount += 1; return }
       const entry = map.get(name) ?? { total: 0, unassigned: 0, inProcess: 0, hold: 0, completed: 0 }
       entry.total += 1
-      if (isBsFloorCompleted(c)) entry.completed += 1
-      else if (hasStatus(c, 'hold')) entry.hold += 1
-      else if (hasAnyAssignment(c)) entry.inProcess += 1
+      const status = listStatus(c)
+      if (status === 'completed') entry.completed += 1
+      else if (status === 'hold') entry.hold += 1
+      else if (status === 'work_inprocess') entry.inProcess += 1
       else entry.unassigned += 1
       map.set(name, entry)
     })
@@ -1318,11 +1364,11 @@ export default function BodyshopFloorPage() {
       )
     }
 
-    if (assignmentView === 'unassigned')     return list.filter((c) => !hasAnyAssignment(c))
+    if (assignmentView === 'unassigned')     return list.filter((c) => listStatus(c) === 'unassigned')
     if (assignmentView === 'assigned')       return list.filter((c) =>  hasAnyAssignment(c))
-    if (assignmentView === 'work_inprocess') return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess'))
-    if (assignmentView === 'hold')           return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold'))
-    if (assignmentView === 'completed')      return list.filter((c) => isBsFloorCompleted(c))
+    if (assignmentView === 'work_inprocess') return list.filter((c) => listStatus(c) === 'work_inprocess')
+    if (assignmentView === 'hold')           return list.filter((c) => listStatus(c) === 'hold')
+    if (assignmentView === 'completed')      return list.filter((c) => listStatus(c) === 'completed')
     if (assignmentView === 'qc')             return list.filter((c) => isInQcQueue(c))
     if (assignmentView === 'ri')             return list.filter((c) => isInRiQueue(c))
     if (assignmentView === 'approvals')      return list.filter((c) => {
@@ -1405,6 +1451,10 @@ export default function BodyshopFloorPage() {
   }
 
   async function assignRole(car: AccidentCar, role: BSRole, empCode: string) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can change assignments', 'error')
+      return
+    }
     if (!empCode) return
     const isNotRequired = empCode === NOT_REQUIRED_CODE
     const emp = isNotRequired
@@ -1414,6 +1464,27 @@ export default function BodyshopFloorPage() {
     const k = jcKey(car)
     if (bsFloorStatus[k]?.completedAt) {
       showToast('BS floor is already completed — role assignments are locked', 'error')
+      return
+    }
+    const existingFi = assignments[k]?.FLOOR_INCHARGE
+    const changingFi =
+      role === 'FLOOR_INCHARGE'
+      && !isNotRequired
+      && Boolean(existingFi?.employee_code)
+      && String(existingFi?.employee_code).trim().toUpperCase() !== empCode.trim().toUpperCase()
+    if (
+      changingFi
+      && isFloorInchargeReassignmentBlocked({
+        bsFloorCompleted: Boolean(bsFloorStatus[k]?.completedAt),
+        floorInchargeAssignment: existingFi,
+        assignRow: assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
+        actor: {
+          isAdmin: inchargeScope.isAdmin,
+          isBodyshopFloorIncharge: inchargeScope.isBodyshopFloorIncharge,
+        },
+      })
+    ) {
+      showToast('Only Admin or Floor Incharge can change the Floor Incharge assignment.', 'error')
       return
     }
     setSaving(`${k}-${role}`)
@@ -1429,7 +1500,11 @@ export default function BodyshopFloorPage() {
         // Clear remark/out/completed so prior Completed work does not linger.
         [cols.employeeCode]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
         [cols.employeeName]: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
-        [cols.workStatus]: isNotRequired ? NOT_REQUIRED_STATUS : draft.work_status,
+        [cols.workStatus]: isNotRequired
+          ? NOT_REQUIRED_STATUS
+          : isBodyshopWorkerPipelineAssignRole(role)
+            ? 'work_inprocess'
+            : draft.work_status,
         [cols.inTs]: isNotRequired ? null : (existingRoleAssignment?.assigned_at ?? new Date().toISOString()),
         [cols.remark]: isNotRequired ? null : (draft.remark.trim() || null),
         [cols.outTs]: isNotRequired ? null : (existingRoleAssignment?.out_ts ?? null),
@@ -1603,6 +1678,10 @@ export default function BodyshopFloorPage() {
   // ── Save stage (status + remark) ─────────────────────────────────────────
 
   async function saveStage(car: AccidentCar, role: BSRole) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can save stage changes', 'error')
+      return
+    }
     const k = jcKey(car)
     const assignment = assignments[k]?.[role]
     if (!assignment?.id) { showToast('Assign person first', 'error'); return }
@@ -1612,6 +1691,17 @@ export default function BodyshopFloorPage() {
     }
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
     const trimmedRemark = draft.remark.trim()
+    if (isBodyshopWorkerPipelineAssignRole(role) && draft.work_status === 'completed') {
+      showToast('Dentor / Painter / Rubbing step completes only from Floor Work (photo + Done).', 'error')
+      return
+    }
+    if (role === 'FLOOR_INCHARGE' && draft.work_status === 'completed') {
+      const row = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
+      if (!arePipelineWorkStepsFinished(row)) {
+        showToast('All workers must finish Floor Work (Done) before Floor Incharge can be marked Completed.', 'error')
+        return
+      }
+    }
     if (draft.work_status === 'hold' && !trimmedRemark) {
       showToast('Hold reason is required when role status is Hold', 'error')
       return
@@ -1889,6 +1979,10 @@ export default function BodyshopFloorPage() {
   }
 
   async function markBsFloorCompleted(car: AccidentCar) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can mark floor complete', 'error')
+      return
+    }
     const k = jcKey(car)
     const rowId = getRoleMapRowId(assignments[k])
     if (!rowId) {
@@ -1898,6 +1992,11 @@ export default function BodyshopFloorPage() {
 
     if (bsFloorStatus[k]?.completedAt) {
       showToast('BS floor already completed for this job card', 'success')
+      return
+    }
+    const assignRow = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
+    if (!arePipelineWorkStepsFinished(assignRow)) {
+      showToast('Mark floor complete only after all Floor Work steps are Done (Dentor → Rubbing).', 'error')
       return
     }
 
@@ -2354,7 +2453,7 @@ export default function BodyshopFloorPage() {
                   {r.pending} pending of {r.total}
                 </div>
                 <div style={{ fontSize: 12, color: active ? 'rgba(255,255,255,0.7)' : '#94a3b8', marginTop: 2 }}>
-                  In-Process {r.inProcess} · Hold {r.hold} · Done {r.completed}
+                  In-Process {r.inProcess} · Hold {r.hold} · Complete {r.completed}
                 </div>
               </button>
             )
@@ -2412,7 +2511,7 @@ export default function BodyshopFloorPage() {
         <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as BSRole | 'all')}
           className="sel sel--advisor-filter">
           <option value="all">All roles</option>
-          {ALL_ROLES.map((r) => (
+          {BODYSHOP_FLOOR_PIPELINE_ROLES.map((r) => (
             <option key={r} value={r}>{ROLE_META[r].label}</option>
           ))}
         </select>
@@ -2457,18 +2556,31 @@ export default function BodyshopFloorPage() {
               const riOtherNameRequired = riDraft.reinspection_type === 'other' && !String(riDraft.reinspection_by ?? '').trim()
               const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
               const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
-              const hasActiveRoleWork = ALL_ROLES.some((role) => {
+              const hasActiveRoleWork = BODYSHOP_FLOOR_PIPELINE_ROLES.some((role) => {
                 const assignment = carMap[role]
                 if (!assignment || isNotRequiredAssignment(assignment)) return false
                 const status = String(assignment.work_status ?? '').trim().toLowerCase()
                 return status === 'work_inprocess' || status === 'hold'
+              })
+              const fiReassignBlocked = isFloorInchargeReassignmentBlocked({
+                bsFloorCompleted: isFloorCompleted,
+                floorInchargeAssignment: carMap.FLOOR_INCHARGE,
+                assignRow: assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
+                actor: {
+                  isAdmin: inchargeScope.isAdmin,
+                  isBodyshopFloorIncharge: inchargeScope.isBodyshopFloorIncharge,
+                },
               })
               // Floor Incharge must be assigned (with a real person) before floor can be marked complete
               const floorInchargeAssigned = Boolean(
                 carMap.FLOOR_INCHARGE?.employee_code &&
                 !isNotRequiredAssignment(carMap.FLOOR_INCHARGE)
               )
-              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved && floorInchargeAssigned
+              const pipelineWorkDone = arePipelineWorkStepsFinished(
+                assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
+              )
+              const canEditFloor = canEditBodyshopFloorAssignments(inchargeScope)
+              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && pipelineWorkDone && !hasActiveRoleWork && additionalApprovalResolved && floorInchargeAssigned
               const isSavingAdditionalApproval = saving === `${k}-additional-approval`
               const additionalApprovalLabel = additionalApproval.status === 'approved'
                 ? 'All Approved'
@@ -2489,27 +2601,35 @@ export default function BodyshopFloorPage() {
                       ? 'b-warn'
                       : 'b-muted'
 
-              const assignedCount = ALL_ROLES.filter((role) => Boolean(carMap[role])).length
+              const assignedCount = BODYSHOP_FLOOR_PIPELINE_ROLES.filter((role) => Boolean(carMap[role])).length
               const inTs = (() => {
-                const assignedTimes = ALL_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
+                const assignedTimes = BODYSHOP_FLOOR_PIPELINE_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
                 if (!assignedTimes.length) return null
                 return assignedTimes.sort()[0]
               })()
 
-              const overallLabel = isFloorCompleted
-                ? 'Floor Done'
-                : hasStatus(car, 'hold')
+              const cardStatus = listStatus(car)
+              const overallLabel = cardStatus === 'completed'
+                ? 'Floor Complete'
+                : cardStatus === 'hold'
                   ? 'On Hold'
-                  : hasAnyAssignment(car)
+                  : cardStatus === 'work_inprocess'
                     ? 'In Process'
                     : 'Unassigned'
-              const overallToneClass = isFloorCompleted
+              const overallToneClass = cardStatus === 'completed'
                 ? 'b-success'
-                : hasStatus(car, 'hold')
+                : cardStatus === 'hold'
                   ? 'b-warn'
-                  : hasAnyAssignment(car)
+                  : cardStatus === 'work_inprocess'
                     ? 'b-info'
                     : 'b-danger'
+
+              const floorAge = bodyshopFloorAgeSummary({
+                bodyshop_floor: car.bodyshop_floor,
+                bodyshop_floor_since_at: car.bodyshop_floor_since_at,
+                survay_info_updated_at: car.survay_info_updated_at,
+                created_at: car.created_at,
+              })
 
               return (
                 <article className="bsf-vcard" key={car.id}>
@@ -2749,19 +2869,21 @@ export default function BodyshopFloorPage() {
                           <div className="bsf-tags">
                             <span className={`badge ${overallToneClass} nodot`}>{overallLabel}</span>
                             <span className="bsf-floor-badge">{car.bodyshop_floor ?? '—'}</span>
+                            {floorAge.label ? (
+                              <span className="bsf-floor-age" style={{ color: floorAge.color ?? undefined }}>
+                                {floorAge.label}
+                              </span>
+                            ) : null}
                             {additionalApproval.status !== 'none' && (
                               <span className={`badge ${approvalToneClass} nodot`}>
                                 {additionalApproval.pendingCount > 0 ? 'Approval Pending' : additionalApprovalLabel}
                               </span>
                             )}
-                            {bodyshopFloorDailySummary(dailyUpdatesByJc[k]).pending ? (
-                              <span className="badge b-warn nodot">Today update pending</span>
-                            ) : null}
                           </div>
                           <span className="ts">Received {fmtDate(car.created_at)}</span>
                         </div>
                         <div className="bsf-summary-row">
-                          <span className="bsf-assigned-count"><strong>{assignedCount}/{ALL_ROLES.length}</strong> roles assigned</span>
+                          <span className="bsf-assigned-count"><strong>{assignedCount}/{BODYSHOP_FLOOR_PIPELINE_ROLES.length}</strong> roles assigned</span>
                           <span className="ts">
                             IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
                           </span>
@@ -2781,7 +2903,7 @@ export default function BodyshopFloorPage() {
                   {expanded && (assignmentView === 'qc' || assignmentView === 'ri' ? (
                     <div className="bsf-qc-shell">
                       <div className="bsf-qc-workers">
-                        {ALL_ROLES.map((role) => {
+                        {BODYSHOP_FLOOR_PIPELINE_ROLES.map((role) => {
                           const ass = carMap[role]
                           return (
                             <div key={`qc-worker-${k}-${role}`} className={`bsf-qc-worker bsf-lane--${role.toLowerCase()}`}>
@@ -2803,15 +2925,8 @@ export default function BodyshopFloorPage() {
                     </div>
                   ) : (
                     <>
-                      <BodyshopFloorDailyUpdatePanel
-                        jobCardNumber={k}
-                        repairCardId={repairCardIdByJc[k] ?? null}
-                        row={dailyUpdatesByJc[k] ?? null}
-                        onSaved={(row) => setDailyUpdatesByJc((prev) => ({ ...prev, [k]: row }))}
-                        canEdit
-                      />
                       <div className="bsf-lanes">
-                        {ALL_ROLES.map((role) => {
+                        {BODYSHOP_FLOOR_PIPELINE_ROLES.map((role) => {
                           const ass = carMap[role]
                           const supportList = supportMap[role] ?? []
                           const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
@@ -2828,6 +2943,10 @@ export default function BodyshopFloorPage() {
                           const showPicker = inlinePickerOpen[pickerKey]
                           const pickerValue = inlinePickerValue[pickerKey] ?? ''
                           const roleClass = `bsf-lane bsf-lane--${role.toLowerCase()} ${ass ? 'is-assigned' : ''}`
+                          const fiSelectLocked = role === 'FLOOR_INCHARGE' && fiReassignBlocked
+                          const inchargeOptions = role === 'FLOOR_INCHARGE'
+                            ? filterBodyshopFloorInchargeCandidates(empByRole[role], car.bodyshop_floor)
+                            : empByRole[role]
 
                           return (
                             <div key={role} className={roleClass}>
@@ -2851,14 +2970,14 @@ export default function BodyshopFloorPage() {
                               <select
                                 className="sel sel-md bsf-role-select"
                                 value={isNotRequiredAssignment(ass) ? NOT_REQUIRED_CODE : (ass?.employee_code ?? '')}
-                                disabled={isFloorCompleted || isSavingThis}
+                                disabled={!canEditFloor || isFloorCompleted || isSavingThis || fiSelectLocked}
                                 onChange={(e) => void assignRole(car, role, e.target.value)}
                               >
                                 <option value="">— Select {ROLE_META[role].label} —</option>
                                 {!ALWAYS_REQUIRED_ROLES.has(role) && (
                                   <option value={NOT_REQUIRED_CODE}>Not Required</option>
                                 )}
-                                {empByRole[role].map((emp) => (
+                                {inchargeOptions.map((emp) => (
                                   <option key={emp.employee_code} value={emp.employee_code}>
                                     {emp.employee_name}
                                   </option>
@@ -2913,10 +3032,18 @@ export default function BodyshopFloorPage() {
                                   <select
                                     className={`sel sel-sm bsf-stage-status ${statusTone}`}
                                     value={draft.work_status}
-                                    disabled={isFloorCompleted}
+                                    disabled={!canEditFloor || isFloorCompleted}
                                     onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
                                   >
-                                    {STATUS_OPTIONS.map((s) => (
+                                    {STATUS_OPTIONS.filter((s) => {
+                                      if (isBodyshopWorkerPipelineAssignRole(role) && s.value === 'completed') return false
+                                      if (
+                                        role === 'FLOOR_INCHARGE'
+                                        && s.value === 'completed'
+                                        && !pipelineWorkDone
+                                      ) return false
+                                      return true
+                                    }).map((s) => (
                                       <option key={s.value} value={s.value}>{s.label}</option>
                                     ))}
                                   </select>
@@ -2924,13 +3051,13 @@ export default function BodyshopFloorPage() {
                                     className={`inp inp-md bsf-stage-remark ${holdRemarkMissing ? 'is-required' : ''}`}
                                     placeholder="Add remark"
                                     value={draft.remark}
-                                    disabled={isFloorCompleted}
+                                    disabled={!canEditFloor || isFloorCompleted}
                                     onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
                                   />
                                   {holdRemarkMissing && <div className="bsf-stage-hint">Remark is required when status is Hold.</div>}
                                   <button
                                     className={`btn btn--primary btn--xs bsf-stage-save ${!changed || isFloorCompleted || isSavingThis ? 'btn--dim' : ''}`}
-                                    disabled={!changed || isFloorCompleted || isSavingThis}
+                                    disabled={!canEditFloor || !changed || isFloorCompleted || isSavingThis}
                                     onClick={() => void saveStage(car, role)}
                                   >
                                     {isSavingThis ? 'Saving…' : 'Save stage'}
@@ -2951,14 +3078,16 @@ export default function BodyshopFloorPage() {
                       <div>
                         <button
                           className={`btn btn--sm ${isFloorCompleted ? 'btn--ghost' : 'btn--primary'} ${canMarkFloorCompleted ? '' : 'btn--dim'}`}
-                          disabled={!canMarkFloorCompleted}
+                          disabled={!canEditFloor || !canMarkFloorCompleted}
                           title={!floorInchargeAssigned
                             ? 'Assign a Floor Incharge before marking BS Floor Completed'
-                            : hasActiveRoleWork
-                              ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
-                              : !additionalApprovalResolved
-                                ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
-                                : undefined}
+                            : !pipelineWorkDone
+                              ? 'All Floor Work steps must be Done (Dentor → Rubbing) in the Floor Work app first'
+                              : hasActiveRoleWork
+                                ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
+                                : !additionalApprovalResolved
+                                  ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
+                                  : undefined}
                           onClick={() => void markBsFloorCompleted(car)}
                         >
                           {isSavingFloorStatus ? 'Saving…' : isFloorCompleted ? 'Completed' : 'Mark Floor Completed'}

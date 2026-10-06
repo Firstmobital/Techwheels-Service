@@ -1,5 +1,6 @@
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
+import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 
 const ALERTS = [
   {
@@ -40,33 +41,45 @@ export default function AlertsScreen() {
   const router = useRouter()
 
   return (
-    <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ paddingBottom: 24 }}>
-      <View className="px-4 pt-4 pb-3">
-        <Text className="text-2xl font-bold text-slate-900">Alerts</Text>
-        <Text className="text-slate-600 text-sm mt-1">Cross-module activity feed for the full platform.</Text>
-      </View>
-
-      <View className="px-4">
-        {ALERTS.map((alert) => (
-          <TouchableOpacity
-            key={alert.id}
-            className="bg-white border border-slate-200 rounded-2xl px-3 py-3 mb-2"
-            onPress={() => router.push(alert.route)}
-            activeOpacity={0.75}
-          >
-            <View className="flex-row items-center">
-              <View className="h-10 w-10 rounded-xl bg-slate-100 items-center justify-center mr-3">
-                <Text>{alert.icon}</Text>
+    <StaffScreenShell
+      title="Alerts"
+      subtitle="Cross-module activity feed for the full platform."
+      rightAction={
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/home')}
+          accessibilityRole="button"
+          accessibilityLabel="Go to home"
+          className="px-3 py-2 rounded-xl bg-slate-100 border border-slate-200"
+        >
+          <Text className="text-slate-800 text-sm font-bold">Home</Text>
+        </TouchableOpacity>
+      }
+    >
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+        <View className="px-4 pt-4">
+          {ALERTS.map((alert) => (
+            <TouchableOpacity
+              key={alert.id}
+              className="bg-white border border-slate-200 rounded-2xl px-3 py-3 mb-2"
+              onPress={() => router.push(alert.route)}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={`${alert.title}. ${alert.detail}`}
+            >
+              <View className="flex-row items-center">
+                <View className="h-10 w-10 rounded-xl bg-slate-100 items-center justify-center mr-3">
+                  <Text>{alert.icon}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-slate-900 font-semibold">{alert.title}</Text>
+                  <Text className="text-slate-500 text-xs mt-0.5">{alert.detail}</Text>
+                </View>
+                <Text className="text-slate-400 text-xs">{alert.time}</Text>
               </View>
-              <View className="flex-1">
-                <Text className="text-slate-900 font-semibold">{alert.title}</Text>
-                <Text className="text-slate-500 text-xs mt-0.5">{alert.detail}</Text>
-              </View>
-              <Text className="text-slate-400 text-xs">{alert.time}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </StaffScreenShell>
   )
 }

@@ -13,7 +13,12 @@ import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../lib/customer/customerAdvis
 import { customerGetVisitContext, customerSetCustomerType } from '../lib/api/customerPortal'
 import { beginCustomerQueryScope, endCustomerQueryScope } from '../lib/api/customerPortalQueryLog'
 import type { MechanicalCasePayload } from '../lib/customer/mechanicalCustomerUi'
-import { type CustomerVisitKind, resolveCustomerVisitKind } from '../lib/customer/mechanicalServiceType'
+import {
+  isBodyshopReceptionServiceType,
+  isEffectiveBodyshopCustomerVisit,
+  type CustomerVisitKind,
+  resolveCustomerVisitKind,
+} from '../lib/customer/mechanicalServiceType'
 import { useCustomerSession } from './CustomerSessionContext'
 
 type CustomerVisitContextValue = {
@@ -136,10 +141,8 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
       const ctx = await customerGetVisitContext(token, selectedReg, { bypassCache: opts?.bypassCache ?? true })
       if (seq !== loadSeq.current) return 'other'
 
-      const serverKind = String(ctx.visit_kind ?? '').trim()
-      const rawCard =
-        serverKind === 'mechanical' ? null : ((ctx.repair_card as Record<string, unknown> | null) ?? null)
       const jobObj = (ctx.job as Record<string, unknown> | null) ?? null
+      const rawCard = (ctx.repair_card as Record<string, unknown> | null) ?? null
 
       // Ensure customer_type is preserved from local memory if backend has not yet updated it
       let finalCard = rawCard
@@ -213,22 +216,28 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
     }
   }, [token, selectedReg])
 
-  const value = useMemo(
-    () => ({
+  const value = useMemo(() => {
+    const bodyshopVisit = isEffectiveBodyshopCustomerVisit({
+      visitReady: ready,
+      kind,
+      repairCard,
+      job,
+    })
+    const accidentReception = isBodyshopReceptionServiceType(String(job?.service_type ?? ''))
+    return {
       ready,
       loading,
-      kind,
+      kind: bodyshopVisit ? ('bodyshop' as CustomerVisitKind) : kind,
       job,
       mechCase,
       repairCard,
-      isMechanical: kind === 'mechanical',
-      isBodyshop: kind === 'bodyshop',
+      isMechanical: kind === 'mechanical' && !bodyshopVisit && !accidentReception,
+      isBodyshop: bodyshopVisit,
       customerType,
       setCustomerType,
       refresh,
-    }),
-    [ready, loading, kind, job, mechCase, repairCard, customerType, setCustomerType, refresh]
-  )
+    }
+  }, [ready, loading, kind, job, mechCase, repairCard, customerType, setCustomerType, refresh])
 
   return <CustomerVisitContext.Provider value={value}>{children}</CustomerVisitContext.Provider>
 }

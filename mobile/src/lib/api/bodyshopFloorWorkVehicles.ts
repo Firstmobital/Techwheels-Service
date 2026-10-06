@@ -5,6 +5,7 @@ import {
   isSystemJobCardKey,
 } from '../bodyshopFloorWork/display'
 import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
+import { resolveBodyshopFloorSinceIso } from '../bodyshopFloorAge'
 import { BODYSHOP_FLOOR_WORK_ON_FLOOR_FROM_IST } from '../bodyshopFloorWork/eligibility'
 
 const JC_CHUNK = 80
@@ -33,26 +34,6 @@ function mergeMeta(
   }
 }
 
-async function attachAssignmentFloorTiming(
-  map: Record<string, FloorWorkVehicleMeta>,
-  keys: string[],
-): Promise<void> {
-  for (let i = 0; i < keys.length; i += JC_CHUNK) {
-    const chunk = keys.slice(i, i + JC_CHUNK)
-    const { data, error } = await supabase
-      .from('bodyshop_assignments')
-      .select('job_card_number, created_at')
-      .eq('is_active', true)
-      .in('job_card_number', chunk)
-    if (error) throw new Error(error.message)
-    for (const row of data ?? []) {
-      const k = normKey(String(row.job_card_number ?? ''))
-      if (!k) continue
-      mergeMeta(map, k, { floorSinceAt: String(row.created_at ?? '') || null })
-    }
-  }
-}
-
 async function attachRepairCardFloorTiming(
   map: Record<string, FloorWorkVehicleMeta>,
   keys: string[],
@@ -61,16 +42,15 @@ async function attachRepairCardFloorTiming(
     const chunk = keys.slice(i, i + JC_CHUNK)
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .select('job_card_no, reg_number, created_at, bodyshop_floor')
+      .select('job_card_no, reg_number, created_at, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at')
       .in('job_card_no', chunk)
     if (error) throw new Error(error.message)
     for (const c of data ?? []) {
       const jc = normKey(String(c.job_card_no ?? ''))
       if (!jc) continue
+      const since = resolveBodyshopFloorSinceIso(c)
       const patch: Partial<FloorWorkVehicleMeta> = { bodyshopFloor: c.bodyshop_floor ?? null }
-      if (!String(map[jc]?.floorSinceAt ?? '').trim()) {
-        patch.floorSinceAt = String(c.created_at ?? '') || null
-      }
+      if (since) patch.floorSinceAt = since
       mergeMeta(map, jc, patch)
     }
   }
@@ -80,7 +60,7 @@ async function attachRepairCardFloorTiming(
     const chunk = regKeys.slice(i, i + JC_CHUNK)
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .select('job_card_no, reg_number, created_at, bodyshop_floor')
+      .select('job_card_no, reg_number, created_at, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at')
       .in('reg_number', chunk)
     if (error) throw new Error(error.message)
     for (const c of data ?? []) {
@@ -88,9 +68,10 @@ async function attachRepairCardFloorTiming(
       if (!reg) continue
       for (const assignmentKey of keys) {
         if (normKey(assignmentKey) !== reg && inferRegistrationFromAssignmentKey(assignmentKey) !== reg) continue
+        const since = resolveBodyshopFloorSinceIso(c)
         const patch: Partial<FloorWorkVehicleMeta> = { bodyshopFloor: c.bodyshop_floor ?? null }
-        if (!String(map[assignmentKey]?.floorSinceAt ?? '').trim()) {
-          patch.floorSinceAt = String(c.created_at ?? '') || null
+        if (since && !String(map[assignmentKey]?.floorSinceAt ?? '').trim()) {
+          patch.floorSinceAt = since
         }
         mergeMeta(map, assignmentKey, patch)
       }
@@ -165,6 +146,28 @@ export async function fetchRepairCardVehicleByJcs(
     }
   }
 
+  const needModel = keys.filter((k) => !String(map[k]?.model ?? '').trim())
+  for (let i = 0; i < needModel.length; i += 100) {
+    const batch = needModel.slice(i, i + 100)
+    const { data, error } = await supabase.rpc('list_floor_work_vehicle_labels', { p_keys: batch })
+    if (error) continue
+    const rows = (Array.isArray(data) ? data : data ? [data] : []) as Array<{
+      lookup_key?: string | null
+      model?: string | null
+      customer_name?: string | null
+      reg_number?: string | null
+    }>
+    for (const row of rows) {
+      const key = normKey(String(row.lookup_key ?? ''))
+      if (!key) continue
+      mergeMeta(map, key, {
+        model: row.model ?? null,
+        customer: row.customer_name ?? null,
+        reg: row.reg_number ?? null,
+      })
+    }
+  }
+
   const needReception = keys.filter((k) => !String(map[k]?.reg ?? '').trim() && isSystemJobCardKey(k))
   for (let i = 0; i < needReception.length; i += 100) {
     const batch = needReception.slice(i, i + 100)
@@ -196,16 +199,17 @@ export async function fetchRepairCardVehicleByJcs(
     }
   }
 
+  await attachRepairCardFloorTiming(map, keys)
+
   const seeded = opts?.assignmentCreatedAtByJc
   if (seeded) {
     for (const [jc, createdAt] of Object.entries(seeded)) {
       const iso = String(createdAt ?? '').trim()
-      if (iso) mergeMeta(map, jc, { floorSinceAt: iso })
+      if (iso && !String(map[jc]?.floorSinceAt ?? '').trim()) {
+        mergeMeta(map, jc, { floorSinceAt: iso })
+      }
     }
-  } else {
-    await attachAssignmentFloorTiming(map, keys)
   }
-  await attachRepairCardFloorTiming(map, keys)
 
   return map
 }

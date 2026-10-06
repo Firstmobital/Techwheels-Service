@@ -428,6 +428,7 @@ export default function JobCardEstimateScreen() {
       labourCharges: Number(row.labourCharges || '0'),
     }
 
+    const prevRows = rows
     setSavingRowId(row.id)
 
     const result = row.dbId
@@ -450,6 +451,7 @@ export default function JobCardEstimateScreen() {
     setSavingRowId(null)
 
     if (result.error || !result.data) {
+      setRows(prevRows)
       Alert.alert('Save Failed', result.error ?? 'Unable to save estimate row')
       return
     }

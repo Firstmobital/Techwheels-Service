@@ -42,3 +42,18 @@ verify_jwt = false
 
 [functions.universal-drive-upload]
 verify_jwt = true
+
+# These admin functions verify the access-token signature themselves.
+# Gateway JWT verification calls GoTrue /user and returns session_not_found
+# when the session row is gone but the token is still signed.
+[functions.list-users-with-phone]
+verify_jwt = false
+
+[functions.set-user-temp-password]
+verify_jwt = false
+
+[functions.deliver-password-reset-email]
+verify_jwt = false
+
+[functions.send-auth-access-email]
+verify_jwt = false

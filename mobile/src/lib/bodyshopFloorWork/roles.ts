@@ -99,7 +99,7 @@ export function listWorkTasksForEmployee(
     employee_code?: string
     employee_name?: string | null
     assigned_at?: string | null
-    is_active?: boolean
+    is_active?: boolean | null
     dealer_code?: string
   }>,
 ): BodyshopFloorWorkTask[] {
@@ -170,7 +170,7 @@ export function listAllWorkTasksForAdmin(
     employee_code?: string
     employee_name?: string | null
     assigned_at?: string | null
-    is_active?: boolean
+    is_active?: boolean | null
     dealer_code?: string
   }>,
 ): BodyshopFloorWorkTask[] {

@@ -1,4 +1,9 @@
 import { supabase } from '../supabase'
+import {
+  clampPageSize,
+  DEFAULT_LIST_PAGE_SIZE,
+  pageResultFromRows,
+} from '../pagination/listPage'
 import { fail, normalizeRegNumber, ok, type ApiResult, type JobCardInsert, type JobCardRow, type JobSummaryRow } from './types'
 
 export type CreateJobCardInput = {
@@ -181,6 +186,31 @@ export async function resolveExistingJobCardId(reference: string, hints?: JobRef
   }
 
   return fail(`Job card not found for reference: ${needle}`)
+}
+
+export type JobCardSummaryPageCursor = {
+  jcCreatedAt: string
+  jobCardId: string
+}
+
+export async function listJobCardSummariesPage(
+  cursor: JobCardSummaryPageCursor | null = null,
+): Promise<ApiResult<{ rows: JobDashboardSummaryRow[]; nextCursor: JobCardSummaryPageCursor | null; hasMore: boolean }>> {
+  const pageSize = clampPageSize(DEFAULT_LIST_PAGE_SIZE)
+  const { data, error } = await supabase.rpc('list_job_card_summaries_page', {
+    p_page_size: pageSize,
+    p_cursor_jc_created_at: cursor?.jcCreatedAt ?? null,
+    p_cursor_job_card_id: cursor?.jobCardId ?? null,
+  })
+  if (error) return fail(error)
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as unknown as JobDashboardSummaryRow[]
+  const page = pageResultFromRows(rows, pageSize, (last) => {
+    const jobCardId = String(last.job_card_id ?? '').trim()
+    const jcCreatedAt = String((last as { jc_created_at?: string }).jc_created_at ?? last.complaint_date ?? '').trim()
+    if (!jobCardId || !jcCreatedAt) return null
+    return { jcCreatedAt, jobCardId }
+  })
+  return ok(page)
 }
 
 export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSummaryRow[]>> {

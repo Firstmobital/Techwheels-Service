@@ -1,3 +1,39 @@
+import * as jose from 'jsr:@panva/jose@6'
+
+/** GoTrue GET /user rejects a still-signed JWT when auth.sessions row is gone (session_not_found). PostgREST only checks the signature, so the admin page stays logged in and this call was the only failure. */
+async function actorIdFromAccessToken(token: string, supabaseUrl: string): Promise<string> {
+  const issuer = `${supabaseUrl.replace(/\/$/, '')}/auth/v1`
+  const errors: string[] = []
+
+  try {
+    const jwks = jose.createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`))
+    let payload: jose.JWTPayload
+    try {
+      payload = (await jose.jwtVerify(token, jwks, { issuer })).payload
+    } catch {
+      payload = (await jose.jwtVerify(token, jwks)).payload
+    }
+    const sub = String(payload.sub ?? '').trim()
+    if (sub) return sub
+    errors.push('JWT has no subject')
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : 'JWKS verify failed')
+  }
+
+  const hmacSecret = Deno.env.get('SUPABASE_JWT_SECRET') ?? Deno.env.get('JWT_SECRET') ?? ''
+  if (hmacSecret) {
+    try {
+      const { payload } = await jose.jwtVerify(token, new TextEncoder().encode(hmacSecret), { issuer })
+      const sub = String(payload.sub ?? '').trim()
+      if (sub) return sub
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : 'HMAC verify failed')
+    }
+  }
+
+  throw new Error(errors.filter(Boolean).join('; ') || 'Invalid access token')
+}
+
 Deno.serve(async (req) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -9,8 +45,8 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers })
   }
 
+  let debugStep = 'init'
   try {
-    let debugStep = 'init'
 
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -22,7 +58,6 @@ Deno.serve(async (req) => {
     debugStep = 'read_env'
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
     const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
 
     if (!SUPABASE_URL || !SERVICE_KEY) {
       throw new Error('Missing environment variables')
@@ -301,7 +336,7 @@ Deno.serve(async (req) => {
         dealer_name: dbDealerName ?? dealerNameByUserId.get(u.id) ?? null,
         dealer_codes: metaDealerCodes,
         requested_access_role: requestedAccessByUserId.get(u.id) ?? null,
-      }
+    console.error('list-users-with-phone failure', { debugStep, message, stack })
     })
 
     return new Response(

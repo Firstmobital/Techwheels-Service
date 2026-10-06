@@ -185,6 +185,13 @@ export default function CustomerBookingScreen() {
     setSubmitting(true)
     setToast(null)
 
+    const pendingConfirmation = {
+      bookingId: undefined as number | undefined,
+      leadNumber: '…',
+      status: 'Submitting',
+    }
+    setConfirmationData(pendingConfirmation)
+
     try {
       const result = await customerSubmitBooking(token!, selected.reg_number, {
         service_type: serviceType,
@@ -207,7 +214,9 @@ export default function CustomerBookingScreen() {
         status: result.status || 'New',
       })
     } catch (err: any) {
-      setToast({ ok: false, msg: err?.message || 'Failed to submit service booking.' })
+      setConfirmationData(null)
+      setShowReviewModal(true)
+      setToast({ ok: false, msg: err?.message || 'Failed to submit service booking. Open review and try again.' })
     } finally {
       setSubmitting(false)
     }

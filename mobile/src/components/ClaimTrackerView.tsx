@@ -1,6 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { supabase as sb } from '@/lib/supabase'
+import { runWithOptimisticRollback } from '@/hooks/useOptimisticAction'
+import {
+  fetchClaimTrackerPage,
+} from '@/lib/api/claimTrackerPage'
+import { collectListPages, formatPartialListLoadError } from '@/lib/pagination/listPage'
 
 interface ClaimRow {
   job_card_id:        string
@@ -55,74 +60,132 @@ export function ClaimTrackerView() {
   const [showHidden, setShowHidden] = useState(false)
   const [busyId, setBusyId]   = useState<string | null>(null)
 
-  useEffect(() => { fetchClaims() }, [])
+  const attachPhotoCounts = useCallback(async (base: ClaimRow[]) => {
+    if (base.length === 0) return base
+    const ids = base.map(r => r.job_card_id)
+    const { data: photos } = await sb
+      .from('panel_photos')
+      .select('job_card_id, photo_type')
+      .in('job_card_id', ids)
+    if (!photos) return base
+    const counts: Record<string, { defect: number; primer: number; paint: number }> = {}
+    for (const p of photos) {
+      if (!counts[p.job_card_id]) counts[p.job_card_id] = { defect: 0, primer: 0, paint: 0 }
+      if (p.photo_type === 'defect') counts[p.job_card_id].defect++
+      if (p.photo_type === 'primer') counts[p.job_card_id].primer++
+      if (p.photo_type === 'paint') counts[p.job_card_id].paint++
+    }
+    return base.map(r => {
+      const c = counts[r.job_card_id]
+      if (!c) return r
+      return { ...r, pre_pics: c.defect, under_repair_pics: c.primer, post_pics: c.paint }
+    })
+  }, [])
 
-  async function fetchClaims() {
-    setLoading(true); setError(null)
+  const fetchClaims = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      const { data, error: err } = await sb
-        .from('job_card_summary')
-        .select(`job_card_id, jc_number, reg_number, vin, model, colour,
-                 warranty_age_days, has_ppt_pre, has_ppt_post, has_excel_estimate,
-                 gdc_status, claim_hidden`)
-        .in('status', ['submitted', 'completed'])
-        .order('warranty_age_days', { ascending: false })
-
-      if (err) throw new Error(err.message)
-      const base: ClaimRow[] = (data ?? []).map(r => ({
-        ...r, pre_pics: 0, under_repair_pics: 0, post_pics: 0,
+      const { rows, pageError } = await collectListPages((cursor) =>
+        fetchClaimTrackerPage({
+          cursor,
+          pageSize: 100,
+          includeHidden: showHidden,
+        }),
+      )
+      const partial = formatPartialListLoadError(pageError, rows.length)
+      if (partial) setError(partial)
+      const base: ClaimRow[] = rows.map(r => ({
+        ...r,
+        has_ppt_pre: Boolean(r.has_ppt_pre),
+        has_ppt_post: Boolean(r.has_ppt_post),
+        has_excel_estimate: Boolean(r.has_excel_estimate),
+        pre_pics: 0,
+        under_repair_pics: 0,
+        post_pics: 0,
       }))
-
-      if (base.length > 0) {
-        const ids = base.map(r => r.job_card_id)
-        const { data: photos } = await sb
-          .from('panel_photos')
-          .select('job_card_id, photo_type')
-          .in('job_card_id', ids)
-
-        if (photos) {
-          const counts: Record<string, { defect: number; primer: number; paint: number }> = {}
-          for (const p of photos) {
-            if (!counts[p.job_card_id]) counts[p.job_card_id] = { defect: 0, primer: 0, paint: 0 }
-            if (p.photo_type === 'defect') counts[p.job_card_id].defect++
-            if (p.photo_type === 'primer') counts[p.job_card_id].primer++
-            if (p.photo_type === 'paint')  counts[p.job_card_id].paint++
-          }
-          for (const r of base) {
-            const c = counts[r.job_card_id]
-            if (c) { r.pre_pics = c.defect; r.under_repair_pics = c.primer; r.post_pics = c.paint }
-          }
-        }
-      }
-
-      setRows(base)
+      const withPhotos = await attachPhotoCounts(base)
+      setRows(withPhotos)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [attachPhotoCounts, showHidden])
+
+  useEffect(() => { void fetchClaims() }, [fetchClaims])
 
   async function toggleGdc(id: string, current: string | null | undefined) {
     const next = current === 'done' ? 'none' : 'done'
-    setBusyId(id)
-    await sb.from('job_cards').update({ gdc_status: next }).eq('id', id)
-    setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, gdc_status: next } : r))
-    setBusyId(null)
+    const prevRows = rows
+    try {
+      await runWithOptimisticRollback({
+        apply: () => {
+          setBusyId(id)
+          setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, gdc_status: next } : r))
+        },
+        rollback: () => {
+          setRows(prevRows)
+          setBusyId(null)
+        },
+        execute: async () => {
+          const { error } = await sb.from('job_cards').update({ gdc_status: next }).eq('id', id)
+          if (error) throw error
+        },
+        onSuccess: () => setBusyId(null),
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'GDC update failed')
+      setBusyId(null)
+    }
   }
 
   async function markSubmitted(id: string) {
-    setBusyId(id)
-    await sb.from('job_cards').update({ claim_hidden: true, claim_submitted_at: new Date().toISOString() }).eq('id', id)
-    setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, claim_hidden: true } : r))
-    setBusyId(null)
+    const prevRows = rows
+    try {
+      await runWithOptimisticRollback({
+        apply: () => {
+          setBusyId(id)
+          setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, claim_hidden: true } : r))
+        },
+        rollback: () => {
+          setRows(prevRows)
+          setBusyId(null)
+        },
+        execute: async () => {
+          const { error } = await sb.from('job_cards').update({ claim_hidden: true, claim_submitted_at: new Date().toISOString() }).eq('id', id)
+          if (error) throw error
+        },
+        onSuccess: () => setBusyId(null),
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Submit failed')
+      setBusyId(null)
+    }
   }
 
   async function undoSubmitted(id: string) {
-    setBusyId(id)
-    await sb.from('job_cards').update({ claim_hidden: false, claim_submitted_at: null }).eq('id', id)
-    setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, claim_hidden: false } : r))
-    setBusyId(null)
+    const prevRows = rows
+    try {
+      await runWithOptimisticRollback({
+        apply: () => {
+          setBusyId(id)
+          setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, claim_hidden: false } : r))
+        },
+        rollback: () => {
+          setRows(prevRows)
+          setBusyId(null)
+        },
+        execute: async () => {
+          const { error } = await sb.from('job_cards').update({ claim_hidden: false, claim_submitted_at: null }).eq('id', id)
+          if (error) throw error
+        },
+        onSuccess: () => setBusyId(null),
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Undo failed')
+      setBusyId(null)
+    }
   }
 
   const visible = rows.filter(r => !r.claim_hidden)
@@ -134,7 +197,7 @@ export function ClaimTrackerView() {
   if (error) return (
     <View style={s.center}>
       <Text style={{ color: '#dc2626', marginBottom: 12, fontSize: 13 }}>{error}</Text>
-      <TouchableOpacity onPress={fetchClaims} style={s.btn}>
+      <TouchableOpacity onPress={() => void fetchClaims()} style={s.btn}>
         <Text style={s.btnText}>Retry</Text>
       </TouchableOpacity>
     </View>
@@ -247,6 +310,9 @@ export function ClaimTrackerView() {
       </View>
 
       {visible.map(renderCard)}
+          )}
+        </TouchableOpacity>
+      ) : null}
 
       {showHidden && hidden.length > 0 && (
         <View>
@@ -283,4 +349,15 @@ const s = StyleSheet.create({
   undoText:    { fontSize: 12, color: '#6b7280', fontWeight: '600' },
   btn:         { backgroundColor: '#3b82f6', borderRadius: 6, paddingHorizontal: 16, paddingVertical: 8 },
   btnText:     { color: '#fff', fontSize: 13, fontWeight: '600' },
+  loadMoreBtn: {
+    alignSelf: 'center',
+    marginVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#4f46e5',
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  loadMoreText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 })

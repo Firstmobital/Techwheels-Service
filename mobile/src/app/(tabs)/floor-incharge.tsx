@@ -1,4 +1,4 @@
-﻿/**
+/**
  * mobile/src/app/(tabs)/floor-incharge.tsx
  * Mobile version of web FloorInchargePage.tsx
  * Business logic: 100% identical to web (same DB tables, queries, rules).
@@ -12,6 +12,11 @@ import {
   Dimensions} from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { StaffNavigationChrome } from '../../components/staff/StaffScreenShell'
+import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
+import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
+import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
+import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
 import {
   isTechnicianBusinessRole,
@@ -290,11 +295,54 @@ function getFloorLookbackRange(): { from: string; to: string } {
   }
 }
 
-async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
+type ReceptionBatchRow = {
+  id: number; created_at: string | null; source: string | null;
+  reg_number: string | null; km_reading: number | null; model: string | null;
+  service_type: string | null; sa_name: string | null; jc_number: string | null;
+  owner_name: string | null; owner_phone: string | null; branch: string | null;
+  location: string | null; portal: string | null; branch_label: string | null;
+  sa_employee_code: string | null;
+  is_revisit?: boolean | null;
+  suggested_technician_code?: string | null;
+  suggested_technician_name?: string | null;
+  has_updation_available?: boolean | null;
+  updation_code?: string | null;
+  updation_name?: string | null;
+}
+
+function mapReceptionBatchToJobCards(batch: ReceptionBatchRow[]): JobCard[] {
   const rows: JobCard[] = []
+  batch.forEach(row => {
+    const jcRaw = String(row.jc_number ?? '').trim()
+    if (!jcRaw) return
+    rows.push({
+      id: row.id, created_at: row.created_at, source: row.source,
+      reg_number: row.reg_number, km_reading: row.km_reading, model: row.model,
+      service_type: row.service_type, sa_name: row.sa_name, jc_number: row.jc_number,
+      owner_name: row.owner_name, owner_phone: row.owner_phone,
+      branch: row.branch, location: row.location ?? row.branch,
+      portal: row.portal, branch_label: row.branch_label ?? row.branch,
+      sa_employee_code: row.sa_employee_code, fuel_type: null,
+      assignment_key: jcRaw.toUpperCase(),
+      is_revisit: row.is_revisit === true,
+      has_updation_available: row.has_updation_available === true,
+      suggested_technician_code: row.suggested_technician_code ?? null,
+      suggested_technician_name: row.suggested_technician_name ?? null,
+    })
+  })
+  return rows
+}
+
+async function fetchFloorInchargeEntries(searchQuery?: string | null): Promise<{
+  rows: JobCard[]
+  rpcError: string | null
+}> {
+  const lookback = getFloorLookbackRange()
+  const search = (searchQuery ?? '').trim() || null
   let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
-  const lookback = getFloorLookbackRange()
+  let rpcError: string | null = null
+  const batchRows: ReceptionBatchRow[] = []
 
   while (true) {
     const { data, error } = await supabase.rpc('list_reception_entries_page', {
@@ -304,54 +352,108 @@ async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
       p_cursor_created_at: cursorCreatedAt,
       p_cursor_id: cursorId,
       p_service_types: FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
-      p_search_query: null,
+      p_search_query: search,
       p_require_non_empty_jc: true,
     })
 
-    if (error) { console.warn('fetchFloorInchargeEntries:', error.message); break }
-    const batch = (Array.isArray(data) ? data : data ? [data] : []) as Array<{
-      id: number; created_at: string | null; source: string | null;
-      reg_number: string | null; km_reading: number | null; model: string | null;
-      service_type: string | null; sa_name: string | null; jc_number: string | null;
-      owner_name: string | null; owner_phone: string | null; branch: string | null;
-      location: string | null; portal: string | null; branch_label: string | null;
-      sa_employee_code: string | null;
-      is_revisit?: boolean | null;
-      suggested_technician_code?: string | null;
-      suggested_technician_name?: string | null;
-      has_updation_available?: boolean | null;
-      updation_code?: string | null;
-      updation_name?: string | null;
-    }>
-    batch.forEach(row => {
-      const jcRaw = String(row.jc_number ?? '').trim()
-      if (!jcRaw) return
-      rows.push({
-        id: row.id, created_at: row.created_at, source: row.source,
-        reg_number: row.reg_number, km_reading: row.km_reading, model: row.model,
-        service_type: row.service_type, sa_name: row.sa_name, jc_number: row.jc_number,
-        owner_name: row.owner_name, owner_phone: row.owner_phone,
-        branch: row.branch, location: row.location ?? row.branch,
-        portal: row.portal, branch_label: row.branch_label ?? row.branch,
-        sa_employee_code: row.sa_employee_code, fuel_type: null,
-        assignment_key: jcRaw.toUpperCase(),
-        is_revisit: row.is_revisit === true,
-        has_updation_available: row.has_updation_available === true,
-        suggested_technician_code: row.suggested_technician_code ?? null,
-        suggested_technician_name: row.suggested_technician_name ?? null,
-      })
-    })
+    if (error) {
+      rpcError = error.message
+      break
+    }
+
+    const batch = (Array.isArray(data) ? data : data ? [data] : []) as ReceptionBatchRow[]
+    batchRows.push(...batch)
     if (batch.length < 100) break
+
     const last = batch[batch.length - 1]
-    cursorCreatedAt = last.created_at ?? null
-    cursorId = last.id ?? null
-    if (!cursorCreatedAt || cursorId === null) break
+    cursorCreatedAt = last?.created_at ?? null
+    const nextId = Number(last?.id)
+    if (!cursorCreatedAt || !Number.isFinite(nextId)) break
+    cursorId = nextId
+  }
+
+  return { rows: mapReceptionBatchToJobCards(batchRows), rpcError }
+}
+
+async function loadRecentTechnicianAssignments(): Promise<TechnicianAssignment[]> {
+  const rows: TechnicianAssignment[] = []
+  let cursorId: number | null = null
+  while (true) {
+    let query = supabase
+      .from('technician_assignments')
+      .select('*')
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
+    if (cursorId !== null) query = query.lt('id', cursorId)
+    const { data, error } = await query
+    if (error) break
+    const batch = (data ?? []) as TechnicianAssignment[]
+    rows.push(...batch)
+    if (batch.length < QUERY_PAGE_SIZE) break
+    const lastId = Number(batch[batch.length - 1]?.id)
+    if (!Number.isFinite(lastId) || lastId <= 0) break
+    cursorId = lastId
   }
   return rows
 }
 
+async function loadRecentSupportAssignments(): Promise<SupportAssignment[]> {
+  const rows: SupportAssignment[] = []
+  let cursorId: number | null = null
+  while (true) {
+    let query = supabase
+      .from('job_card_support_assignments')
+      .select('*')
+      .eq('is_active', true)
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
+    if (cursorId !== null) query = query.lt('id', cursorId)
+    const { data, error } = await query
+    if (error) break
+    const batch = (data ?? []) as SupportAssignment[]
+    rows.push(...batch)
+    if (batch.length < QUERY_PAGE_SIZE) break
+    const lastId = Number(batch[batch.length - 1]?.id)
+    if (!Number.isFinite(lastId) || lastId <= 0) break
+    cursorId = lastId
+  }
+  return rows
+}
+
+function mergeTechnicianAssignmentRows(assignmentRows: TechnicianAssignment[]): {
+  assignMap: Record<string, TechnicianAssignment>
+  nextDrafts: Record<string, StageDraft>
+} {
+  const assignMap: Record<string, TechnicianAssignment> = {}
+  const nextDrafts: Record<string, StageDraft> = {}
+  for (const a of assignmentRows) {
+    const key = normalizeJobCardNumber(a.job_card_number)
+    if (!key) continue
+    const existing = assignMap[key]
+    if (existing && getAssignmentRecencyMs(existing) >= getAssignmentRecencyMs(a)) continue
+    assignMap[key] = a
+    nextDrafts[key] = { bay_no: a.bay_no ?? '', work_status: a.work_status ?? 'work_inprocess', remark: a.remark ?? '' }
+  }
+  return { assignMap, nextDrafts }
+}
+
+function mergeSupportAssignmentRows(supportRows: SupportAssignment[]): Record<string, SupportAssignment[]> {
+  const suppMap: Record<string, SupportAssignment[]> = {}
+  for (const sa of supportRows) {
+    const key = String(sa.job_card_number ?? '').trim().toUpperCase()
+    if (!key) continue
+    const norm: SupportAssignment = { ...sa, support_role: normalizeSupportRole(sa.support_role) ?? 'TECHNICIAN' }
+    suppMap[key] = [...(suppMap[key] ?? []), norm]
+  }
+  Object.keys(suppMap).forEach(k => {
+    suppMap[k].sort((a, b) => String(b.assigned_at ?? '').localeCompare(String(a.assigned_at ?? '')))
+  })
+  return suppMap
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function FloorInchargeScreen() {
+  const optimistic = useOptimisticAction()
   const [jobCards,           setJobCards]           = useState<JobCard[]>([])
   const [allEmployees,       setAllEmployees]       = useState<Employee[]>([])
   const [employees,          setEmployees]          = useState<Employee[]>([])
@@ -363,6 +465,7 @@ export default function FloorInchargeScreen() {
   const [saving,             setSaving]             = useState<string | null>(null)
   const [supportSaving,      setSupportSaving]      = useState<string | null>(null)
   const [toast,              setToast]              = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [loadError,          setLoadError]          = useState<string | null>(null)
 
   // Filters (exact web)
   const [search,           setSearch]           = useState('')
@@ -387,114 +490,101 @@ export default function FloorInchargeScreen() {
   const [supportModalRole, setSupportModalRole] = useState<SupportRole | ''>('')
   const [supportModalCode, setSupportModalCode] = useState('')
   const autoAssignedRevisitRef = useRef<Set<string>>(new Set())
+  const searchReloadSkipRef = useRef(true)
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const loadSeqRef = useRef(0)
+
+  const enrichJobCardsWithSaFuel = useCallback(async (rawEntries: JobCard[]) => {
+    const saCodes = [...new Set(rawEntries.map(r => normalizeEmployeeCode(r.sa_employee_code)).filter(Boolean))]
+    const saFuelMap = new Map<string, string | null>()
+    if (saCodes.length > 0) {
+      const { data: saFuelData } = await supabase
+        .from('employee_master').select('employee_code, fuel_type').in('employee_code', saCodes)
+      ;(saFuelData ?? []).forEach((r: { employee_code?: string; fuel_type?: string | null }) => {
+        const code = normalizeEmployeeCode(r.employee_code)
+        if (code) saFuelMap.set(code, String(r.fuel_type ?? '').trim() || null)
+      })
+    }
+    return rawEntries.map(r => ({
+      ...r,
+      fuel_type: saFuelMap.get(normalizeEmployeeCode(r.sa_employee_code)) ?? r.fuel_type ?? null,
+    }))
+  }, [])
 
   // ── Load ─────────────────────────────────────────────────────────────────
-  const fetchAll = useCallback(async (isRefresh = false) => {
+  const fetchAll = useCallback(async (isRefresh = false, searchQuery?: string) => {
+    const seq = ++loadSeqRef.current
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
+    setLoadError(null)
 
     try {
-      const [rawEntries, empRes] = await Promise.all([
-        fetchFloorInchargeEntries(),
+      const q = (searchQuery ?? search).trim() || null
+      const [entryRes, empRes] = await Promise.all([
+        fetchFloorInchargeEntries(q),
         supabase.from('employee_master').select('id, employee_code, employee_name, department, location, fuel_type, role').eq('is_active', true).order('employee_name'),
       ])
+      if (seq !== loadSeqRef.current) return
 
-      // Enrich fuel_type from SA's employee_master record (exact web logic)
-      const saCodes = [...new Set(rawEntries.map(r => normalizeEmployeeCode(r.sa_employee_code)).filter(Boolean))]
-      const saFuelMap = new Map<string, string | null>()
-      if (saCodes.length > 0) {
-        const { data: saFuelData } = await supabase
-          .from('employee_master').select('employee_code, fuel_type').in('employee_code', saCodes)
-        ;(saFuelData ?? []).forEach((r: { employee_code?: string; fuel_type?: string | null }) => {
-          const code = normalizeEmployeeCode(r.employee_code)
-          if (code) saFuelMap.set(code, String(r.fuel_type ?? '').trim() || null)
-        })
+      if (entryRes.rpcError && entryRes.rows.length === 0) {
+        setLoadError(entryRes.rpcError)
+        setJobCards([])
+        setAssignments({})
+        setStageDrafts({})
+        setSupportAssignments({})
+        return
       }
-      const receptionRows = rawEntries.map(r => ({
-        ...r,
-        fuel_type: saFuelMap.get(normalizeEmployeeCode(r.sa_employee_code)) ?? r.fuel_type ?? null,
-      }))
+      if (entryRes.rpcError) {
+        setLoadError(`${entryRes.rpcError} (showing ${entryRes.rows.length} loaded job cards)`)
+      }
+
+      const receptionRows = await enrichJobCardsWithSaFuel(entryRes.rows)
+      if (seq !== loadSeqRef.current) return
 
       const empList = (empRes.data ?? []) as Employee[]
       setJobCards(receptionRows)
       setAllEmployees(empList)
       setEmployees(empList.filter(e => isServiceDepartment(e.department) && isTechnicianBusinessRole(e.role)))
 
-      // Technician assignments
-      const assignmentRows: TechnicianAssignment[] = []
-      let assignmentCursorId: number | null = null
-      while (true) {
-        let assignmentQuery = supabase
-          .from('technician_assignments').select('*')
-          .order('id', { ascending: false })
-          .limit(QUERY_PAGE_SIZE)
+      const [assignmentRows, supportRows] = await Promise.all([
+        loadRecentTechnicianAssignments(),
+        loadRecentSupportAssignments(),
+      ])
+      if (seq !== loadSeqRef.current) return
 
-        if (assignmentCursorId !== null) {
-          assignmentQuery = assignmentQuery.lt('id', assignmentCursorId)
-        }
-
-        const { data: aData, error: aErr } = await assignmentQuery
-        if (aErr) break
-        const batch = (aData ?? []) as TechnicianAssignment[]
-        assignmentRows.push(...batch)
-        if (batch.length < QUERY_PAGE_SIZE) break
-
-        const lastId = Number(batch[batch.length - 1]?.id)
-        if (!Number.isFinite(lastId) || lastId <= 0) break
-        assignmentCursorId = lastId
-      }
-      const assignMap: Record<string, TechnicianAssignment> = {}
-      const nextDrafts: Record<string, StageDraft> = {}
-      for (const a of assignmentRows) {
-        const key = normalizeJobCardNumber(a.job_card_number)
-        if (!key) continue
-        const existing = assignMap[key]
-        if (existing && getAssignmentRecencyMs(existing) >= getAssignmentRecencyMs(a)) continue
-        assignMap[key] = a
-        nextDrafts[key] = { bay_no: a.bay_no ?? '', work_status: a.work_status ?? 'work_inprocess', remark: a.remark ?? '' }
-      }
+      const { assignMap, nextDrafts } = mergeTechnicianAssignmentRows(assignmentRows)
+      const suppMap = mergeSupportAssignmentRows(supportRows)
       setAssignments(assignMap)
       setStageDrafts(nextDrafts)
-
-      // Support assignments
-      const supportRows: SupportAssignment[] = []
-      let supportCursorId: number | null = null
-      while (true) {
-        let supportQuery = supabase
-          .from('job_card_support_assignments').select('*').eq('is_active', true)
-          .order('id', { ascending: false })
-          .limit(QUERY_PAGE_SIZE)
-
-        if (supportCursorId !== null) {
-          supportQuery = supportQuery.lt('id', supportCursorId)
-        }
-
-        const { data: sData, error: sErr } = await supportQuery
-        if (sErr) break
-        const batch = (sData ?? []) as SupportAssignment[]
-        supportRows.push(...batch)
-        if (batch.length < QUERY_PAGE_SIZE) break
-
-        const lastId = Number(batch[batch.length - 1]?.id)
-        if (!Number.isFinite(lastId) || lastId <= 0) break
-        supportCursorId = lastId
-      }
-      const suppMap: Record<string, SupportAssignment[]> = {}
-      for (const sa of supportRows) {
-        const key = String(sa.job_card_number ?? '').trim().toUpperCase()
-        if (!key) continue
-        const norm: SupportAssignment = { ...sa, support_role: normalizeSupportRole(sa.support_role) ?? 'TECHNICIAN' }
-        suppMap[key] = [...(suppMap[key] ?? []), norm]
-      }
-      Object.keys(suppMap).forEach(k => {
-        suppMap[k].sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())
-      })
       setSupportAssignments(suppMap)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false); setRefreshing(false) }
-  }, [])
+    } catch (err) {
+      if (seq !== loadSeqRef.current) return
+      const msg = err instanceof Error ? err.message : 'Failed to load Floor Incharge data'
+      setLoadError(msg)
+      console.error(err)
+    } finally {
+      if (seq === loadSeqRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    }
+  }, [enrichJobCardsWithSaFuel, search])
 
   useFocusEffect(useCallback(() => { void fetchAll() }, [fetchAll]))
+
+  useEffect(() => {
+    if (searchReloadSkipRef.current) {
+      searchReloadSkipRef.current = false
+      return
+    }
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      void fetchAll(true, search)
+    }, 400)
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
+  }, [search, fetchAll])
 
   // ── Derived state — exact web filter chain ────────────────────────────────
   const statusScopedRows = useMemo(() => {
@@ -650,47 +740,74 @@ export default function FloorInchargeScreen() {
   async function assignTechnician(jobCardNumber: string, employeeCode: string) {
     const key = normalizeJobCardNumber(jobCardNumber)
     if (!key) { showToast('Job card number required', 'error'); return }
-    setSaving(key)
-    try {
-      const isNotRequired = employeeCode === NOT_REQUIRED_TECHNICIAN_CODE
-      const scopedEmps = techniciansByJobCard[key] ?? []
-      const emp = isNotRequired
-        ? { employee_code: NOT_REQUIRED_TECHNICIAN_CODE, employee_name: NOT_REQUIRED_TECHNICIAN_NAME }
-        : scopedEmps.find(e => normalizeEmployeeCode(e.employee_code) === normalizeEmployeeCode(employeeCode))
-      if (!emp) { showToast('Technician does not match Service/Location/Fuel rules', 'error'); return }
+    const isNotRequired = employeeCode === NOT_REQUIRED_TECHNICIAN_CODE
+    const scopedEmps = techniciansByJobCard[key] ?? []
+    const emp = isNotRequired
+      ? { employee_code: NOT_REQUIRED_TECHNICIAN_CODE, employee_name: NOT_REQUIRED_TECHNICIAN_NAME }
+      : scopedEmps.find(e => normalizeEmployeeCode(e.employee_code) === normalizeEmployeeCode(employeeCode))
+    if (!emp) { showToast('Technician does not match Service/Location/Fuel rules', 'error'); return }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      const payload: Omit<TechnicianAssignment, 'id'> = {
-        job_card_number: key, technician_code: emp.employee_code, technician_name: emp.employee_name,
-        assigned_at: new Date().toISOString(), assigned_by: user?.email ?? null,
-      }
+    const prevAssignment = assignments[key]
+    const prevDraft = stageDrafts[key]
+    const optimisticAssignment: TechnicianAssignment = {
+      ...(prevAssignment ?? { id: -1, job_card_number: key, bay_no: null, work_status: 'work_inprocess', remark: null, assigned_at: new Date().toISOString(), assigned_by: null, out_ts: null, time_diff: null, technician_code: emp.employee_code, technician_name: emp.employee_name }),
+      technician_code: emp.employee_code,
+      technician_name: emp.employee_name,
+      assigned_at: new Date().toISOString(),
+    }
 
-      const existing = assignments[key]
-      let result
-      if (existing?.id) {
-        result = await supabase.from('technician_assignments').update(payload).eq('id', existing.id).select().single()
-      } else {
-        const { data: latest } = await supabase.from('technician_assignments').select('*')
-          .eq('job_card_number', key)
-          .order('updated_at', { ascending: false }).order('assigned_at', { ascending: false })
-          .limit(1).maybeSingle()
-        if (latest?.id) {
-          result = await supabase.from('technician_assignments').update(payload).eq('id', latest.id).select().single()
-        } else {
-          result = await supabase.from('technician_assignments').insert(payload).select().single()
+    await optimistic.run(key, {
+      apply: () => {
+        setSaving(key)
+        setAssignments(p => ({ ...p, [key]: optimisticAssignment }))
+        setStageDrafts(p => ({
+          ...p,
+          [key]: { bay_no: p[key]?.bay_no ?? '', work_status: p[key]?.work_status ?? 'work_inprocess', remark: p[key]?.remark ?? '' },
+        }))
+      },
+      rollback: () => {
+        setAssignments(p => {
+          const next = { ...p }
+          if (prevAssignment) next[key] = prevAssignment
+          else delete next[key]
+          return next
+        })
+        setStageDrafts(p => ({ ...p, [key]: prevDraft ?? p[key] }))
+        setSaving(null)
+      },
+      execute: async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        const payload: Omit<TechnicianAssignment, 'id'> = {
+          job_card_number: key, technician_code: emp.employee_code, technician_name: emp.employee_name,
+          assigned_at: new Date().toISOString(), assigned_by: user?.email ?? null,
         }
-      }
-      if (result.error) throw result.error
-
-      const updated = result.data as TechnicianAssignment
-      setAssignments(p => ({ ...p, [key]: updated }))
-      setStageDrafts(p => ({
-        ...p, [key]: { bay_no: updated.bay_no ?? p[key]?.bay_no ?? '', work_status: updated.work_status ?? p[key]?.work_status ?? 'work_inprocess', remark: updated.remark ?? p[key]?.remark ?? '' }
-      }))
-      showToast(`Technician assigned to ${key}`, 'success')
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
-    } finally { setSaving(null) }
+        const existing = assignments[key]
+        let result
+        if (existing?.id && existing.id > 0) {
+          result = await supabase.from('technician_assignments').update(payload).eq('id', existing.id).select().single()
+        } else {
+          const { data: latest } = await supabase.from('technician_assignments').select('*')
+            .eq('job_card_number', key)
+            .order('updated_at', { ascending: false }).order('assigned_at', { ascending: false })
+            .limit(1).maybeSingle()
+          if (latest?.id) {
+            result = await supabase.from('technician_assignments').update(payload).eq('id', latest.id).select().single()
+          } else {
+            result = await supabase.from('technician_assignments').insert(payload).select().single()
+          }
+        }
+        if (result.error) throw result.error
+        const updated = result.data as TechnicianAssignment
+        setAssignments(p => ({ ...p, [key]: updated }))
+        setStageDrafts(p => ({
+          ...p, [key]: { bay_no: updated.bay_no ?? p[key]?.bay_no ?? '', work_status: updated.work_status ?? p[key]?.work_status ?? 'work_inprocess', remark: updated.remark ?? p[key]?.remark ?? '' },
+        }))
+      },
+      onSuccess: () => {
+        showToast(`Technician assigned to ${key}`, 'success')
+        setSaving(null)
+      },
+    })
   }
 
   function patchStageDraft(key: string, patch: Partial<StageDraft>) {
@@ -705,25 +822,43 @@ export default function FloorInchargeScreen() {
     const a = assignments[key]
     if (!a?.id) { showToast('Assign technician first', 'error'); return }
     const draft = stageDrafts[key] ?? { bay_no: a.bay_no ?? '', work_status: a.work_status ?? 'work_inprocess', remark: a.remark ?? '' }
-    setSaving(key)
-    try {
-      const payload: Record<string, unknown> = {
-        bay_no: draft.bay_no.trim() || null,
-        work_status: draft.work_status,
-        remark: draft.remark.trim() || null,
-      }
-      if (draft.work_status === 'completed') payload.out_ts = new Date().toISOString()
-
-      const result = await supabase.from('technician_assignments').update(payload).eq('id', a.id).select('*').single()
-      if (result.error) throw result.error
-
-      const updated = result.data as TechnicianAssignment
-      setAssignments(p => ({ ...p, [key]: updated }))
-      setStageDrafts(p => ({ ...p, [key]: { bay_no: updated.bay_no ?? '', work_status: updated.work_status ?? 'work_inprocess', remark: updated.remark ?? '' } }))
-      showToast(`Stage saved for ${key}`, 'success')
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Failed to save stage', 'error')
-    } finally { setSaving(null) }
+    const prevAssignment = a
+    const prevDraft = stageDrafts[key]
+    const optimisticAssignment: TechnicianAssignment = {
+      ...a,
+      bay_no: draft.bay_no.trim() || null,
+      work_status: draft.work_status,
+      remark: draft.remark.trim() || null,
+      out_ts: draft.work_status === 'completed' ? (a.out_ts ?? new Date().toISOString()) : a.out_ts,
+    }
+    await optimistic.run(`${key}-stage`, {
+      apply: () => {
+        setSaving(key)
+        setAssignments(p => ({ ...p, [key]: optimisticAssignment }))
+      },
+      rollback: () => {
+        setAssignments(p => ({ ...p, [key]: prevAssignment }))
+        setStageDrafts(p => ({ ...p, [key]: prevDraft ?? p[key] }))
+        setSaving(null)
+      },
+      execute: async () => {
+        const payload: Record<string, unknown> = {
+          bay_no: draft.bay_no.trim() || null,
+          work_status: draft.work_status,
+          remark: draft.remark.trim() || null,
+        }
+        if (draft.work_status === 'completed') payload.out_ts = new Date().toISOString()
+        const result = await supabase.from('technician_assignments').update(payload).eq('id', a.id).select('*').single()
+        if (result.error) throw result.error
+        const updated = result.data as TechnicianAssignment
+        setAssignments(p => ({ ...p, [key]: updated }))
+        setStageDrafts(p => ({ ...p, [key]: { bay_no: updated.bay_no ?? '', work_status: updated.work_status ?? 'work_inprocess', remark: updated.remark ?? '' } }))
+      },
+      onSuccess: () => {
+        showToast(`Stage saved for ${key}`, 'success')
+        setSaving(null)
+      },
+    })
   }
 
   async function saveSupportAssignment() {
@@ -744,50 +879,91 @@ export default function FloorInchargeScreen() {
       showToast('This person is already added', 'error'); return
     }
 
-    setSupportSaving(key)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const base = { job_card_number: key, employee_code: emp.employee_code, employee_name: emp.employee_name, assigned_at: new Date().toISOString(), assigned_by: user?.email ?? null, is_active: true }
-
-      const candidates: SupportRoleDb[] = supportModalRole === 'DENTOR' ? ['DENTER', 'DENTOR'] : [supportModalRole as SupportRoleDb]
-      let result: { data: unknown; error: { message?: string } | null } | null = null
-      for (let i = 0; i < candidates.length; i++) {
-        const ins = await supabase.from('job_card_support_assignments').insert({ ...base, support_role: candidates[i] }).select().single()
-        if (!ins.error) { result = ins as unknown as typeof result; break }
-        const errText = String(ins.error.message ?? '').toLowerCase()
-        const isRoleErr = errText.includes('support_role') && errText.includes('check')
-        if (i === candidates.length - 1 || !isRoleErr) { result = ins as unknown as typeof result; break }
-      }
-      if (!result || (result as any).error) throw (result as any)?.error ?? new Error('Failed')
-
-      setSupportAssignments(p => ({
-        ...p, [key]: [
-          { ...((result as any)!.data as SupportAssignment), support_role: normalizeSupportRole(((result as any)!.data as SupportAssignment).support_role) ?? (supportModalRole as SupportRole) },
-          ...(p[key] ?? []),
-        ]
-      }))
-      showToast(`Support assigned to ${key}`, 'success')
-      setSupportModalCard(null); setSupportModalRole(''); setSupportModalCode('')
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Failed', 'error')
-    } finally { setSupportSaving(null) }
+    const prevSupport = supportAssignments[key]
+    const optimisticRow: SupportAssignment = {
+      id: -1,
+      job_card_number: key,
+      support_role: supportModalRole as SupportRole,
+      employee_code: emp.employee_code,
+      employee_name: emp.employee_name,
+      assigned_at: new Date().toISOString(),
+      assigned_by: null,
+      is_active: true,
+    }
+    await optimistic.run(`${key}-support-add`, {
+      apply: () => {
+        setSupportSaving(key)
+        setSupportAssignments(p => ({ ...p, [key]: [optimisticRow, ...(p[key] ?? [])] }))
+        setSupportModalCard(null)
+        setSupportModalRole('')
+        setSupportModalCode('')
+      },
+      rollback: () => {
+        setSupportAssignments(p => ({ ...p, [key]: prevSupport ?? [] }))
+        setSupportSaving(null)
+      },
+      execute: async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        const base = { job_card_number: key, employee_code: emp.employee_code, employee_name: emp.employee_name, assigned_at: new Date().toISOString(), assigned_by: user?.email ?? null, is_active: true }
+        const candidates: SupportRoleDb[] = supportModalRole === 'DENTOR' ? ['DENTER', 'DENTOR'] : [supportModalRole as SupportRoleDb]
+        let inserted: SupportAssignment | null = null
+        let lastError: string | null = null
+        for (let i = 0; i < candidates.length; i++) {
+          const ins = await supabase.from('job_card_support_assignments').insert({ ...base, support_role: candidates[i] }).select().single()
+          if (!ins.error && ins.data) {
+            inserted = ins.data as SupportAssignment
+            break
+          }
+          lastError = ins.error?.message ?? 'Failed'
+          const errText = String(ins.error?.message ?? '').toLowerCase()
+          const isRoleErr = errText.includes('support_role') && errText.includes('check')
+          if (i === candidates.length - 1 || !isRoleErr) break
+        }
+        if (!inserted) throw new Error(lastError ?? 'Failed')
+        setSupportAssignments(p => ({
+          ...p,
+          [key]: [
+            {
+              ...inserted,
+              support_role: normalizeSupportRole(inserted.support_role) ?? (supportModalRole as SupportRole),
+            },
+            ...(p[key] ?? []).filter(s => s.id !== -1),
+          ],
+        }))
+      },
+      onSuccess: () => {
+        showToast(`Support assigned to ${key}`, 'success')
+        setSupportSaving(null)
+      },
+    })
   }
 
   async function removeSupportAssignment(key: string, id: number) {
-    setSupportSaving(key)
-    try {
-      const { error } = await supabase.from('job_card_support_assignments').update({ is_active: false }).eq('id', id)
-      if (error) throw error
-      setSupportAssignments(p => {
-        const next = { ...p }
-        const rows = (next[key] ?? []).filter(s => s.id !== id)
-        if (!rows.length) delete next[key]; else next[key] = rows
-        return next
-      })
-      showToast('Support removed', 'success')
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Failed', 'error')
-    } finally { setSupportSaving(null) }
+    const prevSupport = supportAssignments[key]
+    await optimistic.run(`${key}-support-rm-${id}`, {
+      apply: () => {
+        setSupportSaving(key)
+        setSupportAssignments(p => {
+          const next = { ...p }
+          const rows = (next[key] ?? []).filter(s => s.id !== id)
+          if (!rows.length) delete next[key]
+          else next[key] = rows
+          return next
+        })
+      },
+      rollback: () => {
+        setSupportAssignments(p => ({ ...p, [key]: prevSupport ?? [] }))
+        setSupportSaving(null)
+      },
+      execute: async () => {
+        const { error } = await supabase.from('job_card_support_assignments').update({ is_active: false }).eq('id', id)
+        if (error) throw error
+      },
+      onSuccess: () => {
+        showToast('Support removed', 'success')
+        setSupportSaving(null)
+      },
+    })
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────
@@ -1059,6 +1235,13 @@ export default function FloorInchargeScreen() {
   // ── Main render ───────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={S.root}>
+      {optimistic.failure ? (
+        <OptimisticActionErrorBar
+          message={optimistic.failure.message}
+          onRetry={() => void optimistic.retry()}
+          onDismiss={optimistic.clearFailure}
+        />
+      ) : null}
 
       {/* Toast */}
       {toast && (
@@ -1067,20 +1250,28 @@ export default function FloorInchargeScreen() {
         </View>
       )}
 
-      {/* ── Top bar: single row — [Floor Incharge] [──search──] [↻] ── */}
-      <View style={S.topBar}>
-        <Text style={S.topBarTitle}>Floor Incharge</Text>
-        <View style={S.searchWrap}>
-          <Text style={S.searchIcon}>🔍</Text>
-          <TextInput style={S.searchInput}
+      <StaffNavigationChrome
+        title="Floor Incharge"
+        subtitle="Technician assignments · bay · status"
+        rightAction={<StaffRefreshButton onPress={() => fetchAll(true)} />}
+      />
+      <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void fetchAll(true)} />
+
+      <View style={[S.topBar, { paddingTop: 8, paddingBottom: 8 }]}>
+        <View style={[S.searchWrap, { flex: 1, maxWidth: '100%' }]}>
+          <Text style={S.searchIcon} accessibilityElementsHidden importantForAccessibility="no">
+            🔍
+          </Text>
+          <TextInput
+            style={S.searchInput}
             placeholder="Search JC / reg / model..."
             placeholderTextColor="#94a3b8"
-            value={search} onChangeText={setSearch} clearButtonMode="while-editing"
+            value={search}
+            onChangeText={setSearch}
+            clearButtonMode="while-editing"
+            accessibilityLabel="Search job cards by JC, registration, or model"
           />
         </View>
-        <TouchableOpacity style={S.refreshBtn} onPress={() => fetchAll(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={S.refreshBtnText}>↻</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── Status tabs — horizontal scroll, 5 statuses clearly visible ── */}
@@ -1619,9 +1810,58 @@ const S = {
   removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5 },
   removeBtnText:     { fontSize: 12, fontWeight: '700' as const, color: '#dc2626' },
 
+  tsLabel:           { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.8, marginBottom: 2 },
+  tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
+
+  remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, fontSize: 13, color: '#1e293b', minHeight: 56, textAlignVertical: 'top' as const },
+  saveBtn:           { backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 13, alignItems: 'center' as const, marginTop: 12, shadowColor: '#2563eb', shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
+  saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
+
+  addSupportBtn:     { backgroundColor: '#eff6ff', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#bfdbfe' },
+  addSupportBtnText: { fontSize: 12, fontWeight: '700' as const, color: '#2563eb' },
+  supportPill:       { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#e2e8f0', gap: 7, marginBottom: 4 },
+  supportRoleTag:    { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
+  supportRoleTagText:{ fontSize: 10, fontWeight: '800' as const, color: '#1d4ed8' },
+  supportPillName:   { fontSize: 13, color: '#334155', fontWeight: '500' as const, flex: 1 },
+  emptyHint:         { fontSize: 11, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 2, marginBottom: 4 },
+
+  pickerHeader:      { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#0f172a', flex: 1 },
+  pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, fontSize: 14, color: '#1e293b' },
+  pickerItem:        { paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9', minHeight: 50, justifyContent: 'center' as const },
+  pickerItemText:    { fontSize: 15, color: '#1e293b', fontWeight: '500' as const },
+  pickerItemSub:     { fontSize: 12, color: '#64748b', marginTop: 2 },
+  pickerEmpty:       { textAlign: 'center' as const, color: '#94a3b8', marginTop: 48, padding: 16 },
+
+  bayChip:           { flex: 1, margin: 4, backgroundColor: '#f1f5f9', borderRadius: 8, paddingVertical: 12, alignItems: 'center' as const, borderWidth: 1, borderColor: '#e2e8f0' },
+  bayChipActive:     { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
+  bayChipText:       { fontSize: 14, fontWeight: '700' as const, color: '#475569' },
+
+  supportMeta:       { backgroundColor: '#f8fafc', borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  supportMetaText:   { fontSize: 13, color: '#475569', fontWeight: '500' as const },
+  roleChip:          { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0' },
+  roleChipActive:    { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
+  roleChipText:      { fontSize: 13, color: '#64748b', fontWeight: '500' as const },
+  roleChipTextActive:{ color: '#2563eb', fontWeight: '700' as const } as const,
+  empRow:            { padding: 12, borderRadius: 8, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#fff', marginBottom: 5 },
+  empRowActive:      { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
+  empRowText:        { fontSize: 14, color: '#1e293b', fontWeight: '500' as const },
+  existingSupportRow:{ flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 9, borderBottomWidth: 1, borderColor: '#f1f5f9', gap: 8 },
+  removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5 },
+  removeBtnText:     { fontSize: 12, fontWeight: '700' as const, color: '#dc2626' },
+
   empty:             { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: 80 },
   emptyIcon:         { fontSize: 44, marginBottom: 12 },
   emptyTitle:        { fontSize: 16, fontWeight: '700' as const, color: '#1e293b' },
   emptySub:          { fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' as const, paddingHorizontal: 32 },
+  loadMoreBtn: {
+    alignSelf: 'center' as const,
+    marginVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#2563eb',
+  },
+  loadMoreBtnText: { color: '#fff', fontWeight: '800' as const, fontSize: 14 },
 }
 

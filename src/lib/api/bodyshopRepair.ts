@@ -97,6 +97,8 @@ export interface RepairCard {
   survay_info_updated_by: string | null
   survay_info_updated_at: string | null
   bodyshop_floor: string | null
+  /** Set when advisor first sends vehicle to Floor 2/3 (not reset on floor change). */
+  bodyshop_floor_since_at: string | null
   claim_intimation_no: string | null
   surveyor_name: string | null
   surveyor_contact: string | null

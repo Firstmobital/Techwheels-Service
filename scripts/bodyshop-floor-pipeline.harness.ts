@@ -10,11 +10,17 @@ import {
   arePipelineWorkStepsFinished,
   isFloorWorkTaskAtActivePipelineStep,
   isFloorWorkTaskVisible,
+  resolveActivePipelineStepIndex,
   isWorkerQcTurn,
   resolveWorkerQcResponsibleRole,
-  resolveActivePipelineStepIndex,
+  canUploadFloorWorkPhotos,
 } from '../src/lib/bodyshopFloorWork/pipeline.ts'
 import type { BodyshopFloorWorkTask } from '../src/lib/bodyshopFloorWork/roles.ts'
+import {
+  resolveBodyshopFloorSinceIso,
+  calendarDaysSince,
+  floorAgeLabel,
+} from '../src/lib/bodyshopFloorAge.ts'
 
 type Row = Record<string, unknown>
 
@@ -35,6 +41,18 @@ function task(
   }
 }
 
+/** All primary lanes assigned; worker steps marked completed (for QC / incharge queue tests). */
+function pipelineWorkerDoneRow(over: Row = {}): Row {
+  return baseRow({
+    dentor_work_status: 'completed',
+    painter_work_status: 'completed',
+    technician_employee_code: 'E003',
+    technician_work_status: 'completed',
+    rubbing_work_status: 'completed',
+    ...over,
+  })
+}
+
 function baseRow(over: Row = {}): Row {
   return {
     job_card_number: 'JC-TEST-001',
@@ -50,8 +68,8 @@ function baseRow(over: Row = {}): Row {
     painter_work_status: 'work_inprocess',
     painter_helper_employee_code: null,
     painter_helper_work_status: null,
-    technician_employee_code: null,
-    technician_work_status: null,
+    technician_employee_code: 'E003',
+    technician_work_status: 'work_inprocess',
     rubbing_employee_code: 'E004',
     rubbing_employee_name: 'Rubbing One',
     rubbing_work_status: 'work_inprocess',
@@ -78,7 +96,7 @@ console.log('\nBodyshop floor pipeline harness (temp data)\n')
 
 check('empty row — pipeline not finished', () => {
   assert.equal(arePipelineWorkStepsFinished({}), false)
-  assert.equal(resolveActivePipelineStepIndex({}), null)
+  assert.equal(resolveActivePipelineStepIndex({}), 0)
 })
 
 check('no worker slots assigned — not QC-ready', () => {
@@ -102,7 +120,8 @@ check('full pipeline done — QC phase (no bs_floor yet)', () => {
   const row = baseRow({
     dentor_work_status: 'completed',
     painter_work_status: 'completed',
-    technician_employee_code: null,
+    technician_employee_code: 'E003',
+    technician_work_status: 'completed',
     rubbing_work_status: 'completed',
   })
   assert.equal(arePipelineWorkStepsFinished(row), true)
@@ -124,11 +143,7 @@ check('rubbing NOT_REQUIRED — technician is QC owner if last active slot', () 
 })
 
 check('only rubbing assignee sees worker QC turn', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    rubbing_work_status: 'completed',
-  })
+  const row = pipelineWorkerDoneRow()
   const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
   const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
   assert.equal(isWorkerQcTurn(rubbingTask, row, 'pending'), true)
@@ -136,11 +151,7 @@ check('only rubbing assignee sees worker QC turn', () => {
 })
 
 check('QC pass — no worker QC turn', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    rubbing_work_status: 'completed',
-  })
+  const row = pipelineWorkerDoneRow()
   const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
   assert.equal(isWorkerQcTurn(rubbingTask, row, 'pass'), false)
 })
@@ -154,10 +165,7 @@ check('active pipeline — dentor visible, not QC turn', () => {
 })
 
 check('after bs_floor_completed — worker QC hidden', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    rubbing_work_status: 'completed',
+  const row = pipelineWorkerDoneRow({
     bs_floor_completed_at: '2026-10-05T12:00:00Z',
   })
   const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
@@ -165,11 +173,7 @@ check('after bs_floor_completed — worker QC hidden', () => {
 })
 
 check('QC fail — rubbing can retry QC', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    rubbing_work_status: 'completed',
-  })
+  const row = pipelineWorkerDoneRow()
   const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
   assert.equal(isWorkerQcTurn(rubbingTask, row, 'fail'), true)
 })
@@ -188,20 +192,13 @@ function inchargeInRiQueue(row: Row, qcStatus: string, riStatus: string): boolea
 }
 
 check('incharge QC tab — pipeline done, QC pending', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    rubbing_work_status: 'completed',
-  })
+  const row = pipelineWorkerDoneRow()
   assert.equal(inchargeInQcQueue(row, 'pending'), true)
   assert.equal(inchargeInRiQueue(row, 'pending', 'pending'), false)
 })
 
 check('incharge RI tab — after worker QC pass + floor complete', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    rubbing_work_status: 'completed',
+  const row = pipelineWorkerDoneRow({
     bs_floor_completed_at: '2026-10-05T12:00:00Z',
   })
   assert.equal(inchargeInQcQueue(row, 'pass'), false)
@@ -221,12 +218,7 @@ check('floor flow — QC locked until rubbing pipeline done', () => {
 })
 
 check('floor flow — QC active then RI after pass then EDP after RI', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    technician_work_status: 'completed',
-    rubbing_work_status: 'completed',
-  })
+  const row = pipelineWorkerDoneRow()
   const mid = computeBodyshopFloorFlowSteps({
     assignRow: row,
     roleAt: (role) =>
@@ -250,6 +242,115 @@ check('floor flow — QC active then RI after pass then EDP after RI', () => {
     riStatus: 'completed',
   })
   assert.equal(afterRi.find((s) => s.id === 'EDP')?.state, 'active')
+})
+
+check('painter not active until dentor Done (Floor Work order)', () => {
+  const row = baseRow({ dentor_work_status: 'work_inprocess', painter_work_status: 'work_inprocess' })
+  const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
+  const painterTask = task('JC-TEST-001', 'PAINTER', 'E002')
+  assert.equal(isFloorWorkTaskAtActivePipelineStep(dentorTask, row), true)
+  assert.equal(isFloorWorkTaskAtActivePipelineStep(painterTask, row), false)
+})
+
+check('missing painter assign blocks pipeline complete (incharge must assign)', () => {
+  const row = baseRow({
+    dentor_work_status: 'completed',
+    painter_employee_code: null,
+    painter_work_status: null,
+  })
+  assert.equal(resolveActivePipelineStepIndex(row), 1)
+  assert.equal(arePipelineWorkStepsFinished(row), false)
+})
+
+check('floor flow — unassigned roles locked in step tracker', () => {
+  const steps = computeBodyshopFloorFlowSteps({
+    assignRow: undefined,
+    roleAt: (role) =>
+      role === 'FLOOR_INCHARGE'
+        ? { employee_code: 'FI1', work_status: 'work_inprocess' }
+        : null,
+    qcStatus: 'pending',
+    riStatus: 'pending',
+  })
+  assert.equal(steps.find((s) => s.id === 'FLOOR_INCHARGE')?.state, 'active')
+  assert.equal(steps.find((s) => s.id === 'DENTOR')?.state, 'locked')
+  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'locked')
+})
+
+check('floor flow — completed role shows done (blue) in step tracker', () => {
+  const steps = computeBodyshopFloorFlowSteps({
+    assignRow: undefined,
+    roleAt: (role) =>
+      role === 'DENTOR'
+        ? { employee_code: 'D1', work_status: 'completed' }
+        : null,
+    qcStatus: 'pending',
+    riStatus: 'pending',
+  })
+  assert.equal(steps.find((s) => s.id === 'DENTOR')?.state, 'done')
+  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'locked')
+})
+
+check('parallel floor steps — dentor and painter both active for assignment UI', () => {
+  const row = baseRow({ dentor_work_status: 'work_inprocess' })
+  const steps = computeBodyshopFloorFlowSteps({
+    assignRow: row,
+    roleAt: (role) =>
+      role === 'DENTOR'
+        ? { employee_code: 'E001', work_status: 'work_inprocess' }
+        : role === 'PAINTER'
+          ? { employee_code: 'E002', work_status: 'work_inprocess' }
+          : null,
+    qcStatus: 'pending',
+    riStatus: 'pending',
+  })
+  assert.equal(steps.find((s) => s.id === 'DENTOR')?.state, 'active')
+  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'active')
+})
+
+check('floor work — dentor can upload photos on active dentor step', () => {
+  const row = baseRow({
+    dentor_employee_code: 'D001',
+    dentor_work_status: 'work_inprocess',
+  })
+  const t = task('JC1', 'DENTOR', 'D001')
+  assert.equal(canUploadFloorWorkPhotos(t, row, 'pending'), true)
+})
+
+check('floor work — painter cannot upload until dentor step done', () => {
+  const row = baseRow({
+    dentor_employee_code: 'D001',
+    dentor_work_status: 'work_inprocess',
+    painter_employee_code: 'P001',
+    painter_work_status: 'work_inprocess',
+  })
+  const t = task('JC1', 'PAINTER', 'P001')
+  assert.equal(canUploadFloorWorkPhotos(t, row, 'pending'), false)
+})
+
+check('floor work — painter can upload after dentor completed', () => {
+  const row = baseRow({
+    dentor_employee_code: 'D001',
+    dentor_work_status: 'completed',
+    painter_employee_code: 'P001',
+    painter_work_status: 'work_inprocess',
+  })
+  const t = task('JC1', 'PAINTER', 'P001')
+  assert.equal(canUploadFloorWorkPhotos(t, row, 'pending'), true)
+})
+
+check('floor age — advisor send timestamp, not role assignment', () => {
+  const since = resolveBodyshopFloorSinceIso({
+    bodyshop_floor: 'Floor 2',
+    bodyshop_floor_since_at: '2026-10-01T08:00:00+05:30',
+    survay_info_updated_at: '2026-10-03T08:00:00+05:30',
+    created_at: '2026-09-01T08:00:00+05:30',
+  })
+  assert.equal(since, '2026-10-01T08:00:00+05:30')
+  assert.equal(resolveBodyshopFloorSinceIso({ bodyshop_floor: null, bodyshop_floor_since_at: '2026-10-01' }), null)
+  const days = calendarDaysSince('2026-10-01T08:00:00+05:30')
+  assert.ok(days != null && days >= 0)
+  assert.ok(floorAgeLabel(0).includes('today'))
 })
 
 check('parse/join QC names — pipe delimiter round-trip', () => {
