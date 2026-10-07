@@ -42,6 +42,14 @@ function mergeFloorWorkDrivePhotoRows(
 }
 import { BodyshopFloorWorkVehicleDetailPanel } from '../components/BodyshopFloorWorkVehicleDetailPanel'
 import { floorWorkVehicleStatusHeadline } from '../lib/bodyshopFloorWork/vehiclePipelineStatus'
+import {
+  classifyFloorWorkPipelineStage,
+  emptyPipelineStageCounts,
+  PIPELINE_STAGE_FILTER_BUCKETS,
+  PIPELINE_STAGE_FILTER_LABELS,
+  pipelineStageHasWorkerAssignment,
+  type FloorWorkPipelineStageFilter,
+} from '../lib/bodyshopFloorWork/pipelineStageFilter'
 import Icon from '../components/Icon'
 import { getDealerContext } from '../lib/api'
 import {
@@ -77,7 +85,6 @@ import {
   floorWorkFloorDayLabel,
   istYearMonthFromIso,
   currentIstYearMonth,
-  type FloorWorkFloorDayBucket,
   type FloorWorkVehicleMeta,
   buildMinimalFloorWorkVehicleMeta,
   floorWorkListSinceIso,
@@ -85,11 +92,16 @@ import {
   floorWorkVehiclePhysicalFloor,
   type FloorWorkPhysicalFloorFilter,
 } from '../lib/bodyshopFloorWork/display'
+import {
+  countAdminListFacet,
+  matchesAdminListFacets,
+  type AdminListFacetFilters,
+  type FloorDayFilter,
+  type FloorWorkListEntry,
+  type UpdateFilter,
+} from '../lib/bodyshopFloorWork/adminListFacetFilters'
 
 const FLOOR_WORK_LIST_PAGE_SIZE = 24
-
-type UpdateFilter = 'all' | 'pending' | 'done'
-type FloorDayFilter = 'all' | FloorWorkFloorDayBucket
 
 function buildRepairCardIdByJc(assRows: Record<string, unknown>[]): Record<string, number> {
   const out: Record<string, number> = {}
@@ -178,6 +190,7 @@ export default function BodyshopFloorWorkPage() {
   const [floorDayFilter, setFloorDayFilter] = useState<FloorDayFilter>('all')
   const [updateFilter, setUpdateFilter] = useState<UpdateFilter>('all')
   const [physicalFloorFilter, setPhysicalFloorFilter] = useState<FloorWorkPhysicalFloorFilter>('all')
+  const [pipelineStageFilter, setPipelineStageFilter] = useState<FloorWorkPipelineStageFilter>('all')
   const [photoCountByJc, setPhotoCountByJc] = useState<Record<string, number>>({})
   const [loadingPhotoCounts, setLoadingPhotoCounts] = useState(false)
   const [loadingSelectedPhotos, setLoadingSelectedPhotos] = useState(false)
@@ -214,7 +227,7 @@ export default function BodyshopFloorWorkPage() {
 
   useEffect(() => {
     setListVisibleCount(FLOOR_WORK_LIST_PAGE_SIZE)
-  }, [vehicleSearch, floorMonthFilter, floorDayFilter, updateFilter, physicalFloorFilter])
+  }, [vehicleSearch, floorMonthFilter, floorDayFilter, updateFilter, physicalFloorFilter, pipelineStageFilter])
 
   const vehicleHasPendingPipelineSteps = useCallback(
     (displayJc: string, rowTasks: BodyshopFloorWorkTask[]) => {
@@ -257,12 +270,19 @@ export default function BodyshopFloorWorkPage() {
     return sortJobCardsByFloorDayRecency([...set], cardByJc, today)
   }, [isAdminOverview, allFloorJcs, tasks, cardByJc, today])
 
-  const filterCounts = useMemo(() => {
-    const floorDay = { all: 0, today: 0, yesterday: 0, older: 0, unknown: 0 }
-    const updates = { all: 0, pending: 0, done: 0 }
-    const physicalFloor = { all: 0, 'Floor 2': 0, 'Floor 3': 0, unknown: 0 }
-    const q = vehicleSearch.trim().toLowerCase()
+  const adminListFacets = useMemo(
+    (): AdminListFacetFilters => ({
+      floorDay: floorDayFilter,
+      physical: physicalFloorFilter,
+      pipeline: pipelineStageFilter,
+      update: updateFilter,
+    }),
+    [floorDayFilter, physicalFloorFilter, pipelineStageFilter, updateFilter],
+  )
 
+  const floorWorkListCatalog = useMemo((): FloorWorkListEntry[] => {
+    const q = vehicleSearch.trim().toLowerCase()
+    const catalog: FloorWorkListEntry[] = []
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
@@ -272,45 +292,28 @@ export default function BodyshopFloorWorkPage() {
         rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
       }
       if (!vehicleInWorkerScope(rowTasks)) continue
-
       const assignRow = assignmentRowForDisplayJc(jc)
-      const bucket = floorWorkFloorDayBucket(floorWorkListSinceIso(meta), today)
-      const hasPending = vehicleHasPendingPipelineSteps(jc, rowTasks)
-      const pf = floorWorkVehiclePhysicalFloor(meta, assignRow)
-      const pfKey = pf ?? 'unknown'
-
-      const passesUpdateFacet =
-        updateFilter === 'all'
-        || (updateFilter === 'pending' && hasPending)
-        || (updateFilter === 'done' && !hasPending)
-      const passesFloorDayFacet = floorDayFilter === 'all' || floorDayFilter === bucket
-      const passesPhysicalFacet =
-        physicalFloorFilter === 'all' || physicalFloorFilter === pfKey
-
-      if (passesUpdateFacet && passesPhysicalFacet) {
-        floorDay.all += 1
-        floorDay[bucket] += 1
-      }
-      if (passesFloorDayFacet && passesPhysicalFacet) {
-        updates.all += 1
-        if (!hasPending) updates.done += 1
-        else updates.pending += 1
-      }
-      if (passesUpdateFacet && passesFloorDayFacet) {
-        physicalFloor.all += 1
-        physicalFloor[pfKey] += 1
-      }
+      catalog.push({
+        jobCardNumber: jc,
+        tasks: rowTasks,
+        floorDayBucket: floorWorkFloorDayBucket(floorWorkListSinceIso(meta), today),
+        physicalFloorKey: (floorWorkVehiclePhysicalFloor(meta, assignRow) ?? 'unknown') as
+          | 'Floor 2'
+          | 'Floor 3'
+          | 'unknown',
+        pipelineStage: classifyFloorWorkPipelineStage(assignRow, {
+          hasAssignment: rowTasks.length > 0 || pipelineStageHasWorkerAssignment(assignRow),
+        }),
+        hasPending: vehicleHasPendingPipelineSteps(jc, rowTasks),
+      })
     }
-    return { floorDay, updates, physicalFloor }
+    return catalog
   }, [
     baseJobCards,
     cardByJc,
     vehicleSearch,
     tasks,
     today,
-    floorDayFilter,
-    updateFilter,
-    physicalFloorFilter,
     vehicleMatchesSearchAndMonth,
     vehicleInWorkerScope,
     vehicleHasPendingPipelineSteps,
@@ -319,53 +322,49 @@ export default function BodyshopFloorWorkPage() {
     tasksForDisplayJc,
     assignmentRowForDisplayJc,
   ])
+
+  const filterCounts = useMemo(() => {
+    const facets = adminListFacets
+    const floorDay = {
+      all: countAdminListFacet(floorWorkListCatalog, facets, { floorDay: 'all' }),
+      today: countAdminListFacet(floorWorkListCatalog, facets, { floorDay: 'today' }),
+      yesterday: countAdminListFacet(floorWorkListCatalog, facets, { floorDay: 'yesterday' }),
+      older: countAdminListFacet(floorWorkListCatalog, facets, { floorDay: 'older' }),
+      unknown: countAdminListFacet(floorWorkListCatalog, facets, { floorDay: 'unknown' }),
+    }
+    const updates = {
+      all: countAdminListFacet(floorWorkListCatalog, facets, { update: 'all' }),
+      pending: countAdminListFacet(floorWorkListCatalog, facets, { update: 'pending' }),
+      done: countAdminListFacet(floorWorkListCatalog, facets, { update: 'done' }),
+    }
+    const physicalFloor = {
+      all: countAdminListFacet(floorWorkListCatalog, facets, { physical: 'all' }),
+      'Floor 2': countAdminListFacet(floorWorkListCatalog, facets, { physical: 'Floor 2' }),
+      'Floor 3': countAdminListFacet(floorWorkListCatalog, facets, { physical: 'Floor 3' }),
+      unknown: countAdminListFacet(floorWorkListCatalog, facets, { physical: 'unknown' }),
+    }
+    const pipelineStageCountsByBucket = emptyPipelineStageCounts()
+    for (const key of PIPELINE_STAGE_FILTER_BUCKETS) {
+      pipelineStageCountsByBucket[key] = countAdminListFacet(floorWorkListCatalog, facets, { pipeline: key })
+    }
+    const pipelineStage = {
+      all: countAdminListFacet(floorWorkListCatalog, facets, { pipeline: 'all' }),
+      ...pipelineStageCountsByBucket,
+    }
+    return { floorDay, updates, physicalFloor, pipelineStage }
+  }, [floorWorkListCatalog, adminListFacets])
 
   const vehicleRows = useMemo(() => {
-    const q = vehicleSearch.trim().toLowerCase()
-    const rows: Array<{ jobCardNumber: string; tasks: BodyshopFloorWorkTask[] }> = []
-
-    for (const jc of baseJobCards) {
-      if (!vehicleMatchesSearchAndMonth(jc, q)) continue
-      const meta = cardByJc[jc]
-      if (!isAdminOverview && !floorWorkVehicleShowInList(jc, meta)) continue
-      if (isAdminOverview && floorDayFilter !== 'all') {
-        const bucket = floorWorkFloorDayBucket(floorWorkListSinceIso(meta), today)
-        if (bucket !== floorDayFilter) continue
-      }
-      if (isAdminOverview && physicalFloorFilter !== 'all') {
-        const pf = floorWorkVehiclePhysicalFloor(meta, assignmentRowForDisplayJc(jc))
-        const pfKey = pf ?? 'unknown'
-        if (physicalFloorFilter !== pfKey) continue
-      }
-      let rowTasks = isAdminOverview ? tasksForDisplayJc(jc) : tasks.filter((t) => t.jobCardNumber === jc)
-      if (!isAdminOverview) {
-        rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
-      }
-      if (!vehicleInWorkerScope(rowTasks)) continue
-      if (isAdminOverview) {
-        if (updateFilter === 'pending' && !vehicleHasPendingPipelineSteps(jc, rowTasks)) continue
-        if (updateFilter === 'done' && vehicleHasPendingPipelineSteps(jc, rowTasks)) continue
-      }
-      rows.push({ jobCardNumber: jc, tasks: rowTasks })
+    if (!isAdminOverview) {
+      return floorWorkListCatalog.map(({ jobCardNumber, tasks: rowTasks }) => ({
+        jobCardNumber,
+        tasks: rowTasks,
+      }))
     }
-    return rows
-  }, [
-    baseJobCards,
-    cardByJc,
-    vehicleSearch,
-    floorDayFilter,
-    updateFilter,
-    physicalFloorFilter,
-    tasks,
-    today,
-    vehicleMatchesSearchAndMonth,
-    vehicleInWorkerScope,
-    vehicleHasPendingPipelineSteps,
-    isAdminOverview,
-    assignmentByJc,
-    tasksForDisplayJc,
-    assignmentRowForDisplayJc,
-  ])
+    return floorWorkListCatalog
+      .filter((e) => matchesAdminListFacets(e, adminListFacets))
+      .map(({ jobCardNumber, tasks: rowTasks }) => ({ jobCardNumber, tasks: rowTasks }))
+  }, [floorWorkListCatalog, adminListFacets, isAdminOverview])
 
   const displayedVehicleRows = useMemo(
     () => vehicleRows.slice(0, listVisibleCount),
@@ -514,12 +513,14 @@ export default function BodyshopFloorWorkPage() {
         setFloorDayFilter('all')
         setUpdateFilter('all')
         setPhysicalFloorFilter('all')
+        setPipelineStageFilter('all')
       } else {
         setWorkerAssignedSlotCount(0)
         setFloorMonthFilter('all')
         setFloorDayFilter('all')
         setUpdateFilter('all')
         setPhysicalFloorFilter('all')
+        setPipelineStageFilter('all')
       }
       setAssignmentByJc(assignmentMap)
       setTasks(myTasks)
@@ -794,6 +795,30 @@ export default function BodyshopFloorWorkPage() {
                   </div>
                   {isAdminOverview ? (
                     <>
+                      <div className="bsf-group bfw-filters__chip-group bfw-filters__chip-group--wide">
+                        <span className="bsf-label">Work lane</span>
+                        <div className="bfw-filters__chips">
+                          <button
+                            type="button"
+                            className={`bsf-chip ${pipelineStageFilter === 'all' ? 'is-active' : ''}`}
+                            onClick={() => setPipelineStageFilter('all')}
+                          >
+                            All lanes
+                            <span className="bsf-chip__n">{filterCounts.pipelineStage.all}</span>
+                          </button>
+                          {PIPELINE_STAGE_FILTER_BUCKETS.map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`bsf-chip ${pipelineStageFilter === key ? 'is-active' : ''}`}
+                              onClick={() => setPipelineStageFilter(key)}
+                            >
+                              {PIPELINE_STAGE_FILTER_LABELS[key]}
+                              <span className="bsf-chip__n">{filterCounts.pipelineStage[key]}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="bsf-group bfw-filters__chip-group">
                         <span className="bsf-label">Bodyshop floor</span>
                         <div className="bfw-filters__chips">
@@ -847,8 +872,10 @@ export default function BodyshopFloorWorkPage() {
                 </div>
               </div>
               <p className="bfw-toolbar__meta">
-                Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
-                {isAdminOverview ? ` — matches Bodyshop Floor live list (${allFloorJcs.length} on floor)` : ' with registration'}
+                Total showing: <strong>{vehicleRows.length}</strong>
+                {' / '}
+                {floorWorkListCatalog.length} in catalog
+                {' · '}Chip counts use the same rules as this list
                 {' · '}Sorted: on floor today → yesterday → longer wait
                 {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
               </p>

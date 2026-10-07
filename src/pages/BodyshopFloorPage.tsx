@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
@@ -14,6 +14,13 @@ import {
 } from '../lib/bodyshopFloorLive'
 import { parseBodyshopFloorRoles } from '../lib/businessRoles'
 import { arePipelineWorkStepsFinished } from '../lib/bodyshopFloorWork/pipeline'
+import {
+  classifyFloorWorkPipelineStage,
+  emptyPipelineStageCounts,
+  PIPELINE_STAGE_FILTER_BUCKETS,
+  PIPELINE_STAGE_FILTER_LABELS,
+  type FloorWorkPipelineStageFilter,
+} from '../lib/bodyshopFloorWork/pipelineStageFilter'
 import { isBodyshopWorkerPipelineAssignRole } from '../lib/bodyshopFloorWork/workerPipelineAssignRoles'
 import {
   filterBodyshopFloorInchargeCandidates,
@@ -823,6 +830,7 @@ export default function BodyshopFloorPage() {
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
   const [branchFilter, setBranchFilter]     = useState('all')
   const [floorFilter, setFloorFilter]       = useState<'all' | 'Floor 2' | 'Floor 3'>('all')
+  const [pipelineStageFilter, setPipelineStageFilter] = useState<FloorWorkPipelineStageFilter>('all')
   const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
   const [search, setSearch]                 = useState('')
   const [fiFilter, setFiFilter]             = useState<string>('all')  // floor incharge name filter
@@ -1290,21 +1298,145 @@ export default function BodyshopFloorPage() {
   }
 
 
-  const counts = useMemo(() => ({
-    all:            cars.length,
-    unassigned:     cars.filter((c) => listStatus(c) === 'unassigned').length,
-    assigned:       cars.filter((c) =>  hasAnyAssignment(c)).length,
-    work_inprocess: cars.filter((c) => listStatus(c) === 'work_inprocess').length,
-    hold:           cars.filter((c) => listStatus(c) === 'hold').length,
-    completed:      cars.filter((c) => listStatus(c) === 'completed').length,
-    qc:             cars.filter((c) => isInQcQueue(c)).length,
-    ri:             cars.filter((c) => isInRiQueue(c)).length,
-    approvals:      cars.filter((c) => {
+  function pipelineStageForCar(c: AccidentCar) {
+    const k = jcKey(c)
+    const row = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
+    return classifyFloorWorkPipelineStage(row, {
+      hasAssignment: hasAnyAssignment(c),
+      onHold: listStatus(c) === 'hold',
+    })
+  }
+
+  function carMatchesAssignmentView(c: AccidentCar, view: AssignmentView): boolean {
+    if (view === 'all') return true
+    if (view === 'unassigned') return listStatus(c) === 'unassigned'
+    if (view === 'assigned') return hasAnyAssignment(c)
+    if (view === 'work_inprocess') return listStatus(c) === 'work_inprocess'
+    if (view === 'hold') return listStatus(c) === 'hold'
+    if (view === 'completed') return listStatus(c) === 'completed'
+    if (view === 'qc') return isInQcQueue(c)
+    if (view === 'ri') return isInRiQueue(c)
+    if (view === 'approvals') {
       const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
       return state.status !== 'none' && state.pendingCount > 0
-    }).length,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc, qcCommittedByJc, riByJc])
+    }
+    return true
+  }
+
+  type BodyshopFloorListFacets = {
+    branch: string
+    floor: 'all' | 'Floor 2' | 'Floor 3'
+    pipeline: FloorWorkPipelineStageFilter
+    assignmentView: AssignmentView
+    role: BSRole | 'all'
+    fi: string
+    searchQ: string
+  }
+
+  const bodyshopListFacets = useMemo(
+    (): BodyshopFloorListFacets => ({
+      branch: branchFilter,
+      floor: floorFilter,
+      pipeline: pipelineStageFilter,
+      assignmentView,
+      role: roleFilter,
+      fi: fiFilter,
+      searchQ: search.trim().toLowerCase(),
+    }),
+    [branchFilter, floorFilter, pipelineStageFilter, assignmentView, roleFilter, fiFilter, search],
+  )
+
+  const carMatchesBodyshopFloorListFacets = useCallback(
+    (c: AccidentCar, facets: BodyshopFloorListFacets): boolean => {
+      if (facets.branch !== 'all' && (c.branch ?? 'Unknown') !== facets.branch) return false
+      if (facets.floor !== 'all') {
+        const want = normalizeBodyshopPhysicalFloor(facets.floor) ?? facets.floor
+        if ((normalizeBodyshopPhysicalFloor(c.bodyshop_floor) ?? c.bodyshop_floor) !== want) return false
+      }
+      if (
+        !carMatchesBodyshopFloorInchargeScope(
+          c.bodyshop_floor,
+          assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_code ?? null,
+          inchargeScope,
+        )
+      ) {
+        return false
+      }
+      if (facets.role !== 'all' && !assignments[jcKey(c)]?.[facets.role]) return false
+      if (facets.fi !== 'all' && assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim() !== facets.fi) {
+        return false
+      }
+      if (facets.searchQ) {
+        const q = facets.searchQ
+        const hit =
+          c.reg_number?.toLowerCase().includes(q)
+          || c.jc_number?.toLowerCase().includes(q)
+          || c.owner_name?.toLowerCase().includes(q)
+          || c.model?.toLowerCase().includes(q)
+          || (c.sa_display_name ?? c.sa_name)?.toLowerCase().includes(q)
+        if (!hit) return false
+      }
+      if (!carMatchesAssignmentView(c, facets.assignmentView)) return false
+      if (facets.pipeline !== 'all' && pipelineStageForCar(c) !== facets.pipeline) return false
+      return true
+    },
+    [assignments, inchargeScope],
+  )
+
+  const countBodyshopListFacet = useCallback(
+    (override: Partial<BodyshopFloorListFacets>) => {
+      const merged = { ...bodyshopListFacets, ...override }
+      let n = 0
+      for (const c of cars) {
+        if (carMatchesBodyshopFloorListFacets(c, merged)) n += 1
+      }
+      return n
+    },
+    [bodyshopListFacets, cars, carMatchesBodyshopFloorListFacets],
+  )
+
+  const counts = useMemo(
+    () => ({
+      all: countBodyshopListFacet({ assignmentView: 'all' }),
+      unassigned: countBodyshopListFacet({ assignmentView: 'unassigned' }),
+      assigned: countBodyshopListFacet({ assignmentView: 'assigned' }),
+      work_inprocess: countBodyshopListFacet({ assignmentView: 'work_inprocess' }),
+      hold: countBodyshopListFacet({ assignmentView: 'hold' }),
+      completed: countBodyshopListFacet({ assignmentView: 'completed' }),
+      qc: countBodyshopListFacet({ assignmentView: 'qc' }),
+      ri: countBodyshopListFacet({ assignmentView: 'ri' }),
+      approvals: countBodyshopListFacet({ assignmentView: 'approvals' }),
+    }),
+    [countBodyshopListFacet],
+  )
+
+  const pipelineStageCounts = useMemo(() => {
+    const stage = {
+      all: countBodyshopListFacet({ pipeline: 'all' }),
+      ...emptyPipelineStageCounts(),
+    }
+    for (const key of PIPELINE_STAGE_FILTER_BUCKETS) {
+      stage[key] = countBodyshopListFacet({ pipeline: key })
+    }
+    return stage
+  }, [countBodyshopListFacet])
+
+  const branchFacetCounts = useMemo(() => {
+    const out: Record<string, number> = { all: countBodyshopListFacet({ branch: 'all' }) }
+    for (const b of branches) {
+      out[b] = countBodyshopListFacet({ branch: b })
+    }
+    return out
+  }, [branches, countBodyshopListFacet])
+
+  const floorFacetCounts = useMemo(
+    () => ({
+      all: countBodyshopListFacet({ floor: 'all' }),
+      'Floor 2': countBodyshopListFacet({ floor: 'Floor 2' }),
+      'Floor 3': countBodyshopListFacet({ floor: 'Floor 3' }),
+    }),
+    [countBodyshopListFacet],
+  )
 
   // ── Floor Incharge workload summary ──────────────────────────────────────
   const floorInchargeSummary = useMemo(() => {
@@ -1331,56 +1463,10 @@ export default function BodyshopFloorPage() {
 
   // ── Filtered rows ────────────────────────────────────────────────────────
 
-  const filtered = useMemo(() => {
-    let list = [...cars]
-
-    if (branchFilter !== 'all')
-      list = list.filter((c) => (c.branch ?? 'Unknown') === branchFilter)
-
-    if (floorFilter !== 'all') {
-      const want = normalizeBodyshopPhysicalFloor(floorFilter) ?? floorFilter
-      list = list.filter((c) => (normalizeBodyshopPhysicalFloor(c.bodyshop_floor) ?? c.bodyshop_floor) === want)
-    }
-
-    list = list.filter((c) =>
-      carMatchesBodyshopFloorInchargeScope(
-        c.bodyshop_floor,
-        assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_code ?? null,
-        inchargeScope,
-      ),
-    )
-
-    if (roleFilter !== 'all')
-      list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
-
-    if (fiFilter !== 'all')
-      list = list.filter((c) => assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim() === fiFilter)
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      list = list.filter((c) =>
-        c.reg_number?.toLowerCase().includes(q) ||
-        c.jc_number?.toLowerCase().includes(q) ||
-        c.owner_name?.toLowerCase().includes(q) ||
-        c.model?.toLowerCase().includes(q) ||
-        (c.sa_display_name ?? c.sa_name)?.toLowerCase().includes(q)
-      )
-    }
-
-    if (assignmentView === 'unassigned')     return list.filter((c) => listStatus(c) === 'unassigned')
-    if (assignmentView === 'assigned')       return list.filter((c) =>  hasAnyAssignment(c))
-    if (assignmentView === 'work_inprocess') return list.filter((c) => listStatus(c) === 'work_inprocess')
-    if (assignmentView === 'hold')           return list.filter((c) => listStatus(c) === 'hold')
-    if (assignmentView === 'completed')      return list.filter((c) => listStatus(c) === 'completed')
-    if (assignmentView === 'qc')             return list.filter((c) => isInQcQueue(c))
-    if (assignmentView === 'ri')             return list.filter((c) => isInRiQueue(c))
-    if (assignmentView === 'approvals')      return list.filter((c) => {
-      const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
-      return state.status !== 'none' && state.pendingCount > 0
-    })
-    return list
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcCommittedByJc, riByJc, inchargeScope])
+  const filtered = useMemo(
+    () => cars.filter((c) => carMatchesBodyshopFloorListFacets(c, bodyshopListFacets)),
+    [cars, bodyshopListFacets, carMatchesBodyshopFloorListFacets],
+  )
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -2465,6 +2551,30 @@ export default function BodyshopFloorPage() {
       )}
 
       <div className="bsf-filterbar">
+        <div className="bsf-group bsf-group--wrap" style={{ flex: '1 1 100%', marginBottom: 4 }}>
+          <span className="bsf-label">Work lane</span>
+          <button
+            type="button"
+            onClick={() => setPipelineStageFilter('all')}
+            className={`bsf-chip ${pipelineStageFilter === 'all' ? 'is-active' : ''}`}
+          >
+            All lanes <span className="bsf-chip__n">{pipelineStageCounts.all}</span>
+          </button>
+          {PIPELINE_STAGE_FILTER_BUCKETS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPipelineStageFilter(key)}
+              className={`bsf-chip ${pipelineStageFilter === key ? 'is-active' : ''}`}
+            >
+              {PIPELINE_STAGE_FILTER_LABELS[key]}
+              <span className="bsf-chip__n">{pipelineStageCounts[key]}</span>
+            </button>
+          ))}
+        </div>
+
+        <span className="bsf-sep" style={{ flexBasis: '100%', height: 0, margin: '4px 0' }} />
+
         <div className="bsf-search">
           <Icon name="search" size={16} />
           <input
@@ -2481,12 +2591,12 @@ export default function BodyshopFloorPage() {
           <span className="bsf-label">Branch</span>
           <button type="button" onClick={() => setBranchFilter('all')}
             className={`bsf-chip ${branchFilter === 'all' ? 'is-active' : ''}`}>
-            All <span className="bsf-chip__n">{cars.length}</span>
+            All <span className="bsf-chip__n">{branchFacetCounts.all}</span>
           </button>
           {branches.map((b) => (
             <button key={b} type="button" onClick={() => setBranchFilter(b)}
               className={`bsf-chip ${branchFilter === b ? 'is-active' : ''}`}>
-              {b} <span className="bsf-chip__n">{cars.filter((c) => (c.branch ?? 'Unknown') === b).length}</span>
+              {b} <span className="bsf-chip__n">{branchFacetCounts[b] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -2497,12 +2607,12 @@ export default function BodyshopFloorPage() {
           <span className="bsf-label">Floor</span>
           <button type="button" onClick={() => setFloorFilter('all')}
             className={`bsf-chip ${floorFilter === 'all' ? 'is-active' : ''}`}>
-            All <span className="bsf-chip__n">{cars.length}</span>
+            All <span className="bsf-chip__n">{floorFacetCounts.all}</span>
           </button>
           {floors.map((floor) => (
             <button key={floor} type="button" onClick={() => setFloorFilter(floor)}
               className={`bsf-chip ${floorFilter === floor ? 'is-active' : ''}`}>
-              {floor} <span className="bsf-chip__n">{cars.filter((c) => c.bodyshop_floor === floor).length}</span>
+              {floor} <span className="bsf-chip__n">{floorFacetCounts[floor]}</span>
             </button>
           ))}
         </div>
@@ -2520,6 +2630,11 @@ export default function BodyshopFloorPage() {
         </select>
       </div>
       </div>
+
+      <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 16px 10px', padding: 0 }}>
+        Total showing: <strong>{filtered.length}</strong> of {cars.length} loaded
+        {' · '}KPI / Work lane / Branch / Floor counts use the same filter rules as this list
+      </p>
 
       <div className="bsf-roster-shell">
         {loading ? (
