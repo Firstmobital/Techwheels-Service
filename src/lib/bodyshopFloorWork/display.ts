@@ -1,4 +1,18 @@
+import { normalizeBodyshopPhysicalFloor, type BodyshopPhysicalFloor } from '../bodyshopFloorInchargeScope'
 import type { BodyshopFloorWorkTask } from './roles'
+
+export type FloorWorkPhysicalFloorFilter = 'all' | BodyshopPhysicalFloor | 'unknown'
+
+/** Bodyshop physical floor (Floor 2 / Floor 3) from repair card meta or assignment row. */
+export function floorWorkVehiclePhysicalFloor(
+  meta: FloorWorkVehicleMeta | undefined,
+  assignmentRow: Record<string, unknown> | undefined,
+): BodyshopPhysicalFloor | null {
+  return (
+    normalizeBodyshopPhysicalFloor(meta?.bodyshopFloor)
+    ?? normalizeBodyshopPhysicalFloor(assignmentRow?.bodyshop_floor)
+  )
+}
 
 export type FloorWorkVehicleMeta = {
   reg: string | null
