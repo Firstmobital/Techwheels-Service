@@ -28,6 +28,8 @@ function mergeMeta(
     model: patch.model ?? prev.model,
     systemJobCardNo: patch.systemJobCardNo ?? prev.systemJobCardNo,
     floorSinceAt: patch.floorSinceAt ?? prev.floorSinceAt,
+    listFloorSinceAt: prev.listFloorSinceAt ?? patch.listFloorSinceAt ?? prev.floorSinceAt,
+    metaFetchDone: patch.metaFetchDone ?? prev.metaFetchDone,
     bodyshopFloor: patch.bodyshopFloor ?? prev.bodyshopFloor,
     qcStatus: patch.qcStatus ?? prev.qcStatus,
     repairCardId: patch.repairCardId ?? prev.repairCardId,
@@ -106,7 +108,14 @@ export async function fetchRepairCardVehicleByJcs(
   if (keys.length === 0) return map
 
   for (const k of keys) {
-    map[k] = { reg: inferRegistrationFromAssignmentKey(k), customer: null, model: null }
+    const seededSince = String(opts?.assignmentCreatedAtByJc?.[k] ?? '').trim() || null
+    map[k] = {
+      reg: inferRegistrationFromAssignmentKey(k),
+      customer: null,
+      model: null,
+      floorSinceAt: seededSince,
+      listFloorSinceAt: seededSince,
+    }
   }
 
   for (let i = 0; i < keys.length; i += JC_CHUNK) {
@@ -217,6 +226,10 @@ export async function fetchRepairCardVehicleByJcs(
   }
 
   await attachRepairCardFloorTiming(map, keys)
+
+  for (const k of keys) {
+    mergeMeta(map, k, { metaFetchDone: true })
+  }
 
   const seeded = opts?.assignmentCreatedAtByJc
   if (seeded) {

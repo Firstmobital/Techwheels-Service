@@ -8,6 +8,10 @@ export type FloorWorkVehicleMeta = {
   systemJobCardNo?: string | null
   /** When this vehicle was first assigned on Bodyshop Floor (assignment row). */
   floorSinceAt?: string | null
+  /** Stable anchor for month/day filters — set once from assignment, not overwritten by repair-card timing. */
+  listFloorSinceAt?: string | null
+  /** Repair-card / reception lookup finished for this assignment key. */
+  metaFetchDone?: boolean
   bodyshopFloor?: string | null
   qcStatus?: string | null
   repairCardId?: number | null
@@ -92,6 +96,21 @@ export function floorWorkVehicleHasCompleteReg(
 ): boolean {
   if (String(meta?.reg ?? '').trim()) return true
   return Boolean(inferRegistrationFromAssignmentKey(assignmentKey))
+}
+
+/** Avoid list count jumping while reg lookup runs in the background. */
+export function floorWorkVehicleShowInList(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+): boolean {
+  if (floorWorkVehicleHasCompleteReg(assignmentKey, meta)) return true
+  if (meta?.metaFetchDone) return false
+  return Boolean(inferRegistrationFromAssignmentKey(assignmentKey))
+}
+
+export function floorWorkListSinceIso(meta: FloorWorkVehicleMeta | undefined): string | null {
+  const anchor = String(meta?.listFloorSinceAt ?? meta?.floorSinceAt ?? '').trim()
+  return anchor || null
 }
 
 /** Primary line — registration when known; system JC as fallback while lookup runs. */
@@ -297,7 +316,7 @@ export function floorWorkFloorDayLabel(bucket: FloorWorkFloorDayBucket): string 
 }
 
 function floorSinceMs(meta: FloorWorkVehicleMeta | undefined): number | null {
-  const iso = String(meta?.floorSinceAt ?? '').trim()
+  const iso = floorWorkListSinceIso(meta) ?? ''
   if (!iso) return null
   const t = new Date(iso).getTime()
   return Number.isNaN(t) ? null : t
@@ -334,10 +353,12 @@ export function buildMinimalFloorWorkVehicleMeta(
   for (const raw of assignmentKeys) {
     const jc = normalizeFloorWorkAssignmentKey(raw)
     if (!jc) continue
+    const since = String(assignmentCreatedAtByJc?.[jc] ?? '').trim() || null
     map[jc] = {
       reg: inferRegistrationFromAssignmentKey(jc),
       customer: null,
-      floorSinceAt: String(assignmentCreatedAtByJc?.[jc] ?? '').trim() || null,
+      floorSinceAt: since,
+      listFloorSinceAt: since,
     }
   }
   return map

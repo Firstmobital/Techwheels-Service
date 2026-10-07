@@ -72,7 +72,8 @@ import {
   type FloorWorkFloorDayBucket,
   type FloorWorkVehicleMeta,
   buildMinimalFloorWorkVehicleMeta,
-  floorWorkVehicleHasCompleteReg,
+  floorWorkListSinceIso,
+  floorWorkVehicleShowInList,
 } from '../lib/bodyshopFloorWork/display'
 
 const FLOOR_WORK_LIST_PAGE_SIZE = 24
@@ -205,7 +206,7 @@ export default function BodyshopFloorWorkPage() {
       if (q && !jobCardMatchesSearch(jc, cardByJc, q)) return false
       const meta = cardByJc[jc]
       if (floorMonthFilter !== 'all') {
-        const ym = istYearMonthFromIso(meta?.floorSinceAt)
+        const ym = istYearMonthFromIso(floorWorkListSinceIso(meta) ?? undefined)
         if (ym !== floorMonthFilter) return false
       }
       return true
@@ -232,14 +233,14 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (!floorWorkVehicleHasCompleteReg(jc, meta)) continue
+      if (!floorWorkVehicleShowInList(jc, meta)) continue
       let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
       if (!isAdminOverview) {
         rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
       }
       if (!vehicleInWorkerScope(rowTasks)) continue
 
-      const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
+      const bucket = floorWorkFloorDayBucket(floorWorkListSinceIso(meta), today)
       const hasPending = vehicleHasPendingPipelineSteps(jc, rowTasks)
 
       const passesUpdateFacet =
@@ -281,9 +282,9 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (!floorWorkVehicleHasCompleteReg(jc, meta)) continue
+      if (!floorWorkVehicleShowInList(jc, meta)) continue
       if (isAdminOverview && floorDayFilter !== 'all') {
-        const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
+        const bucket = floorWorkFloorDayBucket(floorWorkListSinceIso(meta), today)
         if (bucket !== floorDayFilter) continue
       }
       let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
@@ -499,18 +500,9 @@ export default function BodyshopFloorWorkPage() {
       setPhotosByVehicle({})
       setPhotoCountByJc({})
 
-      const firstBatch = sortJobCardsByFloorDayRecency(allJcs, minimalCards, today).slice(
-        0,
-        FLOOR_WORK_LIST_PAGE_SIZE,
-      )
-      void enrichVehicleMetaBatch(firstBatch)
-      if (adminOverview && allJcs.length > firstBatch.length) {
-        void (async () => {
-          const ordered = sortJobCardsByFloorDayRecency(allJcs, minimalCards, today)
-          for (let i = firstBatch.length; i < ordered.length; i += 80) {
-            await enrichVehicleMetaBatch(ordered.slice(i, i + 80), { quiet: true })
-          }
-        })()
+      const ordered = sortJobCardsByFloorDayRecency(allJcs, minimalCards, today)
+      for (let i = 0; i < ordered.length; i += 80) {
+        await enrichVehicleMetaBatch(ordered.slice(i, i + 80), { quiet: i > 0 })
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
@@ -522,12 +514,6 @@ export default function BodyshopFloorWorkPage() {
   useEffect(() => {
     void load()
   }, [load])
-
-  useEffect(() => {
-    if (loading || displayedVehicleRows.length === 0) return
-    const jcs = displayedVehicleRows.map((r) => r.jobCardNumber)
-    void enrichVehicleMetaBatch(jcs)
-  }, [loading, displayedVehicleRows, enrichVehicleMetaBatch])
 
   useEffect(() => {
     if (!selectedJc) return
@@ -772,9 +758,8 @@ export default function BodyshopFloorWorkPage() {
               <p className="bfw-toolbar__meta">
                 Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'} with registration
                 {' · '}Sorted: on floor today → yesterday → longer wait
-                {' · '}Vehicles without reg in Repair/Reception are hidden
+                {' · '}Without reg in Repair/Reception are hidden (count is stable after load)
                 {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
-                {loadingMoreMeta ? ' · Loading vehicle details…' : ''}
               </p>
             </div>
           ) : null}
