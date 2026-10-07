@@ -75,6 +75,31 @@ export async function fetchRoleDailyLogsForJobCard(
   return ok((data ?? []) as BodyshopFloorRoleDailyLogRow[])
 }
 
+/** Worker logs for one vehicle (repair-card JC + plate alias keys). */
+export async function fetchRoleDailyLogsForVehicleKeys(
+  displayJobCardKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+  limit = 120,
+): Promise<ApiResult<BodyshopFloorRoleDailyLogRow[]>> {
+  const keys = floorWorkJobCardLookupKeys(displayJobCardKey, meta)
+  const byId = new Map<number, BodyshopFloorRoleDailyLogRow>()
+  for (const jc of keys) {
+    const normalized = normalizeBodyshopFloorWorkJc(jc)
+    if (!normalized) continue
+    const res = await fetchRoleDailyLogsForJobCard(normalized, limit)
+    if (res.error) return res
+    for (const row of res.data ?? []) {
+      byId.set(row.id, row)
+    }
+  }
+  const merged = [...byId.values()].sort((a, b) => {
+    const d = String(b.update_date).localeCompare(String(a.update_date))
+    if (d !== 0) return d
+    return String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? ''))
+  })
+  return ok(merged.slice(0, limit))
+}
+
 export async function fetchRoleDailyLogPhotos(logIds: number[]): Promise<ApiResult<BodyshopFloorRoleDailyLogPhotoRow[]>> {
   if (logIds.length === 0) return ok([])
   const { data, error } = await supabase.from(PHOTO_TABLE).select('*').in('log_id', logIds).order('sort_order')

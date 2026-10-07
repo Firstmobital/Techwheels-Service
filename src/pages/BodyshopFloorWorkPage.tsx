@@ -48,7 +48,15 @@ import {
   fetchBodyshopAssignmentsForEmployee,
   fetchBodyshopSupportAssignmentsForEmployee,
 } from '../lib/api/bodyshopFloorWorkAssignments'
-import { fetchLiveOnFloorJobCardKeys, fetchRepairCardVehicleByJcs } from '../lib/api/bodyshopFloorWorkVehicles'
+import {
+  fetchLiveOnFloorVehicleCatalog,
+  fetchRepairCardVehicleByJcs,
+} from '../lib/api/bodyshopFloorWorkVehicles'
+import {
+  filterTasksForLiveFloorVehicle,
+  resolveBodyshopAssignmentRow,
+} from '../lib/bodyshopFloorWork/assignmentLookup'
+import { BODYSHOP_FLOOR_LIVE_LIST_LABEL } from '../lib/bodyshopFloorLive'
 import { completeBodyshopFloorWorkRoleOnAssignment } from '../lib/api/bodyshopFloorWorkPipeline'
 import {
   buildAssignmentRowByJobCard,
@@ -175,7 +183,28 @@ export default function BodyshopFloorWorkPage() {
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
   const assignmentRepairCardIdRef = useRef<Record<string, number>>({})
+  const assignmentRowsRef = useRef<Record<string, unknown>[]>([])
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
+
+  const assignmentRowForDisplayJc = useCallback(
+    (displayJc: string) =>
+      resolveBodyshopAssignmentRow(
+        displayJc,
+        cardByJc[displayJc],
+        assignmentByJc,
+        assignmentRowsRef.current,
+      ),
+    [cardByJc, assignmentByJc],
+  )
+
+  const tasksForDisplayJc = useCallback(
+    (displayJc: string): BodyshopFloorWorkTask[] => {
+      const meta = cardByJc[displayJc]
+      const ass = assignmentRowForDisplayJc(displayJc)
+      return filterTasksForLiveFloorVehicle(displayJc, meta, ass, tasks) as BodyshopFloorWorkTask[]
+    },
+    [cardByJc, tasks, assignmentRowForDisplayJc],
+  )
 
   const monthFilterOptions = useMemo(() => buildFloorWorkMonthFilterOptions(today, 5), [today])
 
@@ -184,12 +213,12 @@ export default function BodyshopFloorWorkPage() {
   }, [vehicleSearch, floorMonthFilter, floorDayFilter, updateFilter])
 
   const vehicleHasPendingPipelineSteps = useCallback(
-    (jobCardNumber: string, rowTasks: BodyshopFloorWorkTask[]) => {
-      const row = assignmentByJc[jobCardNumber]
+    (displayJc: string, rowTasks: BodyshopFloorWorkTask[]) => {
+      const row = assignmentRowForDisplayJc(displayJc)
       if (rowTasks.length === 0) return true
       return rowTasks.some((t) => !isFloorWorkTaskStepCompleted(t, row))
     },
-    [assignmentByJc],
+    [assignmentRowForDisplayJc],
   )
 
   const vehicleInWorkerScope = useCallback(
@@ -218,7 +247,6 @@ export default function BodyshopFloorWorkPage() {
     const set = new Set<string>()
     if (isAdminOverview) {
       for (const jc of allFloorJcs) set.add(jc)
-      for (const t of tasks) set.add(t.jobCardNumber)
     } else {
       for (const t of tasks) set.add(t.jobCardNumber)
     }
@@ -233,8 +261,8 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (!floorWorkVehicleShowInList(jc, meta)) continue
-      let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      if (!isAdminOverview && !floorWorkVehicleShowInList(jc, meta)) continue
+      let rowTasks = isAdminOverview ? tasksForDisplayJc(jc) : tasks.filter((t) => t.jobCardNumber === jc)
       if (!isAdminOverview) {
         rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
       }
@@ -273,6 +301,7 @@ export default function BodyshopFloorWorkPage() {
     vehicleHasPendingPipelineSteps,
     isAdminOverview,
     assignmentByJc,
+    tasksForDisplayJc,
   ])
 
   const vehicleRows = useMemo(() => {
@@ -282,12 +311,12 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
-      if (!floorWorkVehicleShowInList(jc, meta)) continue
+      if (!isAdminOverview && !floorWorkVehicleShowInList(jc, meta)) continue
       if (isAdminOverview && floorDayFilter !== 'all') {
         const bucket = floorWorkFloorDayBucket(floorWorkListSinceIso(meta), today)
         if (bucket !== floorDayFilter) continue
       }
-      let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
+      let rowTasks = isAdminOverview ? tasksForDisplayJc(jc) : tasks.filter((t) => t.jobCardNumber === jc)
       if (!isAdminOverview) {
         rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
       }
@@ -312,6 +341,7 @@ export default function BodyshopFloorWorkPage() {
     vehicleHasPendingPipelineSteps,
     isAdminOverview,
     assignmentByJc,
+    tasksForDisplayJc,
   ])
 
   const displayedVehicleRows = useMemo(
@@ -321,8 +351,8 @@ export default function BodyshopFloorWorkPage() {
 
   const selectedTask = useMemo(() => {
     if (!selectedJc) return null
-    const onVehicle = tasks.filter((t) => t.jobCardNumber === selectedJc)
-    const row = assignmentByJc[selectedJc]
+    const onVehicle = isAdminOverview ? tasksForDisplayJc(selectedJc) : tasks.filter((t) => t.jobCardNumber === selectedJc)
+    const row = assignmentRowForDisplayJc(selectedJc)
     const qcStatus = cardByJc[selectedJc]?.qcStatus
     if (isAdminOverview) {
       return pickFloorWorkDetailTask(onVehicle, row, qcStatus, employeeCode)
@@ -330,14 +360,14 @@ export default function BodyshopFloorWorkPage() {
     const me = String(employeeCode ?? '').trim().toUpperCase()
     const mine = onVehicle.find((t) => workTaskEmployeeCode(t, employeeCode) === me)
     return mine ?? onVehicle[0] ?? null
-  }, [selectedJc, tasks, employeeCode, isAdminOverview, assignmentByJc, cardByJc])
+  }, [selectedJc, tasks, employeeCode, isAdminOverview, cardByJc, tasksForDisplayJc, assignmentRowForDisplayJc])
 
   const canEditSelectedTask = useMemo(() => {
     if (!selectedTask) return false
-    const row = assignmentByJc[selectedTask.jobCardNumber]
-    const qcStatus = cardByJc[selectedTask.jobCardNumber]?.qcStatus
+    const row = assignmentRowForDisplayJc(selectedJc ?? selectedTask.jobCardNumber)
+    const qcStatus = cardByJc[selectedJc ?? '']?.qcStatus ?? cardByJc[selectedTask.jobCardNumber]?.qcStatus
     return canSubmitFloorWorkTask(selectedTask, row, qcStatus, { isAdminOverview })
-  }, [selectedTask, assignmentByJc, cardByJc, isAdminOverview])
+  }, [selectedTask, selectedJc, cardByJc, isAdminOverview, assignmentRowForDisplayJc])
 
   const selectedVehiclePhotos = selectedJc ? (photosByVehicle[selectedJc] ?? []) : []
 
@@ -468,24 +498,45 @@ export default function BodyshopFloorWorkPage() {
       }
       setAssignmentByJc(assignmentMap)
       setTasks(myTasks)
+      assignmentRowsRef.current = assRows
 
-      const assignmentJcs = Array.from(
-        new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
-      )
       const assignmentCreatedAtByJc = buildAssignmentCreatedAtByJc(assRows)
-      const liveFloorJcs = adminOverview ? await fetchLiveOnFloorJobCardKeys() : []
-      const allJcs = Array.from(new Set([...assignmentJcs, ...liveFloorJcs, ...myTasks.map((t) => t.jobCardNumber)]))
-      setAllFloorJcs(allJcs)
       assignmentCreatedAtRef.current = assignmentCreatedAtByJc
       assignmentRepairCardIdRef.current = buildRepairCardIdByJc(assRows)
       metaLoadedJcsRef.current = new Set()
       setListVisibleCount(FLOOR_WORK_LIST_PAGE_SIZE)
 
-      const minimalCards =
-        allJcs.length > 0
-          ? buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc)
-          : ({} as Record<string, FloorWorkVehicleMeta>)
-      setCardByJc(minimalCards)
+      let allJcs: string[] = []
+      let cardMeta: Record<string, FloorWorkVehicleMeta> = {}
+
+      if (adminOverview) {
+        const catalog = await fetchLiveOnFloorVehicleCatalog()
+        allJcs = catalog.jobCardKeys
+        cardMeta = catalog.metaByJc
+        for (const jc of allJcs) {
+          const id = cardMeta[jc]?.repairCardId
+          if (typeof id === 'number' && id > 0) {
+            assignmentRepairCardIdRef.current[jc] = id
+          }
+        }
+        metaLoadedJcsRef.current = new Set(allJcs)
+      } else {
+        const assignmentJcs = Array.from(
+          new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
+        )
+        allJcs = Array.from(new Set([...assignmentJcs, ...myTasks.map((t) => t.jobCardNumber)]))
+        cardMeta =
+          allJcs.length > 0
+            ? buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc)
+            : ({} as Record<string, FloorWorkVehicleMeta>)
+        const ordered = sortJobCardsByFloorDayRecency(allJcs, cardMeta, today)
+        for (let i = 0; i < ordered.length; i += 80) {
+          await enrichVehicleMetaBatch(ordered.slice(i, i + 80), { quiet: i > 0 })
+        }
+      }
+
+      setAllFloorJcs(allJcs)
+      setCardByJc(cardMeta)
 
       const logsRes = adminOverview
         ? await fetchRoleDailyLogsForDate(today)
@@ -500,9 +551,8 @@ export default function BodyshopFloorWorkPage() {
       setPhotosByVehicle({})
       setPhotoCountByJc({})
 
-      const ordered = sortJobCardsByFloorDayRecency(allJcs, minimalCards, today)
-      for (let i = 0; i < ordered.length; i += 80) {
-        await enrichVehicleMetaBatch(ordered.slice(i, i + 80), { quiet: i > 0 })
+      if (adminOverview && allJcs.length > 0) {
+        void refreshPhotoCounts(allJcs, cardMeta)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
@@ -683,7 +733,7 @@ export default function BodyshopFloorWorkPage() {
       <h1>Bodyshop Floor Work</h1>
       <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
         {(employeeName ?? employeeCode) || 'Admin'}
-        {isAdminOverview ? ' · Admin overview (all floor assignments)' : ''}
+        {isAdminOverview ? ` · Admin — ${BODYSHOP_FLOOR_LIVE_LIST_LABEL} (same as Bodyshop Floor)` : ''}
         {' · IST date '}{today}
       </p>
 
@@ -756,9 +806,9 @@ export default function BodyshopFloorWorkPage() {
                 </div>
               </div>
               <p className="bfw-toolbar__meta">
-                Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'} with registration
+                Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
+                {isAdminOverview ? ` — matches Bodyshop Floor live list (${allFloorJcs.length} on floor)` : ' with registration'}
                 {' · '}Sorted: on floor today → yesterday → longer wait
-                {' · '}Without reg in Repair/Reception are hidden (count is stable after load)
                 {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
               </p>
             </div>
@@ -766,7 +816,9 @@ export default function BodyshopFloorWorkPage() {
 
           <div className="bfw-stack">
           <section className="card bfw-stack__list">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>{isAdminOverview ? 'All assigned vehicles' : 'My vehicles — your pipeline step'}</h2>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>
+              {isAdminOverview ? 'On Floor (Live) — same vehicles as Bodyshop Floor' : 'My vehicles — your pipeline step'}
+            </h2>
             {!isAdminOverview ? (
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
                 Your assigned vehicles this month, only when it is your turn in the pipeline
@@ -789,7 +841,7 @@ export default function BodyshopFloorWorkPage() {
               <div className="bfw-vehicle-grid">
                 {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
                   const card = cardByJc[jobCardNumber]
-                  const assignRow = assignmentByJc[jobCardNumber]
+                  const assignRow = assignmentRowForDisplayJc(jobCardNumber)
                   const stepPending = vehicleHasPendingPipelineSteps(jobCardNumber, rowTasks)
                   const photoCount = photoCountByJc[jobCardNumber] ?? 0
                   const active = selectedJc === jobCardNumber
@@ -882,11 +934,12 @@ export default function BodyshopFloorWorkPage() {
                 <BodyshopFloorWorkVehicleDetailPanel
                   jobCardNumber={selectedJc}
                   vehicleMeta={cardByJc[selectedJc]}
-                  assignmentRow={assignmentByJc[selectedJc]}
+                  assignmentRow={assignmentRowForDisplayJc(selectedJc)}
                   qcStatus={cardByJc[selectedJc]?.qcStatus}
                   allPhotos={selectedVehiclePhotos}
                   loadingPhotos={loadingSelectedPhotos}
                   photosError={selectedPhotosError}
+                  adminWorkReview={isAdminOverview}
                 >
                   {selectedTask ? (
                     <div className="bfw-worker-form">

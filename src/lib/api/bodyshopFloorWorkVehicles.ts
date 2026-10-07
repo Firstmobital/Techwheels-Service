@@ -6,6 +6,11 @@ import {
 } from '../bodyshopFloorWork/display'
 import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
 import { resolveBodyshopFloorSinceIso } from '../bodyshopFloorAge'
+
+export type LiveOnFloorVehicleCatalog = {
+  jobCardKeys: string[]
+  metaByJc: Record<string, FloorWorkVehicleMeta>
+}
 import { listReceptionEntriesByJobCardNumbers } from './reception'
 
 const JC_CHUNK = 80
@@ -242,6 +247,54 @@ export async function fetchRepairCardVehicleByJcs(
   }
 
   return map
+}
+
+/** Same vehicle set as Bodyshop Floor → “On Floor (Live)” (stage 11–14, active). */
+export async function fetchLiveOnFloorVehicleCatalog(): Promise<LiveOnFloorVehicleCatalog> {
+  const { data, error } = await supabase
+    .from('bodyshop_repair_cards')
+    .select(
+      'id, job_card_no, reg_number, customer_name, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at, qc_status, current_stage, overall_status, updated_at, created_at',
+    )
+  if (error) throw new Error(error.message)
+
+  const latestByJc = new Map<string, { updatedAtMs: number; row: (typeof data)[number] }>()
+  for (const row of data ?? []) {
+    if (!isLiveOnFloorRepairCard(row)) continue
+    const jc = normKey(String(row.job_card_no ?? ''))
+    if (!jc) continue
+    const updatedAtMs = Number.isFinite(new Date(String(row.updated_at ?? '')).getTime())
+      ? new Date(String(row.updated_at ?? '')).getTime()
+      : Number.isFinite(new Date(String(row.created_at ?? '')).getTime())
+        ? new Date(String(row.created_at ?? '')).getTime()
+        : 0
+    const existing = latestByJc.get(jc)
+    if (!existing || updatedAtMs >= existing.updatedAtMs) {
+      latestByJc.set(jc, { updatedAtMs, row })
+    }
+  }
+
+  const metaByJc: Record<string, FloorWorkVehicleMeta> = {}
+  const jobCardKeys: string[] = []
+  for (const [jc, { row }] of latestByJc) {
+    const since =
+      resolveBodyshopFloorSinceIso(row) ??
+      (String(row.created_at ?? '').trim() || null)
+    metaByJc[jc] = {
+      reg: row.reg_number ? normKey(String(row.reg_number)) : null,
+      customer: row.customer_name ?? null,
+      systemJobCardNo: jc,
+      repairCardId: typeof row.id === 'number' ? row.id : Number(row.id) || null,
+      bodyshopFloor: row.bodyshop_floor ?? null,
+      qcStatus: row.qc_status ?? null,
+      floorSinceAt: since,
+      listFloorSinceAt: since,
+      metaFetchDone: true,
+    }
+    jobCardKeys.push(jc)
+  }
+
+  return { jobCardKeys, metaByJc }
 }
 
 /** Job cards for vehicles currently in bodyshop floor stages (11–14). */

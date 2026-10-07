@@ -12,6 +12,7 @@ import {
   createSignedRoleLogPhotoUrl,
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForJobCard,
+  fetchRoleDailyLogsForVehicleKeys,
   openRoleDailyLogPhoto,
   type FloorWorkPhotoWithLog,
 } from '../lib/api/bodyshopFloorRoleWorkLog'
@@ -33,6 +34,8 @@ type Props = {
   allPhotos: FloorWorkPhotoWithLog[]
   loadingPhotos: boolean
   photosError: string | null
+  /** Admin: all worker logs + photos for denter/painter/etc. */
+  adminWorkReview?: boolean
   children?: ReactNode
 }
 
@@ -44,6 +47,7 @@ export function BodyshopFloorWorkVehicleDetailPanel({
   allPhotos,
   loadingPhotos,
   photosError,
+  adminWorkReview = false,
   children,
 }: Props) {
   const summary = useMemo(
@@ -61,7 +65,10 @@ export function BodyshopFloorWorkVehicleDetailPanel({
     let cancelled = false
     setLogsLoading(true)
     setLogsError(null)
-    void fetchRoleDailyLogsForJobCard(jobCardNumber, 48).then(async (res) => {
+    const loadLogs = adminWorkReview
+      ? fetchRoleDailyLogsForVehicleKeys(jobCardNumber, vehicleMeta, 200)
+      : fetchRoleDailyLogsForJobCard(jobCardNumber, 48)
+    void loadLogs.then(async (res) => {
       if (cancelled) return
       if (res.error) {
         setLogsError(res.error)
@@ -88,7 +95,7 @@ export function BodyshopFloorWorkVehicleDetailPanel({
     return () => {
       cancelled = true
     }
-  }, [jobCardNumber])
+  }, [jobCardNumber, vehicleMeta, adminWorkReview])
 
   useEffect(() => {
     let cancelled = false
@@ -169,9 +176,9 @@ export function BodyshopFloorWorkVehicleDetailPanel({
 
       {children ? <section className="bfw-detail__section">{children}</section> : null}
 
-      <details className="bfw-detail__expand">
+      <details className="bfw-detail__expand" open={adminWorkReview}>
         <summary className="bfw-detail__expand-summary">
-          Work updates — notes &amp; photos by worker
+          {adminWorkReview ? 'All worker work — who did what (Dentor / Painter / …)' : 'Work updates — notes & photos by worker'}
           {logs.length > 0 ? ` (${logs.length})` : ''}
         </summary>
         <div className="bfw-detail__expand-body">
@@ -206,7 +213,7 @@ export function BodyshopFloorWorkVehicleDetailPanel({
                         {count} photo{count === 1 ? '' : 's'}
                       </span>
                       <div className="bfw-log-card__thumb-row">
-                        {logPhotos.slice(0, 6).map((p) => (
+                        {(adminWorkReview ? logPhotos : logPhotos.slice(0, 6)).map((p) => (
                           <button
                             key={p.id}
                             type="button"
