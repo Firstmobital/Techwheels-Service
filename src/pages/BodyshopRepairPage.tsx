@@ -2437,6 +2437,51 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  async function refreshSelectedSurveyCustomerStatus() {
+    if (!selected?.id) return
+    try {
+      const { data, error } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('customer_survey_approval_status, customer_survey_rejection_reason, customer_survey_decided_at, doc_survey_approval')
+        .eq('id', selected.id)
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return
+      const patch = data as Pick<
+        RepairCard,
+        'customer_survey_approval_status' | 'customer_survey_rejection_reason' | 'customer_survey_decided_at' | 'doc_survey_approval'
+      >
+      setSelected((prev) => prev ? { ...prev, ...patch } : prev)
+      setCards((prev) => prev.map((c) => (c.id === selected.id ? { ...c, ...patch } : c)))
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Could not refresh customer status', false)
+    }
+  }
+
+  async function handleResendSurveyApprovalToCustomer() {
+    if (!selected) return
+    if (!bodyshopDocsByKey.doc_survey_approval) {
+      toast_('Upload a survey approval document first', false)
+      return
+    }
+    setSaving(true)
+    try {
+      const updated = await updateRepairCard(selected.id, {
+        customer_survey_approval_status: 'pending',
+        customer_survey_rejection_reason: null,
+        customer_survey_decided_at: null,
+        doc_survey_approval: false,
+      })
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      toast_('Document sent again to the customer app for approval ✅')
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Resend failed', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleSendToBodyshopFloor(floorValue: 'Floor 2' | 'Floor 3') {
     if (!selected) return
 
@@ -6763,8 +6808,20 @@ export default function BodyshopRepairPage() {
                 const hasSurveyDate = Boolean(String(selected.survey_date ?? '').trim())
                 const hasSurveyorName = Boolean(String(selected.surveyor_name ?? '').trim())
                 const canSaveSurveyRequiredFields = hasClaimNo && hasSurveyDate && hasSurveyorName
-                const customerSurveyStatus = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+                const customerSurveyStatusRaw = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+                const customerSurveyStatus = surveyApprovalDoc
+                  ? (customerSurveyStatusRaw || 'pending')
+                  : customerSurveyStatusRaw
                 const customerRejectRemark = String(selected.customer_survey_rejection_reason ?? '').trim()
+                const customerDecidedAt = String(selected.customer_survey_decided_at ?? '').trim()
+                const customerStatusPill =
+                  customerSurveyStatus === 'approved'
+                    ? { label: 'Approved by customer', tone: 'is-approved' as const }
+                    : customerSurveyStatus === 'rejected'
+                      ? { label: 'Rejected by customer', tone: 'is-rejected' as const }
+                      : customerSurveyStatus === 'pending'
+                        ? { label: 'Pending in customer app', tone: 'is-pending' as const }
+                        : null
 
                 return (
                   <div className="brx-survey-wrap">
@@ -6898,30 +6955,69 @@ export default function BodyshopRepairPage() {
                               After upload, the customer approves or rejects this document in the customer app.
                             </p>
                           )}
-                        </div>
-                      </div>
-                    )}
 
-                    {isSurveyApproved && surveyApprovalDoc && (
-                      <div className="brx-grid-full">
-                        <div className="brx-approval-panel">
-                          <div className="brx-approval-k">Customer app decision</div>
-                          <div className="brx-approval-v">
-                            {customerSurveyStatus === 'approved'
-                              ? 'Approved by customer'
-                              : customerSurveyStatus === 'rejected'
-                                ? 'Rejected by customer'
-                                : 'Waiting for customer (pending)'}
-                          </div>
-                          {customerSurveyStatus === 'rejected' && customerRejectRemark ? (
-                            <div className="brx-survey-feedback is-error" style={{ marginTop: 8 }}>
-                              Customer remark: {customerRejectRemark}
+                          {surveyApprovalDoc ? (
+                            <div
+                              className="brx-approval-box brx-approval-box--row"
+                              style={{ marginTop: 10, gridColumn: '1 / -1', alignItems: 'flex-start' }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <div className="brx-approval-k">Customer app status</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                                  {customerStatusPill ? (
+                                    <span className={`brx-survey-approval-status ${customerStatusPill.tone}`}>
+                                      {customerStatusPill.label}
+                                    </span>
+                                  ) : (
+                                    <span className="brx-survey-approval-status is-pending">Not sent yet</span>
+                                  )}
+                                  {customerDecidedAt ? (
+                                    <span className="brx-survey-approval-sub" style={{ margin: 0 }}>
+                                      {fmt(customerDecidedAt)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {customerSurveyStatus === 'rejected' && customerRejectRemark ? (
+                                  <div className="brx-survey-feedback is-error" style={{ marginTop: 8 }}>
+                                    <strong>Customer remark:</strong> {customerRejectRemark}
+                                  </div>
+                                ) : null}
+                                {customerSurveyStatus === 'pending' ? (
+                                  <p className="brx-survey-approval-sub" style={{ margin: '8px 0 0' }}>
+                                    Customer must approve in the mobile app. Floor assignment unlocks on the Floor tab after approval.
+                                  </p>
+                                ) : null}
+                                {customerSurveyStatus === 'approved' ? (
+                                  <p className="brx-survey-approval-sub" style={{ margin: '8px 0 0', color: '#047857' }}>
+                                    You can send this vehicle to Floor 2 or Floor 3 from the Floor tab.
+                                  </p>
+                                ) : null}
+                                {customerSurveyStatus === 'rejected' ? (
+                                  <p className="brx-survey-approval-sub" style={{ margin: '8px 0 0' }}>
+                                    Upload a corrected document (Replace) or resend the same file for customer review.
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="brx-survey-actions" style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost btn--xs"
+                                  onClick={() => void refreshSelectedSurveyCustomerStatus()}
+                                >
+                                  Refresh status
+                                </button>
+                                {customerSurveyStatus === 'rejected' ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn--primary btn--xs"
+                                    disabled={saving}
+                                    onClick={() => void handleResendSurveyApprovalToCustomer()}
+                                  >
+                                    {saving ? 'Sending…' : 'Resend to customer app'}
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
-                          ) : null}
-                          {customerSurveyStatus === 'pending' || !customerSurveyStatus ? (
-                            <p className="brx-survey-approval-sub" style={{ margin: '8px 0 0' }}>
-                              Send to Floor 2/3 is available on the Floor tab after the customer approves.
-                            </p>
                           ) : null}
                         </div>
                       </div>
