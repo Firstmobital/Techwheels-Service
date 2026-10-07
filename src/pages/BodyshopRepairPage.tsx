@@ -1466,6 +1466,63 @@ export default function BodyshopRepairPage() {
   }, [selected?.id, selected?.reception_entry_id, selected?.reg_number])
 
   useEffect(() => {
+    if (detailTab !== 'survey' || !selected?.id) return
+
+    const cardId = selected.id
+    let cancelled = false
+
+    const tick = () => {
+      if (cancelled) return
+      void refreshSelectedSurveyCustomerStatus({ silent: true })
+    }
+
+    tick()
+    const intervalId = window.setInterval(tick, 5000)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    window.addEventListener('focus', tick)
+    document.addEventListener('visibilitychange', onVisible)
+
+    const channel = supabase
+      .channel(`brx-survey-customer-status-${cardId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bodyshop_repair_cards',
+          filter: `id=eq.${cardId}`,
+        },
+        (payload) => {
+          if (cancelled) return
+          const row = payload.new as RepairCard
+          const patch: Pick<
+            RepairCard,
+            'customer_survey_approval_status' | 'customer_survey_rejection_reason' | 'customer_survey_decided_at' | 'doc_survey_approval'
+          > = {
+            customer_survey_approval_status: row.customer_survey_approval_status ?? null,
+            customer_survey_rejection_reason: row.customer_survey_rejection_reason ?? null,
+            customer_survey_decided_at: row.customer_survey_decided_at ?? null,
+            doc_survey_approval: Boolean(row.doc_survey_approval),
+          }
+          setSelected((prev) => (prev?.id === cardId ? { ...prev, ...patch } : prev))
+          setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, ...patch } : c)))
+        },
+      )
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', tick)
+      document.removeEventListener('visibilitychange', onVisible)
+      void supabase.removeChannel(channel)
+    }
+  }, [detailTab, selected?.id])
+
+  useEffect(() => {
     if (!selected?.id || selected.current_stage !== 5 || autoAdvanceDocsLockRef.current) return
 
     const ct = String(selected.customer_type ?? '').trim().toLowerCase()
@@ -2437,13 +2494,14 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  async function refreshSelectedSurveyCustomerStatus() {
-    if (!selected?.id) return
+  async function refreshSelectedSurveyCustomerStatus(options?: { silent?: boolean }) {
+    const cardId = selected?.id
+    if (!cardId) return
     try {
       const { data, error } = await supabase
         .from('bodyshop_repair_cards')
         .select('customer_survey_approval_status, customer_survey_rejection_reason, customer_survey_decided_at, doc_survey_approval')
-        .eq('id', selected.id)
+        .eq('id', cardId)
         .maybeSingle()
       if (error) throw error
       if (!data) return
@@ -2451,10 +2509,12 @@ export default function BodyshopRepairPage() {
         RepairCard,
         'customer_survey_approval_status' | 'customer_survey_rejection_reason' | 'customer_survey_decided_at' | 'doc_survey_approval'
       >
-      setSelected((prev) => prev ? { ...prev, ...patch } : prev)
-      setCards((prev) => prev.map((c) => (c.id === selected.id ? { ...c, ...patch } : c)))
+      setSelected((prev) => (prev?.id === cardId ? { ...prev, ...patch } : prev))
+      setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, ...patch } : c)))
     } catch (e) {
-      toast_(e instanceof Error ? e.message : 'Could not refresh customer status', false)
+      if (!options?.silent) {
+        toast_(e instanceof Error ? e.message : 'Could not refresh customer status', false)
+      }
     }
   }
 
@@ -7002,7 +7062,7 @@ export default function BodyshopRepairPage() {
                                 <button
                                   type="button"
                                   className="btn btn--ghost btn--xs"
-                                  onClick={() => void refreshSelectedSurveyCustomerStatus()}
+                                  onClick={() => void refreshSelectedSurveyCustomerStatus({ silent: false })}
                                 >
                                   Refresh status
                                 </button>
