@@ -50,8 +50,10 @@ async function attachRepairCardFloorTiming(
       if (!jc) continue
       const since = resolveBodyshopFloorSinceIso(c)
       const patch: Partial<FloorWorkVehicleMeta> = {
+        reg: c.reg_number ?? null,
         bodyshopFloor: c.bodyshop_floor ?? null,
         qcStatus: c.qc_status ?? null,
+        systemJobCardNo: jc,
       }
       if (since) patch.floorSinceAt = since
       mergeMeta(map, jc, patch)
@@ -73,8 +75,10 @@ async function attachRepairCardFloorTiming(
         if (normKey(assignmentKey) !== reg && inferRegistrationFromAssignmentKey(assignmentKey) !== reg) continue
         const since = resolveBodyshopFloorSinceIso(c)
         const patch: Partial<FloorWorkVehicleMeta> = {
+          reg: c.reg_number ?? map[assignmentKey]?.reg ?? null,
           bodyshopFloor: c.bodyshop_floor ?? null,
           qcStatus: c.qc_status ?? null,
+          systemJobCardNo: normKey(String(c.job_card_no ?? '')) || map[assignmentKey]?.systemJobCardNo,
         }
         if (since && !String(map[assignmentKey]?.floorSinceAt ?? '').trim()) {
           patch.floorSinceAt = since
@@ -88,6 +92,8 @@ async function attachRepairCardFloorTiming(
 export type FetchRepairCardVehicleOptions = {
   /** Skip extra query when assignment `created_at` is already known (admin load). */
   assignmentCreatedAtByJc?: Record<string, string | null | undefined>
+  /** bodyshop_assignments.repair_card_id — resolves reg when job_card_number is system JC. */
+  repairCardIdByJc?: Record<string, number | null | undefined>
 }
 
 /** Resolve reg/customer for each assignment key (JC or plate-shaped key). */
@@ -150,6 +156,39 @@ export async function fetchRepairCardVehicleByJcs(
             repairCardId: typeof c.id === 'number' ? c.id : null,
           })
         }
+      }
+    }
+  }
+
+  const repairCardIdByJc = opts?.repairCardIdByJc ?? {}
+  const idToJcs = new Map<number, string[]>()
+  for (const assignmentKey of keys) {
+    if (String(map[assignmentKey]?.reg ?? '').trim()) continue
+    const rid = Number(repairCardIdByJc[assignmentKey])
+    if (!Number.isFinite(rid) || rid <= 0) continue
+    const list = idToJcs.get(rid) ?? []
+    list.push(assignmentKey)
+    idToJcs.set(rid, list)
+  }
+  const repairIds = [...idToJcs.keys()]
+  for (let i = 0; i < repairIds.length; i += JC_CHUNK) {
+    const chunk = repairIds.slice(i, i + JC_CHUNK)
+    const { data, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .select('id, job_card_no, reg_number, customer_name, qc_status')
+      .in('id', chunk)
+    if (error) throw new Error(error.message)
+    for (const c of data ?? []) {
+      const rid = typeof c.id === 'number' ? c.id : Number(c.id)
+      if (!Number.isFinite(rid)) continue
+      for (const assignmentKey of idToJcs.get(rid) ?? []) {
+        mergeMeta(map, assignmentKey, {
+          reg: c.reg_number ?? null,
+          customer: c.customer_name ?? null,
+          systemJobCardNo: normKey(String(c.job_card_no ?? '')),
+          qcStatus: c.qc_status ?? null,
+          repairCardId: rid,
+        })
       }
     }
   }

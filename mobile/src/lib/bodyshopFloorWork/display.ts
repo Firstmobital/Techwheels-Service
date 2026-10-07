@@ -80,6 +80,14 @@ export function resolveFloorWorkRegistration(
   return inferRegistrationFromAssignmentKey(assignmentKey)
 }
 
+export function floorWorkVehicleHasCompleteReg(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+): boolean {
+  if (String(meta?.reg ?? '').trim()) return true
+  return Boolean(inferRegistrationFromAssignmentKey(assignmentKey))
+}
+
 export function buildMinimalFloorWorkVehicleMeta(
   assignmentKeys: string[],
   assignmentCreatedAtByJc?: Record<string, string | null | undefined>,

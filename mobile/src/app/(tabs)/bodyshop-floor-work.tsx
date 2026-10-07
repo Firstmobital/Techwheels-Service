@@ -45,6 +45,7 @@ import {
   buildFloorWorkMonthFilterOptions,
   istYearMonthFromIso,
   sortFloorWorkTasksByFloorDayRecency,
+  floorWorkVehicleHasCompleteReg,
   floorWorkJobCardLookupKeys,
   buildMinimalFloorWorkVehicleMeta,
   currentIstYearMonth,
@@ -360,10 +361,12 @@ export default function BodyshopFloorWorkScreen() {
     })
   }, [tasksForList, assignmentMonthFilter, vehicleByJc])
 
-  const sortedMonthTasks = useMemo(
-    () => sortFloorWorkTasksByFloorDayRecency(monthFilteredTasks, vehicleByJc, today),
-    [monthFilteredTasks, vehicleByJc, today],
-  )
+  const sortedMonthTasks = useMemo(() => {
+    const withReg = monthFilteredTasks.filter((t) =>
+      floorWorkVehicleHasCompleteReg(t.jobCardNumber, vehicleByJc[t.jobCardNumber]),
+    )
+    return sortFloorWorkTasksByFloorDayRecency(withReg, vehicleByJc, today)
+  }, [monthFilteredTasks, vehicleByJc, today])
 
   const vehicleStepPendingForAdmin = useCallback(
     (jobCardNumber: string, employeeCode?: string | null) => {

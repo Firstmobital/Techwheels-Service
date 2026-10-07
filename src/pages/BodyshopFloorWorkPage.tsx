@@ -72,12 +72,23 @@ import {
   type FloorWorkFloorDayBucket,
   type FloorWorkVehicleMeta,
   buildMinimalFloorWorkVehicleMeta,
+  floorWorkVehicleHasCompleteReg,
 } from '../lib/bodyshopFloorWork/display'
 
 const FLOOR_WORK_LIST_PAGE_SIZE = 24
 
 type UpdateFilter = 'all' | 'pending' | 'done'
 type FloorDayFilter = 'all' | FloorWorkFloorDayBucket
+
+function buildRepairCardIdByJc(assRows: Record<string, unknown>[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const row of assRows) {
+    const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+    const id = typeof row.repair_card_id === 'number' ? row.repair_card_id : Number(row.repair_card_id)
+    if (jc && Number.isFinite(id) && id > 0) out[jc] = id
+  }
+  return out
+}
 
 function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -162,6 +173,7 @@ export default function BodyshopFloorWorkPage() {
   const [listVisibleCount, setListVisibleCount] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
+  const assignmentRepairCardIdRef = useRef<Record<string, number>>({})
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
 
   const monthFilterOptions = useMemo(() => buildFloorWorkMonthFilterOptions(today, 5), [today])
@@ -220,6 +232,7 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
+      if (!floorWorkVehicleHasCompleteReg(jc, meta)) continue
       let rowTasks = tasks.filter((t) => t.jobCardNumber === jc)
       if (!isAdminOverview) {
         rowTasks = rowTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentByJc[jc]))
@@ -268,6 +281,7 @@ export default function BodyshopFloorWorkPage() {
     for (const jc of baseJobCards) {
       if (!vehicleMatchesSearchAndMonth(jc, q)) continue
       const meta = cardByJc[jc]
+      if (!floorWorkVehicleHasCompleteReg(jc, meta)) continue
       if (isAdminOverview && floorDayFilter !== 'all') {
         const bucket = floorWorkFloorDayBucket(meta?.floorSinceAt, today)
         if (bucket !== floorDayFilter) continue
@@ -344,13 +358,14 @@ export default function BodyshopFloorWorkPage() {
   }, [])
 
   const enrichVehicleMetaBatch = useCallback(
-    async (jcs: string[]) => {
+    async (jcs: string[], opts?: { quiet?: boolean }) => {
       const todo = jcs.filter((jc) => jc && !metaLoadedJcsRef.current.has(jc))
       if (todo.length === 0) return
-      setLoadingMoreMeta(true)
+      if (!opts?.quiet) setLoadingMoreMeta(true)
       try {
         const batch = await fetchRepairCardVehicleByJcs(todo, {
           assignmentCreatedAtByJc: assignmentCreatedAtRef.current,
+          repairCardIdByJc: assignmentRepairCardIdRef.current,
         })
         for (const jc of todo) metaLoadedJcsRef.current.add(jc)
         setCardByJc((prev) => {
@@ -359,7 +374,7 @@ export default function BodyshopFloorWorkPage() {
           return next
         })
       } finally {
-        setLoadingMoreMeta(false)
+        if (!opts?.quiet) setLoadingMoreMeta(false)
       }
     },
     [refreshPhotoCounts],
@@ -461,6 +476,7 @@ export default function BodyshopFloorWorkPage() {
       const allJcs = Array.from(new Set([...assignmentJcs, ...liveFloorJcs, ...myTasks.map((t) => t.jobCardNumber)]))
       setAllFloorJcs(allJcs)
       assignmentCreatedAtRef.current = assignmentCreatedAtByJc
+      assignmentRepairCardIdRef.current = buildRepairCardIdByJc(assRows)
       metaLoadedJcsRef.current = new Set()
       setListVisibleCount(FLOOR_WORK_LIST_PAGE_SIZE)
 
@@ -488,6 +504,14 @@ export default function BodyshopFloorWorkPage() {
         FLOOR_WORK_LIST_PAGE_SIZE,
       )
       void enrichVehicleMetaBatch(firstBatch)
+      if (adminOverview && allJcs.length > firstBatch.length) {
+        void (async () => {
+          const ordered = sortJobCardsByFloorDayRecency(allJcs, minimalCards, today)
+          for (let i = firstBatch.length; i < ordered.length; i += 80) {
+            await enrichVehicleMetaBatch(ordered.slice(i, i + 80), { quiet: true })
+          }
+        })()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
     } finally {
@@ -746,9 +770,11 @@ export default function BodyshopFloorWorkPage() {
                 </div>
               </div>
               <p className="bfw-toolbar__meta">
-                Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'}
+                Showing {vehicleRows.length} vehicle{vehicleRows.length === 1 ? '' : 's'} with registration
                 {' · '}Sorted: on floor today → yesterday → longer wait
+                {' · '}Vehicles without reg in Repair/Reception are hidden
                 {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
+                {loadingMoreMeta ? ' · Loading vehicle details…' : ''}
               </p>
             </div>
           ) : null}
@@ -767,7 +793,7 @@ export default function BodyshopFloorWorkPage() {
                 {isAdminOverview
                   ? baseJobCards.length === 0
                     ? 'No vehicles on floor or active assignments yet.'
-                    : 'No vehicles match the current filters. Try All for On floor and Today\'s update, or clear search.'
+                    : 'No vehicles match the current filters (only cars with registration are listed). Try All for On floor, clear search, or add reg on Bodyshop Repair.'
                   : workerAssignedSlotCount === 0
                     ? 'No vehicle is assigned to you on Bodyshop Floor yet. Ask Floor Incharge to assign your name (Dentor / Painter / etc.) on the Bodyshop Floor screen for that job card.'
                     : tasks.length === 0

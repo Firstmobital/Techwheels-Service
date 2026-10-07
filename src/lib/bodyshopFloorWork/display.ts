@@ -85,9 +85,22 @@ export function resolveFloorWorkRegistration(
   return inferRegistrationFromAssignmentKey(assignmentKey)
 }
 
-/** Primary line — always registration, never internal JC. */
+/** List/detail: hide cards until we know the plate (repair card, reception, or plate-shaped assignment key). */
+export function floorWorkVehicleHasCompleteReg(
+  assignmentKey: string,
+  meta: FloorWorkVehicleMeta | undefined,
+): boolean {
+  if (String(meta?.reg ?? '').trim()) return true
+  return Boolean(inferRegistrationFromAssignmentKey(assignmentKey))
+}
+
+/** Primary line — registration when known; system JC as fallback while lookup runs. */
 export function floorWorkVehicleTitle(meta: FloorWorkVehicleMeta | undefined, assignmentKey: string): string {
-  return resolveFloorWorkRegistration(meta, assignmentKey) ?? 'Registration pending'
+  const reg = resolveFloorWorkRegistration(meta, assignmentKey)
+  if (reg) return reg
+  const key = normalizeFloorWorkAssignmentKey(assignmentKey)
+  if (key && isSystemJobCardKey(key)) return key
+  return 'Registration pending'
 }
 
 /** Secondary — customer / model only (no JC for floor staff). */
