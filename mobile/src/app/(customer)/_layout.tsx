@@ -135,6 +135,7 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="invoices" options={{ title: 'Payments', tabBarLabel: 'Payments' }} />
       <Tabs.Screen name="helpdesk" options={{ title: 'Help', tabBarLabel: 'Help' }} />
       <Tabs.Screen name="estimate" options={{ href: null, title: 'Estimate' }} />
+      <Tabs.Screen name="survey-approval" options={{ href: null, title: 'Survey Approval' }} />
       <Tabs.Screen name="gatepass" options={{ href: null, title: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />
       <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Issue' }} />

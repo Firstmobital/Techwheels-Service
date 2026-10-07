@@ -14,9 +14,11 @@ type Props = {
   regNumber: string
   repairCard: Record<string, unknown> | null | undefined
   onDecided: () => void
+  /** Dedicated Survey Approval module screen (shows empty state when no doc yet). */
+  moduleScreen?: boolean
 }
 
-export function CustomerSurveyApprovalCard({ token, regNumber, repairCard, onDecided }: Props) {
+export function CustomerSurveyApprovalCard({ token, regNumber, repairCard, onDecided, moduleScreen }: Props) {
   const doc = parseBodyshopSurveyApprovalDocument(repairCard)
   const status = String(repairCard?.customer_survey_approval_status ?? '').trim().toLowerCase()
   const rejectRemark = String(repairCard?.customer_survey_rejection_reason ?? '').trim()
@@ -28,7 +30,18 @@ export function CustomerSurveyApprovalCard({ token, regNumber, repairCard, onDec
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
 
-  if (!doc) return null
+  if (!doc) {
+    if (!moduleScreen) return null
+    return (
+      <CustomerCard>
+        <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900' }}>Survey Approval</Text>
+        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12.5, marginTop: 8, lineHeight: 18 }}>
+          Your Service Advisor has not uploaded the survey approval document yet. When it is uploaded here, you can view it
+          and approve or reject with a remark.
+        </Text>
+      </CustomerCard>
+    )
+  }
 
   const pending = !status || status === 'pending'
   const approved = status === 'approved'

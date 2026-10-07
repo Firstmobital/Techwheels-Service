@@ -340,12 +340,22 @@ export default function CustomerDashboardScreen() {
           {isEffectiveBodyshopCustomerVisit({ visitReady, kind: visitKind, isBodyshop, repairCard }) &&
           token &&
           selected?.reg_number ? (
-            <CustomerSurveyApprovalCard
-              token={token}
-              regNumber={selected.reg_number}
-              repairCard={repairCard}
-              onDecided={() => void refreshVisit({ bypassCache: true })}
-            />
+            <>
+              <CustomerSurveyApprovalCard
+                token={token}
+                regNumber={selected.reg_number}
+                repairCard={repairCard}
+                onDecided={() => void refreshVisit({ bypassCache: true })}
+              />
+              <TouchableOpacity
+                onPress={() => router.push('/(customer)/survey-approval')}
+                style={{ marginTop: 4, marginBottom: 14, alignSelf: 'flex-end' }}
+              >
+                <Text style={{ color: CustomerTheme.primary, fontSize: 12, fontWeight: '800' }}>
+                  Open Survey Approval module →
+                </Text>
+              </TouchableOpacity>
+            </>
           ) : null}
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 

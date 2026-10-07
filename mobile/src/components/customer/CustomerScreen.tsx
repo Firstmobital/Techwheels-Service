@@ -217,6 +217,12 @@ export function CustomerScreen({
         desc: 'Review your Service Advisor quotation and approve or reject',
       },
       {
+        label: 'Survey Approval',
+        icon: 'check-circle',
+        route: '/(customer)/survey-approval',
+        desc: 'View surveyor / insurer approval document and approve or reject',
+      },
+      {
         label: 'Download Insurance Claim Form',
         icon: 'download',
         menuAction: 'claim-form',
@@ -239,7 +245,8 @@ export function CustomerScreen({
     return all.filter(
       (item) =>
         item.label !== 'Download Insurance Claim Form' &&
-        item.label !== 'Download T/P Affidavit'
+        item.label !== 'Download T/P Affidavit' &&
+        item.label !== 'Survey Approval'
     )
   }, [isAccident, isEffectiveMechanical])
 
