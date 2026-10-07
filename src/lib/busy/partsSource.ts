@@ -18,6 +18,7 @@ export interface BusyPartsSourceStatus {
 }
 
 interface BusyPartsTableRow {
+  id?: number
   source_type: string
   job_card_no: string
   invoice_no: string
@@ -243,35 +244,32 @@ function isMissingUploadedAtColumnError(error: unknown): boolean {
   )
 }
 
-async function fetchBusyPartsLinesPage(
-  columns: string,
-  from: number,
-): Promise<{ batch: BusyPartsTableRow[]; error: unknown | null }> {
-  const { data, error } = await supabase
-    .from('busy_parts' as never)
-    .select(columns)
-    .order('source_type', { ascending: true })
-    .order('job_card_no', { ascending: true })
-    .range(from, from + PAGE_SIZE - 1)
-
-  if (error) return { batch: [], error }
-  return { batch: ((data ?? []) as unknown) as BusyPartsTableRow[], error: null }
-}
-
 async function fetchBusyPartsLinesWithColumns(columns: string): Promise<BusyPartsLine[]> {
   const rows: BusyPartsLine[] = []
-  let from = 0
+  const selectColumns = columns.includes('id') ? columns : `id, ${columns}`
+  let lastId = 0
 
   while (true) {
-    let { batch, error } = await fetchBusyPartsLinesPage(columns, from)
-    if (error) {
-      const retry = await fetchBusyPartsLinesPage(columns, from)
-      if (retry.error) throw retry.error
-      batch = retry.batch
+    let query = supabase
+      .from('busy_parts' as never)
+      .select(selectColumns)
+      .order('id', { ascending: true })
+      .limit(PAGE_SIZE)
+
+    if (lastId > 0) {
+      query = query.gt('id', lastId)
     }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const batch = ((data ?? []) as unknown) as BusyPartsTableRow[]
+    if (batch.length === 0) break
+
     rows.push(...batch.map(persistedRowToPartsLine))
-    if (batch.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+    const tailId = batch[batch.length - 1]?.id
+    if (tailId == null || batch.length < PAGE_SIZE) break
+    lastId = tailId
   }
 
   return rows
