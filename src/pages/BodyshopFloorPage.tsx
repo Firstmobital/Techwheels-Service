@@ -33,6 +33,11 @@ import {
   type BodyshopFloorInchargeScope,
 } from '../lib/bodyshopFloorInchargeScope'
 import { bodyshopFloorAgeSummary } from '../lib/bodyshopFloorAge'
+import {
+  fetchActiveBodyshopAssignmentsAllPages,
+  fetchActiveBodyshopSupportAssignmentsAllPages,
+  fetchBodyshopRepairCardsAllPages,
+} from '../lib/api/bodyshopFloorFullLoad'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -880,12 +885,34 @@ export default function BodyshopFloorPage() {
     try {
       const scope = await loadBodyshopFloorInchargeScope()
       setInchargeScope(scope)
-      // 1. All vehicles active on the Bodyshop Repair pipeline — Stage 11 (Floor Assignment) is treated as active for every one, no stage/floor gating
-      const { data: sentCards, error: sentErr } = await supabase
-        .from('bodyshop_repair_cards')
-        .select('id, reception_entry_id, job_card_no, reg_number, customer_name, branch, sa_name, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at, current_stage, overall_status, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at')
-
-      if (sentErr) throw sentErr
+      // Full repair-card set (PostgREST default max is 1000 rows — paginate so counts/list stay complete).
+      const sentCards = await fetchBodyshopRepairCardsAllPages<{
+        id: number | null
+        reception_entry_id: number | null
+        job_card_no: string | null
+        reg_number: string | null
+        customer_name: string | null
+        branch: string | null
+        sa_name: string | null
+        bodyshop_floor: 'Floor 2' | 'Floor 3' | null
+        bodyshop_floor_since_at: string | null
+        survay_info_updated_at: string | null
+        current_stage: number | null
+        overall_status: string | null
+        additional_approval: string | null
+        qc_status: string | null
+        qc_fail_reason: string | null
+        qc_checked_by: string | null
+        qc_checked_at: string | null
+        reinspection_status: string | null
+        reinspection_type: string | null
+        reinspection_by: string | null
+        reinspection_at: string | null
+        updated_at: string | null
+        created_at: string | null
+      }>(
+        'id, reception_entry_id, job_card_no, reg_number, customer_name, branch, sa_name, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at, current_stage, overall_status, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at',
+      )
 
       const sentByJc = new Map<string, 'Floor 2' | 'Floor 3' | null>()
       const additionalByJc: Record<string, AdditionalApprovalRowState> = {}
@@ -912,31 +939,7 @@ export default function BodyshopFloorPage() {
         updatedAtMs: number
       }>()
 
-      ;((sentCards ?? []) as Array<{
-        id: number | null
-        reception_entry_id: number | null
-        job_card_no: string | null
-        reg_number: string | null
-        customer_name: string | null
-        branch: string | null
-        sa_name: string | null
-        bodyshop_floor: 'Floor 2' | 'Floor 3' | null
-        bodyshop_floor_since_at: string | null
-        survay_info_updated_at: string | null
-        current_stage: number | null
-        overall_status: string | null
-        additional_approval: string | null
-        qc_status: string | null
-        qc_fail_reason: string | null
-        qc_checked_by: string | null
-        qc_checked_at: string | null
-        reinspection_status: string | null
-        reinspection_type: string | null
-        reinspection_by: string | null
-        reinspection_at: string | null
-        updated_at: string | null
-        created_at: string | null
-      }>).forEach((row) => {
+      ;sentCards.forEach((row) => {
         const floor = row.bodyshop_floor
 
         const jc = String(row.job_card_no ?? '').trim().toUpperCase()
@@ -1082,18 +1085,8 @@ export default function BodyshopFloorPage() {
         jcKeysForSecondary = Array.from(latestByJc.keys())
       }
 
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
-      jcKeysForSecondary = []
-    } finally {
-      // Show vehicle list as soon as cards/reception are loaded; assignments load in background.
-      setLoading(false)
-    }
-
-    if (jcKeysForSecondary.length === 0) return
-
-    try {
-      const [{ data: empData }, { data: assData, error: assErr }, { data: supportData, error: supportErr }] =
+      if (jcKeysForSecondary.length > 0) {
+      const [{ data: empData, error: empErr }, assData, supportData] =
         await Promise.all([
           supabase
             .from('employee_master')
@@ -1102,44 +1095,33 @@ export default function BodyshopFloorPage() {
             .or('department.ilike.%body%,role.ilike.%floor%incharge%')
             .order('employee_name')
             .limit(1000),
-          supabase
-            .from('bodyshop_assignments')
-            .select('*')
-            .eq('is_active', true)
-            .order('updated_at', { ascending: false }),
-          supabase
-            .from('bodyshop_floor_support_assignments')
-            .select('*')
-            .eq('is_active', true)
-            .order('assigned_at', { ascending: false }),
+          fetchActiveBodyshopAssignmentsAllPages<DBPrimaryAssignmentRow>(),
+          fetchActiveBodyshopSupportAssignmentsAllPages<SupportAssignment>(),
         ])
 
+      if (empErr) console.warn('employee_master:', empErr.message)
       setEmployees((empData ?? []) as Employee[])
 
-      if (assErr) {
-        console.warn('bodyshop_assignments:', assErr.message)
-        setDataError(true)
-        setAssignments({})
-        setAssignmentRawByJc({})
-        setBsFloorStatus({})
-      } else {
+      try {
         const map: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
         const rawMap: Record<string, DBPrimaryAssignmentRow> = {}
         const floorMap: Record<string, { completedAt: string | null; completedBy: string | null }> = {}
-        for (const row of (assData ?? []) as DBPrimaryAssignmentRow[]) {
+        for (const row of assData) {
           const k = row.job_card_number.trim().toUpperCase()
-          const partial = mapRowToRoleMap(row)
-          if (!map[k]) map[k] = emptyRoleMap()
           const prevRaw = rawMap[k]
-          if (!prevRaw || String(row.updated_at ?? '') >= String(prevRaw.updated_at ?? '')) {
-            rawMap[k] = row
-            floorMap[k] = {
-              completedAt: row.bs_floor_completed_at ?? null,
-              completedBy: row.bs_floor_completed_by ?? null,
-            }
-          }
-          for (const role of ALL_ROLES) {
-            if (partial[role]) map[k][role] = partial[role]
+          const eId = prevRaw ? Number(prevRaw.id) : NaN
+          const cId = Number(row.id)
+          const beats =
+            !prevRaw
+            || (Number.isFinite(cId) && Number.isFinite(eId) && cId !== eId
+              ? cId > eId
+              : String(row.updated_at ?? '') >= String(prevRaw.updated_at ?? ''))
+          if (!beats) continue
+          rawMap[k] = row
+          map[k] = mapRowToRoleMap(row)
+          floorMap[k] = {
+            completedAt: row.bs_floor_completed_at ?? null,
+            completedBy: row.bs_floor_completed_by ?? null,
           }
         }
         setAssignments(map)
@@ -1158,14 +1140,9 @@ export default function BodyshopFloorPage() {
           }
         }
         setStageDrafts(drafts)
-      }
 
-      if (supportErr) {
-        console.warn('bodyshop_floor_support_assignments:', supportErr.message)
-        setSupportAssignments({})
-      } else {
         const supportMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
-        for (const s of (supportData ?? []) as SupportAssignment[]) {
+        for (const s of supportData) {
           const k = s.job_card_number.toUpperCase()
           const role = s.support_role as SupportRole
           if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
@@ -1177,9 +1154,20 @@ export default function BodyshopFloorPage() {
           }
         }
         setSupportAssignments(supportMap)
+      } catch (assErr) {
+        console.warn('bodyshop floor assignments load:', assErr)
+        setDataError(true)
+        setAssignments({})
+        setAssignmentRawByJc({})
+        setBsFloorStatus({})
+        setSupportAssignments({})
       }
+      }
+
     } catch (err) {
-      console.warn('bodyshop floor secondary load:', err)
+      showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
+    } finally {
+      setLoading(false)
     }
   }
 

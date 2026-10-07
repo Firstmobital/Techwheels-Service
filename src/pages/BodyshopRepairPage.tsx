@@ -2457,6 +2457,12 @@ export default function BodyshopRepairPage() {
       return
     }
 
+    const customerSurvey = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+    if (customerSurvey !== 'approved') {
+      toast_('Customer must approve the survey document in the customer app before sending to floor', false)
+      return
+    }
+
     const surveyDate = String(selected.survey_date ?? '').trim()
     if (!surveyDate) {
       toast_('Survey Date is required before sending to floor', false)
@@ -3192,6 +3198,11 @@ export default function BodyshopRepairPage() {
           if (!selected.survay_info_by) surveyPatch.survay_info_by = surveyActor
           if (!selected.survay_info_at) surveyPatch.survay_info_at = surveyNow
 
+          surveyPatch.customer_survey_approval_status = 'pending'
+          surveyPatch.customer_survey_rejection_reason = null
+          surveyPatch.customer_survey_decided_at = null
+          surveyPatch.doc_survey_approval = false
+
           const updatedSurvey = await updateRepairCard(selected.id, surveyPatch)
           setSelected(updatedSurvey)
           setCards((prev) => prev.map((card) => card.id === updatedSurvey.id ? updatedSurvey : card))
@@ -3199,12 +3210,28 @@ export default function BodyshopRepairPage() {
 
           setDocUploadFeedbackByKey((prev) => ({
             ...prev,
-            [docKey]: { tone: 'ok', text: action.mode === 'replace' ? 'Photo replaced and survey auto-saved.' : 'Photo uploaded and survey auto-saved.' },
+            [docKey]: {
+              tone: 'ok',
+              text: action.mode === 'replace'
+                ? 'Document replaced. Sent to customer app for approval.'
+                : 'Document uploaded. Customer will approve or reject in the app.',
+            },
           }))
         } else {
+          const pendingOnly = await updateRepairCard(selected.id, {
+            customer_survey_approval_status: 'pending',
+            customer_survey_rejection_reason: null,
+            customer_survey_decided_at: null,
+            doc_survey_approval: false,
+          })
+          setSelected(pendingOnly)
+          setCards((prev) => prev.map((card) => card.id === pendingOnly.id ? pendingOnly : card))
           setDocUploadFeedbackByKey((prev) => ({
             ...prev,
-            [docKey]: { tone: 'info', text: `Photo uploaded. Survey auto-save skipped: ${missing.join(', ')}` },
+            [docKey]: {
+              tone: 'info',
+              text: `Document sent to customer app. Complete ${missing.join(', ')} and Save Survey when ready.`,
+            },
           }))
         }
       }
@@ -6744,6 +6771,8 @@ export default function BodyshopRepairPage() {
                   : null
                 const floorChanged = Boolean(initialFloor && hasFloorSelection && initialFloor !== currentFloor)
                 const floorChangeLocked = false
+                const customerSurveyStatus = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+                const customerRejectRemark = String(selected.customer_survey_rejection_reason ?? '').trim()
 
                 return (
                   <div className="brx-survey-wrap">
@@ -6818,97 +6847,95 @@ export default function BodyshopRepairPage() {
                         />
                       </label>
                     )}
-                      </div>
-                    </div>
 
                     {isSurveyApproved && (
-                      <div className="brx-survey-approval brx-grid-full">
-                        <div className="brx-survey-approval-head">
-                          <div>
-                            <div className="brx-survey-approval-title">Survey Approval Photo</div>
-                            <div className="brx-survey-approval-sub">
-                              {surveyApprovalDoc ? 'Uploaded' : 'Upload is required for Approved status'}
+                      <div className="brx-grid-full">
+                        <div className="brx-approval-panel">
+                          <div className="brx-approval-grid" style={{ gridTemplateColumns: '1fr' }}>
+                            <div className="brx-approval-box brx-approval-box--row">
+                              <div>
+                                <div className="brx-approval-k">Survey approval document</div>
+                                <div className="brx-approval-v">
+                                  {surveyApprovalDoc
+                                    ? (surveyApprovalDoc.file_name || 'Uploaded')
+                                    : 'Upload insurer / surveyor approval (photo or PDF)'}
+                                </div>
+                                {bodyshopDocsLoadError && (
+                                  <div className="brx-survey-feedback is-error">
+                                    Cannot read uploaded document metadata: {bodyshopDocsLoadError}
+                                  </div>
+                                )}
+                                {surveyApprovalFeedback?.text && (
+                                  <div className={`brx-survey-feedback ${surveyApprovalFeedback.tone === 'error' ? 'is-error' : surveyApprovalFeedback.tone === 'ok' ? 'is-ok' : 'is-info'}`}>
+                                    {surveyApprovalFeedback.text}
+                                  </div>
+                                )}
+                              </div>
+                              {!surveyApprovalDoc ? (
+                                <button
+                                  type="button"
+                                  className="btn btn--primary brx-approval-view-btn"
+                                  disabled={surveyApprovalDocBusy}
+                                  onClick={() => startBodyshopDocUpload('doc_survey_approval', 'upload')}
+                                >
+                                  {surveyApprovalDocBusy ? 'Uploading…' : 'Upload document'}
+                                </button>
+                              ) : (
+                                <div className="brx-survey-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost brx-approval-view-btn"
+                                    onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn brx-approval-view-btn"
+                                    disabled={surveyApprovalDocBusy}
+                                    onClick={() => startBodyshopDocUpload('doc_survey_approval', 'replace')}
+                                  >
+                                    {surveyApprovalDocBusy ? 'Uploading…' : 'Replace'}
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                            {bodyshopDocsLoadError && (
-                              <div className="brx-survey-feedback is-error">
-                                Cannot read uploaded document metadata: {bodyshopDocsLoadError}
-                              </div>
-                            )}
-                            {surveyApprovalFeedback?.text && (
-                              <div className={`brx-survey-feedback ${surveyApprovalFeedback.tone === 'error' ? 'is-error' : surveyApprovalFeedback.tone === 'ok' ? 'is-ok' : 'is-info'}`}>
-                                {surveyApprovalFeedback.text}
-                              </div>
-                            )}
                           </div>
-                          {!surveyApprovalDoc ? (
-                            <button
-                              type="button"
-                              className="btn btn--primary"
-                              disabled={surveyApprovalDocBusy}
-                              onClick={() => startBodyshopDocUpload('doc_survey_approval', 'upload')}
-                            >
-                              {surveyApprovalDocBusy ? 'Uploading…' : 'Upload Photo'}
-                            </button>
-                          ) : (
-                            <div className="brx-survey-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                              <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}>
-                                View
-                              </button>
-                              <button
-                                type="button"
-                                className="btn"
-                                disabled={surveyApprovalDocBusy}
-                                onClick={() => startBodyshopDocUpload('doc_survey_approval', 'replace')}
-                              >
-                                {surveyApprovalDocBusy ? 'Uploading…' : 'Replace'}
-                              </button>
-                            </div>
+                          {!surveyApprovalDoc && (
+                            <p className="brx-survey-approval-sub" style={{ margin: 0 }}>
+                              After upload, the customer approves or rejects this document in the customer app.
+                            </p>
                           )}
                         </div>
-                        {surveyApprovalDoc && (
-                          <div className="brx-survey-actions brx-survey-floor-actions">
-                            <button
-                              type="button"
-                              className={`btn brx-floor-send-btn ${currentFloor === 'Floor 2' ? 'is-selected' : ''}`}
-                              disabled={saving || floorChangeLocked}
-                              onClick={() => void handleSendToBodyshopFloor('Floor 2')}
-                            >
-                              {currentFloor === 'Floor 2' ? 'Selected: Floor 2' : 'Send To Floor 2'}
-                            </button>
-                            <button
-                              type="button"
-                              className={`btn brx-floor-send-btn ${currentFloor === 'Floor 3' ? 'is-selected' : ''}`}
-                              disabled={saving || floorChangeLocked}
-                              onClick={() => void handleSendToBodyshopFloor('Floor 3')}
-                            >
-                              {currentFloor === 'Floor 3' ? 'Selected: Floor 3' : 'Send To Floor 3'}
-                            </button>
-
-                            {!hasFloorSelection ? (
-                              <span className="brx-survey-current-floor is-empty">Not sent to floor yet</span>
-                            ) : (
-                              <>
-                                <span className="brx-survey-current-floor is-initial">
-                                  Initial: {initialFloor ?? currentFloor}
-                                </span>
-                                <span className="brx-survey-current-floor is-current">
-                                  Current: {currentFloor}
-                                </span>
-                                {floorChanged && (
-                                  <span className="brx-survey-current-floor is-changed">Changed</span>
-                                )}
-                              </>
-                            )}
-
-                            <span className={`brx-survey-floor-lock ${floorChangeLocked ? 'is-locked' : 'is-open'}`}>
-                              {floorChangeLocked
-                                ? 'Floor change locked: technician/support is assigned in Bodyshop Floor'
-                                : 'Floor can be changed until technician/support assignment starts'}
-                            </span>
-                          </div>
-                        )}
                       </div>
                     )}
+
+                    {isSurveyApproved && surveyApprovalDoc && (
+                      <div className="brx-grid-full">
+                        <div className="brx-approval-panel">
+                          <div className="brx-approval-k">Customer app decision</div>
+                          <div className="brx-approval-v">
+                            {customerSurveyStatus === 'approved'
+                              ? 'Approved by customer'
+                              : customerSurveyStatus === 'rejected'
+                                ? 'Rejected by customer'
+                                : 'Waiting for customer (pending)'}
+                          </div>
+                          {customerSurveyStatus === 'rejected' && customerRejectRemark ? (
+                            <div className="brx-survey-feedback is-error" style={{ marginTop: 8 }}>
+                              Customer remark: {customerRejectRemark}
+                            </div>
+                          ) : null}
+                          {customerSurveyStatus === 'pending' || !customerSurveyStatus ? (
+                            <p className="brx-survey-approval-sub" style={{ margin: '8px 0 0' }}>
+                              Send to Floor 2/3 is available on the Floor tab after the customer approves.
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                      </div>
+                    </div>
 
                     {isSurveyApproved && surveyApprovalDoc && (
                       <div className="brx-survey-parts brx-grid-full">
@@ -7184,6 +7211,57 @@ export default function BodyshopRepairPage() {
               {/* ── Floor ── */}
               {detailTab === 'floor' && (
                 <div className="brx-floor-wrap">
+                  {(() => {
+                    const surveyApprovalDoc = bodyshopDocsByKey.doc_survey_approval
+                    const customerOk = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase() === 'approved'
+                    const currentFloor = String(selected.bodyshop_floor ?? '').trim()
+                    const hasFloorSelection = currentFloor === 'Floor 2' || currentFloor === 'Floor 3'
+                    const selectedCardId = Number(selected.id)
+                    const initialFloor = Number.isFinite(selectedCardId) && selectedCardId > 0
+                      ? (initialFloorByCardId[selectedCardId] ?? null)
+                      : null
+                    const floorChanged = Boolean(initialFloor && hasFloorSelection && initialFloor !== currentFloor)
+                    const floorChangeLocked = false
+                    if (!surveyApprovalDoc) return null
+                    return (
+                      <div className="brx-survey-approval brx-grid-full" style={{ marginBottom: 14 }}>
+                        <div className="brx-survey-approval-title">Physical floor</div>
+                        {!customerOk ? (
+                          <p className="brx-survey-approval-sub">
+                            Customer must approve the survey document in the app before you can send this vehicle to a floor.
+                          </p>
+                        ) : (
+                          <div className="brx-survey-actions brx-survey-floor-actions">
+                            <button
+                              type="button"
+                              className={`btn brx-floor-send-btn ${currentFloor === 'Floor 2' ? 'is-selected' : ''}`}
+                              disabled={saving || floorChangeLocked}
+                              onClick={() => void handleSendToBodyshopFloor('Floor 2')}
+                            >
+                              {currentFloor === 'Floor 2' ? 'Selected: Floor 2' : 'Send To Floor 2'}
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn brx-floor-send-btn ${currentFloor === 'Floor 3' ? 'is-selected' : ''}`}
+                              disabled={saving || floorChangeLocked}
+                              onClick={() => void handleSendToBodyshopFloor('Floor 3')}
+                            >
+                              {currentFloor === 'Floor 3' ? 'Selected: Floor 3' : 'Send To Floor 3'}
+                            </button>
+                            {!hasFloorSelection ? (
+                              <span className="brx-survey-current-floor is-empty">Not sent to floor yet</span>
+                            ) : (
+                              <>
+                                <span className="brx-survey-current-floor is-initial">Initial: {initialFloor ?? currentFloor}</span>
+                                <span className="brx-survey-current-floor is-current">Current: {currentFloor}</span>
+                                {floorChanged ? <span className="brx-survey-current-floor is-changed">Changed</span> : null}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                   <div className="brx-floor-head">
                     <div>
                       <div className="brx-floor-head-k">Stage 11 Parent Status</div>

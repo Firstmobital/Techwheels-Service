@@ -12,7 +12,6 @@ import {
   isFloorWorkTaskVisible,
   resolveActivePipelineStepIndex,
   isWorkerQcTurn,
-  resolveWorkerQcResponsibleRole,
   canUploadFloorWorkPhotos,
 } from '../src/lib/bodyshopFloorWork/pipeline.ts'
 import type { BodyshopFloorWorkTask } from '../src/lib/bodyshopFloorWork/roles.ts'
@@ -125,57 +124,50 @@ check('full pipeline done — QC phase (no bs_floor yet)', () => {
     rubbing_work_status: 'completed',
   })
   assert.equal(arePipelineWorkStepsFinished(row), true)
-  assert.equal(resolveWorkerQcResponsibleRole(row), 'RUBBING')
 })
 
-check('rubbing NOT_REQUIRED — technician is QC owner if last active slot', () => {
-  const row = baseRow({
-    dentor_work_status: 'completed',
-    painter_work_status: 'completed',
-    technician_employee_code: 'E003',
-    technician_work_status: 'completed',
-    rubbing_employee_code: 'NOT_REQUIRED',
-    rubbing_employee_name: 'Not Required',
-    rubbing_work_status: 'not_required',
-  })
-  assert.equal(arePipelineWorkStepsFinished(row), true)
-  assert.equal(resolveWorkerQcResponsibleRole(row), 'TECHNICIAN')
-})
-
-check('only rubbing assignee sees worker QC turn', () => {
+check('dentor / painter / technician each get QC after their step Done', () => {
   const row = pipelineWorkerDoneRow()
-  const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
   const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
-  assert.equal(isWorkerQcTurn(rubbingTask, row, 'pending'), true)
-  assert.equal(isWorkerQcTurn(dentorTask, row, 'pending'), false)
+  const painterTask = task('JC-TEST-001', 'PAINTER', 'E002')
+  const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
+  assert.equal(isWorkerQcTurn(dentorTask, row, {}, 'pending'), true)
+  assert.equal(isWorkerQcTurn(painterTask, row, {}, 'pending'), true)
+  assert.equal(isWorkerQcTurn(rubbingTask, row, {}, 'pending'), false)
 })
 
-check('QC pass — no worker QC turn', () => {
+check('repair card QC pass — no worker QC turn', () => {
   const row = pipelineWorkerDoneRow()
-  const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
-  assert.equal(isWorkerQcTurn(rubbingTask, row, 'pass'), false)
+  const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
+  assert.equal(isWorkerQcTurn(dentorTask, row, {}, 'pass'), false)
 })
 
 check('active pipeline — dentor visible, not QC turn', () => {
   const row = baseRow()
   const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
   assert.equal(isFloorWorkTaskAtActivePipelineStep(dentorTask, row), true)
-  assert.equal(isWorkerQcTurn(dentorTask, row, 'pending'), false)
-  assert.equal(isFloorWorkTaskVisible(dentorTask, row, 'pending'), true)
+  assert.equal(isWorkerQcTurn(dentorTask, row, {}, 'pending'), false)
+  assert.equal(isFloorWorkTaskVisible(dentorTask, row, {}, 'pending'), true)
 })
 
 check('after bs_floor_completed — worker QC hidden', () => {
   const row = pipelineWorkerDoneRow({
     bs_floor_completed_at: '2026-10-05T12:00:00Z',
   })
-  const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
-  assert.equal(isWorkerQcTurn(rubbingTask, row, 'pending'), false)
+  const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
+  assert.equal(isWorkerQcTurn(dentorTask, row, {}, 'pending'), false)
 })
 
-check('QC fail — rubbing can retry QC', () => {
+check('role QC pass — that worker QC turn ends', () => {
   const row = pipelineWorkerDoneRow()
-  const rubbingTask = task('JC-TEST-001', 'RUBBING', 'E004')
-  assert.equal(isWorkerQcTurn(rubbingTask, row, 'fail'), true)
+  const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
+  assert.equal(isWorkerQcTurn(dentorTask, row, { DENTOR: { floor_role: 'DENTOR', qc_status: 'pass' } }, 'pending'), false)
+})
+
+check('role QC fail — dentor can retry', () => {
+  const row = pipelineWorkerDoneRow()
+  const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')
+  assert.equal(isWorkerQcTurn(dentorTask, row, { DENTOR: { floor_role: 'DENTOR', qc_status: 'fail' } }, 'fail'), true)
 })
 
 function inchargeInQcQueue(row: Row, qcStatus: string): boolean {
@@ -314,7 +306,7 @@ check('floor work — dentor can upload photos on active dentor step', () => {
     dentor_work_status: 'work_inprocess',
   })
   const t = task('JC1', 'DENTOR', 'D001')
-  assert.equal(canUploadFloorWorkPhotos(t, row, 'pending'), true)
+  assert.equal(canUploadFloorWorkPhotos(t, row, {}, 'pending'), true)
 })
 
 check('floor work — painter cannot upload until dentor step done', () => {
@@ -325,7 +317,7 @@ check('floor work — painter cannot upload until dentor step done', () => {
     painter_work_status: 'work_inprocess',
   })
   const t = task('JC1', 'PAINTER', 'P001')
-  assert.equal(canUploadFloorWorkPhotos(t, row, 'pending'), false)
+  assert.equal(canUploadFloorWorkPhotos(t, row, {}, 'pending'), false)
 })
 
 check('floor work — painter can upload after dentor completed', () => {
@@ -336,7 +328,7 @@ check('floor work — painter can upload after dentor completed', () => {
     painter_work_status: 'work_inprocess',
   })
   const t = task('JC1', 'PAINTER', 'P001')
-  assert.equal(canUploadFloorWorkPhotos(t, row, 'pending'), true)
+  assert.equal(canUploadFloorWorkPhotos(t, row, {}, 'pending'), true)
 })
 
 check('floor age — advisor send timestamp, not role assignment', () => {

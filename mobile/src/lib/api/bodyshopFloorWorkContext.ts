@@ -13,6 +13,15 @@ export type LinkedEmployeeContext = {
 const ADMIN_FLOOR_WORK_ROLE =
   'ADMIN,EDP,DENTOR,PAINTER,TECHNICIAN,RUBBING,DENTOR_HELPER,PAINTER_HELPER'
 
+type EmployeeMasterEmbed = { employee_name?: string | null; role?: string | null }
+
+function normalizeEmployeeMasterEmbed(
+  raw: EmployeeMasterEmbed | EmployeeMasterEmbed[] | null | undefined,
+): EmployeeMasterEmbed | null {
+  if (!raw) return null
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw
+}
+
 async function userHasAdminAccess(
   userId: string,
   user: { user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown> },
@@ -46,8 +55,8 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
     .from('user_employee_links')
     .select('employee_code, dealer_code, employee_master(employee_name, role)')
     .eq('user_id', user.id)
-    .eq('is_primary', true)
     .eq('is_active', true)
+    .order('is_primary', { ascending: false })
     .order('updated_at', { ascending: false })
     .limit(1)
 
@@ -56,8 +65,8 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
       .from('user_employee_links')
       .select('employee_code, dealer_code')
       .eq('user_id', user.id)
-      .eq('is_primary', true)
       .eq('is_active', true)
+      .order('is_primary', { ascending: false })
       .order('updated_at', { ascending: false })
       .limit(1)
     if (plainErr) throw new Error(plainErr.message)
@@ -76,7 +85,16 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
       }
     }
   } else {
-    link = linkRows?.[0] ?? null
+    const row = linkRows?.[0]
+    link = row
+      ? {
+          employee_code: row.employee_code,
+          dealer_code: row.dealer_code,
+          employee_master: normalizeEmployeeMasterEmbed(
+            row.employee_master as EmployeeMasterEmbed | EmployeeMasterEmbed[] | null,
+          ),
+        }
+      : null
   }
 
   if (!link?.employee_code && (await userHasAdminAccess(user.id, user))) {
@@ -84,12 +102,18 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
       .from('user_employee_links')
       .select('employee_code, dealer_code, employee_master(employee_name, role)')
       .eq('user_id', user.id)
-      .eq('is_primary', true)
+      .order('is_primary', { ascending: false })
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     if (!inactive.error && inactive.data?.employee_code) {
-      link = inactive.data
+      link = {
+        employee_code: inactive.data.employee_code,
+        dealer_code: inactive.data.dealer_code,
+        employee_master: normalizeEmployeeMasterEmbed(
+          inactive.data.employee_master as EmployeeMasterEmbed | EmployeeMasterEmbed[] | null,
+        ),
+      }
     }
   }
 
@@ -109,7 +133,7 @@ export async function getLinkedEmployeeContext(): Promise<LinkedEmployeeContext>
     throw new Error('No employee linked to your login. Ask admin: Admin → Mappings.')
   }
 
-  const em = link?.employee_master as { employee_name?: string | null; role?: string | null } | null
+  const em = link?.employee_master ?? null
   const ctx: LinkedEmployeeContext = {
     employeeCode: code,
     employeeName: String(em?.employee_name ?? '').trim() || null,

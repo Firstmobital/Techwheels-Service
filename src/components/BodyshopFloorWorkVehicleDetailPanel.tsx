@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { BODYSHOP_FLOOR_WORK_ROLE_LABELS } from '../lib/bodyshopFloorWork/roles'
 import type { BodyshopFloorWorkLogRole } from '../lib/bodyshopFloorWork/roles'
 import type { FloorWorkVehicleMeta } from '../lib/bodyshopFloorWork/display'
@@ -71,8 +72,8 @@ export function BodyshopFloorWorkVehicleDetailPanel({
   children,
 }: Props) {
   const summary = useMemo(
-    () => buildFloorWorkVehicleStatusSummary(assignmentRow, qcStatus),
-    [assignmentRow, qcStatus],
+    () => buildFloorWorkVehicleStatusSummary(assignmentRow, qcStatus, vehicleMeta),
+    [assignmentRow, qcStatus, vehicleMeta],
   )
 
   const [logs, setLogs] = useState<BodyshopFloorRoleDailyLogRow[]>([])
@@ -224,6 +225,12 @@ export function BodyshopFloorWorkVehicleDetailPanel({
         <div className="bfw-detail__status-card">
           <div className="bfw-detail__headline">{summary.headline}</div>
           <div className="bfw-detail__subline">{summary.subline}</div>
+          {!assignmentRow ? (
+            <p className="bfw-detail__subline" style={{ marginTop: 8 }}>
+              <Link to="/bodyshop-floor">Assign roles on Bodyshop Floor</Link>
+              {' '}for this registration / job card, then refresh this page.
+            </p>
+          ) : null}
           <div className="bfw-detail__qc">{summary.qcLabel}</div>
         </div>
       </header>
@@ -261,16 +268,14 @@ export function BodyshopFloorWorkVehicleDetailPanel({
       </section>
 
       <section className="bfw-detail__section bfw-detail__section--work">
-        <h3 className="bfw-detail__section-title">
-          Kaam — kaun ne kya kiya (Dentor / Painter / …)
-        </h3>
+        <h3 className="bfw-detail__section-title">Work submitted — Dentor / Painter / …</h3>
         <p className="bfw-detail__muted" style={{ marginTop: 0, marginBottom: 12 }}>
-          Har worker ka note aur us kaam ki photos. Photo par click karke badi size mein dekhein.
+          Notes and photos from each worker. Click a photo to open full size.
         </p>
         {logsLoading ? <p className="bfw-detail__muted">Loading worker logs…</p> : null}
         {logsError ? <p className="bfw-detail__err">{logsError}</p> : null}
         {!logsLoading && !logsError && logs.length === 0 ? (
-          <p className="bfw-detail__muted">Abhi tak Floor Work app se is gaadi par koi update nahi aaya.</p>
+          <p className="bfw-detail__muted">No Floor Work app submissions for this vehicle yet.</p>
         ) : null}
 
         {!logsLoading && logs.length > 0 ? (
@@ -293,7 +298,7 @@ export function BodyshopFloorWorkVehicleDetailPanel({
                   {log.note_text?.trim() ? (
                     <p className="bfw-log-card__note">{log.note_text.trim()}</p>
                   ) : (
-                    <p className="bfw-detail__muted bfw-log-card__note">Koi note nahi</p>
+                    <p className="bfw-detail__muted bfw-log-card__note">No note</p>
                   )}
                   {photoCount > 0 ? (
                     <div className="bfw-log-card__photos">
@@ -303,7 +308,7 @@ export function BodyshopFloorWorkVehicleDetailPanel({
                       {renderLogPhotoThumbs(log.id, adminWorkReview ? null : 12)}
                     </div>
                   ) : (
-                    <p className="bfw-detail__muted">Is update par photo nahi</p>
+                    <p className="bfw-detail__muted">No photos on this update</p>
                   )}
                 </article>
               )
@@ -314,7 +319,7 @@ export function BodyshopFloorWorkVehicleDetailPanel({
         {logs.length > 0 ? (
           <>
             <h4 className="bfw-detail__subsection-title">
-              Saari entries {logs.length > 0 ? `(${logs.length})` : ''}
+              All entries {logs.length > 0 ? `(${logs.length})` : ''}
             </h4>
             <div className="bfw-log-list">
               {logs.map((log) => {

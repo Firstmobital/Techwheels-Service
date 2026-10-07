@@ -5,6 +5,11 @@ import {
   NOT_REQUIRED_ASSIGNMENT_CODE,
   workTaskEmployeeCode,
 } from './roles'
+import {
+  isWorkerSelfQcRole,
+  type WorkerRoleQcMap,
+  workerRoleQcStatus,
+} from './workerRoleQc'
 
 type AssignmentRow = Record<string, unknown>
 
@@ -104,12 +109,52 @@ export function isFloorWorkTaskAtActivePipelineStep(
   return !isBodyshopFloorRoleWorkFinished(row?.[ROLE_COLUMNS[task.floorRole].workStatus])
 }
 
+/** Prefer highest id (ties: latest updated_at) — matches complete_bodyshop_floor_work_role. */
+export function bodyshopAssignmentRowBeats(
+  existing: AssignmentRow | undefined,
+  candidate: AssignmentRow,
+): boolean {
+  if (!existing) return true
+  const eId = Number(existing.id)
+  const cId = Number(candidate.id)
+  if (Number.isFinite(cId) && Number.isFinite(eId) && cId !== eId) return cId > eId
+  return String(candidate.updated_at ?? '') >= String(existing.updated_at ?? '')
+}
+
+function roleSlotConfiguredForPick(row: AssignmentRow, role: BodyshopFloorWorkLogRole): boolean {
+  return isRoleSlotActiveOnAssignment(row, role)
+}
+
+/** When multiple active rows exist, prefer the row that owns this pipeline role slot. */
+export function resolveCanonicalAssignmentRowForJobCard(
+  rows: AssignmentRow[],
+  preferRole?: BodyshopFloorWorkLogRole,
+): AssignmentRow | undefined {
+  let best: AssignmentRow | undefined
+  for (const row of rows) {
+    if (!normCode(row.job_card_number)) continue
+    if (!best) {
+      best = row
+      continue
+    }
+    const rowPref = preferRole ? roleSlotConfiguredForPick(row, preferRole) : false
+    const bestPref = preferRole ? roleSlotConfiguredForPick(best, preferRole) : false
+    if (rowPref && !bestPref) {
+      best = row
+      continue
+    }
+    if (rowPref === bestPref && bodyshopAssignmentRowBeats(best, row)) best = row
+  }
+  return best
+}
+
 export function buildAssignmentRowByJobCard(rows: AssignmentRow[]): Record<string, AssignmentRow> {
   const map: Record<string, AssignmentRow> = {}
   for (const row of rows) {
     const jc = normCode(row.job_card_number)
     if (!jc) continue
-    map[jc] = row
+    const prev = map[jc]
+    if (!prev || bodyshopAssignmentRowBeats(prev, row)) map[jc] = row
   }
   return map
 }
@@ -136,15 +181,12 @@ export function arePipelineWorkStepsFinished(row: AssignmentRow | undefined): bo
   return true
 }
 
-/** Last pipeline stage with a real assignee — that worker submits QC (usually Rubbing). */
-export function resolveWorkerQcResponsibleRole(row: AssignmentRow | undefined): BodyshopFloorWorkLogRole | null {
-  if (!row || !arePipelineWorkStepsFinished(row)) return null
-  for (let i = BODYSHOP_FLOOR_WORK_PIPELINE_STEPS.length - 1; i >= 0; i -= 1) {
-    for (const role of BODYSHOP_FLOOR_WORK_PIPELINE_STEPS[i]) {
-      if (isRoleSlotActiveOnAssignment(row, role)) return role
-    }
-  }
-  return null
+export function roleWorkStatusOnAssignment(
+  row: AssignmentRow | undefined,
+  role: BodyshopFloorWorkLogRole,
+): string {
+  if (!row) return ''
+  return normStatus(row[ROLE_COLUMNS[role].workStatus])
 }
 
 export function normalizeQcStatus(raw: unknown): string {
@@ -154,28 +196,32 @@ export function normalizeQcStatus(raw: unknown): string {
 export function isWorkerQcTurn(
   task: Pick<BodyshopFloorWorkTask, 'jobCardNumber' | 'floorRole' | 'assignedEmployeeCode' | 'isSupport'>,
   row: AssignmentRow | undefined,
-  qcStatus: unknown,
+  roleQcByRole: WorkerRoleQcMap = {},
+  repairCardQcStatus?: unknown,
 ): boolean {
   if (!row || String(row.bs_floor_completed_at ?? '').trim()) return false
-  if (!arePipelineWorkStepsFinished(row)) return false
-  const qc = normalizeQcStatus(qcStatus)
-  if (qc === 'pass') return false
+  if (normalizeQcStatus(repairCardQcStatus) === 'pass') return false
+  if (task.isSupport || !isWorkerSelfQcRole(task.floorRole)) return false
   if (!isRoleSlotActiveOnAssignment(row, task.floorRole)) return false
   if (!isFloorWorkTaskStepCompleted(task, row)) return false
-  const responsible = resolveWorkerQcResponsibleRole(row)
-  if (!responsible || task.floorRole !== responsible) return false
-  if (task.isSupport) return false
+  if (roleWorkStatusOnAssignment(row, task.floorRole) !== 'completed') return false
+  if (workerRoleQcStatus(roleQcByRole, task.floorRole) === 'pass') return false
+  const assignee = normCode(row[ROLE_COLUMNS[task.floorRole].code])
+  const worker = normCode(task.assignedEmployeeCode)
+  if (!assignee || assignee !== worker) return false
   return true
 }
 
 export function isFloorWorkTaskVisible(
   task: BodyshopFloorWorkTask,
   row: AssignmentRow | undefined,
-  qcStatus: unknown,
+  roleQcByRole: WorkerRoleQcMap = {},
+  repairCardQcStatus?: unknown,
 ): boolean {
+  if (normalizeQcStatus(repairCardQcStatus) === 'pass') return false
   return (
     isFloorWorkTaskAtActivePipelineStep(task, row)
-    || isWorkerQcTurn(task, row, qcStatus)
+    || isWorkerQcTurn(task, row, roleQcByRole, repairCardQcStatus)
   )
 }
 
@@ -191,11 +237,12 @@ export function activePipelineStepLabel(row: AssignmentRow | undefined): string 
 export function pickFloorWorkDetailTask(
   tasksOnVehicle: BodyshopFloorWorkTask[],
   assignRow: AssignmentRow | undefined,
-  qcStatus: unknown,
+  roleQcByRole: WorkerRoleQcMap = {},
   loginEmployeeCode?: string | null,
+  repairCardQcStatus?: unknown,
 ): BodyshopFloorWorkTask | null {
   if (tasksOnVehicle.length === 0) return null
-  const qcTask = tasksOnVehicle.find((t) => isWorkerQcTurn(t, assignRow, qcStatus))
+  const qcTask = tasksOnVehicle.find((t) => isWorkerQcTurn(t, assignRow, roleQcByRole, repairCardQcStatus))
   if (qcTask) return qcTask
   const active = tasksOnVehicle.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignRow))
   if (active.length > 0) {
@@ -218,12 +265,13 @@ export function pickFloorWorkDetailTask(
 export function canSubmitFloorWorkTask(
   task: BodyshopFloorWorkTask,
   assignRow: AssignmentRow | undefined,
-  qcStatus: unknown,
-  options?: { isAdminOverview?: boolean },
+  roleQcByRole: WorkerRoleQcMap = {},
+  options?: { isAdminOverview?: boolean; repairCardQcStatus?: unknown },
 ): boolean {
+  void options?.isAdminOverview
   return (
     isFloorWorkTaskAtActivePipelineStep(task, assignRow)
-    || isWorkerQcTurn(task, assignRow, qcStatus)
+    || isWorkerQcTurn(task, assignRow, roleQcByRole, options?.repairCardQcStatus)
   )
 }
 
@@ -231,8 +279,9 @@ export function canSubmitFloorWorkTask(
 export function canUploadFloorWorkPhotos(
   task: BodyshopFloorWorkTask,
   assignRow: AssignmentRow | undefined,
-  qcStatus: unknown,
+  roleQcByRole: WorkerRoleQcMap = {},
+  repairCardQcStatus?: unknown,
 ): boolean {
-  if (isWorkerQcTurn(task, assignRow, qcStatus)) return false
+  if (isWorkerQcTurn(task, assignRow, roleQcByRole, repairCardQcStatus)) return false
   return isFloorWorkTaskAtActivePipelineStep(task, assignRow)
 }

@@ -17,12 +17,11 @@ import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
+import { type BodyshopRepairCardListRow } from '../../lib/api/bodyshopFloorList'
 import {
-  fetchBodyshopAssignmentsForJobCards,
-  fetchBodyshopSupportAssignmentsForJobCards,
-  type BodyshopRepairCardListRow,
-} from '../../lib/api/bodyshopFloorList'
-import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
+  fetchActiveTableRowsLegacyFull,
+  fetchBodyshopRepairCardsLegacyFull,
+} from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
@@ -32,7 +31,10 @@ import {
 } from '../../lib/bodyshopFloorLive'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
 import { BodyshopFloorStepTracker } from '../../components/bodyshop/BodyshopFloorStepTracker'
-import { arePipelineWorkStepsFinished } from '../../lib/bodyshopFloorWork/pipeline'
+import {
+  arePipelineWorkStepsFinished,
+  resolveCanonicalAssignmentRowForJobCard,
+} from '../../lib/bodyshopFloorWork/pipeline'
 import {
   BODYSHOP_FLOOR_DETAIL_STEP_ORDER,
   computeBodyshopFloorFlowSteps,
@@ -358,6 +360,15 @@ function mapRowToRoleMap(row: DBAssignmentRow): Record<BSRole, BSAssignment | un
   return m
 }
 
+/** Same rule as complete_bodyshop_floor_work_role: newest active row by id wins (no role merge across duplicates). */
+function assignmentRowBeatsExisting(existing: DBAssignmentRow | undefined, candidate: DBAssignmentRow): boolean {
+  if (!existing) return true
+  const eId = Number(existing.id)
+  const cId = Number(candidate.id)
+  if (Number.isFinite(cId) && Number.isFinite(eId) && cId !== eId) return cId > eId
+  return String(candidate.updated_at ?? '') >= String(existing.updated_at ?? '')
+}
+
 function mergeAssignmentRowIntoMaps(
   assMap: Record<string, Record<BSRole, BSAssignment | undefined>>,
   rawByJc: Record<string, DBAssignmentRow>,
@@ -365,21 +376,15 @@ function mergeAssignmentRowIntoMaps(
   row: DBAssignmentRow,
 ) {
   const k = jcKey(row.job_card_number)
-  const partial = mapRowToRoleMap(row)
-  if (!assMap[k]) {
-    assMap[k] = emptyRoleMap()
-  }
   const prevRaw = rawByJc[k]
-  if (!prevRaw || String(row.updated_at ?? '') >= String(prevRaw.updated_at ?? '')) {
-    rawByJc[k] = row
-    floorMap[k] = {
-      completedAt: row.bs_floor_completed_at ?? null,
-      completedBy: row.bs_floor_completed_by ?? null,
-      enteredAt: row.assigned_at ?? row.created_at ?? floorMap[k]?.enteredAt ?? null,
-    }
-  }
-  for (const role of ALL_ROLES) {
-    if (partial[role]) assMap[k][role] = partial[role]
+  if (!assignmentRowBeatsExisting(prevRaw, row)) return
+
+  rawByJc[k] = row
+  assMap[k] = mapRowToRoleMap(row)
+  floorMap[k] = {
+    completedAt: row.bs_floor_completed_at ?? null,
+    completedBy: row.bs_floor_completed_by ?? null,
+    enteredAt: row.assigned_at ?? row.created_at ?? floorMap[k]?.enteredAt ?? null,
   }
 }
 
@@ -648,10 +653,10 @@ export default function BodyshopFloorScreen() {
   const [branchFilter,   setBranchFilter]   = useState('all')
   const [floorFilter,    setFloorFilter]    = useState('all')
   const loadSeq = useRef(0)
+  const assignmentRefreshSeq = useRef(0)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [search,         setSearch]         = useState('')
-  const searchReloadSkipRef = useRef(true)
-
+  const [searchDraft,    setSearchDraft]    = useState('')
+  const [appliedSearch,  setAppliedSearch]  = useState('')
   // Detail
   const [selectedCar,  setSelectedCar]  = useState<FloorCar | null>(null)
   const [expandedRole, setExpandedRole] = useState<BSRole | null>(null)
@@ -696,13 +701,12 @@ export default function BodyshopFloorScreen() {
       const scope = await loadBodyshopFloorInchargeScope()
       if (seq !== loadSeq.current) return
       setInchargeScope(scope)
-      const floorForQuery = floorFilter !== 'all' ? floorFilter : null
       const liveOnFloor = vehicleListMode === 'live_on_floor'
-      const searchQuery = search.trim() || null
 
+      // One full fetch — search / floor chips filter client-side (no re-query per keystroke).
       const mergedRows = await fetchBodyshopRepairCardsLegacyFull({
-        searchQuery,
-        bodyshopFloor: floorForQuery,
+        searchQuery: null,
+        bodyshopFloor: null,
         liveOnFloor,
       })
       if (seq !== loadSeq.current) return
@@ -714,11 +718,12 @@ export default function BodyshopFloorScreen() {
       setQcByJc(qc)
       setRiByJc(ri)
 
-      const jcs = carList.map(c => c.job_card_no)
-      const [assRows, supRows] = await Promise.all([
-        fetchBodyshopAssignmentsForJobCards<DBAssignmentRow>(jcs),
-        fetchBodyshopSupportAssignmentsForJobCards<SupportAssignment>(jcs),
+      const [assRowsRaw, supRowsRaw] = await Promise.all([
+        fetchActiveTableRowsLegacyFull('bodyshop_assignments'),
+        fetchActiveTableRowsLegacyFull('bodyshop_floor_support_assignments'),
       ])
+      const assRows = assRowsRaw as unknown as DBAssignmentRow[]
+      const supRows = supRowsRaw as unknown as SupportAssignment[]
 
       const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
       const rawByJc: Record<string, DBAssignmentRow> = {}
@@ -760,22 +765,69 @@ export default function BodyshopFloorScreen() {
         .limit(1000)
       setEmployees((empData ?? []) as Employee[])
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
+      const msg = err instanceof Error ? err.message : 'Failed to load'
+      setLoadError(msg)
+      showToast(msg, 'error')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [floorFilter, search, vehicleListMode])
-
-  useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
+  }, [vehicleListMode])
 
   useEffect(() => {
-    if (searchReloadSkipRef.current) {
-      searchReloadSkipRef.current = false
-      return
+    void loadAll()
+  }, [loadAll])
+
+  /** Sync dentor/painter Done from Floor Work when returning to this tab (no full repair-card reload). */
+  const reloadAssignmentsOnly = useCallback(async () => {
+    if (loading) return
+    const seq = ++assignmentRefreshSeq.current
+    try {
+      const [assRowsRaw, supRowsRaw] = await Promise.all([
+        fetchActiveTableRowsLegacyFull('bodyshop_assignments'),
+        fetchActiveTableRowsLegacyFull('bodyshop_floor_support_assignments'),
+      ])
+      if (seq !== assignmentRefreshSeq.current) return
+      const assRows = assRowsRaw as unknown as DBAssignmentRow[]
+      const supRows = supRowsRaw as unknown as SupportAssignment[]
+
+      const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
+      const rawByJc: Record<string, DBAssignmentRow> = {}
+      const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
+      const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
+      for (const row of assRows) {
+        mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
+      }
+      for (const k of Object.keys(assMap)) {
+        drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
+        for (const role of ALL_ROLES) {
+          const a = assMap[k][role]
+          drafts[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
+        }
+      }
+      setAssignments(assMap)
+      setAssignmentRawByJc(rawByJc)
+      setBsFloorStatus(floorMap)
+      setStageDrafts(drafts)
+
+      const supMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
+      for (const s of supRows) {
+        const sk = jcKey(s.job_card_number)
+        const role = s.support_role
+        if (!supMap[sk]) {
+          supMap[sk] = { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
+        }
+        supMap[sk][role].push(s)
+      }
+      setSupportAssignments(supMap)
+    } catch {
+      /* keep cached list on background sync failure */
     }
-    void loadAll(true)
-  }, [search, floorFilter, vehicleListMode, loadAll])
+  }, [loading])
+
+  useFocusEffect(useCallback(() => {
+    void reloadAssignmentsOnly()
+  }, [reloadAssignmentsOnly]))
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -853,8 +905,8 @@ export default function BodyshopFloorScreen() {
   const baseScopedCars = useMemo(() => {
     let list = [...scopeCars]
     if (branchFilter !== 'all') list = list.filter(c => matchesBodyshopBranchFilter(c.branch, branchFilter))
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
+    if (appliedSearch.trim()) {
+      const q = appliedSearch.trim().toLowerCase()
       list = list.filter(c =>
         c.job_card_no.toLowerCase().includes(q) ||
         (c.reg_number ?? '').toLowerCase().includes(q) ||
@@ -871,7 +923,16 @@ export default function BodyshopFloorScreen() {
       ),
     )
     return list
-  }, [scopeCars, branchFilter, search, inchargeScope, assignments])
+  }, [scopeCars, branchFilter, appliedSearch, inchargeScope, assignments])
+
+  const applyListSearch = useCallback(() => {
+    setAppliedSearch(searchDraft.trim())
+  }, [searchDraft])
+
+  const clearListSearch = useCallback(() => {
+    setSearchDraft('')
+    setAppliedSearch('')
+  }, [])
 
   const floorCountsByKey = useMemo(() => {
     const out: Record<string, number> = { all: baseScopedCars.length }
@@ -1101,6 +1162,11 @@ export default function BodyshopFloorScreen() {
         if (existingRowId) {
           result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existingRowId).select().single()
         } else {
+          await supabase
+            .from('bodyshop_assignments')
+            .update({ is_active: false })
+            .eq('is_active', true)
+            .ilike('job_card_number', k)
           const insertPayload: Record<string, unknown> = {
             ...payload,
             job_card_number: k,
@@ -1187,13 +1253,12 @@ export default function BodyshopFloorScreen() {
       .order('updated_at', { ascending: false })
     if (error) throw error
     const matching = ((data ?? []) as DBAssignmentRow[]).filter(r => jcKey(r.job_card_number) === k)
-    if (matching.length === 0) return
+    const canonical = resolveCanonicalAssignmentRowForJobCard(matching)
+    if (!canonical) return
     const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
     const rawByJc: Record<string, DBAssignmentRow> = {}
     const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
-    for (const row of matching) {
-      mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
-    }
+    mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, canonical as DBAssignmentRow)
     const merged = assMap[k]
     if (!merged) return
     setAssignments(prev => ({ ...prev, [k]: merged }))
@@ -2432,15 +2497,27 @@ export default function BodyshopFloorScreen() {
       <View style={S.listFiltersBlock}>
         <View style={S.searchRow}>
           <TextInput
-            style={S.searchInput}
-            placeholder="Search JC, reg, customer…"
+            style={S.searchInputFlex}
+            placeholder="JC, reg, customer… (tap Search)"
             placeholderTextColor="#a7a99f"
-            value={search}
-            onChangeText={setSearch}
-            clearButtonMode="while-editing"
+            value={searchDraft}
+            onChangeText={setSearchDraft}
+            returnKeyType="search"
+            onSubmitEditing={applyListSearch}
             accessibilityLabel="Search job cards by JC, registration, or customer"
           />
+          {searchDraft.trim().length > 0 ? (
+            <TouchableOpacity style={S.searchClearBtn} onPress={clearListSearch} accessibilityLabel="Clear search">
+              <Text style={S.searchClearBtnText}>✕</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={S.searchApplyBtn} onPress={applyListSearch} accessibilityLabel="Run search">
+            <Text style={S.searchApplyBtnText}>Search</Text>
+          </TouchableOpacity>
         </View>
+        {appliedSearch.trim().length > 0 ? (
+          <Text style={S.searchAppliedHint}>Showing matches for “{appliedSearch.trim()}”</Text>
+        ) : null}
 
         <Text style={S.filterRowLabel}>Floor</Text>
         <ScrollView
@@ -2640,8 +2717,14 @@ const S = StyleSheet.create({
   screenSubtitle:   { fontSize: 11, color: '#82858f', fontWeight: '500', marginTop: 1 },
   refreshBtn:       { padding: 6 },
   refreshBtnText:   { fontSize: 18, color: '#2a4cd0' },
-  searchRow:        { paddingHorizontal: 12, paddingBottom: 6 },
+  searchRow:        { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingBottom: 6 },
   searchInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#1a1b21' },
+  searchInputFlex:  { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#1a1b21' },
+  searchApplyBtn:   { backgroundColor: '#2a4cd0', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  searchApplyBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  searchClearBtn:   { paddingHorizontal: 8, paddingVertical: 8 },
+  searchClearBtnText: { color: '#82858f', fontSize: 16, fontWeight: '600' },
+  searchAppliedHint: { paddingHorizontal: 12, paddingBottom: 4, fontSize: 11, color: '#82858f' },
   listFlex:         { flex: 1 },
   filterRowLabel: {
     fontSize: 11,

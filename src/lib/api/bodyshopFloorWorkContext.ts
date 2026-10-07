@@ -42,18 +42,20 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
     .from('user_employee_links')
     .select('employee_code, dealer_code, employee_master(employee_name, role)')
     .eq('user_id', user.id)
-    .eq('is_primary', true)
     .eq('is_active', true)
 
-  let { data: linkRows, error: linkErr } = await linkQuery.order('updated_at', { ascending: false }).limit(1)
+  let { data: linkRows, error: linkErr } = await linkQuery
+    .order('is_primary', { ascending: false })
+    .order('updated_at', { ascending: false })
+    .limit(1)
   let link = linkRows?.[0] ?? null
   if (linkErr) {
     const { data: plainRows, error: plainErr } = await supabase
       .from('user_employee_links')
       .select('employee_code, dealer_code')
       .eq('user_id', user.id)
-      .eq('is_primary', true)
       .eq('is_active', true)
+      .order('is_primary', { ascending: false })
       .order('updated_at', { ascending: false })
       .limit(1)
     if (plainErr) return fail(plainErr.message)
@@ -78,7 +80,7 @@ export async function getLinkedEmployeeContext(): Promise<ApiResult<LinkedEmploy
       .from('user_employee_links')
       .select('employee_code, dealer_code, employee_master(employee_name, role)')
       .eq('user_id', user.id)
-      .eq('is_primary', true)
+      .order('is_primary', { ascending: false })
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()

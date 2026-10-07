@@ -92,6 +92,9 @@ export interface RepairCard {
   survey_date: string | null
   survey_status: string | null
   survey_hold_reason: string | null
+  customer_survey_approval_status: 'pending' | 'approved' | 'rejected' | null
+  customer_survey_rejection_reason: string | null
+  customer_survey_decided_at: string | null
   survay_info_by: string | null
   survay_info_at: string | null
   survay_info_updated_by: string | null

@@ -12,6 +12,7 @@ export type LiveOnFloorVehicleCatalog = {
   metaByJc: Record<string, FloorWorkVehicleMeta>
 }
 import { listReceptionEntriesByJobCardNumbers } from './reception'
+import { fetchBodyshopRepairCardsAllPages } from './bodyshopFloorFullLoad'
 
 const JC_CHUNK = 80
 
@@ -251,15 +252,26 @@ export async function fetchRepairCardVehicleByJcs(
 
 /** Same vehicle set as Bodyshop Floor → “On Floor (Live)” (stage 11–14, active). */
 export async function fetchLiveOnFloorVehicleCatalog(): Promise<LiveOnFloorVehicleCatalog> {
-  const { data, error } = await supabase
-    .from('bodyshop_repair_cards')
-    .select(
-      'id, job_card_no, reg_number, customer_name, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at, qc_status, current_stage, overall_status, updated_at, created_at',
-    )
-  if (error) throw new Error(error.message)
+  type Row = {
+    id: number
+    job_card_no: string | null
+    reg_number: string | null
+    customer_name: string | null
+    bodyshop_floor: string | null
+    bodyshop_floor_since_at: string | null
+    survay_info_updated_at: string | null
+    qc_status: string | null
+    current_stage: number | null
+    overall_status: string | null
+    updated_at: string | null
+    created_at: string | null
+  }
+  const data = await fetchBodyshopRepairCardsAllPages<Row>(
+    'id, job_card_no, reg_number, customer_name, bodyshop_floor, bodyshop_floor_since_at, survay_info_updated_at, qc_status, current_stage, overall_status, updated_at, created_at',
+  )
 
-  const latestByJc = new Map<string, { updatedAtMs: number; row: (typeof data)[number] }>()
-  for (const row of data ?? []) {
+  const latestByJc = new Map<string, { updatedAtMs: number; row: Row }>()
+  for (const row of data) {
     if (!isLiveOnFloorRepairCard(row)) continue
     const jc = normKey(String(row.job_card_no ?? ''))
     if (!jc) continue
@@ -299,15 +311,13 @@ export async function fetchLiveOnFloorVehicleCatalog(): Promise<LiveOnFloorVehic
 
 /** Job cards for vehicles currently in bodyshop floor stages (11–14). */
 export async function fetchLiveOnFloorJobCardKeys(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('bodyshop_repair_cards')
-    .select('job_card_no, current_stage, overall_status')
-    .gte('current_stage', 11)
-    .lte('current_stage', 14)
-  if (error) throw new Error(error.message)
+  type Row = { job_card_no: string | null; current_stage: number | null; overall_status: string | null }
+  const data = await fetchBodyshopRepairCardsAllPages<Row>(
+    'job_card_no, current_stage, overall_status',
+  )
   return Array.from(
     new Set(
-      (data ?? [])
+      data
         .filter((row) => isLiveOnFloorRepairCard(row))
         .map((row) => normKey(String(row.job_card_no ?? '')))
         .filter(Boolean),

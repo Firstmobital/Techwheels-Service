@@ -19,8 +19,20 @@ export function resolveBodyshopAssignmentRow(
   }
   const repairCardId = meta?.repairCardId
   if (typeof repairCardId === 'number' && repairCardId > 0) {
-    const byId = assignmentRows.find((r) => Number(r.repair_card_id) === repairCardId)
-    if (byId) return byId
+    const matches = assignmentRows.filter((r) => Number(r.repair_card_id) === repairCardId)
+    if (matches.length > 0) {
+      return matches.reduce((best, r) => {
+        const bId = Number(best.id)
+        const rId = Number(r.id)
+        if (Number.isFinite(rId) && Number.isFinite(bId) && rId !== bId) return rId > bId ? r : best
+        return String(r.updated_at ?? '') >= String(best.updated_at ?? '') ? r : best
+      })
+    }
+  }
+  const reg = normKey(meta?.reg ?? '')
+  if (reg) {
+    const byReg = assignmentRows.find((r) => normKey(r.job_card_number) === reg)
+    if (byReg) return byReg
   }
   return undefined
 }
@@ -44,4 +56,20 @@ export function filterTasksForLiveFloorVehicle(
 ): Array<{ jobCardNumber: string }> {
   const keys = new Set(taskKeysForLiveFloorVehicle(displayJobCardKey, meta, assignmentRow))
   return tasks.filter((t) => keys.has(normKey(t.jobCardNumber)))
+}
+
+/** Pin resolved assignment row under each live-catalog display key (reg vs system JC). */
+export function aliasAssignmentMapForVehicleCatalog(
+  assignmentByJc: Record<string, AssignmentRow>,
+  assignmentRows: AssignmentRow[],
+  metaByJc: Record<string, FloorWorkVehicleMeta>,
+  displayKeys: string[],
+): Record<string, AssignmentRow> {
+  const out = { ...assignmentByJc }
+  for (const displayJc of displayKeys) {
+    const meta = metaByJc[displayJc]
+    const resolved = resolveBodyshopAssignmentRow(displayJc, meta, out, assignmentRows)
+    if (resolved) out[normKey(displayJc)] = resolved
+  }
+  return out
 }

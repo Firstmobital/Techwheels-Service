@@ -1,3 +1,4 @@
+import type { FloorWorkVehicleMeta } from './display'
 import {
   BODYSHOP_FLOOR_WORK_ROLE_LABELS,
   type BodyshopFloorWorkLogRole,
@@ -57,12 +58,22 @@ function humanWorkStatus(raw: string, isActiveLane: boolean, slotActive: boolean
 export function buildFloorWorkVehicleStatusSummary(
   row: Record<string, unknown> | undefined,
   qcStatus: unknown,
+  meta?: FloorWorkVehicleMeta | undefined,
 ): FloorWorkVehicleStatusSummary {
   const qc = normalizeQcStatus(qcStatus)
   const qcLabel =
     qc === 'pass' ? 'QC: Passed' : qc === 'fail' ? 'QC: Failed — rework' : 'QC: Pending (after all steps Done)'
 
   if (!row) {
+    const floorLabel = String(meta?.bodyshopFloor ?? '').trim()
+    if (floorLabel) {
+      return {
+        headline: 'On floor — roles not assigned',
+        subline: `Vehicle is on ${floorLabel}. Assign workers on Bodyshop Floor to start the pipeline.`,
+        qcLabel,
+        steps: [],
+      }
+    }
     return {
       headline: 'No floor assignment',
       subline: 'Assign roles on Bodyshop Floor first.',
@@ -86,7 +97,7 @@ export function buildFloorWorkVehicleStatusSummary(
   if (pipelineDone) {
     return {
       headline: 'Worker QC stage',
-      subline: 'Dentor → Rubbing steps are Done. Waiting for worker QC submit from Floor Work.',
+      subline: 'Waiting for Dentor, Painter and Technician QC Pass in Floor Work (all roles + floor steps done → RI).',
       qcLabel,
       steps: buildStepRows(row, null),
     }
@@ -158,6 +169,7 @@ function buildStepRows(row: Record<string, unknown>, activeIdx: number | null): 
 export function floorWorkVehicleStatusHeadline(
   row: Record<string, unknown> | undefined,
   qcStatus: unknown,
+  meta?: FloorWorkVehicleMeta | undefined,
 ): string {
-  return buildFloorWorkVehicleStatusSummary(row, qcStatus).headline
+  return buildFloorWorkVehicleStatusSummary(row, qcStatus, meta).headline
 }

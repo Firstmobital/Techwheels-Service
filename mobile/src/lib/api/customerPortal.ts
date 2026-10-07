@@ -1677,6 +1677,92 @@ export async function customerGetBodyshopEstimateViewUrl(
 }
 
 /** Opens estimate in browser, or returns a URL for in-app image preview (Supabase signed URLs). */
+export function parseBodyshopSurveyApprovalDocument(
+  card: Record<string, unknown> | null | undefined,
+): CustomerBodyshopEstimateDocument | null {
+  const fromField = normalizeEstimateDocRow(
+    card?.survey_approval_document && typeof card.survey_approval_document === 'object'
+      ? (card.survey_approval_document as Record<string, unknown>)
+      : null,
+  )
+  if (fromField) return fromField
+
+  const uploaded = Array.isArray(card?.uploaded_documents)
+    ? (card!.uploaded_documents as Record<string, unknown>[])
+    : []
+  for (const row of uploaded) {
+    if (String(row.doc_key ?? '').trim() !== 'doc_survey_approval') continue
+    const parsed = normalizeEstimateDocRow(row)
+    if (parsed) return parsed
+  }
+  return null
+}
+
+export async function customerSetSurveyApprovalDecision(
+  sessionToken: string,
+  regNumber: string,
+  decision: 'approve' | 'reject',
+  reason?: string,
+): Promise<{ ok: boolean; status: string }> {
+  const { data, error } = await cpRpc('customer_set_survey_approval_decision', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber,
+    p_decision: decision,
+    p_reason: decision === 'reject' ? (reason || '').trim() || null : null,
+  })
+  if (error) throw new Error(error.message)
+  if (data && typeof data === 'object' && 'error' in (data as Record<string, unknown>)) {
+    throw new Error(String((data as Record<string, unknown>).error ?? 'Survey decision failed'))
+  }
+  clearCustomerPortalCache()
+  const status = String((data as Record<string, unknown>)?.status ?? (decision === 'approve' ? 'approved' : 'rejected'))
+  return { ok: true, status }
+}
+
+export async function customerOpenBodyshopSurveyApprovalDocument(
+  sessionToken: string,
+  regNumber: string | null | undefined,
+  doc?: CustomerBodyshopEstimateDocument | null,
+): Promise<{ mode: 'preview'; uri: string } | { mode: 'external' }> {
+  const reg = (regNumber || '').trim()
+  if (!sessionToken || !reg) throw new Error('Session or vehicle not available.')
+
+  let viewUrl = ''
+  let fileName = doc?.file_name ?? null
+  let contentType = doc?.content_type ?? null
+
+  try {
+    const resolved = await fetchCustomerBodyshopDocViewUrl(sessionToken, reg, 'doc_survey_approval')
+    viewUrl = preferDirectViewUrl(resolved.view_url, doc)
+    fileName = resolved.file_name ?? fileName
+    contentType = resolved.content_type ?? contentType
+  } catch (edgeErr) {
+    const driveUrl = String(doc?.drive_url ?? '').trim()
+    if (!driveUrl) {
+      throw edgeErr instanceof Error ? edgeErr : new Error('Unable to open survey approval document.')
+    }
+    viewUrl = preferDirectViewUrl(driveUrl, doc)
+  }
+
+  const isImage =
+    String(contentType ?? '').toLowerCase().startsWith('image/')
+    || isLikelyImageViewUrl(viewUrl, contentType, fileName)
+
+  const useInAppPreview =
+    isImage
+    && !/drive\.google\.com/i.test(viewUrl)
+    && !viewUrl.toLowerCase().includes('googleusercontent.com')
+
+  if (useInAppPreview) return { mode: 'preview', uri: viewUrl }
+
+  try {
+    await Linking.openURL(viewUrl)
+  } catch {
+    throw new Error('Unable to open this document on your device.')
+  }
+  return { mode: 'external' }
+}
+
 export async function customerOpenBodyshopEstimateDocument(
   sessionToken: string,
   regNumber: string | null | undefined,

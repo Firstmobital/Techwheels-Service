@@ -31,6 +31,7 @@ import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../../lib/customer/customerAd
 import { Icon, IconName } from '../../components/ui/Icon'
 import { RemainingDocumentsCard } from '../../components/customer/RemainingDocumentsCard'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
+import { CustomerSurveyApprovalCard } from '../../components/customer/CustomerSurveyApprovalCard'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
@@ -336,6 +337,16 @@ export default function CustomerDashboardScreen() {
           </CustomerCard>
 
           <RemainingDocumentsCard regNumber={selected?.reg_number} />
+          {isEffectiveBodyshopCustomerVisit({ visitReady, kind: visitKind, isBodyshop, repairCard }) &&
+          token &&
+          selected?.reg_number ? (
+            <CustomerSurveyApprovalCard
+              token={token}
+              regNumber={selected.reg_number}
+              repairCard={repairCard}
+              onDecided={() => void refreshVisit({ bypassCache: true })}
+            />
+          ) : null}
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
           <View style={{ marginBottom: 14 }}>

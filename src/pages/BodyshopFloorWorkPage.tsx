@@ -61,9 +61,11 @@ import {
   fetchRepairCardVehicleByJcs,
 } from '../lib/api/bodyshopFloorWorkVehicles'
 import {
+  aliasAssignmentMapForVehicleCatalog,
   filterTasksForLiveFloorVehicle,
   resolveBodyshopAssignmentRow,
 } from '../lib/bodyshopFloorWork/assignmentLookup'
+import { floorWorkVehicleDetailPath } from '../lib/bodyshopFloorWork/floorWorkRoutes'
 import { BODYSHOP_FLOOR_LIVE_LIST_LABEL } from '../lib/bodyshopFloorLive'
 import { completeBodyshopFloorWorkRoleOnAssignment } from '../lib/api/bodyshopFloorWorkPipeline'
 import {
@@ -71,8 +73,16 @@ import {
   canSubmitFloorWorkTask,
   isFloorWorkTaskAtActivePipelineStep,
   isFloorWorkTaskStepCompleted,
+  isWorkerQcTurn,
   pickFloorWorkDetailTask,
+  resolveCanonicalAssignmentRowForJobCard,
 } from '../lib/bodyshopFloorWork/pipeline'
+import {
+  fetchWorkerRoleQcForJobCards,
+  saveWorkerRoleQcFromFloorWork,
+  type WorkerQcDecision,
+} from '../lib/api/bodyshopFloorWorkerRoleQc'
+import { isWorkerSelfQcRole, type WorkerRoleQcMap } from '../lib/bodyshopFloorWork/workerRoleQc'
 import {
   floorWorkVehicleSubtitle,
   floorWorkVehicleTitle,
@@ -197,6 +207,8 @@ export default function BodyshopFloorWorkPage() {
   const [selectedPhotosError, setSelectedPhotosError] = useState<string | null>(null)
   const [listVisibleCount, setListVisibleCount] = useState(FLOOR_WORK_LIST_PAGE_SIZE)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
+  const [workerRoleQcByJc, setWorkerRoleQcByJc] = useState<Record<string, WorkerRoleQcMap>>({})
+  const [workerQcFailReason, setWorkerQcFailReason] = useState('')
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
   const assignmentRepairCardIdRef = useRef<Record<string, number>>({})
   const assignmentRowsRef = useRef<Record<string, unknown>[]>([])
@@ -375,21 +387,31 @@ export default function BodyshopFloorWorkPage() {
     if (!selectedJc) return null
     const onVehicle = isAdminOverview ? tasksForDisplayJc(selectedJc) : tasks.filter((t) => t.jobCardNumber === selectedJc)
     const row = assignmentRowForDisplayJc(selectedJc)
-    const qcStatus = cardByJc[selectedJc]?.qcStatus
-    if (isAdminOverview) {
-      return pickFloorWorkDetailTask(onVehicle, row, qcStatus, employeeCode)
-    }
-    const me = String(employeeCode ?? '').trim().toUpperCase()
-    const mine = onVehicle.find((t) => workTaskEmployeeCode(t, employeeCode) === me)
-    return mine ?? onVehicle[0] ?? null
-  }, [selectedJc, tasks, employeeCode, isAdminOverview, cardByJc, tasksForDisplayJc, assignmentRowForDisplayJc])
+    const jc = selectedJc
+    const roleQc = workerRoleQcByJc[jc] ?? {}
+    const repairCardQc = cardByJc[jc]?.qcStatus
+    return pickFloorWorkDetailTask(onVehicle, row, roleQc, employeeCode, repairCardQc)
+  }, [selectedJc, tasks, employeeCode, isAdminOverview, cardByJc, tasksForDisplayJc, assignmentRowForDisplayJc, workerRoleQcByJc])
 
   const canEditSelectedTask = useMemo(() => {
     if (!selectedTask) return false
-    const row = assignmentRowForDisplayJc(selectedJc ?? selectedTask.jobCardNumber)
-    const qcStatus = cardByJc[selectedJc ?? '']?.qcStatus ?? cardByJc[selectedTask.jobCardNumber]?.qcStatus
-    return canSubmitFloorWorkTask(selectedTask, row, qcStatus, { isAdminOverview })
-  }, [selectedTask, selectedJc, cardByJc, isAdminOverview, assignmentRowForDisplayJc])
+    const jc = selectedJc ?? selectedTask.jobCardNumber
+    const row = assignmentRowForDisplayJc(jc)
+    const roleQc = workerRoleQcByJc[jc] ?? {}
+    const repairCardQc = cardByJc[jc]?.qcStatus
+    return canSubmitFloorWorkTask(selectedTask, row, roleQc, { isAdminOverview, repairCardQcStatus: repairCardQc })
+  }, [selectedTask, selectedJc, cardByJc, isAdminOverview, assignmentRowForDisplayJc, workerRoleQcByJc])
+
+  const selectedWorkerQcTurn = useMemo(() => {
+    if (!selectedTask || !selectedJc) return false
+    const row = assignmentRowForDisplayJc(selectedJc)
+    return isWorkerQcTurn(
+      selectedTask,
+      row,
+      workerRoleQcByJc[selectedJc] ?? {},
+      cardByJc[selectedJc]?.qcStatus,
+    )
+  }, [selectedTask, selectedJc, cardByJc, assignmentRowForDisplayJc, workerRoleQcByJc])
 
   const selectedVehiclePhotos = selectedJc ? (photosByVehicle[selectedJc] ?? []) : []
 
@@ -505,7 +527,7 @@ export default function BodyshopFloorWorkPage() {
         throw new Error('No employee linked to your login.')
       }
 
-      const assignmentMap = buildAssignmentRowByJobCard(assRows)
+      let assignmentMap = buildAssignmentRowByJobCard(assRows)
       if (!adminOverview) {
         setWorkerAssignedSlotCount(myTasks.length)
         myTasks = myTasks.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, assignmentMap[t.jobCardNumber]))
@@ -546,6 +568,8 @@ export default function BodyshopFloorWorkPage() {
           }
         }
         metaLoadedJcsRef.current = new Set(allJcs)
+        assignmentMap = aliasAssignmentMapForVehicleCatalog(assignmentMap, assRows, cardMeta, allJcs)
+        setAssignmentByJc(assignmentMap)
       } else {
         const assignmentJcs = Array.from(
           new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
@@ -563,6 +587,13 @@ export default function BodyshopFloorWorkPage() {
 
       setAllFloorJcs(allJcs)
       setCardByJc(cardMeta)
+
+      try {
+        const qcMaps = allJcs.length > 0 ? await fetchWorkerRoleQcForJobCards(allJcs) : {}
+        setWorkerRoleQcByJc(qcMaps)
+      } catch {
+        setWorkerRoleQcByJc({})
+      }
 
       const logsRes = adminOverview
         ? await fetchRoleDailyLogsForDate(today)
@@ -648,6 +679,57 @@ export default function BodyshopFloorWorkPage() {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [queueVisibleFloorWorkDriveSync])
 
+  async function submitWorkerRoleQc(decision: WorkerQcDecision) {
+    if (!selectedTask || !selectedJc || !selectedWorkerQcTurn) return
+    if (!isWorkerSelfQcRole(selectedTask.floorRole)) return
+    if (decision === 'fail' && !workerQcFailReason.trim()) {
+      alert('Enter a fail reason before QC Fail.')
+      return
+    }
+    const row = assignmentRowForDisplayJc(selectedJc)
+    if (!row) {
+      alert('Assignment missing — refresh the page.')
+      return
+    }
+    const repairCardId = cardByJc[selectedJc]?.repairCardId ?? selectedTask.repairCardId
+    if (!repairCardId) {
+      alert('Vehicle record still loading — refresh and try again.')
+      return
+    }
+    setSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const checker = String(selectedTask.employeeName ?? employeeName ?? employeeCode).trim()
+      const result = await saveWorkerRoleQcFromFloorWork({
+        repairCardId,
+        jobCardNumber: selectedJc,
+        assignmentRow: row,
+        floorRole: selectedTask.floorRole,
+        decision,
+        employeeCode: selectedTask.assignedEmployeeCode,
+        checkerName: checker,
+        failReason: workerQcFailReason,
+        actorEmail: user?.email ?? null,
+      })
+      setWorkerRoleQcByJc((prev) => ({ ...prev, [selectedJc]: result.roleQcMap }))
+      setCardByJc((prev) => ({
+        ...prev,
+        [selectedJc]: { ...(prev[selectedJc] ?? { reg: null, customer: null }), qcStatus: result.repairCardQcStatus },
+      }))
+      setWorkerQcFailReason('')
+      alert(
+        decision === 'pass'
+          ? 'QC passed. When Dentor, Painter and Technician all pass (and floor work is finished), the vehicle goes to RI for Floor Incharge.'
+          : 'QC failed — fix work and submit again.',
+      )
+      void load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'QC save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function saveWorkerLog() {
     if (!selectedTask) return
     const selected = selectedTask
@@ -710,15 +792,19 @@ export default function BodyshopFloorWorkPage() {
       })
       if (completeRes.error) throw new Error(completeRes.error)
 
-      const { data: assRow, error: assReadErr } = await supabase
+      const { data: assRows, error: assReadErr } = await supabase
         .from('bodyshop_assignments')
         .select('*')
         .eq('is_active', true)
-        .eq('job_card_number', selected.jobCardNumber)
-        .maybeSingle()
+        .ilike('job_card_number', selected.jobCardNumber.trim())
       if (assReadErr) throw new Error(assReadErr.message)
-      if (assRow) {
-        const row = assRow as Record<string, unknown>
+      const jcNorm = selected.jobCardNumber.trim().toUpperCase()
+      const matching = ((assRows ?? []) as Record<string, unknown>[]).filter(
+        (r) => String(r.job_card_number ?? '').trim().toUpperCase() === jcNorm,
+      )
+      const picked = resolveCanonicalAssignmentRowForJobCard(matching, selected.floorRole)
+      if (picked) {
+        const row = picked
         setAssignmentByJc((prev) => ({ ...prev, [selected.jobCardNumber]: row }))
         if (!isAdminOverview) {
           setTasks((prev) => prev.filter((t) => isFloorWorkTaskAtActivePipelineStep(t, row)))
@@ -914,27 +1000,9 @@ export default function BodyshopFloorWorkPage() {
                   const photoCount = photoCountByJc[jobCardNumber] ?? 0
                   const active = selectedJc === jobCardNumber
                   const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)
-                  const statusLine = floorWorkVehicleStatusHeadline(assignRow, card?.qcStatus)
-                  return (
-                    <button
-                      key={jobCardNumber}
-                      type="button"
-                      onClick={() => {
-                        setSelectedJc(jobCardNumber)
-                        requestAnimationFrame(() => {
-                          detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                        })
-                      }}
-                      className="card"
-                      style={{
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        margin: 0,
-                        padding: 14,
-                        border: active ? '2px solid var(--primary, #0d9488)' : '1px solid var(--border, #e5e7eb)',
-                        boxShadow: active ? '0 0 0 1px var(--primary, #0d9488)' : undefined,
-                      }}
-                    >
+                  const statusLine = floorWorkVehicleStatusHeadline(assignRow, card?.qcStatus, card)
+                  const cardBody = (
+                    <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                         <strong style={{ fontSize: 16 }}>{floorWorkVehicleTitle(card, jobCardNumber)}</strong>
                         <span
@@ -973,6 +1041,37 @@ export default function BodyshopFloorWorkPage() {
                       <p style={{ margin: 0, fontSize: 12, fontWeight: 600 }}>
                         Photos: {photoCount}
                       </p>
+                      {isAdminOverview ? (
+                        <p className="bfw-vehicle-card__hint">Opens in new tab</p>
+                      ) : null}
+                    </>
+                  )
+                  if (isAdminOverview) {
+                    return (
+                      <a
+                        key={jobCardNumber}
+                        href={floorWorkVehicleDetailPath(jobCardNumber)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="card bfw-vehicle-card"
+                      >
+                        {cardBody}
+                      </a>
+                    )
+                  }
+                  return (
+                    <button
+                      key={jobCardNumber}
+                      type="button"
+                      onClick={() => {
+                        setSelectedJc(jobCardNumber)
+                        requestAnimationFrame(() => {
+                          detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        })
+                      }}
+                      className={`card bfw-vehicle-card${active ? ' bfw-vehicle-card--active' : ''}`}
+                    >
+                      {cardBody}
                     </button>
                   )
                 })}
@@ -997,12 +1096,23 @@ export default function BodyshopFloorWorkPage() {
               </div>
             ) : null}
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
-              Click a vehicle — full pipeline, worker notes and photos appear below.
+              {isAdminOverview
+                ? 'Click a vehicle to open pipeline, worker notes, and photos in a new tab.'
+                : 'Click a vehicle — full pipeline, worker notes and photos appear below.'}
             </p>
           </section>
 
           <section ref={detailSectionRef} className="card bfw-stack__detail">
-            {selectedJc ? (
+            {isAdminOverview ? (
+              <div className="bfw-stack__placeholder">
+                <h2 style={{ fontSize: 16, marginTop: 0 }}>Vehicle details</h2>
+                <p style={{ color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
+                  Select a vehicle from the list above — it opens in a new browser tab with pipeline status,
+                  worker work, and all photos.
+                </p>
+              </div>
+            ) : null}
+            {!isAdminOverview && selectedJc ? (
               <div className="bfw-stack__detail-inner">
                 <BodyshopFloorWorkVehicleDetailPanel
                   jobCardNumber={selectedJc}
@@ -1022,7 +1132,7 @@ export default function BodyshopFloorWorkPage() {
                         {BODYSHOP_FLOOR_WORK_ROLE_LABELS[selectedTask.floorRole]}
                         {selectedTask.isSupport ? ' (support)' : ''}
                       </h3>
-                      {canEditSelectedTask ? (
+                      {canEditSelectedTask && !selectedWorkerQcTurn ? (
                         <>
                           <p className="bfw-detail__muted">Optional note + work photos, then Done to send to the next role.</p>
                           <textarea
@@ -1057,7 +1167,44 @@ export default function BodyshopFloorWorkPage() {
                             {saving ? 'Saving…' : 'Done — send to next step'}
                           </button>
                         </>
-                      ) : isAdminOverview ? (
+                      ) : null}
+                      {selectedWorkerQcTurn && canEditSelectedTask ? (
+                        <div className="bfw-worker-qc" style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                          <h3 className="bfw-detail__section-title">Quality check — your work</h3>
+                          <p className="bfw-detail__muted">
+                            Your step is Done. Pass or fail QC on this vehicle before it can go to RI (after all roles pass).
+                          </p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+                            <button
+                              type="button"
+                              className="btn btn--primary"
+                              disabled={saving}
+                              onClick={() => void submitWorkerRoleQc('pass')}
+                            >
+                              QC Pass
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--ghost"
+                              disabled={saving}
+                              onClick={() => void submitWorkerRoleQc('fail')}
+                            >
+                              QC Fail
+                            </button>
+                          </div>
+                          <label className="field" style={{ marginTop: 12 }}>
+                            <span className="label">Fail reason (required if Fail)</span>
+                            <textarea
+                              className="inp"
+                              rows={2}
+                              value={workerQcFailReason}
+                              onChange={(e) => setWorkerQcFailReason(e.target.value)}
+                              placeholder="Describe the defect"
+                            />
+                          </label>
+                        </div>
+                      ) : !canEditSelectedTask ? (
+                        isAdminOverview ? (
                         <p className="bfw-detail__muted">
                           Admin read-only: this vehicle is not on an active pipeline step for upload. Use work updates and
                           photo sections below to review what each worker submitted.
@@ -1066,12 +1213,13 @@ export default function BodyshopFloorWorkPage() {
                         <p className="bfw-detail__muted">
                           Not your turn yet — an earlier pipeline step must finish first, or QC is in progress.
                         </p>
-                      )}
+                      )
+                      ) : null}
                     </div>
                   ) : null}
                 </BodyshopFloorWorkVehicleDetailPanel>
               </div>
-            ) : (
+            ) : !isAdminOverview ? (
               <div className="bfw-stack__placeholder">
                 <h2 style={{ fontSize: 16, marginTop: 0 }}>Vehicle details</h2>
                 <p style={{ color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
@@ -1079,7 +1227,7 @@ export default function BodyshopFloorWorkPage() {
                   worker notes, and all photos.
                 </p>
               </div>
-            )}
+            ) : null}
           </section>
           </div>
         </>

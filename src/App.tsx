@@ -22,6 +22,7 @@ import SATrackerPage from './pages/SATrackerPage'
 import BodyshopTrackerPage from './pages/BodyshopTrackerPage'
 import BodyshopFloorPage from './pages/BodyshopFloorPage'
 import BodyshopFloorWorkPage from './pages/BodyshopFloorWorkPage'
+import BodyshopFloorWorkVehiclePage from './pages/BodyshopFloorWorkVehiclePage'
 import BodyshopRepairPage from './pages/BodyshopRepairPage'
 import BodyshopRecoveryPage from './pages/BodyshopRecoveryPage'
 import FloorInchargePage from './pages/FloorInchargePage'
@@ -1595,6 +1596,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-floor']}>
                       <BodyshopFloorPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/bodyshop-floor-work/v/:vehicleKey"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-floor-work']}>
+                      <BodyshopFloorWorkVehiclePage />
                     </RequireAccess>
                   )}
                 />

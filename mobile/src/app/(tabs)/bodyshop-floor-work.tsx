@@ -59,8 +59,14 @@ import {
   isFloorWorkTaskStepCompleted,
   isFloorWorkTaskVisible,
   isWorkerQcTurn,
+  resolveCanonicalAssignmentRowForJobCard,
 } from '../../lib/bodyshopFloorWork/pipeline'
-import { saveWorkerQcFromFloorWork, type WorkerQcDecision } from '../../lib/api/bodyshopFloorWorkerQc'
+import {
+  fetchWorkerRoleQcForJobCards,
+  saveWorkerRoleQcFromFloorWork,
+  type WorkerQcDecision,
+} from '../../lib/api/bodyshopFloorWorkerRoleQc'
+import { isWorkerSelfQcRole, type WorkerRoleQcMap } from '../../lib/bodyshopFloorWork/workerRoleQc'
 import { filterTasksByFloorWorkGoLive } from '../../lib/bodyshopFloorWork/eligibility'
 import { completeBodyshopFloorWorkRoleOnAssignment } from '../../lib/api/bodyshopFloorWorkPipeline'
 import { humanizeStaffAuthError } from '../../lib/staffAuthErrors'
@@ -302,6 +308,7 @@ export default function BodyshopFloorWorkScreen() {
   const [loadingAllPhotos, setLoadingAllPhotos] = useState(false)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
   const [workerQcFailReason, setWorkerQcFailReason] = useState('')
+  const [roleQcByJc, setRoleQcByJc] = useState<Record<string, WorkerRoleQcMap>>({})
   const optimistic = useOptimisticAction()
   const assignmentCreatedAtRef = useRef<Record<string, string>>({})
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
@@ -380,19 +387,20 @@ export default function BodyshopFloorWorkScreen() {
     [assignmentByJc, adminEmployeeScopedTasks, tasks],
   )
 
-  const qcStatusForTask = useCallback(
-    (t: BodyshopFloorWorkTask) =>
-      vehicleByJc[t.jobCardNumber]?.qcStatus
-      ?? (t.repairCardId ? undefined : undefined),
-    [vehicleByJc],
-  )
+  const roleQcForJc = useCallback((jc: string) => roleQcByJc[jc] ?? {}, [roleQcByJc])
+  const repairCardQcForJc = useCallback((jc: string) => vehicleByJc[jc]?.qcStatus, [vehicleByJc])
 
   const visibleTasks = useMemo(() => {
     if (isAdminOverview) return sortedMonthTasks
     return sortedMonthTasks.filter((t) =>
-      isFloorWorkTaskVisible(t, assignmentByJc[t.jobCardNumber], qcStatusForTask(t)),
+      isFloorWorkTaskVisible(
+        t,
+        assignmentByJc[t.jobCardNumber],
+        roleQcForJc(t.jobCardNumber),
+        repairCardQcForJc(t.jobCardNumber),
+      ),
     )
-  }, [sortedMonthTasks, isAdminOverview, assignmentByJc, qcStatusForTask])
+  }, [sortedMonthTasks, isAdminOverview, assignmentByJc, roleQcForJc, repairCardQcForJc])
 
   const visibleListTasks = useMemo(() => {
     if (!isAdminOverview || !selectedAdminEmployee) return visibleTasks
@@ -406,14 +414,24 @@ export default function BodyshopFloorWorkScreen() {
       if (onJc.length === 0) continue
       const row = assignmentByJc[t.jobCardNumber]
       const pick =
-        onJc.find((x) => isWorkerQcTurn(x, row, qcStatusForTask(x)))
+        onJc.find((x) =>
+          isWorkerQcTurn(x, row, roleQcForJc(x.jobCardNumber), repairCardQcForJc(x.jobCardNumber)),
+        )
         ?? onJc.find((x) => isFloorWorkTaskAtActivePipelineStep(x, row))
         ?? onJc.find((x) => !isFloorWorkTaskStepCompleted(x, row))
         ?? onJc[0]
       ordered.push(pick)
     }
     return ordered
-  }, [visibleTasks, isAdminOverview, selectedAdminEmployee, adminEmployeeScopedTasks, assignmentByJc, qcStatusForTask])
+  }, [
+    visibleTasks,
+    isAdminOverview,
+    selectedAdminEmployee,
+    adminEmployeeScopedTasks,
+    assignmentByJc,
+    roleQcForJc,
+    repairCardQcForJc,
+  ])
 
   const pagedTasks = visibleListTasks
 
@@ -564,10 +582,22 @@ export default function BodyshopFloorWorkScreen() {
       if (allJcs.length > 0) {
         minimal = await attachQcStatusToVehicleMeta(minimal, allJcs)
       }
+      let qcByJc: Record<string, WorkerRoleQcMap> = {}
+      try {
+        qcByJc = await fetchWorkerRoleQcForJobCards(allJcs)
+      } catch {
+        qcByJc = {}
+      }
+      setRoleQcByJc(qcByJc)
       if (!adminOverview) {
         taskList = taskList.filter((t) => {
           const meta = minimal[t.jobCardNumber]
-          return isFloorWorkTaskVisible(t, assignmentMap[t.jobCardNumber], meta?.qcStatus)
+          return isFloorWorkTaskVisible(
+            t,
+            assignmentMap[t.jobCardNumber],
+            qcByJc[t.jobCardNumber] ?? {},
+            meta?.qcStatus,
+          )
         })
       }
       taskList = filterTasksByFloorWorkGoLive(taskList, minimal, assignmentMap)
@@ -913,106 +943,106 @@ export default function BodyshopFloorWorkScreen() {
   const selectedWorkerQcTurn = useMemo(() => {
     if (!selected) return false
     const row = assignmentByJc[selected.jobCardNumber]
-    const meta = vehicleByJc[selected.jobCardNumber]
-    return isWorkerQcTurn(selected, row, meta?.qcStatus)
-  }, [selected, assignmentByJc, vehicleByJc])
+    const jc = selected.jobCardNumber
+    return isWorkerQcTurn(
+      selected,
+      row,
+      roleQcForJc(jc),
+      repairCardQcForJc(jc),
+    )
+  }, [selected, assignmentByJc, roleQcForJc, repairCardQcForJc])
 
   const canSubmitSelected = useMemo(() => {
     if (!selected) return false
     const row = assignmentByJc[selected.jobCardNumber]
-    const meta = vehicleByJc[selected.jobCardNumber]
-    return canSubmitFloorWorkTask(selected, row, meta?.qcStatus, { isAdminOverview })
-  }, [selected, isAdminOverview, assignmentByJc, vehicleByJc])
+    const jc = selected.jobCardNumber
+    return canSubmitFloorWorkTask(selected, row, roleQcForJc(jc), {
+      isAdminOverview,
+      repairCardQcStatus: repairCardQcForJc(jc),
+    })
+  }, [selected, isAdminOverview, assignmentByJc, roleQcForJc, repairCardQcForJc])
 
   const canUploadPhotosSelected = useMemo(() => {
     if (!selected) return false
     const row = assignmentByJc[selected.jobCardNumber]
-    const meta = vehicleByJc[selected.jobCardNumber]
-    return canUploadFloorWorkPhotos(selected, row, meta?.qcStatus)
-  }, [selected, assignmentByJc, vehicleByJc])
+    const jc = selected.jobCardNumber
+    return canUploadFloorWorkPhotos(selected, row, roleQcForJc(jc), repairCardQcForJc(jc))
+  }, [selected, assignmentByJc, roleQcForJc, repairCardQcForJc])
 
   async function submitWorkerQc(decision: WorkerQcDecision) {
     if (!selected || !canSubmitSelected || !selectedWorkerQcTurn) return
+    if (!isWorkerSelfQcRole(selected.floorRole)) return
     if (decision === 'fail' && !workerQcFailReason.trim()) {
       Alert.alert('QC Fail', 'Enter a fail reason before submitting.')
       return
     }
     const row = assignmentByJc[selected.jobCardNumber] as Record<string, unknown> | undefined
-    const assignmentId = typeof row?.id === 'number' && row.id > 0 ? row.id : null
+    if (!row) {
+      Alert.alert('QC', 'Assignment missing — pull to refresh.')
+      return
+    }
     const meta = vehicleByJc[selected.jobCardNumber]
     const repairCardId = meta?.repairCardId ?? selected.repairCardId
-    if (!assignmentId || !repairCardId) {
+    if (!repairCardId) {
       Alert.alert('QC', 'Vehicle record is still loading. Pull to refresh and try again.')
       return
     }
     const checker = String(selected.employeeName ?? employeeName ?? employeeCode).trim()
     const failReasonSnapshot = workerQcFailReason
     const jc = selected.jobCardNumber
-    const optimisticQc = decision === 'pass' ? 'pass' : 'fail'
+    const floorRole = selected.floorRole
     const prevVehicleByJc = vehicleByJc
     const prevAssignmentByJc = assignmentByJc
+    const prevRoleQcByJc = roleQcByJc
     const prevTasks = tasks
     const prevSelected = selected
-    const now = new Date().toISOString()
-    const optimisticNextRow = decision === 'pass' && row ? { ...row, bs_floor_completed_at: now } : row
 
-    await optimistic.run(`qc-${jc}`, {
+    await optimistic.run(`qc-${jc}-${floorRole}`, {
       apply: () => {
         setSaving(true)
-        setVehicleByJc((prev) => ({
-          ...prev,
-          [jc]: {
-            ...(prev[jc] ?? { reg: null, customer: null }),
-            qcStatus: optimisticQc,
-          },
-        }))
-        if (optimisticNextRow) {
-          setAssignmentByJc((prev) => ({ ...prev, [jc]: optimisticNextRow }))
-        }
-        setTasks((prev) =>
-          prev.filter((t) => {
-            const assignRow =
-              t.jobCardNumber === jc ? (optimisticNextRow ?? assignmentByJc[t.jobCardNumber]) : assignmentByJc[t.jobCardNumber]
-            const qc = t.jobCardNumber === jc ? optimisticQc : vehicleByJc[t.jobCardNumber]?.qcStatus
-            return isFloorWorkTaskVisible(t, assignRow, qc)
-          }),
-        )
-        setSelected(null)
       },
       rollback: () => {
         setVehicleByJc(prevVehicleByJc)
         setAssignmentByJc(prevAssignmentByJc)
+        setRoleQcByJc(prevRoleQcByJc)
         setTasks(prevTasks)
         setSelected(prevSelected)
         setSaving(false)
       },
       execute: async () => {
         const { data: { user } } = await supabase.auth.getUser()
-        const result = await saveWorkerQcFromFloorWork({
+        const result = await saveWorkerRoleQcFromFloorWork({
           repairCardId,
           jobCardNumber: jc,
-          assignmentRowId: assignmentId,
+          assignmentRow: row,
+          floorRole,
           decision,
+          employeeCode: selected.assignedEmployeeCode,
           checkerName: checker,
           failReason: failReasonSnapshot,
           actorEmail: user?.email ?? null,
         })
+        setRoleQcByJc((prev) => ({ ...prev, [jc]: result.roleQcMap }))
         setVehicleByJc((prev) => ({
           ...prev,
           [jc]: {
             ...(prev[jc] ?? { reg: null, customer: null }),
-            qcStatus: result.qc_status,
+            qcStatus: result.repairCardQcStatus,
           },
         }))
-        const passQc = decision === 'pass' ? 'pass' : result.qc_status
-        const nextRow = decision === 'pass' && row ? { ...row, bs_floor_completed_at: now } : row
-        setAssignmentByJc((prev) => ({ ...prev, [jc]: nextRow ?? prev[jc] }))
+        if (result.repairCardQcStatus === 'pass') {
+          const now = new Date().toISOString()
+          setAssignmentByJc((prev) => ({
+            ...prev,
+            [jc]: { ...(prev[jc] ?? row), bs_floor_completed_at: now },
+          }))
+        }
         setTasks((prev) =>
           prev.filter((t) => {
-            const assignRow =
-              t.jobCardNumber === jc ? (nextRow ?? assignmentByJc[t.jobCardNumber]) : assignmentByJc[t.jobCardNumber]
-            const qc = t.jobCardNumber === jc ? passQc : vehicleByJc[t.jobCardNumber]?.qcStatus
-            return isFloorWorkTaskVisible(t, assignRow, qc)
+            const assignRow = assignmentByJc[t.jobCardNumber]
+            const cardQc = t.jobCardNumber === jc ? result.repairCardQcStatus : vehicleByJc[t.jobCardNumber]?.qcStatus
+            const rq = t.jobCardNumber === jc ? result.roleQcMap : roleQcForJc(t.jobCardNumber)
+            return isFloorWorkTaskVisible(t, assignRow, rq, cardQc)
           }),
         )
       },
@@ -1022,7 +1052,7 @@ export default function BodyshopFloorWorkScreen() {
         Alert.alert(
           decision === 'pass' ? 'QC passed' : 'QC failed',
           decision === 'pass'
-            ? 'Floor incharge can complete Re-Inspection on Bodyshop Floor.'
+            ? 'Your QC is saved. When Dentor, Painter and Technician all pass (and floor work is done), the car moves to RI for Floor Incharge.'
             : 'Fail reason saved. Fix work and submit QC again.',
         )
       },
@@ -1054,15 +1084,19 @@ export default function BodyshopFloorWorkScreen() {
         actorEmail: ctx.user?.email ?? null,
       })
 
-      const { data: assRow, error: assReadErr } = await supabase
+      const { data: assRows, error: assReadErr } = await supabase
         .from('bodyshop_assignments')
         .select('*')
         .eq('is_active', true)
-        .eq('job_card_number', selected.jobCardNumber)
-        .maybeSingle()
+        .ilike('job_card_number', selected.jobCardNumber.trim())
       if (assReadErr) throw new Error(assReadErr.message)
-      if (assRow) {
-        const assignmentRow = assRow as Record<string, unknown>
+      const jcNorm = selected.jobCardNumber.trim().toUpperCase()
+      const matching = ((assRows ?? []) as Record<string, unknown>[]).filter(
+        (r) => String(r.job_card_number ?? '').trim().toUpperCase() === jcNorm,
+      )
+      const picked = resolveCanonicalAssignmentRowForJobCard(matching, selected.floorRole)
+      if (picked) {
+        const assignmentRow = picked
         setAssignmentByJc((prev) => ({ ...prev, [selected.jobCardNumber]: assignmentRow }))
         if (!isAdminOverview) {
           setTasks((prev) =>
@@ -1070,7 +1104,12 @@ export default function BodyshopFloorWorkScreen() {
               const rowForTask =
                 t.jobCardNumber === selected.jobCardNumber ? assignmentRow : assignmentByJc[t.jobCardNumber]
               const meta = vehicleByJc[t.jobCardNumber]
-              return isFloorWorkTaskVisible(t, rowForTask, meta?.qcStatus)
+              return isFloorWorkTaskVisible(
+                t,
+                rowForTask,
+                roleQcForJc(t.jobCardNumber),
+                meta?.qcStatus,
+              )
             }),
           )
         }
@@ -1241,7 +1280,7 @@ export default function BodyshopFloorWorkScreen() {
               <View style={S.qcPanel}>
                 <Text style={S.qcPanelTitle}>Quality check — your turn</Text>
                 <Text style={S.qcPanelHint}>
-                  All floor steps are done. As the last pipeline role on this job, pass or fail QC here (usually Rubbing).
+                  Your work step is Done. Pass or fail QC on your work for this vehicle (Dentor / Painter / Technician).
                 </Text>
                 <View style={S.qcBtnRow}>
                   <TouchableOpacity
@@ -1506,7 +1545,9 @@ export default function BodyshopFloorWorkScreen() {
             renderItem={({ item }) => {
               const meta = vehicleByJc[item.jobCardNumber]
               const assignRow = assignmentByJc[item.jobCardNumber]
-              const qcTurn = !isAdminOverview && isWorkerQcTurn(item, assignRow, meta?.qcStatus)
+              const qcTurn =
+                !isAdminOverview
+                && isWorkerQcTurn(item, assignRow, roleQcForJc(item.jobCardNumber), meta?.qcStatus)
               const yourTurn = !isAdminOverview && isFloorWorkTaskAtActivePipelineStep(item, assignRow)
               const stepDone = isFloorWorkTaskStepCompleted(item, assignRow)
               const done = adminEmployeeWorkView && selectedAdminEmployee
