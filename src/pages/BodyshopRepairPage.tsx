@@ -6763,14 +6763,6 @@ export default function BodyshopRepairPage() {
                 const hasSurveyDate = Boolean(String(selected.survey_date ?? '').trim())
                 const hasSurveyorName = Boolean(String(selected.surveyor_name ?? '').trim())
                 const canSaveSurveyRequiredFields = hasClaimNo && hasSurveyDate && hasSurveyorName
-                const selectedCardId = Number(selected.id)
-                const currentFloor = String(selected.bodyshop_floor ?? '').trim()
-                const hasFloorSelection = currentFloor === 'Floor 2' || currentFloor === 'Floor 3'
-                const initialFloor = Number.isFinite(selectedCardId) && selectedCardId > 0
-                  ? (initialFloorByCardId[selectedCardId] ?? null)
-                  : null
-                const floorChanged = Boolean(initialFloor && hasFloorSelection && initialFloor !== currentFloor)
-                const floorChangeLocked = false
                 const customerSurveyStatus = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
                 const customerRejectRemark = String(selected.customer_survey_rejection_reason ?? '').trim()
 
