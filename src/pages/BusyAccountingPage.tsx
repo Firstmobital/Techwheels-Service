@@ -15,6 +15,7 @@ import {
   fetchBusyPartsLines,
   formatInr,
   loadBusyLabourSourceStatus,
+  enrichBusyPartsSourceStatusFromLines,
   loadBusyPartsSourceStatus,
   parsePartsSpreadsheet,
   importBusyPartsSource,
@@ -157,27 +158,28 @@ export default function BusyAccountingPage() {
       throw error
     })]).then(([status, lines]) => {
       if (!active) return
-      setPartsStatus(status)
+      const mergedStatus = enrichBusyPartsSourceStatusFromLines(status, lines)
+      setPartsStatus(mergedStatus)
       const pvLines = lines.filter((line) => line.portal === 'PV')
       const evLines = lines.filter((line) => line.portal === 'EV')
       setPvParts({
-        fileName: status.pvFileName,
+        fileName: mergedStatus.pvFileName,
         rowCount: pvLines.length,
-        error: status.error,
+        error: mergedStatus.error,
         summary: null,
         lines: pvLines,
         persisted: pvLines.length > 0,
-        uploadedAt: status.latestPvUploadedAt,
+        uploadedAt: mergedStatus.latestPvUploadedAt,
         saving: false,
       })
       setEvParts({
-        fileName: status.evFileName,
+        fileName: mergedStatus.evFileName,
         rowCount: evLines.length,
-        error: status.error,
+        error: mergedStatus.error,
         summary: null,
         lines: evLines,
         persisted: evLines.length > 0,
-        uploadedAt: status.latestEvUploadedAt,
+        uploadedAt: mergedStatus.latestEvUploadedAt,
         saving: false,
       })
     }).catch((error: unknown) => {
@@ -282,7 +284,10 @@ export default function BusyAccountingPage() {
         const imported = await importBusyPartsSource(portal, file.name, parsed.lines)
         const persisted = await fetchBusyPartsLines()
         const portalLines = persisted.filter((line) => line.portal === portal)
-        const status = await loadBusyPartsSourceStatus()
+        const status = enrichBusyPartsSourceStatusFromLines(
+          await loadBusyPartsSourceStatus(),
+          persisted,
+        )
         setPartsStatus(status)
         const incomplete = parsed.skippedIncomplete > 0
           ? `${parsed.skippedIncomplete} incomplete source rows skipped (Invoice_No / Invoice_Date / Job Card_No / Net_Amount required)`

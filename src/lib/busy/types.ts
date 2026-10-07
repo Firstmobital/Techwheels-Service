@@ -37,6 +37,8 @@ export interface BusyPartsLine {
   sourceRowNumber: number
   sourceRowKey: string
   sourceFileName: string
+  /** Persisted upload timestamp from busy_parts.uploaded_at when loaded from DB. */
+  uploadedAt?: string | null
   /** CRM Account_Name, trimmed. Empty when the source column is blank. */
   accountName?: string
   /** Leading token of accountName before the first hyphen. */

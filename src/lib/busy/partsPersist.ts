@@ -84,6 +84,7 @@ export function persistedRowToPartsLine(row: {
   net_amount: number
   source_row_key: string
   source_file_name: string | null
+  uploaded_at?: string | null
   account_name?: string | null
   account_code?: string | null
 }): BusyPartsLine {
@@ -106,6 +107,7 @@ export function persistedRowToPartsLine(row: {
     sourceRowNumber: 0,
     sourceRowKey: row.source_row_key,
     sourceFileName: row.source_file_name ?? '',
+    uploadedAt: row.uploaded_at ? String(row.uploaded_at) : null,
     accountName: String(row.account_name ?? '').trim(),
     accountCode: String(row.account_code ?? '').trim().toUpperCase(),
   }

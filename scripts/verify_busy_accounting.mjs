@@ -27,7 +27,9 @@ import {
   toBusyPartsPersistRows,
 } from '../src/lib/busy/partsPersist.ts'
 import { evaluateBusyVoucherSourceAvailability, VOUCHER_SOURCE_WARNING } from '../src/lib/busy/sourceAvailability.ts'
+import { enrichBusyPartsSourceStatusFromLines } from '../src/lib/busy/partsSource.ts'
 import { transformBusyAccounting } from '../src/lib/busy/transform.ts'
+import { formatSupabaseError } from '../src/lib/supabaseError.ts'
 import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, busyXlsxWriteOptions, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
 import * as XLSX from 'xlsx'
 import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS } from '../src/lib/busy/types.ts'
@@ -1820,6 +1822,48 @@ test('supplied PV.csv dealer invoices resolve by code when the file is present',
     assert.equal(host[other], '')
     assert.equal(exported.filter((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '').length, 1)
   }
+})
+
+test('formatSupabaseError surfaces PostgREST plain-object fields', () => {
+  const plain = { message: 'permission denied for table busy_parts', code: '42501', details: null, hint: null }
+  assert.equal(formatSupabaseError(plain), 'permission denied for table busy_parts | code=42501')
+  assert.notEqual(formatSupabaseError(plain), '[object Object]')
+})
+
+test('enrichBusyPartsSourceStatusFromLines fills filename and uploadedAt from persisted lines', () => {
+  const enriched = enrichBusyPartsSourceStatusFromLines(
+    {
+      pvAvailable: false,
+      evAvailable: false,
+      pvCount: 0,
+      evCount: 0,
+      pvFileName: null,
+      evFileName: null,
+      latestPvUploadedAt: null,
+      latestEvUploadedAt: null,
+      error: '[object Object]',
+    },
+    [
+      {
+        portal: 'PV',
+        jobCardNumber: 'JC-1',
+        invoiceNumber: 'IMBTAI2627000001',
+        invoiceDate: '2026-09-01',
+        netAmount: 100,
+        taxAmount: null,
+        gstRate: 18,
+        gstRateRaw: 18,
+        gstIssue: null,
+        sourceRowNumber: 0,
+        sourceRowKey: 'k1',
+        sourceFileName: 'Parts - PV.csv',
+        uploadedAt: '2026-09-06T10:00:00.000Z',
+      },
+    ],
+  )
+  assert.equal(enriched.pvFileName, 'Parts - PV.csv')
+  assert.equal(enriched.latestPvUploadedAt, '2026-09-06T10:00:00.000Z')
+  assert.equal(enriched.error, null)
 })
 
 if (failed > 0) {

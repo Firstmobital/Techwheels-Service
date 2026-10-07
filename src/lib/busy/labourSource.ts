@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { formatSupabaseError } from '../supabaseError.ts'
 import { busyLabourInvoiceInValues, busyLabourVrnInValues, BUSY_LABOUR_INVOICE_IN_CHUNK } from './eligibility.ts'
 import type { BusyLabourRow } from './types.ts'
 import type { VehiclePortal } from './types.ts'
@@ -76,7 +77,7 @@ export async function loadBusyLabourSourceStatus(): Promise<BusyLabourSourceStat
       evCount: 0,
       latestPvDate: null,
       latestEvDate: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: formatSupabaseError(error),
     }
   }
 }

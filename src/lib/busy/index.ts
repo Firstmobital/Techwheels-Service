@@ -68,6 +68,7 @@ export {
 } from './partsPersist.ts'
 export {
   fetchBusyPartsLines,
+  enrichBusyPartsSourceStatusFromLines,
   loadBusyPartsSourceStatus,
   importBusyPartsSource,
   formatBusyPartsImportSummary,
