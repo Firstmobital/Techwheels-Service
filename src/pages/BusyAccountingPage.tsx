@@ -15,6 +15,7 @@ import {
   fetchBusyPartsLines,
   formatInr,
   loadBusyLabourSourceStatus,
+  buildBusyPartsSlotViews,
   enrichBusyPartsSourceStatusFromLines,
   loadBusyPartsSourceStatus,
   parsePartsSpreadsheet,
@@ -40,6 +41,7 @@ import {
 import type { BusyLabourSourceStatus } from '../lib/busy/labourSource'
 import type { BusyPartsSourceStatus } from '../lib/busy/partsSource'
 import type { BusyPartsLine, VehiclePortal } from '../lib/busy/types'
+import { formatSupabaseError } from '../lib/supabaseError.ts'
 
 interface PartsSlotState {
   fileName: string | null
@@ -63,6 +65,21 @@ const EMPTY_SLOT: PartsSlotState = {
   saving: false,
 }
 
+function partsSlotsFromLoad(input: {
+  status: BusyPartsSourceStatus
+  lines: BusyPartsLine[]
+  linesLoadError: string | null
+}): { pv: PartsSlotState; ev: PartsSlotState; mergedStatus: BusyPartsSourceStatus } {
+  const { pv, ev, mergedStatus } = buildBusyPartsSlotViews(input)
+  const pvLines = input.lines.filter((line) => line.portal === 'PV')
+  const evLines = input.lines.filter((line) => line.portal === 'EV')
+  return {
+    mergedStatus,
+    pv: { ...pv, summary: null, lines: pvLines, saving: false },
+    ev: { ...ev, summary: null, lines: evLines, saving: false },
+  }
+}
+
 function statusTone(status: BusyPreviewRow['status']): { bg: string; color: string; label: string } {
   if (status === 'ready') return { bg: '#f0fdf4', color: '#15803d', label: 'Ready' }
   if (status === 'warning') return { bg: '#fffbeb', color: '#b45309', label: 'Warning' }
@@ -75,6 +92,7 @@ export default function BusyAccountingPage() {
   const [customRange, setCustomRange] = useState<DateRange>(currentMonthRange)
   const [labourStatus, setLabourStatus] = useState<BusyLabourSourceStatus | null>(null)
   const [partsStatus, setPartsStatus] = useState<BusyPartsSourceStatus | null>(null)
+  const [partsLinesLoadError, setPartsLinesLoadError] = useState<string | null>(null)
   const [labourLoading, setLabourLoading] = useState(true)
   const [partsLoading, setPartsLoading] = useState(true)
   const [labourResolvedRange, setLabourResolvedRange] = useState<string | null>(null)
@@ -154,52 +172,73 @@ export default function BusyAccountingPage() {
       if (active) setLabourStatus(status)
     })
     setPartsLoading(true)
-    Promise.all([loadBusyPartsSourceStatus(), fetchBusyPartsLines().catch((error: unknown) => {
-      throw error
-    })]).then(([status, lines]) => {
-      if (!active) return
-      const mergedStatus = enrichBusyPartsSourceStatusFromLines(status, lines)
+    setPartsLinesLoadError(null)
+
+    let latestStatus: BusyPartsSourceStatus | null = null
+    let latestLines: BusyPartsLine[] = []
+    let latestLinesError: string | null = null
+    let statusDone = false
+    let linesDone = false
+
+    const applyPartsLoad = () => {
+      if (!active || !latestStatus) return
+      const { pv, ev, mergedStatus } = partsSlotsFromLoad({
+        status: latestStatus,
+        lines: latestLines,
+        linesLoadError: latestLinesError,
+      })
       setPartsStatus(mergedStatus)
-      const pvLines = lines.filter((line) => line.portal === 'PV')
-      const evLines = lines.filter((line) => line.portal === 'EV')
-      setPvParts({
-        fileName: mergedStatus.pvFileName,
-        rowCount: pvLines.length,
-        error: mergedStatus.error,
-        summary: null,
-        lines: pvLines,
-        persisted: pvLines.length > 0,
-        uploadedAt: mergedStatus.latestPvUploadedAt,
-        saving: false,
-      })
-      setEvParts({
-        fileName: mergedStatus.evFileName,
-        rowCount: evLines.length,
-        error: mergedStatus.error,
-        summary: null,
-        lines: evLines,
-        persisted: evLines.length > 0,
-        uploadedAt: mergedStatus.latestEvUploadedAt,
-        saving: false,
-      })
+      setPartsLinesLoadError(latestLinesError)
+      setPvParts(pv)
+      setEvParts(ev)
+      if (statusDone && linesDone && active) setPartsLoading(false)
+    }
+
+    void loadBusyPartsSourceStatus().then((status) => {
+      if (!active) return
+      latestStatus = status
+      statusDone = true
+      applyPartsLoad()
+    })
+
+    void fetchBusyPartsLines().then((lines) => {
+      if (!active) return
+      latestLines = lines
+      latestLinesError = null
+      linesDone = true
+      if (!latestStatus) {
+        latestStatus = {
+          pvAvailable: false,
+          evAvailable: false,
+          pvCount: 0,
+          evCount: 0,
+          pvFileName: null,
+          evFileName: null,
+          latestPvUploadedAt: null,
+          latestEvUploadedAt: null,
+          error: null,
+        }
+      }
+      applyPartsLoad()
     }).catch((error: unknown) => {
       if (!active) return
-      const message = error instanceof Error ? error.message : String(error)
-      setPvParts(EMPTY_SLOT)
-      setEvParts(EMPTY_SLOT)
-      setPartsStatus({
-        pvAvailable: false,
-        evAvailable: false,
-        pvCount: 0,
-        evCount: 0,
-        pvFileName: null,
-        evFileName: null,
-        latestPvUploadedAt: null,
-        latestEvUploadedAt: null,
-        error: message,
-      })
-    }).finally(() => {
-      if (active) setPartsLoading(false)
+      latestLines = []
+      latestLinesError = formatSupabaseError(error)
+      linesDone = true
+      if (!latestStatus) {
+        latestStatus = {
+          pvAvailable: false,
+          evAvailable: false,
+          pvCount: 0,
+          evCount: 0,
+          pvFileName: null,
+          evFileName: null,
+          latestPvUploadedAt: null,
+          latestEvUploadedAt: null,
+          error: null,
+        }
+      }
+      applyPartsLoad()
     })
     return () => { active = false }
   }, [])
@@ -289,24 +328,30 @@ export default function BusyAccountingPage() {
           persisted,
         )
         setPartsStatus(status)
+        setPartsLinesLoadError(null)
         const incomplete = parsed.skippedIncomplete > 0
           ? `${parsed.skippedIncomplete} incomplete source rows skipped (Invoice_No / Invoice_Date / Job Card_No / Net_Amount required)`
           : null
+        const built = partsSlotsFromLoad({
+          status,
+          lines: persisted,
+          linesLoadError: null,
+        })
+        const slot = portal === 'PV' ? built.pv : built.ev
         setter({
+          ...slot,
           fileName: file.name,
-          rowCount: portalLines.length,
           error: incomplete,
           summary: formatBusyPartsImportSummary(imported),
           lines: portalLines,
           persisted: true,
-          uploadedAt: portal === 'PV' ? status.latestPvUploadedAt : status.latestEvUploadedAt,
           saving: false,
         })
       } catch (persistError) {
         setter((current) => ({
           ...current,
           fileName: file.name,
-          error: `Parsed locally; persist failed: ${persistError instanceof Error ? persistError.message : String(persistError)}`,
+          error: `Parsed locally; persist failed: ${formatSupabaseError(persistError)}`,
           summary: null,
           saving: false,
         }))
@@ -442,7 +487,13 @@ export default function BusyAccountingPage() {
       {partsStatus?.error && (
         <div className="toast error" style={{ marginBottom: 12 }}>
           <Icon name="alert" size={14} />
-          Parts persist: {partsStatus.error}
+          Parts source status: {partsStatus.error}
+        </div>
+      )}
+      {partsLinesLoadError && (
+        <div className="toast error" style={{ marginBottom: 12 }}>
+          <Icon name="alert" size={14} />
+          Parts lines: {partsLinesLoadError}
         </div>
       )}
 
@@ -663,7 +714,7 @@ function PartsUploadCard({
         {slot.summary && (
           <div className="toast" style={{ marginTop: 8, whiteSpace: 'pre-line' }}>{slot.summary}</div>
         )}
-        {slot.persisted && slot.uploadedAt && (
+        {slot.uploadedAt && (slot.persisted || slot.fileName) && (
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
             Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}
           </div>

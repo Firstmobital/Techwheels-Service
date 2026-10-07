@@ -27,7 +27,7 @@ import {
   toBusyPartsPersistRows,
 } from '../src/lib/busy/partsPersist.ts'
 import { evaluateBusyVoucherSourceAvailability, VOUCHER_SOURCE_WARNING } from '../src/lib/busy/sourceAvailability.ts'
-import { enrichBusyPartsSourceStatusFromLines } from '../src/lib/busy/partsSource.ts'
+import { buildBusyPartsSlotViews, enrichBusyPartsSourceStatusFromLines } from '../src/lib/busy/partsSource.ts'
 import { transformBusyAccounting } from '../src/lib/busy/transform.ts'
 import { formatSupabaseError } from '../src/lib/supabaseError.ts'
 import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, busyXlsxWriteOptions, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
@@ -1828,6 +1828,28 @@ test('formatSupabaseError surfaces PostgREST plain-object fields', () => {
   const plain = { message: 'permission denied for table busy_parts', code: '42501', details: null, hint: null }
   assert.equal(formatSupabaseError(plain), 'permission denied for table busy_parts | code=42501')
   assert.notEqual(formatSupabaseError(plain), '[object Object]')
+})
+
+test('buildBusyPartsSlotViews keeps RPC metadata when lines fetch failed', () => {
+  const views = buildBusyPartsSlotViews({
+    status: {
+      pvAvailable: true,
+      evAvailable: true,
+      pvCount: 9210,
+      evCount: 5513,
+      pvFileName: 'output - PV.csv',
+      evFileName: 'output - EV.csv',
+      latestPvUploadedAt: '2026-10-06T12:24:33.03842+05:30',
+      latestEvUploadedAt: '2026-10-06T12:22:58.52061+05:30',
+      error: null,
+    },
+    lines: [],
+    linesLoadError: 'canceling statement due to statement timeout | code=57014',
+  })
+  assert.equal(views.pv.fileName, 'output - PV.csv')
+  assert.equal(views.pv.uploadedAt, '2026-10-06T12:24:33.03842+05:30')
+  assert.equal(views.pv.persisted, true)
+  assert.match(views.pv.error ?? '', /57014/)
 })
 
 test('enrichBusyPartsSourceStatusFromLines fills filename and uploadedAt from persisted lines', () => {

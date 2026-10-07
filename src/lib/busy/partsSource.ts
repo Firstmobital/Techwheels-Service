@@ -131,6 +131,48 @@ function dominantFileName(lines: BusyPartsLine[]): string | null {
 }
 
 /** Fill missing status metadata from persisted lines already readable via fetchBusyPartsLines(). */
+export interface BusyPartsSlotViewModel {
+  fileName: string | null
+  rowCount: number
+  error: string | null
+  persisted: boolean
+  uploadedAt: string | null
+}
+
+export function buildBusyPartsSlotViews(input: {
+  status: BusyPartsSourceStatus
+  lines: BusyPartsLine[]
+  linesLoadError: string | null
+}): {
+  mergedStatus: BusyPartsSourceStatus
+  pv: BusyPartsSlotViewModel
+  ev: BusyPartsSlotViewModel
+} {
+  const mergedStatus = enrichBusyPartsSourceStatusFromLines(input.status, input.lines)
+  const pvLines = input.lines.filter((line) => line.portal === 'PV')
+  const evLines = input.lines.filter((line) => line.portal === 'EV')
+  const pvPersisted = pvLines.length > 0 || mergedStatus.pvCount > 0
+  const evPersisted = evLines.length > 0 || mergedStatus.evCount > 0
+
+  return {
+    mergedStatus,
+    pv: {
+      fileName: mergedStatus.pvFileName,
+      rowCount: pvLines.length > 0 ? pvLines.length : mergedStatus.pvCount,
+      error: input.linesLoadError,
+      persisted: pvPersisted,
+      uploadedAt: mergedStatus.latestPvUploadedAt,
+    },
+    ev: {
+      fileName: mergedStatus.evFileName,
+      rowCount: evLines.length > 0 ? evLines.length : mergedStatus.evCount,
+      error: input.linesLoadError,
+      persisted: evPersisted,
+      uploadedAt: mergedStatus.latestEvUploadedAt,
+    },
+  }
+}
+
 export function enrichBusyPartsSourceStatusFromLines(
   status: BusyPartsSourceStatus,
   lines: BusyPartsLine[],
@@ -184,28 +226,64 @@ export async function loadBusyPartsSourceStatus(): Promise<BusyPartsSourceStatus
   }
 }
 
-export async function fetchBusyPartsLines(): Promise<BusyPartsLine[]> {
+const BUSY_PARTS_LINE_COLUMNS =
+  'source_type, job_card_no, invoice_no, invoice_date, gst_rate, net_amount, source_row_key, source_file_name, uploaded_at, account_name, account_code'
+
+const BUSY_PARTS_LINE_COLUMNS_WITHOUT_UPLOADED_AT =
+  'source_type, job_card_no, invoice_no, invoice_date, gst_rate, net_amount, source_row_key, source_file_name, account_name, account_code'
+
+function isMissingUploadedAtColumnError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const record = error as { code?: string; message?: string }
+  const message = String(record.message ?? '')
+  return (
+    record.code === 'PGRST204'
+    || /uploaded_at/i.test(message)
+    || /column.*does not exist/i.test(message)
+  )
+}
+
+async function fetchBusyPartsLinesPage(
+  columns: string,
+  from: number,
+): Promise<{ batch: BusyPartsTableRow[]; error: unknown | null }> {
+  const { data, error } = await supabase
+    .from('busy_parts' as never)
+    .select(columns)
+    .order('source_type', { ascending: true })
+    .order('job_card_no', { ascending: true })
+    .range(from, from + PAGE_SIZE - 1)
+
+  if (error) return { batch: [], error }
+  return { batch: ((data ?? []) as unknown) as BusyPartsTableRow[], error: null }
+}
+
+async function fetchBusyPartsLinesWithColumns(columns: string): Promise<BusyPartsLine[]> {
   const rows: BusyPartsLine[] = []
   let from = 0
 
   while (true) {
-    const { data, error } = await supabase
-      .from('busy_parts' as never)
-      .select(
-        'source_type, job_card_no, invoice_no, invoice_date, gst_rate, net_amount, source_row_key, source_file_name, uploaded_at, account_name, account_code',
-      )
-      .order('source_type', { ascending: true })
-      .order('job_card_no', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1)
-
-    if (error) throw error
-    const batch = ((data ?? []) as unknown) as BusyPartsTableRow[]
+    let { batch, error } = await fetchBusyPartsLinesPage(columns, from)
+    if (error) {
+      const retry = await fetchBusyPartsLinesPage(columns, from)
+      if (retry.error) throw retry.error
+      batch = retry.batch
+    }
     rows.push(...batch.map(persistedRowToPartsLine))
     if (batch.length < PAGE_SIZE) break
     from += PAGE_SIZE
   }
 
   return rows
+}
+
+export async function fetchBusyPartsLines(): Promise<BusyPartsLine[]> {
+  try {
+    return await fetchBusyPartsLinesWithColumns(BUSY_PARTS_LINE_COLUMNS)
+  } catch (error) {
+    if (!isMissingUploadedAtColumnError(error)) throw error
+    return fetchBusyPartsLinesWithColumns(BUSY_PARTS_LINE_COLUMNS_WITHOUT_UPLOADED_AT)
+  }
 }
 
 export interface BusyPartsImportResult {
