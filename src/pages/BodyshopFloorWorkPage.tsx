@@ -185,6 +185,7 @@ export default function BodyshopFloorWorkPage() {
   const assignmentRepairCardIdRef = useRef<Record<string, number>>({})
   const assignmentRowsRef = useRef<Record<string, unknown>[]>([])
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
+  const detailSectionRef = useRef<HTMLElement | null>(null)
 
   const assignmentRowForDisplayJc = useCallback(
     (displayJc: string) =>
@@ -851,7 +852,12 @@ export default function BodyshopFloorWorkPage() {
                     <button
                       key={jobCardNumber}
                       type="button"
-                      onClick={() => setSelectedJc(jobCardNumber)}
+                      onClick={() => {
+                        setSelectedJc(jobCardNumber)
+                        requestAnimationFrame(() => {
+                          detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        })
+                      }}
                       className="card"
                       style={{
                         textAlign: 'left',
@@ -928,7 +934,7 @@ export default function BodyshopFloorWorkPage() {
             </p>
           </section>
 
-          <section className="card bfw-stack__detail">
+          <section ref={detailSectionRef} className="card bfw-stack__detail">
             {selectedJc ? (
               <div className="bfw-stack__detail-inner">
                 <BodyshopFloorWorkVehicleDetailPanel

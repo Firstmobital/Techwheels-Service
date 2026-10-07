@@ -7,11 +7,13 @@ import {
   buildFloorWorkVehicleStatusSummary,
   type FloorWorkRoleStatusTone,
 } from '../lib/bodyshopFloorWork/vehiclePipelineStatus'
-import type { BodyshopFloorRoleDailyLogRow } from '../lib/bodyshopFloorRoleWorkLog'
+import type {
+  BodyshopFloorRoleDailyLogPhotoRow,
+  BodyshopFloorRoleDailyLogRow,
+} from '../lib/bodyshopFloorRoleWorkLog'
 import {
   createSignedRoleLogPhotoUrl,
   fetchRoleDailyLogPhotos,
-  fetchRoleDailyLogsForJobCard,
   fetchRoleDailyLogsForVehicleKeys,
   openRoleDailyLogPhoto,
   type FloorWorkPhotoWithLog,
@@ -24,6 +26,24 @@ const TONE_CLASS: Record<FloorWorkRoleStatusTone, string> = {
   pending: 'bfw-pill bfw-pill--pending',
   waiting: 'bfw-pill bfw-pill--waiting',
   muted: 'bfw-pill bfw-pill--muted',
+}
+
+const HIGHLIGHT_ROLES: BodyshopFloorWorkLogRole[] = [
+  'DENTOR',
+  'DENTOR_HELPER',
+  'PAINTER',
+  'PAINTER_HELPER',
+  'TECHNICIAN',
+  'RUBBING',
+]
+
+function latestLogByRole(logs: BodyshopFloorRoleDailyLogRow[]): Map<BodyshopFloorWorkLogRole, BodyshopFloorRoleDailyLogRow> {
+  const map = new Map<BodyshopFloorWorkLogRole, BodyshopFloorRoleDailyLogRow>()
+  for (const log of logs) {
+    const role = log.floor_role as BodyshopFloorWorkLogRole
+    if (!map.has(role)) map.set(role, log)
+  }
+  return map
 }
 
 type Props = {
@@ -58,17 +78,17 @@ export function BodyshopFloorWorkVehicleDetailPanel({
   const [logs, setLogs] = useState<BodyshopFloorRoleDailyLogRow[]>([])
   const [logsLoading, setLogsLoading] = useState(true)
   const [logsError, setLogsError] = useState<string | null>(null)
-  const [photoCountByLogId, setPhotoCountByLogId] = useState<Record<number, number>>({})
+  const [photosByLogIdFetched, setPhotosByLogIdFetched] = useState<
+    Record<number, BodyshopFloorRoleDailyLogPhotoRow[]>
+  >({})
   const [thumbByPhotoId, setThumbByPhotoId] = useState<Record<number, string>>({})
 
   useEffect(() => {
     let cancelled = false
     setLogsLoading(true)
     setLogsError(null)
-    const loadLogs = adminWorkReview
-      ? fetchRoleDailyLogsForVehicleKeys(jobCardNumber, vehicleMeta, 200)
-      : fetchRoleDailyLogsForJobCard(jobCardNumber, 48)
-    void loadLogs.then(async (res) => {
+    setPhotosByLogIdFetched({})
+    void fetchRoleDailyLogsForVehicleKeys(jobCardNumber, vehicleMeta, adminWorkReview ? 200 : 80).then(async (res) => {
       if (cancelled) return
       if (res.error) {
         setLogsError(res.error)
@@ -79,17 +99,25 @@ export function BodyshopFloorWorkVehicleDetailPanel({
       const rows = res.data ?? []
       setLogs(rows)
       if (rows.length === 0) {
-        setPhotoCountByLogId({})
         setLogsLoading(false)
         return
       }
       const ph = await fetchRoleDailyLogPhotos(rows.map((r) => r.id))
       if (cancelled) return
-      const counts: Record<number, number> = {}
+      const byLog: Record<number, BodyshopFloorRoleDailyLogPhotoRow[]> = {}
       for (const p of ph.data ?? []) {
-        counts[p.log_id] = (counts[p.log_id] ?? 0) + 1
+        const list = byLog[p.log_id] ?? []
+        list.push(p)
+        byLog[p.log_id] = list
       }
-      setPhotoCountByLogId(counts)
+      for (const id of Object.keys(byLog)) {
+        byLog[Number(id)].sort((a, b) => {
+          const o = (a.sort_order ?? 0) - (b.sort_order ?? 0)
+          if (o !== 0) return o
+          return a.id - b.id
+        })
+      }
+      setPhotosByLogIdFetched(byLog)
       setLogsLoading(false)
     })
     return () => {
@@ -101,17 +129,26 @@ export function BodyshopFloorWorkVehicleDetailPanel({
     let cancelled = false
     void (async () => {
       const next: Record<number, string> = {}
+      const seen = new Set<number>()
       for (const p of allPhotos) {
+        seen.add(p.id)
         if (p.drive_url) continue
         const res = await createSignedRoleLogPhotoUrl(p.storage_bucket, p.storage_path, 3600)
         if (res.data) next[p.id] = res.data
+      }
+      for (const list of Object.values(photosByLogIdFetched)) {
+        for (const p of list) {
+          if (seen.has(p.id) || p.drive_url) continue
+          const res = await createSignedRoleLogPhotoUrl(p.storage_bucket, p.storage_path, 3600)
+          if (res.data) next[p.id] = res.data
+        }
       }
       if (!cancelled) setThumbByPhotoId(next)
     })()
     return () => {
       cancelled = true
     }
-  }, [allPhotos])
+  }, [allPhotos, photosByLogIdFetched])
 
   const photosByLogId = useMemo(() => {
     const map = new Map<number, FloorWorkPhotoWithLog[]>()
@@ -122,6 +159,55 @@ export function BodyshopFloorWorkVehicleDetailPanel({
     }
     return map
   }, [allPhotos])
+
+  const latestByRole = useMemo(() => latestLogByRole(logs), [logs])
+
+  const renderLogPhotoThumbs = (
+    logId: number,
+    max: number | null,
+  ) => {
+    const fromGallery = photosByLogId.get(logId) ?? []
+    const fromFetch = photosByLogIdFetched[logId] ?? []
+    const merged: Array<FloorWorkPhotoWithLog | BodyshopFloorRoleDailyLogPhotoRow> = []
+    const ids = new Set<number>()
+    for (const p of fromGallery) {
+      if (ids.has(p.id)) continue
+      ids.add(p.id)
+      merged.push(p)
+    }
+    for (const p of fromFetch) {
+      if (ids.has(p.id)) continue
+      ids.add(p.id)
+      merged.push(p)
+    }
+    const slice = max == null ? merged : merged.slice(0, max)
+    if (slice.length === 0) return null
+    return (
+      <div className="bfw-log-card__thumb-row">
+        {slice.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className="bfw-log-card__thumb-btn"
+            title={p.file_name ?? 'Open photo'}
+            onClick={() => void openRoleDailyLogPhoto(p).then((res) => {
+              if (res.data) window.open(res.data, '_blank', 'noopener,noreferrer')
+            })}
+          >
+            {p.drive_url || thumbByPhotoId[p.id] ? (
+              <img
+                src={p.drive_url || thumbByPhotoId[p.id]}
+                alt=""
+                className="bfw-log-card__thumb"
+              />
+            ) : (
+              <span className="bfw-log-card__thumb-ph">Photo</span>
+            )}
+          </button>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="bfw-detail">
@@ -174,77 +260,100 @@ export function BodyshopFloorWorkVehicleDetailPanel({
         </div>
       </section>
 
-      {children ? <section className="bfw-detail__section">{children}</section> : null}
+      <section className="bfw-detail__section bfw-detail__section--work">
+        <h3 className="bfw-detail__section-title">
+          Kaam — kaun ne kya kiya (Dentor / Painter / …)
+        </h3>
+        <p className="bfw-detail__muted" style={{ marginTop: 0, marginBottom: 12 }}>
+          Har worker ka note aur us kaam ki photos. Photo par click karke badi size mein dekhein.
+        </p>
+        {logsLoading ? <p className="bfw-detail__muted">Loading worker logs…</p> : null}
+        {logsError ? <p className="bfw-detail__err">{logsError}</p> : null}
+        {!logsLoading && !logsError && logs.length === 0 ? (
+          <p className="bfw-detail__muted">Abhi tak Floor Work app se is gaadi par koi update nahi aaya.</p>
+        ) : null}
 
-      <details className="bfw-detail__expand" open={adminWorkReview}>
-        <summary className="bfw-detail__expand-summary">
-          {adminWorkReview ? 'All worker work — who did what (Dentor / Painter / …)' : 'Work updates — notes & photos by worker'}
-          {logs.length > 0 ? ` (${logs.length})` : ''}
-        </summary>
-        <div className="bfw-detail__expand-body">
-          {logsLoading ? <p className="bfw-detail__muted">Loading worker logs…</p> : null}
-          {logsError ? <p className="bfw-detail__err">{logsError}</p> : null}
-          {!logsLoading && !logsError && logs.length === 0 ? (
-            <p className="bfw-detail__muted">No Floor Work app submissions yet for this vehicle.</p>
-          ) : null}
-          <div className="bfw-log-list">
-            {logs.map((log) => {
-              const role = log.floor_role as BodyshopFloorWorkLogRole
-              const roleLabel = BODYSHOP_FLOOR_WORK_ROLE_LABELS[role] ?? log.floor_role
-              const count = photoCountByLogId[log.id] ?? 0
-              const logPhotos = photosByLogId.get(log.id) ?? []
+        {!logsLoading && logs.length > 0 ? (
+          <div className="bfw-role-highlight-grid">
+            {HIGHLIGHT_ROLES.map((roleKey) => {
+              const log = latestByRole.get(roleKey)
+              if (!log) return null
+              const roleLabel = BODYSHOP_FLOOR_WORK_ROLE_LABELS[roleKey]
+              const photoCount = (photosByLogIdFetched[log.id] ?? []).length
               return (
-                <article key={log.id} className="bfw-log-card">
-                  <div className="bfw-log-card__top">
-                    <strong>
-                      {log.update_date} · {roleLabel}
-                      {log.is_support ? ' (support)' : ''}
-                    </strong>
-                    <span>{log.employee_name ?? log.employee_code}</span>
+                <article key={roleKey} className="bfw-role-highlight">
+                  <div className="bfw-role-highlight__head">
+                    <strong>{roleLabel}</strong>
+                    <span className="bfw-role-highlight__who">{log.employee_name ?? log.employee_code}</span>
                   </div>
+                  <p className="bfw-detail__muted bfw-role-highlight__date">
+                    Last update · {log.update_date}
+                    {log.is_support ? ' · support' : ''}
+                  </p>
                   {log.note_text?.trim() ? (
                     <p className="bfw-log-card__note">{log.note_text.trim()}</p>
                   ) : (
-                    <p className="bfw-detail__muted bfw-log-card__note">No work note</p>
+                    <p className="bfw-detail__muted bfw-log-card__note">Koi note nahi</p>
                   )}
-                  {count > 0 ? (
+                  {photoCount > 0 ? (
                     <div className="bfw-log-card__photos">
                       <span className="bfw-log-card__photo-label">
-                        {count} photo{count === 1 ? '' : 's'}
+                        {photoCount} photo{photoCount === 1 ? '' : 's'}
                       </span>
-                      <div className="bfw-log-card__thumb-row">
-                        {(adminWorkReview ? logPhotos : logPhotos.slice(0, 6)).map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className="bfw-log-card__thumb-btn"
-                            title={p.file_name ?? 'Open photo'}
-                            onClick={() => void openRoleDailyLogPhoto(p).then((res) => {
-                              if (res.data) window.open(res.data, '_blank', 'noopener,noreferrer')
-                            })}
-                          >
-                            {p.drive_url || thumbByPhotoId[p.id] ? (
-                              <img
-                                src={p.drive_url || thumbByPhotoId[p.id]}
-                                alt=""
-                                className="bfw-log-card__thumb"
-                              />
-                            ) : (
-                              <span className="bfw-log-card__thumb-ph">Photo</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
+                      {renderLogPhotoThumbs(log.id, adminWorkReview ? null : 12)}
                     </div>
                   ) : (
-                    <p className="bfw-detail__muted">No photos on this log</p>
+                    <p className="bfw-detail__muted">Is update par photo nahi</p>
                   )}
                 </article>
               )
             })}
           </div>
-        </div>
-      </details>
+        ) : null}
+
+        {logs.length > 0 ? (
+          <>
+            <h4 className="bfw-detail__subsection-title">
+              Saari entries {logs.length > 0 ? `(${logs.length})` : ''}
+            </h4>
+            <div className="bfw-log-list">
+              {logs.map((log) => {
+                const role = log.floor_role as BodyshopFloorWorkLogRole
+                const roleLabel = BODYSHOP_FLOOR_WORK_ROLE_LABELS[role] ?? log.floor_role
+                const photoCount = (photosByLogIdFetched[log.id] ?? []).length
+                return (
+                  <article key={log.id} className="bfw-log-card">
+                    <div className="bfw-log-card__top">
+                      <strong>
+                        {log.update_date} · {roleLabel}
+                        {log.is_support ? ' (support)' : ''}
+                      </strong>
+                      <span>{log.employee_name ?? log.employee_code}</span>
+                    </div>
+                    {log.note_text?.trim() ? (
+                      <p className="bfw-log-card__note">{log.note_text.trim()}</p>
+                    ) : (
+                      <p className="bfw-detail__muted bfw-log-card__note">No work note</p>
+                    )}
+                    {photoCount > 0 ? (
+                      <div className="bfw-log-card__photos">
+                        <span className="bfw-log-card__photo-label">
+                          {photoCount} photo{photoCount === 1 ? '' : 's'}
+                        </span>
+                        {renderLogPhotoThumbs(log.id, adminWorkReview ? null : 6)}
+                      </div>
+                    ) : (
+                      <p className="bfw-detail__muted">No photos on this log</p>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      {children ? <section className="bfw-detail__section">{children}</section> : null}
 
       <details className="bfw-detail__expand" open>
         <summary className="bfw-detail__expand-summary">

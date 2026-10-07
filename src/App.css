@@ -4515,6 +4515,58 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   border-top: 1px solid var(--border);
 }
 
+.bfw-detail__section--work {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.bfw-detail__subsection-title {
+  font-size: 13px;
+  font-weight: 800;
+  margin: 18px 0 8px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bfw-role-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.bfw-role-highlight {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  background: var(--surface-1, #fff);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.bfw-role-highlight__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.bfw-role-highlight__head strong {
+  font-size: 15px;
+  color: var(--primary, #0d9488);
+}
+
+.bfw-role-highlight__who {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bfw-role-highlight__date {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
 .bfw-log-list {
   display: flex;
   flex-direction: column;
