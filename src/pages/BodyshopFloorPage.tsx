@@ -2463,8 +2463,6 @@ export default function BodyshopFloorPage() {
             <select
               className="sel sel--advisor-filter"
               value={vehicleListMode}
-              onChange={(e) => setVehicleListMode(e.target.value as BodyshopFloorVehicleListMode)}
-            >
               onChange={(e) => {
                 const next = e.target.value as BodyshopFloorVehicleListMode
                 setVehicleListMode(next)
@@ -2481,6 +2479,8 @@ export default function BodyshopFloorPage() {
             label="Period:"
             includeAll
             allLabel="All intake"
+            disabled={vehicleListMode === 'live_on_floor'}
+          />
           <button type="button" className="btn btn--ghost btn--sm"
             onClick={() => setExpandedCards(new Set(filtered.map((c) => jcKey(c))))}>
             Expand All
