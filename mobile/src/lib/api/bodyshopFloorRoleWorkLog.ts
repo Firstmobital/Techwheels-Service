@@ -332,6 +332,37 @@ export async function fetchRoleDailyLogPhotos(logIds: number[]): Promise<Bodysho
   return (data ?? []) as BodyshopFloorRoleDailyLogPhotoRow[]
 }
 
+export function extractGoogleDriveFileId(urlOrId: string | null | undefined): string | null {
+  const raw = String(urlOrId ?? '').trim()
+  if (!raw) return null
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(raw) && !raw.includes('/')) return raw
+  const fromPath = raw.match(/\/file\/d\/([^/]+)/)
+  if (fromPath?.[1]) return fromPath[1]
+  const fromQuery = raw.match(/[?&]id=([^&]+)/)
+  if (fromQuery?.[1]) return fromQuery[1]
+  return null
+}
+
+export function googleDriveThumbnailUrl(fileId: string, size = 'w400'): string {
+  return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=${size}`
+}
+
+/** Thumbnail / preview after Supabase staging file is removed (Drive link stays on the row). */
+export async function resolveRoleLogPhotoPreviewUrl(
+  photo: BodyshopFloorRoleDailyLogPhotoRow,
+  expiresSec = 3600,
+): Promise<string | null> {
+  const fileId =
+    extractGoogleDriveFileId(photo.drive_file_id) || extractGoogleDriveFileId(photo.drive_url)
+  if (fileId) return googleDriveThumbnailUrl(fileId)
+  const bucket = String(photo.storage_bucket ?? '').trim()
+  const path = String(photo.storage_path ?? '').trim()
+  if (!bucket || !path) return null
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresSec)
+  if (error || !data?.signedUrl) return null
+  return data.signedUrl
+}
+
 export async function openRoleDailyLogPhoto(photo: BodyshopFloorRoleDailyLogPhotoRow): Promise<void> {
   const drive = String(photo.drive_url ?? '').trim()
   if (drive) {

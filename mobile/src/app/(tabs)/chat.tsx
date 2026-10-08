@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Keyboard,
@@ -20,13 +20,11 @@ import {
   type CustomerAdvisorMessage,
   type StaffAdvisorChatThread,
 } from '../../lib/api/advisorChat'
-
-function formatWhen(value: string | null | undefined): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
+import {
+  buildChatTimeline,
+  formatChatListPreviewTime,
+  formatChatMessageTime,
+} from '../../lib/chatTimestamps'
 
 function subtitle(row: StaffAdvisorChatThread): string {
   if (row.contact_key && row.contact_key !== 'advisor' && row.sa_name) {
@@ -114,6 +112,11 @@ export default function StaffChatScreen() {
   }, [])
 
   const selected = threads.find((row) => row.id === openId) || null
+
+  const messageTimeline = useMemo(
+    () => buildChatTimeline(messages),
+    [messages],
+  )
 
   async function onSend() {
     const body = draft.trim()
@@ -209,7 +212,28 @@ export default function StaffChatScreen() {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
             >
-              {messages.map((message) => {
+              {messageTimeline.map((item) => {
+                if (item.type === 'day') {
+                  return (
+                    <View key={item.key} style={{ alignSelf: 'center', marginVertical: 6 }}>
+                      <Text
+                        style={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.08)',
+                          color: '#64748b',
+                          fontSize: 12,
+                          fontWeight: '600',
+                          paddingHorizontal: 12,
+                          paddingVertical: 4,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {item.label}
+                      </Text>
+                    </View>
+                  )
+                }
+                const message = item.message
                 const mine = message.author_side === 'staff'
                 return (
                   <View key={message.id} style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
@@ -218,7 +242,9 @@ export default function StaffChatScreen() {
                         {mine ? message.author_name || 'You' : 'Customer'}
                       </Text>
                       <Text style={{ color: mine ? '#fff' : '#0f172a', fontSize: 15, marginTop: 2 }}>{message.body}</Text>
-                      <Text style={{ color: mine ? '#dbeafe' : '#94a3b8', fontSize: 10, marginTop: 4, textAlign: 'right' }}>{formatWhen(message.created_at)}</Text>
+                      <Text style={{ color: mine ? '#dbeafe' : '#94a3b8', fontSize: 10, marginTop: 4, textAlign: 'right' }}>
+                        {formatChatMessageTime(message.created_at)}
+                      </Text>
                     </View>
                   </View>
                 )
@@ -260,7 +286,7 @@ export default function StaffChatScreen() {
                   <Text style={{ color: '#334155', marginTop: 4 }} numberOfLines={1}>{row.last_message_preview || ''}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                  <Text style={{ color: '#94a3b8', fontSize: 11 }}>{formatWhen(row.last_message_at)}</Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 11 }}>{formatChatListPreviewTime(row.last_message_at)}</Text>
                   {row.staff_unread_count > 0 ? (
                     <View style={{ minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 }}>
                       <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{row.staff_unread_count > 9 ? '9+' : row.staff_unread_count}</Text>

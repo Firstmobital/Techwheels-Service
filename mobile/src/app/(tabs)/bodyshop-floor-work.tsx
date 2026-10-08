@@ -16,7 +16,10 @@ import {
   View,
 } from 'react-native'
 import { MaterialIcons } from '@expo/vector-icons'
-import * as ImagePicker from 'expo-image-picker'
+import {
+  captureMultipleWorkPhotosFromCamera,
+  pickMultipleWorkPhotosFromGallery,
+} from '../../lib/workPhotoCapture'
 import { useFocusEffect } from 'expo-router'
 import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
 import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
@@ -47,8 +50,8 @@ import {
   sortFloorWorkTasksByFloorDayRecency,
   floorWorkVehicleHasCompleteReg,
   floorWorkJobCardLookupKeys,
-  buildMinimalFloorWorkVehicleMeta,
   currentIstYearMonth,
+  floorWorkVehicleAgeSummary,
   type FloorWorkVehicleMeta,
 } from '../../lib/bodyshopFloorWork/display'
 import {
@@ -123,6 +126,7 @@ import {
   fetchRoleDailyLogPhotos,
   fetchRoleDailyLogsForDate,
   openRoleDailyLogPhoto,
+  resolveRoleLogPhotoPreviewUrl,
   syncFloorWorkPhotosToDrive,
   uploadRoleDailyLogPhotoFromUri,
   upsertRoleDailyLog,
@@ -171,18 +175,6 @@ function FloorWorkStatsThree({
       </View>
     </View>
   )
-}
-
-function buildAssignmentCreatedAtByJc(assRows: Record<string, unknown>[]): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const row of assRows) {
-    const jc = String(row.job_card_number ?? '').trim().toUpperCase()
-    const at = String(row.created_at ?? '').trim()
-    if (!jc || !at) continue
-    const prev = out[jc]
-    if (!prev || new Date(at).getTime() < new Date(prev).getTime()) out[jc] = at
-  }
-  return out
 }
 
 function AdminFloorTeamRoster({
@@ -310,7 +302,6 @@ export default function BodyshopFloorWorkScreen() {
   const [workerQcFailReason, setWorkerQcFailReason] = useState('')
   const [roleQcByJc, setRoleQcByJc] = useState<Record<string, WorkerRoleQcMap>>({})
   const optimistic = useOptimisticAction()
-  const assignmentCreatedAtRef = useRef<Record<string, string>>({})
   const metaLoadedJcsRef = useRef<Set<string>>(new Set())
 
   const monthFilterOptions = useMemo(() => buildFloorWorkMonthFilterOptions(today, 5), [today])
@@ -515,9 +506,7 @@ export default function BodyshopFloorWorkScreen() {
     if (todo.length === 0) return
     setLoadingMoreMeta(true)
     try {
-      const batch = await fetchRepairCardVehicleByJcs(todo, {
-        assignmentCreatedAtByJc: assignmentCreatedAtRef.current,
-      })
+      const batch = await fetchRepairCardVehicleByJcs(todo)
       for (const jc of todo) metaLoadedJcsRef.current.add(jc)
       setVehicleByJc((prev) => ({ ...prev, ...batch }))
     } finally {
@@ -567,9 +556,6 @@ export default function BodyshopFloorWorkScreen() {
         setWorkerAssignedSlotCount(0)
         setAssignmentMonthFilter('all')
       }
-      const assignmentCreatedAtByJc = buildAssignmentCreatedAtByJc(assRows)
-      assignmentCreatedAtRef.current = assignmentCreatedAtByJc
-
       const assignmentJcs = Array.from(
         new Set((assRows ?? []).map((r) => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean)),
       )
@@ -577,9 +563,9 @@ export default function BodyshopFloorWorkScreen() {
       const allJcs = Array.from(
         new Set([...assignmentJcs, ...liveFloorJcs, ...taskList.map((t) => t.jobCardNumber)]),
       )
-      let minimal =
-        allJcs.length > 0 ? buildMinimalFloorWorkVehicleMeta(allJcs, assignmentCreatedAtByJc) : {}
+      let minimal: Record<string, FloorWorkVehicleMeta> = {}
       if (allJcs.length > 0) {
+        minimal = await fetchRepairCardVehicleByJcs(allJcs)
         minimal = await attachQcStatusToVehicleMeta(minimal, allJcs)
       }
       let qcByJc: Record<string, WorkerRoleQcMap> = {}
@@ -612,14 +598,8 @@ export default function BodyshopFloorWorkScreen() {
       setAssignmentByJc(assignmentMap)
       setTasks(taskList)
 
-      metaLoadedJcsRef.current = new Set()
-      if (allJcs.length > 0) {
-        setVehicleByJc(minimal)
-        const sorted = sortFloorWorkTasksByFloorDayRecency(taskList, minimal, today)
-        void enrichVehicleMetaBatch(uniqueJcsFromTasks(sorted, sorted.length))
-      } else {
-        setVehicleByJc({})
-      }
+      metaLoadedJcsRef.current = new Set(allJcs)
+      setVehicleByJc(allJcs.length > 0 ? minimal : {})
       if (!adminOverview) {
         const logJcKeys = allJcs.length > 0 ? allJcs : taskList.map((t) => t.jobCardNumber)
         try {
@@ -768,10 +748,8 @@ export default function BodyshopFloorWorkScreen() {
       const next: Record<number, string> = {}
       await Promise.all(
         photos.map(async (photo) => {
-          const { data } = await supabase.storage
-            .from(photo.storage_bucket)
-            .createSignedUrl(photo.storage_path, 3600)
-          if (data?.signedUrl) next[photo.id] = data.signedUrl
+          const url = await resolveRoleLogPhotoPreviewUrl(photo, 3600)
+          if (url) next[photo.id] = url
         }),
       )
       if (!cancelled) setPhotoThumbs(next)
@@ -816,36 +794,15 @@ export default function BodyshopFloorWorkScreen() {
   }, [queueVisibleFloorWorkDriveSync])
 
   async function addPhotosFromCamera() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Camera', 'Permission needed to take work photos.')
-      return
-    }
-    const res = await ImagePicker.launchCameraAsync({
-      quality: 0.8,
-      allowsEditing: false,
+    await captureMultipleWorkPhotosFromCamera((photo) => {
+      setPhotoUris((prev) => [...prev, photo])
     })
-    if (res.canceled || !res.assets[0]?.uri) return
-    setPhotoUris((prev) => [...prev, { uri: res.assets[0].uri, mime: res.assets[0].mimeType ?? 'image/jpeg' }])
   }
 
   async function addPhotosFromGallery() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Gallery', 'Permission needed to pick photos from gallery.')
-      return
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.8,
-      allowsMultipleSelection: true,
-      selectionLimit: 0,
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    await pickMultipleWorkPhotosFromGallery((photos) => {
+      setPhotoUris((prev) => [...prev, ...photos])
     })
-    if (res.canceled || !res.assets?.length) return
-    setPhotoUris((prev) => [
-      ...prev,
-      ...res.assets.map((a) => ({ uri: a.uri, mime: a.mimeType ?? 'image/jpeg' })),
-    ])
   }
 
   const totalPhotoCount = photoUris.length + savedPhotos.length
@@ -1273,9 +1230,22 @@ export default function BodyshopFloorWorkScreen() {
                 This pipeline step is not active on this vehicle — view all photos below, or open the row for the active role to add work (same as denter/painter).
               </Text>
             ) : null}
-            {floorWorkStandingLine(vehicleByJc[selected.jobCardNumber]) ? (
-              <Text style={S.standingLine}>{floorWorkStandingLine(vehicleByJc[selected.jobCardNumber])}</Text>
-            ) : null}
+            {(() => {
+              const selMeta = vehicleByJc[selected.jobCardNumber]
+              const selAge = floorWorkVehicleAgeSummary(selMeta)
+              const standing = floorWorkStandingLine(selMeta)
+              if (!selAge.label && !standing) return null
+              return (
+                <View style={S.floorAgeDetailBox}>
+                  {selAge.label ? (
+                    <Text style={[S.floorAgeDetailTitle, selAge.color ? { color: selAge.color } : null]}>
+                      {selAge.label}
+                    </Text>
+                  ) : null}
+                  {standing ? <Text style={S.standingLine}>{standing}</Text> : null}
+                </View>
+              )
+            })()}
             {selectedWorkerQcTurn && canSubmitSelected ? (
               <View style={S.qcPanel}>
                 <Text style={S.qcPanelTitle}>Quality check — your turn</Text>
@@ -1313,8 +1283,8 @@ export default function BodyshopFloorWorkScreen() {
               <View style={S.photoBlock}>
                 <Text style={S.photoSectionTitle}>Work photos</Text>
                 <Text style={S.cameraHint}>
-                  Add as many photos as you need. Each save goes to Supabase and Google Drive (vehicle reg folder).
-                  If Drive fails, it retries automatically in the background. Done moves the step forward.
+                  Camera: take multiple shots (tap “Take another” after each). Upload on Save photos or Done (Supabase +
+                  Google Drive). Use Gallery to pick photos already on the phone.
                 </Text>
                 <View style={S.photoBtnRow}>
                   <TouchableOpacity
@@ -1544,6 +1514,7 @@ export default function BodyshopFloorWorkScreen() {
             }
             renderItem={({ item }) => {
               const meta = vehicleByJc[item.jobCardNumber]
+              const floorAge = floorWorkVehicleAgeSummary(meta)
               const assignRow = assignmentByJc[item.jobCardNumber]
               const qcTurn =
                 !isAdminOverview
@@ -1571,16 +1542,31 @@ export default function BodyshopFloorWorkScreen() {
                 >
                   <View style={S.cardTopRow}>
                     <Text style={S.cardTitle}>{floorWorkVehicleTitle(meta, item.jobCardNumber)}</Text>
-                    <View style={[
-                      S.statusPill,
-                      qcTurn ? S.statusPillQc : done ? S.statusPillDone : yourTurn ? S.statusPillPending : S.statusPillWaiting,
-                    ]}>
-                      <Text style={[
-                        S.statusPillText,
-                        qcTurn ? S.statusPillTextQc : done ? S.statusPillTextDone : yourTurn ? S.statusPillTextPending : S.statusPillTextWaiting,
+                    <View style={S.cardTopBadges}>
+                      {floorAge.label ? (
+                        <View style={[
+                          S.floorAgeBadge,
+                          floorAge.days != null && floorAge.days >= 3 ? S.floorAgeBadgeLate : S.floorAgeBadgeFresh,
+                        ]}>
+                          <Text style={[
+                            S.floorAgeBadgeText,
+                            floorAge.days != null && floorAge.days >= 3 ? S.floorAgeBadgeTextLate : S.floorAgeBadgeTextFresh,
+                          ]} numberOfLines={2}>
+                            {floorAge.label}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <View style={[
+                        S.statusPill,
+                        qcTurn ? S.statusPillQc : done ? S.statusPillDone : yourTurn ? S.statusPillPending : S.statusPillWaiting,
                       ]}>
-                        {pillLabel}
-                      </Text>
+                        <Text style={[
+                          S.statusPillText,
+                          qcTurn ? S.statusPillTextQc : done ? S.statusPillTextDone : yourTurn ? S.statusPillTextPending : S.statusPillTextWaiting,
+                        ]}>
+                          {pillLabel}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   {floorWorkVehicleSubtitle(meta, item.jobCardNumber) ? (
@@ -1765,7 +1751,29 @@ const S = StyleSheet.create({
   cardPending: { borderColor: '#f1dcb8' },
   cardDone: { borderColor: '#cadcf8' },
   cardTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  cardTopBadges: { flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: '42%' },
   cardTitle: { flex: 1, fontWeight: '800', color: '#1a1b21', fontSize: 17 },
+  floorAgeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxWidth: 140,
+  },
+  floorAgeBadgeFresh: { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' },
+  floorAgeBadgeLate: { backgroundColor: '#fbe9ec', borderColor: '#c33b53' },
+  floorAgeBadgeText: { fontSize: 10, fontWeight: '800', textAlign: 'right' },
+  floorAgeBadgeTextFresh: { color: '#1c8f63' },
+  floorAgeBadgeTextLate: { color: '#c33b53' },
+  floorAgeDetailBox: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#f0f4fa',
+    borderWidth: 1,
+    borderColor: '#cadcf8',
+  },
+  floorAgeDetailTitle: { fontSize: 16, fontWeight: '800', color: '#1c8f63' },
   cardSub: { fontSize: 12, color: '#4b4e59', marginTop: 4 },
   cardAssignee: { fontSize: 12, color: '#1a1b21', fontWeight: '600', marginTop: 6, lineHeight: 17 },
   cardStanding: { fontSize: 12, color: '#2a4cd0', marginTop: 6, fontWeight: '700' },

@@ -473,15 +473,15 @@ export async function resolveRoleLogPhotoPreviewUrl(
   photo: BodyshopFloorRoleDailyLogPhotoRow,
   expiresSec = 3600,
 ): Promise<string | null> {
+  const fileId =
+    extractGoogleDriveFileId(photo.drive_file_id) || extractGoogleDriveFileId(photo.drive_url)
+  if (fileId) return googleDriveThumbnailUrl(fileId)
   const bucket = String(photo.storage_bucket ?? '').trim()
   const path = String(photo.storage_path ?? '').trim()
   if (bucket && path) {
     const signed = await createSignedRoleLogPhotoUrl(bucket, path, expiresSec)
     if (signed.data) return signed.data
   }
-  const fileId =
-    extractGoogleDriveFileId(photo.drive_file_id) || extractGoogleDriveFileId(photo.drive_url)
-  if (fileId) return googleDriveThumbnailUrl(fileId)
   return null
 }
 

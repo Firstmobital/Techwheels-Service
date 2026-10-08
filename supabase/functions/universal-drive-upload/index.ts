@@ -449,6 +449,22 @@ function driveViewUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${fileId}/view`
 }
 
+/** After Drive sync, drop staging blobs from Supabase Storage (metadata row stays in Postgres). */
+const STAGING_PHOTO_RESOURCE_TYPES = new Set<string>([
+  'bodyshop_floor_work_photo',
+  'bodyshop_intake_photo',
+  'panel_photo',
+  'help_ticket_attachment',
+])
+
+function shouldDeleteSourceFromStorage(resourceType: string): boolean {
+  const keep = (Deno.env.get('DRIVE_KEEP_SOURCE_OBJECT') ?? '').toLowerCase() === 'true'
+  if (keep) return false
+  const forceDelete = (Deno.env.get('DRIVE_DELETE_SOURCE_OBJECT') ?? '').toLowerCase() === 'true'
+  if (forceDelete) return true
+  return STAGING_PHOTO_RESOURCE_TYPES.has(resourceType)
+}
+
 // deno-lint-ignore no-explicit-any
 function sanitizePendingUploadPayload(payload: Record<string, unknown>): Record<string, unknown> {
   const next = { ...payload }
@@ -1223,7 +1239,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const deleteFromStorage = (Deno.env.get('DRIVE_DELETE_SOURCE_OBJECT') ?? '').toLowerCase() === 'true'
+    const deleteFromStorage = shouldDeleteSourceFromStorage(body.resourceType)
     let storageDeleteError: string | null = null
 
     if (deleteFromStorage) {

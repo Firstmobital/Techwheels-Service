@@ -79,13 +79,8 @@ async function attachRepairCardFloorTiming(
   }
 }
 
-export type FetchRepairCardVehicleOptions = {
-  assignmentCreatedAtByJc?: Record<string, string | null | undefined>
-}
-
 export async function fetchRepairCardVehicleByJcs(
   assignmentKeys: string[],
-  opts?: FetchRepairCardVehicleOptions,
 ): Promise<Record<string, FloorWorkVehicleMeta>> {
   const keys = Array.from(new Set(assignmentKeys.map(normKey).filter(Boolean)))
   const map: Record<string, FloorWorkVehicleMeta> = {}
@@ -200,16 +195,6 @@ export async function fetchRepairCardVehicleByJcs(
   }
 
   await attachRepairCardFloorTiming(map, keys)
-
-  const seeded = opts?.assignmentCreatedAtByJc
-  if (seeded) {
-    for (const [jc, createdAt] of Object.entries(seeded)) {
-      const iso = String(createdAt ?? '').trim()
-      if (iso && !String(map[jc]?.floorSinceAt ?? '').trim()) {
-        mergeMeta(map, jc, { floorSinceAt: iso })
-      }
-    }
-  }
 
   return map
 }

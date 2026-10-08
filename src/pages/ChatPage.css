@@ -124,6 +124,26 @@
   background: var(--canvas);
 }
 
+.chat-day-separator {
+  align-self: center;
+  margin: 6px 0 4px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--canvas));
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.chat-bubble__time {
+  text-align: right;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
 .chat-bubble {
   max-width: min(72%, 520px);
   padding: 8px 10px;

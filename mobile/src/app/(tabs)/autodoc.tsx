@@ -29,6 +29,7 @@ import {
 } from '../../lib/api/jobCards'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { useListSearch } from '../../hooks/useListSearch'
 import { useFocusEffect } from 'expo-router'
 import { Icon, PrimaryButton } from '../../components/ui'
 import { StaffScreenShell } from '../../components/staff/StaffScreenShell'
@@ -136,7 +137,7 @@ export default function AutoDocScreen() {
   const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [search, setSearch] = useState('')
+  const listSearch = useListSearch()
   const [stageFilter, setStageFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [error, setError] = useState<string | null>(null)
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
@@ -431,7 +432,7 @@ export default function AutoDocScreen() {
   }, [rowsWithStage])
 
   const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = listSearch.appliedNorm
 
     return rowsWithStage.filter(({ row, stage }) => {
       if (stageFilter === 'today') {
@@ -453,7 +454,7 @@ export default function AutoDocScreen() {
 
       return jc.includes(q) || reg.includes(q) || model.includes(q) || owner.includes(q)
     })
-  }, [rowsWithStage, search, stageFilter])
+  }, [rowsWithStage, listSearch.appliedNorm, stageFilter])
 
   return (
     <StaffScreenShell title="Body & Paint" subtitle="Job cards, workflow stages, and documentation.">
@@ -519,13 +520,34 @@ export default function AutoDocScreen() {
                       paddingHorizontal: 38,
                       fontFamily: 'Plus Jakarta Sans',
                     }}
-                    value={search}
-                    onChangeText={setSearch}
-                    placeholder="Search JC, reg, model or owner"
+                    value={listSearch.draft}
+                    onChangeText={listSearch.setDraft}
+                    returnKeyType="search"
+                    onSubmitEditing={listSearch.apply}
+                    placeholder="JC / reg… type fully, then Search"
                     placeholderTextColor="#a7a99f"
                     accessibilityLabel="Search job cards by JC, registration, model, or owner"
                   />
                 </View>
+                <TouchableOpacity
+                  onPress={listSearch.apply}
+                  style={{
+                    marginTop: 8,
+                    alignSelf: 'flex-end',
+                    backgroundColor: '#1a1b21',
+                    borderRadius: 8,
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                  }}
+                  accessibilityLabel="Apply search"
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Search</Text>
+                </TouchableOpacity>
+                {listSearch.hasApplied ? (
+                  <Text style={{ marginTop: 6, fontSize: 11, color: '#82858f' }}>
+                    Matches for “{listSearch.applied}”
+                  </Text>
+                ) : null}
               </View>
 
               {/* Segmented Control */}

@@ -3,16 +3,41 @@ export function isBodyshopFloorAssigned(floor: string | null | undefined): boole
   return v === 'floor 2' || v === 'floor 3'
 }
 
-/** Calendar days since an ISO timestamp (local midnight). */
+const IST = 'Asia/Kolkata'
+
+function istCalendarDayKey(from: Date | string): string | null {
+  const d = from instanceof Date ? from : new Date(String(from).trim())
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-CA', { timeZone: IST })
+}
+
+/** Calendar days since an ISO timestamp (IST midnight — advisor floor-assign day). */
 export function calendarDaysSince(iso: string | null | undefined): number | null {
   const raw = String(iso ?? '').trim()
   if (!raw) return null
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) return null
-  const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  return Math.max(0, Math.floor((today.getTime() - startDay.getTime()) / 86400000))
+  const startKey = istCalendarDayKey(raw)
+  if (!startKey) return null
+  const todayKey = istCalendarDayKey(new Date())
+  if (!todayKey) return null
+  const [sy, sm, sd] = startKey.split('-').map(Number)
+  const [ty, tm, td] = todayKey.split('-').map(Number)
+  const startUtc = Date.UTC(sy, sm - 1, sd)
+  const todayUtc = Date.UTC(ty, tm - 1, td)
+  return Math.max(0, Math.floor((todayUtc - startUtc) / 86400000))
+}
+
+/** YYYY-MM-DD in IST from ISO (for “since …” labels). */
+export function istDateFromIso(iso: string | null | undefined): string | null {
+  return istCalendarDayKey(String(iso ?? '').trim() || 'invalid')
+}
+
+export function formatIstSinceShort(iso: string | null | undefined): string | null {
+  const ymd = istDateFromIso(iso)
+  if (!ymd) return null
+  const [y, m, d] = ymd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  const label = dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  return `${label} ${y}`
 }
 
 /** Under 3 days is on track (green). 3 days or more is late (red). */

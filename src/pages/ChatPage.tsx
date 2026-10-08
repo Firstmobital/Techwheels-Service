@@ -7,18 +7,12 @@ import {
   type AdvisorChatMessage,
   type AdvisorChatThread,
 } from '../lib/api/advisorChat'
+import {
+  buildChatTimeline,
+  formatChatListPreviewTime,
+  formatChatMessageTime,
+} from '../lib/chatTimestamps'
 import './ChatPage.css'
-
-function formatWhen(value: string | null | undefined): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const now = new Date()
-  const sameDay = date.toDateString() === now.toDateString()
-  return sameDay
-    ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    : date.toLocaleDateString([], { day: 'numeric', month: 'short' })
-}
 
 function mergeMessage(current: AdvisorChatMessage[], next: AdvisorChatMessage): AdvisorChatMessage[] {
   if (current.some((row) => row.id === next.id)) return current
@@ -103,6 +97,11 @@ export default function ChatPage() {
 
   const selected = threads.find((row) => row.id === selectedId) || null
 
+  const messageTimeline = useMemo(
+    () => buildChatTimeline(messages),
+    [messages],
+  )
+
   async function onSend(event: FormEvent) {
     event.preventDefault()
     const body = draft.trim()
@@ -162,7 +161,7 @@ export default function ChatPage() {
                   <div className="chat-row__preview">{row.last_message_preview || ''}</div>
                 </span>
                 <span className="chat-row__side">
-                  <span className="chat-meta">{formatWhen(row.last_message_at)}</span>
+                  <span className="chat-meta">{formatChatListPreviewTime(row.last_message_at)}</span>
                   {row.staff_unread_count > 0 && (
                     <span className="chat-badge">{row.staff_unread_count > 9 ? '9+' : row.staff_unread_count}</span>
                   )}
@@ -190,14 +189,23 @@ export default function ChatPage() {
                 </div>
               </header>
               <div className="chat-thread__messages" ref={scrollerRef}>
-                {messages.map((message) => (
-                  <div key={message.id} className={`chat-bubble ${message.author_side === 'staff' ? 'staff' : 'customer'}`}>
-                    <div className="chat-bubble__name">
-                      {message.author_side === 'staff' ? message.author_name : 'Customer'}
+                {messageTimeline.map((item) => (
+                  item.type === 'day' ? (
+                    <div key={item.key} className="chat-day-separator" role="separator">
+                      {item.label}
                     </div>
-                    <div className="chat-bubble__body">{message.body}</div>
-                    <div className="chat-meta">{formatWhen(message.created_at)}</div>
-                  </div>
+                  ) : (
+                    <div
+                      key={item.key}
+                      className={`chat-bubble ${item.message.author_side === 'staff' ? 'staff' : 'customer'}`}
+                    >
+                      <div className="chat-bubble__name">
+                        {item.message.author_side === 'staff' ? item.message.author_name : 'Customer'}
+                      </div>
+                      <div className="chat-bubble__body">{item.message.body}</div>
+                      <div className="chat-meta chat-bubble__time">{formatChatMessageTime(item.message.created_at)}</div>
+                    </div>
+                  )
                 ))}
               </div>
               <form className="chat-composer" onSubmit={(event) => void onSend(event)}>

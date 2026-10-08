@@ -1,3 +1,14 @@
+import {
+  bodyshopFloorAgeSummary,
+  calendarDaysSince,
+  floorAgeColor,
+  floorAgeLabel,
+  formatIstSinceShort,
+  istDateFromIso,
+  type BodyshopFloorAgeCard,
+} from '../bodyshopFloorAge'
+
+export { istDateFromIso }
 import type { BodyshopFloorWorkTask } from './roles'
 
 export type FloorWorkVehicleMeta = {
@@ -90,7 +101,6 @@ export function floorWorkVehicleHasCompleteReg(
 
 export function buildMinimalFloorWorkVehicleMeta(
   assignmentKeys: string[],
-  assignmentCreatedAtByJc?: Record<string, string | null | undefined>,
 ): Record<string, FloorWorkVehicleMeta> {
   const map: Record<string, FloorWorkVehicleMeta> = {}
   for (const raw of assignmentKeys) {
@@ -99,10 +109,33 @@ export function buildMinimalFloorWorkVehicleMeta(
     map[jc] = {
       reg: inferRegistrationFromAssignmentKey(jc),
       customer: null,
-      floorSinceAt: String(assignmentCreatedAtByJc?.[jc] ?? '').trim() || null,
     }
   }
   return map
+}
+
+export function floorWorkVehicleAgeCard(meta: FloorWorkVehicleMeta | undefined): BodyshopFloorAgeCard {
+  return {
+    bodyshop_floor: meta?.bodyshopFloor ?? null,
+    bodyshop_floor_since_at: meta?.floorSinceAt ?? null,
+  }
+}
+
+export function floorWorkVehicleAgeSummary(meta: FloorWorkVehicleMeta | undefined) {
+  const explicitSince = String(meta?.floorSinceAt ?? '').trim()
+  if (explicitSince) {
+    const days = calendarDaysSince(explicitSince)
+    if (days == null) {
+      return { sinceIso: explicitSince, days: null, label: null, color: null }
+    }
+    return {
+      sinceIso: explicitSince,
+      days,
+      label: floorAgeLabel(days),
+      color: floorAgeColor(days),
+    }
+  }
+  return bodyshopFloorAgeSummary(floorWorkVehicleAgeCard(meta))
 }
 
 export function floorWorkVehicleTitle(meta: FloorWorkVehicleMeta | undefined, assignmentKey: string): string {
@@ -121,35 +154,16 @@ export function floorWorkVehicleSubtitle(meta: FloorWorkVehicleMeta | undefined,
   return ''
 }
 
-export function formatFloorStandingDuration(sinceIso: string | null | undefined, now = new Date()): string | null {
-  if (!sinceIso) return null
-  const start = new Date(sinceIso)
-  if (Number.isNaN(start.getTime())) return null
-  const ms = now.getTime() - start.getTime()
-  if (ms < 0) return null
-  const totalHours = Math.floor(ms / 3_600_000)
-  const days = Math.floor(totalHours / 24)
-  const hours = totalHours % 24
-  if (days > 0) return `${days} day${days === 1 ? '' : 's'} ${hours}h on floor`
-  if (hours > 0) return `${hours} hr on floor`
-  const mins = Math.max(1, Math.floor(ms / 60_000))
-  return `${mins} min on floor`
-}
-
+/** Advisor floor-assign countdown (IST calendar days from bodyshop_floor_since_at). */
 export function floorWorkStandingLine(meta: FloorWorkVehicleMeta | undefined): string | null {
-  const standing = formatFloorStandingDuration(meta?.floorSinceAt)
-  if (!standing) return null
+  const age = floorWorkVehicleAgeSummary(meta)
+  if (!age.label) return null
+  const sinceLabel = formatIstSinceShort(meta?.floorSinceAt)
   const floor = String(meta?.bodyshopFloor ?? '').trim()
-  if (floor) return `${standing} · ${floor}`
-  return standing
-}
-
-/** Calendar date (YYYY-MM-DD) in IST for an ISO timestamp. */
-export function istDateFromIso(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  const parts: string[] = [age.label]
+  if (sinceLabel) parts.push(`since ${sinceLabel}`)
+  if (floor) parts.push(floor)
+  return parts.join(' · ')
 }
 
 export function bodyshopFloorWorkYesterdayIstDate(todayIst: string): string {

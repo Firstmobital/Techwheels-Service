@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Keyboard,
@@ -24,12 +24,10 @@ import {
   helpdeskChatPeerName,
   normalizeHelpdeskChatContactKey,
 } from '../../lib/customer/helpdeskChatContacts'
-
-function formatWhen(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
+import {
+  buildChatTimeline,
+  formatChatMessageTime,
+} from '../../lib/chatTimestamps'
 
 export default function CustomerAdvisorChatScreen() {
   const router = useRouter()
@@ -53,6 +51,11 @@ export default function CustomerAdvisorChatScreen() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scroller = useRef<ScrollView | null>(null)
+
+  const messageTimeline = useMemo(
+    () => buildChatTimeline(messages),
+    [messages],
+  )
 
   const load = useCallback(async (isInitial = false) => {
     if (!token || !regNumber) return
@@ -175,7 +178,27 @@ export default function CustomerAdvisorChatScreen() {
               Send a message to {peerName}.
             </Text>
           )}
-          {messages.map((message) => {
+          {messageTimeline.map((item) => {
+            if (item.type === 'day') {
+              return (
+                <View key={item.key} style={{ alignSelf: 'center', marginVertical: 6 }}>
+                  <Text
+                    style={{
+                      backgroundColor: 'rgba(15, 23, 42, 0.08)',
+                      color: CustomerTheme.inkSoft,
+                      fontSize: 12,
+                      fontWeight: '600',
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      borderRadius: 8,
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              )
+            }
+            const message = item.message
             const mine = message.author_side === 'customer'
             return (
               <View key={message.id} style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
@@ -197,7 +220,7 @@ export default function CustomerAdvisorChatScreen() {
                     {message.body}
                   </Text>
                   <Text style={{ color: mine ? '#D6E8F8' : CustomerTheme.inkSoft, fontSize: 10, marginTop: 4, textAlign: 'right' }}>
-                    {formatWhen(message.created_at)}
+                    {formatChatMessageTime(message.created_at)}
                   </Text>
                 </View>
               </View>

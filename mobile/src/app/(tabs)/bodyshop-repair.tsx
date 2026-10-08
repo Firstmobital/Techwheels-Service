@@ -15,6 +15,7 @@ import { StaffNavigationChrome, StaffInlineMenuButton } from '../../components/s
 import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
+import { useListSearch } from '../../hooks/useListSearch'
 import { supabase } from '../../lib/supabase'
 import {
   fetchBodyshopAssignmentsForJobCards,
@@ -239,7 +240,7 @@ export default function BodyshopRepairScreen() {
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [pipelineGroupFilter, setPipelineGroupFilter] = useState<string>('all')
   const [branchFilter, setBranchFilter] = useState('all')
-  const [search,       setSearch]       = useState('')
+  const listSearch = useListSearch()
   const [loadError,    setLoadError]    = useState<string | null>(null)
 
   const [selectedCard, setSelectedCard] = useState<RepairCard | null>(null)
@@ -263,16 +264,7 @@ export default function BodyshopRepairScreen() {
         .order('created_at', { ascending: false })
         .limit(2000)
       if (error) throw error
-      let cardList = (data ?? []) as RepairCard[]
-      const q = search.trim().toLowerCase()
-      if (q) {
-        cardList = cardList.filter(
-          (c) =>
-            String(c.job_card_no ?? '').toLowerCase().includes(q)
-            || String(c.reg_number ?? '').toLowerCase().includes(q)
-            || String(c.customer_name ?? '').toLowerCase().includes(q),
-        )
-      }
+      const cardList = (data ?? []) as RepairCard[]
       setCards(cardList)
 
       const { data: empData } = await supabase
@@ -307,7 +299,7 @@ export default function BodyshopRepairScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [search])
+  }, [])
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
 
@@ -509,8 +501,8 @@ export default function BodyshopRepairScreen() {
     let list = [...cards]
     if (statusFilter !== 'all') list = list.filter(c => c.overall_status === statusFilter)
     if (branchFilter !== 'all') list = list.filter(c => matchesBodyshopBranchFilter(c.branch, branchFilter))
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
+    if (listSearch.appliedNorm) {
+      const q = listSearch.appliedNorm
       list = list.filter(c =>
         c.job_card_no.toLowerCase().includes(q) ||
         (c.reg_number ?? '').toLowerCase().includes(q) ||
@@ -518,7 +510,7 @@ export default function BodyshopRepairScreen() {
       )
     }
     return list
-  }, [cards, statusFilter, branchFilter, search])
+  }, [cards, statusFilter, branchFilter, listSearch.appliedNorm])
 
   const stageCounts = useMemo(
     () =>
@@ -537,14 +529,14 @@ export default function BodyshopRepairScreen() {
   }, [scopedCards, pipelineGroupFilter])
 
   const hasExtraFilters =
-    pipelineGroupFilter !== 'all' || branchFilter !== 'all' || statusFilter !== 'active' || search.trim().length > 0
+    pipelineGroupFilter !== 'all' || branchFilter !== 'all' || statusFilter !== 'active' || listSearch.hasApplied
 
   const clearAllFilters = useCallback(() => {
     setPipelineGroupFilter('all')
     setBranchFilter('all')
     setStatusFilter('active')
-    setSearch('')
-  }, [])
+    listSearch.clear()
+  }, [listSearch])
 
   const bodyshopEmpNames = useMemo(() => {
     const seen = new Set<string>()
@@ -586,16 +578,24 @@ export default function BodyshopRepairScreen() {
         })}
       </ScrollView>
 
-      <View style={S.searchWrap}>
+      <View style={[S.searchWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
         <TextInput
-          style={S.searchInput}
-          placeholder="Search JC / reg / customer..."
+          style={[S.searchInput, { flex: 1 }]}
+          placeholder="JC / reg… tap Search when ready"
           placeholderTextColor="#a7a99f"
-          value={search}
-          onChangeText={setSearch}
+          value={listSearch.draft}
+          onChangeText={listSearch.setDraft}
+          returnKeyType="search"
+          onSubmitEditing={listSearch.apply}
           clearButtonMode="while-editing"
         />
+        <TouchableOpacity style={S.searchApplyBtn} onPress={listSearch.apply}>
+          <Text style={S.searchApplyBtnText}>Search</Text>
+        </TouchableOpacity>
       </View>
+      {listSearch.hasApplied ? (
+        <Text style={S.searchAppliedHint}>Matches for “{listSearch.applied}”</Text>
+      ) : null}
 
       <Text style={S.filterSectionLabel}>Status</Text>
       <ScrollView
@@ -668,7 +668,7 @@ export default function BodyshopRepairScreen() {
   ), [
     stageCounts,
     pipelineGroupFilter,
-    search,
+    listSearch.hasApplied,
     statusFilter,
     branchFilter,
     branches,
@@ -1406,6 +1406,9 @@ const S = StyleSheet.create({
   clearFiltersBtnText: { fontSize: 12, fontWeight: '700', color: '#2a4cd0' },
   listHint:         { fontSize: 11, color: '#82858f', marginTop: 8, marginBottom: 4 },
   searchInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13.5, color: '#1a1b21' },
+  searchApplyBtn:   { backgroundColor: '#1a1b21', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  searchApplyBtnText:{ color: '#fff', fontSize: 13, fontWeight: '800' },
+  searchAppliedHint:{ fontSize: 11, color: '#82858f', marginBottom: 6, paddingHorizontal: 2 },
   searchInputSm:    { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#1a1b21', marginBottom: 6 },
   chip:             { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 14, backgroundColor: '#fbfaf6', borderWidth: 1, borderColor: '#e7e3d9' },
   chipActive:       { backgroundColor: '#1a1b21', borderColor: '#1a1b21' },

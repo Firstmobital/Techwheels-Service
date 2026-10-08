@@ -42,7 +42,7 @@ import {
   type FloorFlowStepId,
 } from '../../lib/bodyshopFloorWork/floorFlowSteps'
 import { isBodyshopWorkerPipelineAssignRole } from '../../lib/bodyshopFloorWork/workerPipelineAssignRoles'
-import { bodyshopFloorAgeSummary } from '../../lib/bodyshopFloorAge'
+import { bodyshopFloorAgeSummary, formatIstSinceShort } from '../../lib/bodyshopFloorAge'
 import {
   filterBodyshopFloorInchargeCandidates,
   listBodyshopFloorInchargeEmployees,
@@ -1839,7 +1839,9 @@ export default function BodyshopFloorScreen() {
     else if (status === 'work_inprocess') { statusLabel = 'In Process'; statusBg = '#e9f0fd'; statusColor = '#2f63cf' }
 
     const floorAge = bodyshopFloorAgeSummary(car)
-    const floorAgeText = floorAge.label
+    const sinceShort = formatIstSinceShort(floorAge.sinceIso)
+    const floorAgeText =
+      floorAge.label && sinceShort ? `${floorAge.label} · since ${sinceShort}` : floorAge.label
     const floorAgeTint = floorAge.color
     const floorAgeDays = floorAge.days
 

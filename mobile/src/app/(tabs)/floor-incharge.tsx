@@ -17,6 +17,7 @@ import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadEr
 import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
+import { useListSearch } from '../../hooks/useListSearch'
 import { supabase } from '../../lib/supabase'
 import {
   isTechnicianBusinessRole,
@@ -468,7 +469,7 @@ export default function FloorInchargeScreen() {
   const [loadError,          setLoadError]          = useState<string | null>(null)
 
   // Filters (exact web)
-  const [search,           setSearch]           = useState('')
+  const listSearch = useListSearch()
   const [branchFilter,     setBranchFilter]     = useState('all')
   const [fuelTypeFilter,   setFuelTypeFilter]   = useState('all')
   const [technicianFilter, setTechnicianFilter] = useState('all')
@@ -490,8 +491,6 @@ export default function FloorInchargeScreen() {
   const [supportModalRole, setSupportModalRole] = useState<SupportRole | ''>('')
   const [supportModalCode, setSupportModalCode] = useState('')
   const autoAssignedRevisitRef = useRef<Set<string>>(new Set())
-  const searchReloadSkipRef = useRef(true)
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadSeqRef = useRef(0)
 
   const enrichJobCardsWithSaFuel = useCallback(async (rawEntries: JobCard[]) => {
@@ -512,14 +511,14 @@ export default function FloorInchargeScreen() {
   }, [])
 
   // ── Load ─────────────────────────────────────────────────────────────────
-  const fetchAll = useCallback(async (isRefresh = false, searchQuery?: string) => {
+  const fetchAll = useCallback(async (isRefresh = false) => {
     const seq = ++loadSeqRef.current
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
     setLoadError(null)
 
     try {
-      const q = (searchQuery ?? search).trim() || null
+      const q = null
       const [entryRes, empRes] = await Promise.all([
         fetchFloorInchargeEntries(q),
         supabase.from('employee_master').select('id, employee_code, employee_name, department, location, fuel_type, role').eq('is_active', true).order('employee_name'),
@@ -568,23 +567,9 @@ export default function FloorInchargeScreen() {
         setRefreshing(false)
       }
     }
-  }, [enrichJobCardsWithSaFuel, search])
+  }, [enrichJobCardsWithSaFuel])
 
   useFocusEffect(useCallback(() => { void fetchAll() }, [fetchAll]))
-
-  useEffect(() => {
-    if (searchReloadSkipRef.current) {
-      searchReloadSkipRef.current = false
-      return
-    }
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    searchDebounceRef.current = setTimeout(() => {
-      void fetchAll(true, search)
-    }, 400)
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    }
-  }, [search, fetchAll])
 
   // ── Derived state — exact web filter chain ────────────────────────────────
   const statusScopedRows = useMemo(() => {
@@ -600,8 +585,8 @@ export default function FloorInchargeScreen() {
     })
   }, [jobCards, assignmentView, assignments])
 
-  const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
   const searchScopedRows = useMemo(() => {
+    const searchQuery = listSearch.appliedNorm
     if (!searchQuery) return statusScopedRows
     return statusScopedRows.filter(jc => {
       const a = assignments[jc.assignment_key]
@@ -616,7 +601,7 @@ export default function FloorInchargeScreen() {
         sp.map(p => p.employee_code).join(' '),
       ].join(' ').toLowerCase().includes(searchQuery)
     })
-  }, [statusScopedRows, searchQuery, assignments, supportAssignments])
+  }, [statusScopedRows, listSearch.appliedNorm, assignments, supportAssignments])
 
   const branches = useMemo(() => {
     const b = new Set(searchScopedRows.map(jc => getLocationLabel(jc.location ?? jc.branch)))
@@ -1257,22 +1242,30 @@ export default function FloorInchargeScreen() {
       />
       <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void fetchAll(true)} />
 
-      <View style={[S.topBar, { paddingTop: 8, paddingBottom: 8 }]}>
+      <View style={[S.topBar, { paddingTop: 8, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
         <View style={[S.searchWrap, { flex: 1, maxWidth: '100%' }]}>
           <Text style={S.searchIcon} accessibilityElementsHidden importantForAccessibility="no">
             🔍
           </Text>
           <TextInput
             style={S.searchInput}
-            placeholder="Search JC / reg / model..."
+            placeholder="JC / reg… tap Search when ready"
             placeholderTextColor="#94a3b8"
-            value={search}
-            onChangeText={setSearch}
+            value={listSearch.draft}
+            onChangeText={listSearch.setDraft}
+            returnKeyType="search"
+            onSubmitEditing={listSearch.apply}
             clearButtonMode="while-editing"
             accessibilityLabel="Search job cards by JC, registration, or model"
           />
         </View>
+        <TouchableOpacity style={S.searchApplyBtn} onPress={listSearch.apply} accessibilityLabel="Apply search">
+          <Text style={S.searchApplyBtnText}>Search</Text>
+        </TouchableOpacity>
       </View>
+      {listSearch.hasApplied ? (
+        <Text style={S.searchAppliedHint}>Showing matches for “{listSearch.applied}”</Text>
+      ) : null}
 
       {/* ── Status tabs — horizontal scroll, 5 statuses clearly visible ── */}
       <ScrollView
@@ -1661,6 +1654,9 @@ const S = {
   searchWrap:        { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 10, height: 36, gap: 6 },
   searchIcon:        { fontSize: 13 },
   searchInput:       { flex: 1, fontSize: 13, color: '#1e293b', paddingVertical: 0 },
+  searchApplyBtn:    { backgroundColor: '#1a1b21', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, height: 36, justifyContent: 'center' as const },
+  searchApplyBtnText:{ color: '#fff', fontSize: 12, fontWeight: '800' as const },
+  searchAppliedHint: { fontSize: 11, color: '#64748b', paddingHorizontal: 12, paddingBottom: 6, backgroundColor: '#fff' },
   refreshBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
   refreshBtnText:    { fontSize: 18, color: '#2563eb' },
   // ── horizontal slide tab bar (5 statuses) ──────────────────

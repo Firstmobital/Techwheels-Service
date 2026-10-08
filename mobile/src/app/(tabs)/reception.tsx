@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { StaffNavigationChrome } from '../../components/staff/StaffScreenShell'
 import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
+import { useListSearch } from '../../hooks/useListSearch'
 import { supabase } from '../../lib/supabase'
 import { isServiceAdvisorRole } from '../../lib/businessRoles'
 import { useAuth } from '../../context/AuthContext'
@@ -303,9 +304,8 @@ export default function ReceptionScreen() {
   const [selectedLocation, setSelectedLocation] = useState<string>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string>('all')
-  const [search, setSearch] = useState('')
+  const listSearch = useListSearch()
   const [loadError, setLoadError] = useState<string | null>(null)
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadSeqRef = useRef(0)
 
   const [showModal, setShowModal] = useState(false)
@@ -359,7 +359,7 @@ export default function ReceptionScreen() {
           .eq('is_active', true)
           .order('sort_order', { ascending: true })
           .order('model_name', { ascending: true }),
-        reloadEntries(search),
+        reloadEntries(''),
       ])
       if (seq !== loadSeqRef.current) return
       if (listErr) setLoadError(listErr)
@@ -399,32 +399,9 @@ export default function ReceptionScreen() {
         setRefreshing(false)
       }
     }
-  }, [reloadEntries, search])
+  }, [reloadEntries])
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
-
-  const searchFetchSkipRef = useRef(true)
-  useEffect(() => {
-    if (searchFetchSkipRef.current) {
-      searchFetchSkipRef.current = false
-      return
-    }
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    searchDebounceRef.current = setTimeout(() => {
-      void (async () => {
-        setLoading(true)
-        try {
-          const listErr = await reloadEntries(search)
-          if (listErr) setLoadError(listErr)
-        } finally {
-          setLoading(false)
-        }
-      })()
-    }, 400)
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    }
-  }, [search, reloadEntries])
 
   useEffect(() => {
     let mounted = true
@@ -485,7 +462,7 @@ export default function ReceptionScreen() {
     [fuelFiltered, selectedServiceType])
 
   const displayEntries = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = listSearch.appliedNorm
     if (!q) return stFiltered
     return stFiltered.filter(e =>
       (e.reg_number ?? '').toLowerCase().includes(q) ||
@@ -495,9 +472,7 @@ export default function ReceptionScreen() {
       (e.jc_number ?? '').toLowerCase().includes(q) ||
       (e.owner_name ?? '').toLowerCase().includes(q)
     )
-  }, [stFiltered, search])
-
-  const serverSearchActive = search.trim().length > 0
+  }, [stFiltered, listSearch.appliedNorm])
 
   // ── SA dropdown — STRICT fuel_type filter: EV shows EV SAs only, PV shows PV SAs only ────
   // Rule: fuel_type MUST be selected first; model inference never overrides explicit fuel selection
@@ -996,15 +971,23 @@ export default function ReceptionScreen() {
 
       <View style={s.searchRow}>
         <TextInput
-          style={s.searchInput}
-          placeholder="Search reg / name / model / SA / JC..."
+          style={[s.searchInput, { flex: 1 }]}
+          placeholder="Reg / JC / name… then tap Search"
           placeholderTextColor="#94a3b8"
-          value={search}
-          onChangeText={setSearch}
+          value={listSearch.draft}
+          onChangeText={listSearch.setDraft}
+          returnKeyType="search"
+          onSubmitEditing={listSearch.apply}
           clearButtonMode="while-editing"
           accessibilityLabel="Search reception entries"
         />
+        <TouchableOpacity style={s.searchApplyBtn} onPress={listSearch.apply} accessibilityLabel="Apply search">
+          <Text style={s.searchApplyBtnText}>Search</Text>
+        </TouchableOpacity>
       </View>
+      {listSearch.hasApplied ? (
+        <Text style={s.searchAppliedHint}>Showing matches for “{listSearch.applied}”</Text>
+      ) : null}
 
       {/* Fuel Type filter — All / EV / PV */}
       <View style={s.fuelTabBar}>
@@ -1286,8 +1269,11 @@ const styles = {
   toggleBtnActive:    { backgroundColor: '#2563eb' },
   toggleBtnText:      { fontSize: 13, fontWeight: '600' as const, color: '#64748b' },
   toggleBtnTextActive:{ color: '#fff' },
-  searchRow:          { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
+  searchRow:          { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
   searchInput:        { backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' },
+  searchApplyBtn:     { backgroundColor: '#1a1b21', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
+  searchApplyBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  searchAppliedHint:  { fontSize: 11, color: '#64748b', paddingHorizontal: 12, paddingBottom: 6, backgroundColor: '#fff' },
   filterRow:          { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#f1f5f9', maxHeight: 44 },
   chip:               { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0', marginRight: 6, alignSelf: 'center' as const },
   chipActive:         { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
