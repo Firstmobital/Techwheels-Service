@@ -235,18 +235,24 @@ function MetricTile({
   label,
   value,
   variant = 'neutral',
+  overview = false,
 }: {
   label: string
   value: number | string
   variant?: MetricVariant
+  /** Fixed-width tile for the top summary row (never wraps within the trio). */
+  overview?: boolean
 }) {
   const v = METRIC_VARIANT_CLASS[variant]
+  const sizeClass = overview
+    ? 'w-[6.75rem] shrink-0 flex-none px-2 py-1'
+    : 'min-w-[6.5rem] flex-1 basis-[7.5rem] max-w-[11rem] px-2.5 py-1.5'
   return (
     <div
-      className={`rounded-md border px-2.5 py-1.5 min-w-[6.5rem] flex-1 basis-[7.5rem] max-w-[11rem] ${METRIC_ELEVATION} ${v.shell}`}
+      className={`rounded-md border ${sizeClass} ${METRIC_ELEVATION} ${v.shell}`}
     >
-      <div className={`text-base font-bold tabular-nums leading-none ${v.value}`}>{value}</div>
-      <div className="text-[10px] font-medium leading-tight text-slate-700 mt-1">{label}</div>
+      <div className={`${overview ? 'text-sm' : 'text-base'} font-bold tabular-nums leading-none ${v.value}`}>{value}</div>
+      <div className="text-[10px] font-medium leading-tight text-slate-700 mt-0.5">{label}</div>
     </div>
   )
 }
@@ -717,29 +723,20 @@ export default function PostServiceFeedbackCREPage() {
   }
 
   return (
-    <div className="flex w-full max-w-none flex-col gap-2 min-h-0 h-[calc(100dvh-var(--util-h)-var(--nav-h)-5.25rem)]">
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-gray-900 leading-tight">Post Service Feedback</h1>
-        <button
-          onClick={() => void load()}
-          className="shrink-0 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium text-gray-800"
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="shrink-0 flex flex-wrap items-end gap-x-3 gap-y-2">
-        <div className="flex flex-wrap gap-1.5">
-          <MetricTile label="Messages Sent" value={overview.totalSent} variant="neutral" />
-          <MetricTile label="4★ & Above" value={overview.positiveCount} variant="positive" />
-          <MetricTile label="3★ & Below" value={overview.needsFollowupCount} variant="negative" />
+    <div className="flex w-full max-w-none flex-col gap-1.5 min-h-0 h-[calc(100dvh-var(--util-h)-var(--nav-h)-5.25rem)]">
+      <div className="shrink-0 grid grid-cols-1 gap-1.5 lg:grid-cols-[auto_auto_minmax(0,1fr)_auto] lg:items-end lg:gap-x-2.5">
+        <h1 className="text-lg font-semibold text-gray-900 leading-tight lg:pr-1">Post Service Feedback</h1>
+        <div className="flex flex-nowrap gap-1.5">
+          <MetricTile overview label="Messages Sent" value={overview.totalSent} variant="neutral" />
+          <MetricTile overview label="4★ & Above" value={overview.positiveCount} variant="positive" />
+          <MetricTile overview label="3★ & Below" value={overview.needsFollowupCount} variant="negative" />
         </div>
-        <div className="flex min-w-[min(100%,20rem)] flex-1 flex-wrap items-end gap-2 gap-y-1.5 lg:justify-end">
+        <div className="flex min-w-0 flex-nowrap items-end gap-2 overflow-x-auto pb-px lg:justify-end">
           {showStatusFilter && (
-            <label className="flex flex-col gap-0.5">
+            <label className="flex shrink-0 flex-col gap-0.5">
               <span className="text-[10px] font-semibold text-slate-700">Status</span>
               <select
-                className="w-[7.5rem] border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+                className="w-[6.75rem] border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
                 value={filterStatus}
                 onChange={e => { setFilterStatus(e.target.value as typeof filterStatus); setPage(1); setExpandedId(null) }}
               >
@@ -750,9 +747,9 @@ export default function PostServiceFeedbackCREPage() {
               </select>
             </label>
           )}
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center justify-between gap-2 min-w-[12rem]">
-              <span className="text-[10px] font-semibold text-slate-700">Service Date</span>
+          <div className="flex shrink-0 flex-col gap-0.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold text-slate-700 whitespace-nowrap">Service Date</span>
               {(serviceDateFrom || serviceDateTo) && (
                 <button
                   type="button"
@@ -772,7 +769,7 @@ export default function PostServiceFeedbackCREPage() {
               <input
                 type="date"
                 aria-label="Service Date from"
-                className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+                className="w-[7.75rem] min-w-0 border border-gray-300 rounded px-1.5 py-1 text-sm text-gray-900 bg-white"
                 value={serviceDateFrom}
                 onChange={e => { setServiceDateFrom(e.target.value); setPage(1); setExpandedId(null) }}
               />
@@ -780,28 +777,31 @@ export default function PostServiceFeedbackCREPage() {
               <input
                 type="date"
                 aria-label="Service Date to"
-                className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+                className="w-[7.75rem] min-w-0 border border-gray-300 rounded px-1.5 py-1 text-sm text-gray-900 bg-white"
                 value={serviceDateTo}
                 onChange={e => { setServiceDateTo(e.target.value); setPage(1); setExpandedId(null) }}
               />
             </div>
           </div>
-          <label className="flex min-w-[10rem] flex-1 flex-col gap-0.5 lg:max-w-xs">
-            <span className="text-[10px] font-semibold text-slate-700">Search (name, mobile, reg no, branch)</span>
+          <label className="flex shrink-0 flex-col gap-0.5">
+            <span className="text-[10px] font-semibold text-slate-700">Search</span>
             <input
               type="text"
-              className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+              title="Search by name, mobile, reg no, branch"
+              aria-label="Search name, mobile, reg no, branch"
+              className="w-[10.5rem] border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search…"
             />
           </label>
-          <p className="shrink-0 pb-1 text-xs font-medium text-slate-600 tabular-nums">
-            {filteredTotal} cases
-            {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
-            {loading ? ' · Updating…' : ''}
-          </p>
         </div>
+        <button
+          onClick={() => void load()}
+          className="shrink-0 justify-self-end px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium text-gray-800 lg:justify-self-auto"
+        >
+          Refresh
+        </button>
       </div>
       {error && <p className="shrink-0 text-xs text-red-600">{error}</p>}
 
@@ -941,27 +941,34 @@ export default function PostServiceFeedbackCREPage() {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
-          <div className="shrink-0 px-3 py-2 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
-            <span>Page {page} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-xs"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-xs"
-              >
-                Next
-              </button>
+        <div className="shrink-0 px-3 py-1.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+          <span className="font-medium tabular-nums">
+            {filteredTotal} cases
+            {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
+            {loading ? ' · Updating…' : ''}
+          </span>
+          {totalPages > 1 && (
+            <div className="ml-auto flex items-center gap-3">
+              <span className="text-gray-500">Page {page} of {totalPages}</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-xs"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-xs"
+                >
+                  Next
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
