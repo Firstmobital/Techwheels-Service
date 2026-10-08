@@ -96,6 +96,71 @@ interface DisciplineRow {
 
 type OrderPortal = 'PV' | 'EV'
 
+function normalizePartNo(partNumber: string): string {
+  return String(partNumber ?? '').trim().toUpperCase()
+}
+
+function pvHasShortage(row: DisciplineRow): boolean {
+  return row.rowStatus === 'CRITICAL' || row.rowStatus === 'LOW STOCK'
+}
+
+/**
+ * Shared part numbers: PV owns Critical/Low and the combined order line.
+ * EV order qty is rolled into PV so one PO covers both; EV sheet shows OK + zero order.
+ */
+function consolidateEvPvSharedOrders(
+  pvRaw: DisciplineRow[],
+  evRaw: DisciplineRow[],
+): Record<OrderPortal, DisciplineRow[]> {
+  const evByPart = new Map<string, DisciplineRow>()
+  for (const r of evRaw) evByPart.set(normalizePartNo(r.partNumber), r)
+
+  const pvByPart = new Map<string, DisciplineRow>()
+  for (const r of pvRaw) pvByPart.set(normalizePartNo(r.partNumber), r)
+
+  const pvAdjusted = pvRaw.map((pvRow) => {
+    const evRow = evByPart.get(normalizePartNo(pvRow.partNumber))
+    if (!evRow || !pvHasShortage(pvRow)) return pvRow
+
+    const evOrderQty = evRow.actualOrderQty
+    if (evOrderQty <= 0) return pvRow
+
+    const mergedQty = pvRow.actualOrderQty + evOrderQty
+    return {
+      ...pvRow,
+      actualOrderQty: mergedQty,
+      qtyToOrder: mergedQty,
+      orderValue: mergedQty * pvRow.unitPrice,
+    }
+  })
+
+  const evAdjusted = evRaw.map((evRow) => {
+    const pvRow = pvByPart.get(normalizePartNo(evRow.partNumber))
+    if (!pvRow || !pvHasShortage(pvRow)) return evRow
+
+    const hadEvOrder = evRow.actualOrderQty > 0
+    const evShortage = pvHasShortage(evRow)
+    if (!hadEvOrder && !evShortage) return evRow
+
+    return {
+      ...evRow,
+      ...(evShortage
+        ? {
+            rowStatus: 'OK' as RowStatus,
+            critical: false,
+            stockStatus: 'OK' as const,
+            netShortfall: 0,
+          }
+        : {}),
+      actualOrderQty: 0,
+      qtyToOrder: 0,
+      orderValue: 0,
+    }
+  })
+
+  return { PV: pvAdjusted, EV: evAdjusted }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WINDOW RESOLUTION — last 3 complete calendar months before current month
 // Apr=FM1, May=FM2, Jun=FM3, Jul=FM4, … Mar=FM12
@@ -314,8 +379,12 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
 
   const CALENDAR_DAYS_DYNAMIC = activeWindow.calendar_days
 
-  const fetchData = useCallback(async (portalToLoad: OrderPortal) => {
-    setLoading(true); setError(null)
+  const fetchData = useCallback(async (portalToLoad: OrderPortal, opts?: { manageLoading?: boolean }) => {
+    const manageLoading = opts?.manageLoading !== false
+    if (manageLoading) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const rawBranch = branch
       const portalFilter = portalToLoad
@@ -522,13 +591,29 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       setRowsByPortal((prev) => ({ ...prev, [portalToLoad]: disciplineRows }))
       setLastUpdated((prev) => ({ ...prev, [portalToLoad]: new Date().toLocaleTimeString('en-IN') }))
     } catch (err: unknown) {
+      if (manageLoading) setError((err as Error).message)
+      throw err
+    } finally {
+      if (manageLoading) setLoading(false)
+    }
+  }, [branch])
+
+  const loadAllPortals = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      await Promise.all([
+        fetchData('PV', { manageLoading: false }),
+        fetchData('EV', { manageLoading: false }),
+      ])
+    } catch (err: unknown) {
       setError((err as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [branch])
+  }, [fetchData])
 
-  useEffect(() => { fetchData(activePortal) }, [fetchData, activePortal])
+  useEffect(() => { void loadAllPortals() }, [loadAllPortals])
   useEffect(() => { setCurrentPage(1) }, [activePortal, statusFilter, searchText, showOrderOnly])
 
   // ── Realtime subscription ───────────────────────────────────────────────
@@ -537,13 +622,17 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
     const channels = tables.map((t) =>
       supabase.channel(`realtime-${t}`).on('postgres_changes', { event: '*', schema: 'public', table: t }, () => {
         if (debounceTimer.current) clearTimeout(debounceTimer.current)
-        debounceTimer.current = setTimeout(() => { fetchData(activePortal) }, 500)
+        debounceTimer.current = setTimeout(() => { void loadAllPortals() }, 500)
       }).subscribe()
     )
     return () => { channels.forEach((c) => { supabase.removeChannel(c) }) }
-  }, [activePortal, fetchData])
+  }, [loadAllPortals])
 
-  const rows = rowsByPortal[activePortal]
+  const consolidatedByPortal = useMemo(
+    () => consolidateEvPvSharedOrders(rowsByPortal.PV, rowsByPortal.EV),
+    [rowsByPortal],
+  )
+  const rows = consolidatedByPortal[activePortal]
   const lastUpdatedForActive = lastUpdated[activePortal]
   const activeMonthLabels = activeWindow.fiscal_months.map(fmLabel)
 
@@ -640,6 +729,11 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       ['daily consumption so body panels / accident parts are never silently excluded.'],
       [],
       ['Accessories excluded: 8855GOLD*, 8855EVCH*, 8857* series'],
+      [],
+      ['EV / PV SHARED PARTS'],
+      ['If the same part number exists on both EV and PV and PV is Critical or Low Stock,'],
+      ['that shortage appears only on the PV order sheet (not duplicated on EV).'],
+      ['EV Actual Order Qty for that part is added to PV Actual Order Qty so one combined PO can be raised from PV.'],
     ]
     const ws0 = XLSX.utils.aoa_to_sheet(readMe)
     ws0['!cols'] = [{ wch: 80 }]
