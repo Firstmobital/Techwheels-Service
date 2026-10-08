@@ -1058,6 +1058,273 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   }
 }
 
+/* BUSY Accounting — compact desk (presentation only; pattern from .acct-page) */
+.busy-page.page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--nav-h));
+  max-height: calc(100dvh - var(--nav-h));
+  overflow: hidden;
+  overflow-x: hidden;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.busy-page .pagehead {
+  margin-bottom: 8px;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex: none;
+}
+.busy-page .pagehead h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+  min-width: 0;
+}
+.busy-pagehead-period {
+  margin-left: auto;
+  flex: none;
+}
+.busy-pagehead-period .cft__label {
+  font-size: 11px;
+}
+.busy-inline-alert {
+  margin-bottom: 6px;
+  flex: none;
+}
+.busy-sources {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: stretch;
+  flex: none;
+}
+.busy-page .busy-source-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: var(--sh-1);
+}
+.busy-page .busy-source-card .card__head {
+  padding: 8px 12px;
+}
+.busy-page .busy-source-card .card__head h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.busy-page .busy-source-card .card__body {
+  padding: 6px 12px 10px;
+  flex: 1 1 auto;
+}
+.busy-labour-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.busy-labour-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.busy-labour-row__label {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink);
+}
+.busy-labour-row__sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.busy-labour-row__status {
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.busy-labour-row__status.is-ok { color: #15803d; }
+.busy-labour-row__status.is-warn { color: #b45309; }
+.busy-labour-row__count {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.busy-page .busy-source-card .imp-drop {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  min-height: 0;
+  text-align: left;
+}
+.busy-parts-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.busy-parts-meta .toast {
+  margin-top: 6px;
+}
+.busy-acc {
+  flex: none;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+}
+.busy-acc__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  min-height: 48px;
+}
+.busy-acc__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  flex: none;
+}
+.busy-acc__meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.busy-acc__body {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+}
+.busy-acc__hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.busy-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+  flex: none;
+}
+.busy-kpi {
+  background: var(--busy-kpi-bg, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--busy-kpi-fg, var(--border)) 18%, var(--border));
+  border-radius: 8px;
+  padding: 6px 10px;
+  box-shadow: var(--sh-1);
+  min-width: 0;
+}
+.busy-kpi__v {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--busy-kpi-fg, var(--ink));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.busy-kpi__l {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-top: 2px;
+  line-height: 1.25;
+}
+.busy-page .busy-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  box-shadow: var(--sh-1);
+}
+.busy-page .busy-workspace .card__head {
+  padding: 10px 14px;
+  flex: none;
+}
+.busy-page .busy-workspace .card__head h3 {
+  font-size: 14px;
+}
+.busy-page .busy-workspace .card__head .sub {
+  font-size: 12px;
+  margin-top: 1px;
+}
+.busy-page .busy-workspace .card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 12px;
+}
+.busy-table-scroll {
+  flex: 1 1 auto;
+  min-height: 200px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.busy-table-scroll .tbl {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.busy-table-scroll .tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--canvas);
+  color: var(--ink-2);
+  font-weight: 700;
+  padding: 8px 14px 9px;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.busy-table-scroll--nested {
+  flex: none;
+  max-height: min(360px, 40vh);
+  min-height: 120px;
+}
+
+@media (max-width: 1100px) {
+  .busy-sources {
+    grid-template-columns: 1fr;
+  }
+  .busy-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .busy-page.page {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .busy-page .pagehead {
+    flex-wrap: wrap;
+  }
+  .busy-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .busy-table-scroll {
+    min-height: 280px;
+    max-height: 70vh;
+  }
+}
+
 /* Bodyshop Recovery compact desk — viewport/table pattern from .acct-page, Recovery-scoped KPI/filter/year rules */
 .recov-page.page {
   display: flex;

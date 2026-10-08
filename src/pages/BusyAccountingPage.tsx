@@ -423,46 +423,35 @@ export default function BusyAccountingPage() {
   }
 
   return (
-    <div>
+    <div className="page busy-page">
       <div className="pagehead">
-        <div>
-          <p className="greet">
-            <Icon name="banknote" size={13} className="icon-align-text" />
-            BUSY Accounting
-          </p>
-          <h1>BUSY</h1>
-          <p>Create Party Accounts and Invoice Vouchers from DMS Labour Revenue plus PV/EV Parts files.</p>
-        </div>
-        <div className="toolbar toolbar--tight">
+        <h1>BUSY</h1>
+        <div className="toolbar toolbar--tight busy-pagehead-period">
           <DateRangeFilter range={{ from: fromDate, to: toDate }} onChange={handlePeriodRangeChange} label="Period:" />
         </div>
       </div>
 
       {rangeIssue && (
-        <div className="toast error" style={{ marginBottom: 12 }}>
+        <div className="toast error busy-inline-alert">
           <Icon name="alert" size={14} />
           {rangeIssue}
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 18 }}>
-        <div className="card" style={{ margin: 0 }}>
+      <div className="busy-sources">
+        <div className="card busy-source-card">
           <div className="card__head">
-            <div>
-              <h3>Labour source</h3>
-              <div className="sub">Existing PSF Revenue Report (DMS) import. No Labour re-upload.</div>
-            </div>
+            <h3>Labour source</h3>
           </div>
           <div className="card__body">
             <LabourPill label="PV Labour" available={labourStatus?.pvAvailable ?? false} count={labourStatus?.pvCount ?? 0} latest={labourStatus?.latestPvDate} />
             <LabourPill label="EV Labour" available={labourStatus?.evAvailable ?? false} count={labourStatus?.evCount ?? 0} latest={labourStatus?.latestEvDate} />
-            {labourStatus?.error && <div className="toast error" style={{ marginTop: 10 }}>{labourStatus.error}</div>}
+            {labourStatus?.error && <div className="toast error" style={{ marginTop: 6 }}>{labourStatus.error}</div>}
           </div>
         </div>
 
         <PartsUploadCard
           title="Parts - PV"
-          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence. Labour remains voucher identity unless Account_Name maps to a dealer code with no Labour row."
           slot={pvParts}
           inputRef={pvInputRef}
           onPick={() => pvInputRef.current?.click()}
@@ -470,7 +459,6 @@ export default function BusyAccountingPage() {
         />
         <PartsUploadCard
           title="Parts - EV"
-          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence. Labour remains voucher identity unless Account_Name maps to a dealer code with no Labour row."
           slot={evParts}
           inputRef={evInputRef}
           onPick={() => evInputRef.current?.click()}
@@ -479,26 +467,26 @@ export default function BusyAccountingPage() {
       </div>
 
       {processError && (
-        <div className="toast error" style={{ marginBottom: 12 }}>
+        <div className="toast error busy-inline-alert">
           <Icon name="alert" size={14} />
           {processError}
         </div>
       )}
       {partsStatus?.error && (
-        <div className="toast error" style={{ marginBottom: 12 }}>
+        <div className="toast error busy-inline-alert">
           <Icon name="alert" size={14} />
           Parts source status: {partsStatus.error}
         </div>
       )}
       {partsLinesLoadError && (
-        <div className="toast error" style={{ marginBottom: 12 }}>
+        <div className="toast error busy-inline-alert">
           <Icon name="alert" size={14} />
           Parts lines: {partsLinesLoadError}
         </div>
       )}
 
       {partsAccountLoadError && !isAdmin && (
-        <div className="toast error" style={{ marginBottom: 12 }}>
+        <div className="toast error busy-inline-alert">
           <Icon name="alert" size={14} />
           Parts dealer accounts: {partsAccountLoadError}
         </div>
@@ -524,7 +512,7 @@ export default function BusyAccountingPage() {
         />
       )}
 
-      <div className="summary">
+      <div className="busy-kpis">
         <SummaryChip label="Eligible invoices" value={result?.summary.eligible ?? 0} color="#2563eb" bg="#eff6ff" />
         <SummaryChip label="PV invoices" value={result?.summary.pv ?? 0} color="#1d4ed8" bg="#eff6ff" />
         <SummaryChip label="EV invoices" value={result?.summary.ev ?? 0} color="#047857" bg="#ecfdf5" />
@@ -537,15 +525,20 @@ export default function BusyAccountingPage() {
         <SummaryChip label="Unmapped Bodyshop" value={result?.summary.unmappedBodyshop ?? 0} color="#b45309" bg="#fffbeb" />
       </div>
 
-      <div className="card mb-gap">
+      <div className="card busy-workspace">
         <div className="card__head">
           <div>
             <h3>Invoice preview</h3>
-            <div className="sub">
-              {labourLoading ? 'Loading Labour invoices…' : `${filteredPreview.length} rows`}
-              {result && result.unmatchedParts.length > 0 ? ` · ${result.unmatchedParts.length} unmatched Parts lines (not exported)` : ''}
-              {result && result.summary.excluded > 0 ? ` · ${result.summary.excluded} excluded by business rule` : ''}
-            </div>
+            {(labourLoading || (result && (result.unmatchedParts.length > 0 || result.summary.excluded > 0))) && (
+              <div className="sub">
+                {labourLoading
+                  ? 'Loading Labour invoices…'
+                  : [
+                      result!.unmatchedParts.length > 0 ? `${result!.unmatchedParts.length} unmatched Parts lines (not exported)` : null,
+                      result!.summary.excluded > 0 ? `${result!.summary.excluded} excluded by business rule` : null,
+                    ].filter(Boolean).join(' · ')}
+              </div>
+            )}
           </div>
           <div className="toolbar toolbar--tight">
             <select className="sel" value={previewFilter} onChange={(e) => setPreviewFilter(e.target.value as typeof previewFilter)}>
@@ -575,7 +568,7 @@ export default function BusyAccountingPage() {
           {filteredPreview.length === 0 && !labourLoading ? (
             <div className="empty-state">No invoices in this view.</div>
           ) : (
-            <div className="tbl-wrap scroll">
+            <div className="busy-table-scroll">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -637,25 +630,25 @@ export default function BusyAccountingPage() {
 
 function SummaryChip({ label, value, color, bg }: { label: string; value: string | number; color: string; bg: string }) {
   return (
-    <div style={{ background: bg, borderRadius: 8, padding: '0.5rem 0.75rem', border: `1px solid ${color}22` }}>
-      <div style={{ fontSize: '0.92rem', fontWeight: 700, color }}>{value}</div>
-      <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{label}</div>
+    <div className="busy-kpi" style={{ ['--busy-kpi-fg' as string]: color, ['--busy-kpi-bg' as string]: bg }}>
+      <div className="busy-kpi__v">{value}</div>
+      <div className="busy-kpi__l">{label}</div>
     </div>
   )
 }
 
 function LabourPill({ label, available, count, latest }: { label: string; available: boolean; count: number; latest: string | null | undefined }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+    <div className="busy-labour-row">
       <div>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
-        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{latest ? `Latest invoice ${latest}` : 'No invoice date yet'}</div>
+        <div className="busy-labour-row__label">{label}</div>
+        <div className="busy-labour-row__sub">{latest ? `Latest invoice ${latest}` : 'No invoice date yet'}</div>
       </div>
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: available ? '#15803d' : '#b45309' }}>
+      <div>
+        <div className={`busy-labour-row__status ${available ? 'is-ok' : 'is-warn'}`}>
           {available ? 'Available' : 'Not loaded'}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{count.toLocaleString('en-IN')} rows</div>
+        <div className="busy-labour-row__count">{count.toLocaleString('en-IN')} rows</div>
       </div>
     </div>
   )
@@ -663,26 +656,27 @@ function LabourPill({ label, available, count, latest }: { label: string; availa
 
 function PartsUploadCard({
   title,
-  description,
   slot,
   inputRef,
   onPick,
   onFile,
 }: {
   title: string
-  description: string
   slot: PartsSlotState
   inputRef: RefObject<HTMLInputElement | null>
   onPick: () => void
   onFile: (file: File) => void
 }) {
+  const dropHint = slot.saving
+    ? 'Saving Parts lines…'
+    : slot.fileName
+      ? `${slot.rowCount.toLocaleString('en-IN')} lines${slot.persisted ? ' persisted' : ''}`
+      : 'Drop or browse · append-only upload'
+
   return (
-    <div className="card" style={{ margin: 0 }}>
+    <div className="card busy-source-card">
       <div className="card__head">
-        <div>
-          <h3>{title}</h3>
-          <div className="sub">{description}</div>
-        </div>
+        <h3>{title}</h3>
       </div>
       <div className="card__body">
         <input
@@ -697,28 +691,24 @@ function PartsUploadCard({
             e.currentTarget.value = ''
           }}
         />
-        <div className="imp-drop" style={{ minHeight: 88 }} onClick={onPick}>
-          <Icon name="upload" size={18} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>{slot.fileName ?? 'Choose CSV / Excel'}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {slot.saving
-                ? 'Saving Parts lines…'
-                : slot.fileName
-                  ? `${slot.rowCount.toLocaleString('en-IN')} Parts lines${slot.persisted ? ' persisted' : ''}`
-                  : 'Drop or browse a Parts file. New invoices are appended; already uploaded invoices are skipped.'}
+        <div className="imp-drop" onClick={onPick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() } }}>
+          <Icon name="upload" size={16} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {slot.fileName ?? 'Choose CSV / Excel'}
             </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>{dropHint}</div>
           </div>
         </div>
-        {slot.error && <div className="toast error" style={{ marginTop: 8 }}>{slot.error}</div>}
-        {slot.summary && (
-          <div className="toast" style={{ marginTop: 8, whiteSpace: 'pre-line' }}>{slot.summary}</div>
-        )}
-        {slot.uploadedAt && (slot.persisted || slot.fileName) && (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
-            Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}
-          </div>
-        )}
+        <div className="busy-parts-meta">
+          {slot.uploadedAt && (slot.persisted || slot.fileName) && (
+            <div>Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}</div>
+          )}
+          {slot.error && <div className="toast error">{slot.error}</div>}
+          {slot.summary && (
+            <div className="toast" style={{ whiteSpace: 'pre-line' }}>{slot.summary}</div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -791,23 +781,21 @@ function BusyPartsAccountMasterCard({
   }
 
   return (
-    <div className="card mb-gap">
-      <div className="card__head">
-        <div>
-          <h3>Parts dealer accounts</h3>
-          <div className="sub">
-            Admin insert or update. The code is the leading token of Parts Account_Name. It sets Party Name, GSTIN, and Group only when that invoice has no Labour row.
-            {loading ? ' Loading…' : ` ${rows.length} mapping${rows.length === 1 ? '' : 's'}.`}
-          </div>
-        </div>
-        <div className="toolbar toolbar--tight">
-          <button type="button" className="btn btn--ghost btn--sm" onClick={toggleOpen}>
-            {open ? 'Hide accounts' : 'Show accounts'}
-          </button>
-        </div>
+    <div className={`busy-acc ${open ? 'is-open' : ''}`}>
+      <div className="busy-acc__bar">
+        <span className="busy-acc__title">Parts dealer accounts</span>
+        <span className="busy-acc__meta">
+          {loading ? 'Loading…' : `${rows.length} mapping${rows.length === 1 ? '' : 's'}`}
+        </span>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={toggleOpen}>
+          {open ? 'Hide accounts' : 'Show accounts'}
+        </button>
       </div>
       {open && (
-      <div className="card__body dense">
+      <div className="busy-acc__body dense">
+        <p className="busy-acc__hint">
+          Admin insert or update. The code is the leading token of Parts Account_Name. It sets Party Name, GSTIN, and Group only when that invoice has no Labour row.
+        </p>
         {loadError && (
           <div className="toast error" style={{ marginBottom: 12 }}>
             <Icon name="alert" size={14} />
@@ -846,7 +834,7 @@ function BusyPartsAccountMasterCard({
         {rows.length === 0 ? (
           <div className="empty-state">No persisted Parts dealer accounts.</div>
         ) : (
-          <div className="tbl-wrap scroll">
+          <div className="busy-table-scroll busy-table-scroll--nested">
             <table className="tbl">
               <thead>
                 <tr>
@@ -987,23 +975,21 @@ function BusyInsuranceMasterCard({
   }
 
   return (
-    <div className="card mb-gap">
-      <div className="card__head">
-        <div>
-          <h3>Bodyshop Group of Account</h3>
-          <div className="sub">
-            Admin insert or update. Insurance company before C/O maps to BUSY Group and GSTIN.
-            {loading ? ' Loading…' : ` ${rows.length} mapping${rows.length === 1 ? '' : 's'}.`}
-          </div>
-        </div>
-        <div className="toolbar toolbar--tight">
-          <button type="button" className="btn btn--ghost btn--sm" onClick={toggleOpen}>
-            {open ? 'Hide groups' : 'Show groups'}
-          </button>
-        </div>
+    <div className={`busy-acc ${open ? 'is-open' : ''}`}>
+      <div className="busy-acc__bar">
+        <span className="busy-acc__title">Bodyshop Group of Account</span>
+        <span className="busy-acc__meta">
+          {loading ? 'Loading…' : `${rows.length} mapping${rows.length === 1 ? '' : 's'}`}
+        </span>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={toggleOpen}>
+          {open ? 'Hide groups' : 'Show groups'}
+        </button>
       </div>
       {open && (
-      <div className="card__body dense">
+      <div className="busy-acc__body dense">
+        <p className="busy-acc__hint">
+          Admin insert or update. Insurance company before C/O maps to BUSY Group and GSTIN.
+        </p>
         {loadError && (
           <div className="toast error" style={{ marginBottom: 12 }}>
             <Icon name="alert" size={14} />
@@ -1043,7 +1029,7 @@ function BusyInsuranceMasterCard({
         {rows.length === 0 ? (
           <div className="empty-state">No persisted Group of Account mappings.</div>
         ) : (
-          <div className="tbl-wrap scroll">
+          <div className="busy-table-scroll busy-table-scroll--nested">
             <table className="tbl">
               <thead>
                 <tr>
