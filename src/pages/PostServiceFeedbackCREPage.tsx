@@ -218,14 +218,17 @@ function RatingPicker({
 
 type MetricVariant = 'neutral' | 'positive' | 'negative' | 'warn' | 'info' | 'orange' | 'purple'
 
+const METRIC_ELEVATION =
+  'shadow-[0_1px_2px_rgba(14,23,38,0.06),0_2px_6px_rgba(14,23,38,0.05)]'
+
 const METRIC_VARIANT_CLASS: Record<MetricVariant, { shell: string; value: string }> = {
-  neutral:  { shell: 'bg-slate-50 border-slate-200/80',     value: 'text-slate-800' },
-  positive: { shell: 'bg-emerald-50/90 border-emerald-100', value: 'text-emerald-800' },
-  negative: { shell: 'bg-red-50/90 border-red-100',         value: 'text-red-800' },
-  warn:     { shell: 'bg-amber-50/90 border-amber-100',     value: 'text-amber-800' },
-  info:     { shell: 'bg-sky-50/90 border-sky-100',         value: 'text-sky-800' },
-  orange:   { shell: 'bg-orange-50/90 border-orange-100',   value: 'text-orange-800' },
-  purple:   { shell: 'bg-violet-50/90 border-violet-100',   value: 'text-violet-800' },
+  neutral:  { shell: 'bg-white border-slate-200/90',        value: 'text-slate-900' },
+  positive: { shell: 'bg-emerald-50/95 border-emerald-200/80', value: 'text-emerald-900' },
+  negative: { shell: 'bg-red-50/95 border-red-200/80',         value: 'text-red-900' },
+  warn:     { shell: 'bg-amber-50/95 border-amber-200/80',     value: 'text-amber-900' },
+  info:     { shell: 'bg-sky-50/95 border-sky-200/80',         value: 'text-sky-900' },
+  orange:   { shell: 'bg-orange-50/95 border-orange-200/80',   value: 'text-orange-900' },
+  purple:   { shell: 'bg-violet-50/95 border-violet-200/80',   value: 'text-violet-900' },
 }
 
 function MetricTile({
@@ -239,9 +242,11 @@ function MetricTile({
 }) {
   const v = METRIC_VARIANT_CLASS[variant]
   return (
-    <div className={`rounded-md border px-2.5 py-1.5 min-w-[6.5rem] flex-1 basis-[7.5rem] max-w-[11rem] ${v.shell}`}>
+    <div
+      className={`rounded-md border px-2.5 py-1.5 min-w-[6.5rem] flex-1 basis-[7.5rem] max-w-[11rem] ${METRIC_ELEVATION} ${v.shell}`}
+    >
       <div className={`text-base font-bold tabular-nums leading-none ${v.value}`}>{value}</div>
-      <div className="text-[10px] leading-tight text-gray-500 mt-1">{label}</div>
+      <div className="text-[10px] font-medium leading-tight text-slate-700 mt-1">{label}</div>
     </div>
   )
 }
@@ -713,26 +718,92 @@ export default function PostServiceFeedbackCREPage() {
 
   return (
     <div className="flex w-full max-w-none flex-col gap-2 min-h-0 h-[calc(100dvh-var(--util-h)-var(--nav-h)-5.25rem)]">
-      <div className="flex shrink-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Post Service Feedback</h1>
-          <p className="text-xs text-gray-500 mt-0.5 leading-snug">
-            Follow up on low ratings, call customers who have not responded, and review the positive ones.
-          </p>
-        </div>
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold text-gray-900 leading-tight">Post Service Feedback</h1>
         <button
           onClick={() => void load()}
-          className="shrink-0 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-700"
+          className="shrink-0 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium text-gray-800"
         >
           Refresh
         </button>
       </div>
 
-      <div className="shrink-0 flex flex-wrap gap-1.5">
-        <MetricTile label="Messages Sent" value={overview.totalSent} variant="neutral" />
-        <MetricTile label="4★ & Above" value={overview.positiveCount} variant="positive" />
-        <MetricTile label="3★ & Below" value={overview.needsFollowupCount} variant="negative" />
+      <div className="shrink-0 flex flex-wrap items-end gap-x-3 gap-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          <MetricTile label="Messages Sent" value={overview.totalSent} variant="neutral" />
+          <MetricTile label="4★ & Above" value={overview.positiveCount} variant="positive" />
+          <MetricTile label="3★ & Below" value={overview.needsFollowupCount} variant="negative" />
+        </div>
+        <div className="flex min-w-[min(100%,20rem)] flex-1 flex-wrap items-end gap-2 gap-y-1.5 lg:justify-end">
+          {showStatusFilter && (
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold text-slate-700">Status</span>
+              <select
+                className="w-[7.5rem] border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+                value={filterStatus}
+                onChange={e => { setFilterStatus(e.target.value as typeof filterStatus); setPage(1); setExpandedId(null) }}
+              >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </label>
+          )}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center justify-between gap-2 min-w-[12rem]">
+              <span className="text-[10px] font-semibold text-slate-700">Service Date</span>
+              {(serviceDateFrom || serviceDateTo) && (
+                <button
+                  type="button"
+                  className="text-[10px] font-medium text-slate-600 hover:text-slate-900"
+                  onClick={() => {
+                    setServiceDateFrom('')
+                    setServiceDateTo('')
+                    setPage(1)
+                    setExpandedId(null)
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                aria-label="Service Date from"
+                className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+                value={serviceDateFrom}
+                onChange={e => { setServiceDateFrom(e.target.value); setPage(1); setExpandedId(null) }}
+              />
+              <span className="text-xs text-slate-500 shrink-0">–</span>
+              <input
+                type="date"
+                aria-label="Service Date to"
+                className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+                value={serviceDateTo}
+                onChange={e => { setServiceDateTo(e.target.value); setPage(1); setExpandedId(null) }}
+              />
+            </div>
+          </div>
+          <label className="flex min-w-[10rem] flex-1 flex-col gap-0.5 lg:max-w-xs">
+            <span className="text-[10px] font-semibold text-slate-700">Search (name, mobile, reg no, branch)</span>
+            <input
+              type="text"
+              className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 bg-white"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search…"
+            />
+          </label>
+          <p className="shrink-0 pb-1 text-xs font-medium text-slate-600 tabular-nums">
+            {filteredTotal} cases
+            {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
+            {loading ? ' · Updating…' : ''}
+          </p>
+        </div>
       </div>
+      {error && <p className="shrink-0 text-xs text-red-600">{error}</p>}
 
       <div className="shrink-0 border-b border-gray-200 flex flex-wrap gap-x-4 gap-y-0">
         <button
@@ -783,103 +854,31 @@ export default function PostServiceFeedbackCREPage() {
         <MetricTile label="Today's WA Sent" value={todayProductivity.waSent} variant="purple" />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <div className="shrink-0 border-b border-gray-100 px-3 py-2">
-          <div className="flex flex-wrap items-end gap-2 gap-y-1.5">
-            {showStatusFilter && (
-              <label className="flex flex-col gap-0.5">
-                <span className="text-[10px] text-gray-500">Status</span>
-                <select
-                  className="w-[7.5rem] border border-gray-300 rounded px-2 py-1 text-sm"
-                  value={filterStatus}
-                  onChange={e => { setFilterStatus(e.target.value as typeof filterStatus); setPage(1); setExpandedId(null) }}
-                >
-                  <option value="all">All</option>
-                  <option value="open">Open</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="resolved">Resolved</option>
-                </select>
-              </label>
-            )}
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-gray-500">Service Date</span>
-                {(serviceDateFrom || serviceDateTo) && (
-                  <button
-                    type="button"
-                    className="text-[10px] text-gray-500 hover:text-gray-800"
-                    onClick={() => {
-                      setServiceDateFrom('')
-                      setServiceDateTo('')
-                      setPage(1)
-                      setExpandedId(null)
-                    }}
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                <input
-                  type="date"
-                  aria-label="Service Date from"
-                  className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm"
-                  value={serviceDateFrom}
-                  onChange={e => { setServiceDateFrom(e.target.value); setPage(1); setExpandedId(null) }}
-                />
-                <span className="text-xs text-gray-400 shrink-0">–</span>
-                <input
-                  type="date"
-                  aria-label="Service Date to"
-                  className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm"
-                  value={serviceDateTo}
-                  onChange={e => { setServiceDateTo(e.target.value); setPage(1); setExpandedId(null) }}
-                />
-              </div>
-            </div>
-            <label className="flex min-w-[12rem] flex-1 flex-col gap-0.5">
-              <span className="text-[10px] text-gray-500">Search (name, mobile, reg no, branch)</span>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search…"
-              />
-            </label>
-            <p className="ml-auto shrink-0 text-xs text-gray-400 pb-1">
-              {filteredTotal} cases
-              {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
-              {loading ? ' · Updating…' : ''}
-            </p>
-          </div>
-          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-        </div>
-
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(14,23,38,0.05)]">
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[960px] text-sm">
-            <thead className="sticky top-0 z-10 bg-gray-50 shadow-[0_1px_0_0_rgb(229,231,235)]">
-              <tr className="border-b border-gray-200 text-left text-[11px] text-gray-500 uppercase tracking-wide">
-                <th className="px-3 py-2 font-medium">Customer</th>
-                <th className="px-3 py-2 font-medium">Reg No</th>
-                <th className="px-3 py-2 font-medium">Branch</th>
-                <th className="px-3 py-2 font-medium">Service Date</th>
-                <th className="px-3 py-2 font-medium">Service Type</th>
-                <th className="px-3 py-2 font-medium">Service Advisor</th>
-                <th className="px-3 py-2 font-medium">Mobile</th>
+            <thead className="sticky top-0 z-10 bg-gray-50/98 shadow-[0_1px_0_0_rgb(229,231,235),0_2px_4px_rgba(14,23,38,0.04)]">
+              <tr className="border-b border-gray-200 text-left text-[11px] text-slate-700 uppercase tracking-wide">
+                <th className="px-3 py-2 font-semibold">Customer</th>
+                <th className="px-3 py-2 font-semibold">Reg No</th>
+                <th className="px-3 py-2 font-semibold">Branch</th>
+                <th className="px-3 py-2 font-semibold">Service Date</th>
+                <th className="px-3 py-2 font-semibold">Service Type</th>
+                <th className="px-3 py-2 font-semibold">Service Advisor</th>
+                <th className="px-3 py-2 font-semibold">Mobile</th>
                 {tier === 'unrated' ? (
                   <>
-                    <th className="px-3 py-2 font-medium">Message Sent At</th>
-                    <th className="px-3 py-2 font-medium">Days Since Sent</th>
+                    <th className="px-3 py-2 font-semibold">Message Sent At</th>
+                    <th className="px-3 py-2 font-semibold">Days Since Sent</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-3 py-2 font-medium">Rating</th>
-                    <th className="px-3 py-2 font-medium">Remark</th>
+                    <th className="px-3 py-2 font-semibold">Rating</th>
+                    <th className="px-3 py-2 font-semibold">Remark</th>
                   </>
                 )}
-                <th className="px-3 py-2 font-medium">{tier === 'high' ? 'Review Link' : 'Status'}</th>
-                <th className="px-3 py-2 font-medium"></th>
+                <th className="px-3 py-2 font-semibold">{tier === 'high' ? 'Review Link' : 'Status'}</th>
+                <th className="px-3 py-2 font-semibold"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
