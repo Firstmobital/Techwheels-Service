@@ -265,6 +265,14 @@ export async function updateAccountsMechanicalPayment(input: {
   return data as AccountsMechanicalCase
 }
 
+export async function deleteAccountsMechanicalPayment(paymentLineId: number): Promise<AccountsMechanicalCase> {
+  const { data, error } = await supabase.rpc('delete_accounts_mechanical_payment', {
+    p_payment_line_id: paymentLineId,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return data as AccountsMechanicalCase
+}
+
 export function mechanicalVoucherSeries(voucherNo: string | null | undefined): 'RApp' | 'JApp' | null {
   const raw = String(voucherNo ?? '').trim()
   if (/^RApp\/26-27\/\d{4}$/.test(raw)) return 'RApp'

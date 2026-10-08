@@ -8,6 +8,7 @@ import {
   accountsBodyshopViewDateYmd,
   accountsMechanicalViewDateYmd,
   addAccountsMechanicalPayment,
+  deleteAccountsMechanicalPayment,
   updateAccountsMechanicalPayment,
   buildBodyshopBusyPaymentExportRows,
   buildMechanicalAccountsExportRows,
@@ -251,6 +252,9 @@ export default function AccountsPage() {
   const [receiptEdit, setReceiptEdit] = useState<MechanicalReceiptEdit | null>(null)
   const [savingReceiptEdit, setSavingReceiptEdit] = useState(false)
   const [receiptEditError, setReceiptEditError] = useState<string | null>(null)
+  const [receiptDeleteTarget, setReceiptDeleteTarget] = useState<AccountsMechanicalPayment | null>(null)
+  const [deletingReceipt, setDeletingReceipt] = useState(false)
+  const [receiptDeleteError, setReceiptDeleteError] = useState<string | null>(null)
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -576,6 +580,39 @@ export default function AccountsPage() {
   function patchReceiptEdit(patch: Partial<MechanicalReceiptEdit>) {
     setReceiptEdit((prev) => (prev ? { ...prev, ...patch } : prev))
     setReceiptEditError(null)
+  }
+
+  function beginReceiptDelete(line: AccountsMechanicalPayment) {
+    setReceiptDeleteTarget(line)
+    setReceiptDeleteError(null)
+    setPayError(null)
+  }
+
+  function cancelReceiptDelete() {
+    if (deletingReceipt) return
+    setReceiptDeleteTarget(null)
+    setReceiptDeleteError(null)
+  }
+
+  async function confirmReceiptDelete() {
+    if (!editRow || !receiptDeleteTarget) return
+    setDeletingReceipt(true)
+    setReceiptDeleteError(null)
+    try {
+      const saved = await deleteAccountsMechanicalPayment(receiptDeleteTarget.id)
+      patchMechRow(saved)
+      await refreshMechanicalPayLines(editRow.reception_entry_id)
+      if (receiptEdit?.paymentLineId === receiptDeleteTarget.id) {
+        setReceiptEdit(null)
+        setReceiptEditError(null)
+      }
+      setReceiptDeleteTarget(null)
+      flash('Payment receipt deleted')
+    } catch (e) {
+      setReceiptDeleteError(e instanceof Error ? e.message : 'Receipt delete failed')
+    } finally {
+      setDeletingReceipt(false)
+    }
   }
 
   async function saveReceiptEdit() {
@@ -1419,11 +1456,11 @@ export default function AccountsPage() {
         const gatepass = mechanicalGatepassEligibility(editRow)
         const creditPersisted = isMechanicalKeepOnCreditValid(editRow)
         return (
-          <div className="modal-back" role="presentation" onClick={() => { setEditRow(null); cancelReceiptEdit() }}>
+          <div className="modal-back" role="presentation" onClick={() => { setEditRow(null); cancelReceiptEdit(); cancelReceiptDelete() }}>
             <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
               <div className="modal__head">
                 <h3 style={{ wordBreak: 'break-word' }}>{editRow.invoice_number ? 'Mechanical payment' : 'Capture invoice'} · {editRow.jc_number}</h3>
-                <button type="button" className="modal__x" onClick={() => { setEditRow(null); cancelReceiptEdit() }} aria-label="Close">×</button>
+                <button type="button" className="modal__x" onClick={() => { setEditRow(null); cancelReceiptEdit(); cancelReceiptDelete() }} aria-label="Close">×</button>
               </div>
               <div className="modal__body">
                 <p style={{ margin: '0 0 16px', color: 'var(--muted)', fontSize: 13 }}>
@@ -1886,14 +1923,25 @@ export default function AccountsPage() {
                                       </button>
                                     </div>
                                   ) : (
-                                    <button
-                                      type="button"
-                                      className="linkbtn linkbtn--sm"
-                                      disabled={savingReceiptEdit || receiptEdit != null}
-                                      onClick={() => beginReceiptEdit(l)}
-                                    >
-                                      Edit
-                                    </button>
+                                    <div className="acct-pay-hist__actions">
+                                      <button
+                                        type="button"
+                                        className="linkbtn linkbtn--sm"
+                                        disabled={savingReceiptEdit || receiptEdit != null || deletingReceipt || receiptDeleteTarget != null}
+                                        onClick={() => beginReceiptEdit(l)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <span aria-hidden="true" style={{ color: 'var(--muted)' }}>|</span>
+                                      <button
+                                        type="button"
+                                        className="linkbtn linkbtn--sm linkbtn--danger"
+                                        disabled={savingReceiptEdit || receiptEdit != null || deletingReceipt || receiptDeleteTarget != null}
+                                        onClick={() => beginReceiptDelete(l)}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
                                   )}
                                 </td>
                               )}
@@ -1915,12 +1963,88 @@ export default function AccountsPage() {
                 )}
               </div>
               <div className="modal__foot">
-                <button type="button" className="btn" onClick={() => { setEditRow(null); cancelReceiptEdit() }}>Close</button>
+                <button type="button" className="btn" onClick={() => { setEditRow(null); cancelReceiptEdit(); cancelReceiptDelete() }}>Close</button>
               </div>
             </div>
           </div>
         )
       })()}
+
+      {receiptDeleteTarget && (
+        <div className="modal-back" role="presentation" onClick={() => cancelReceiptDelete()}>
+          <div
+            className="modal modal--sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="receipt-delete-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 440 }}
+          >
+            <div className="modal__head">
+              <h3 id="receipt-delete-title" style={{ margin: 0 }}>Delete payment receipt?</h3>
+              <button
+                type="button"
+                className="modal__x"
+                onClick={() => cancelReceiptDelete()}
+                disabled={deletingReceipt}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal__body">
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: '14px',
+                  fontSize: '13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>Amount</span>
+                  <strong className="mono">{inr(receiptDeleteTarget.amount)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>Date</span>
+                  <strong>{fmtDate(mechanicalPaymentReceivedDate(receiptDeleteTarget))}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>Mode</span>
+                  <strong>{paymentModeLabel(receiptDeleteTarget.payment_mode)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>Reference</span>
+                  <strong className="mono">{receiptDeleteTarget.reference?.trim() || '—'}</strong>
+                </div>
+              </div>
+              <p style={{ margin: '14px 0 0', fontSize: 13, color: 'var(--muted)', lineHeight: 1.45 }}>
+                This payment entry will be removed and the payment totals will be recalculated.
+              </p>
+              {receiptDeleteError && (
+                <p className="acct-pay-hist__error" style={{ marginTop: 12 }}>{receiptDeleteError}</p>
+              )}
+            </div>
+            <div className="modal__foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn" disabled={deletingReceipt} onClick={() => cancelReceiptDelete()}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="tbtn tbtn--danger"
+                disabled={deletingReceipt}
+                onClick={() => void confirmReceiptDelete()}
+              >
+                {deletingReceipt ? 'Deleting…' : 'Delete payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {postRow && postCard && (
         <div className="modal-back" role="presentation" onClick={() => { setPostRow(null); setPostCard(null); void load() }}>
