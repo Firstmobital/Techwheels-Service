@@ -94,6 +94,7 @@ const PRIMARY_DOCS: { key: string; label: string }[] = [
   { key: 'doc_insurance', label: 'Insurance Copy' },
   { key: 'doc_rc', label: 'RC' },
   { key: 'doc_tp_affidavit', label: 'T/P Affidavit' },
+  { key: 'doc_towing_bill', label: 'Towing Bill' },
   { key: 'doc_kyc', label: 'KYC' },
 ]
 
@@ -114,6 +115,7 @@ const DOC_LABELS: Record<string, string> = {
   doc_estimate: 'Estimate',
   doc_survey_approval: 'Survey approval',
   doc_tp_affidavit: 'T/P Affidavit (PDF)',
+  doc_towing_bill: 'Towing Bill (PDF)',
   doc_job_card: 'Job Card',
   job_card: 'Job Card',
 }

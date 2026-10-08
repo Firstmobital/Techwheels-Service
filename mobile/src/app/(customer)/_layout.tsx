@@ -102,7 +102,7 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
 
 export default function CustomerTabsLayout() {
   const { loading: staffLoading, session } = useAuth()
-  const { loading: customerLoading, token } = useCustomerSession()
+  const { loading: customerLoading, token, termsNeedsAcceptance } = useCustomerSession()
 
   if (staffLoading || customerLoading) {
     return (
@@ -118,6 +118,10 @@ export default function CustomerTabsLayout() {
 
   if (!token) {
     return <Redirect href="/(audience)" />
+  }
+
+  if (termsNeedsAcceptance) {
+    return <Redirect href="/(customer-auth)/terms" />
   }
 
   return (

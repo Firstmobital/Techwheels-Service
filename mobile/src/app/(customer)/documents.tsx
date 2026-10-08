@@ -148,7 +148,7 @@ export default function CustomerDocumentsScreen() {
     setUpdatingType(true)
     try {
       await setCustomerType(newType)
-    } catch (err) {
+      } catch (err) {
       Alert.alert('Update failed', err instanceof Error ? err.message : 'Could not update customer type.')
     } finally {
       setUpdatingType(false)
@@ -974,9 +974,9 @@ export default function CustomerDocumentsScreen() {
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 16 }}>
           <TouchableOpacity onPress={() => setPreviewUri(null)} style={{ alignSelf: 'flex-end', marginBottom: 12 }}>
             <Icon name="x" size={22} color="#fff" />
-          </TouchableOpacity>
+              </TouchableOpacity>
           {previewUri ? <Image source={{ uri: previewUri }} style={{ width: '100%', height: '70%' }} resizeMode="contain" /> : null}
-        </View>
+            </View>
       </Modal>
 
       <DamagePhotosSection sessionToken={token} regNumber={selectedReg} />

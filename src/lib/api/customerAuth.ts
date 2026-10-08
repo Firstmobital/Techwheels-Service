@@ -1,11 +1,30 @@
 import { supabase } from '../supabase'
 import type { CustomerVehicle } from './customer'
 
+export interface CustomerTermsStatus {
+  required_version: string
+  accepted_version?: string | null
+  accepted_at?: string | null
+  needs_acceptance: boolean
+}
+
 export interface CustomerSessionResult {
   session_token: string
   expires_at?: string
   phone: string
   vehicles: CustomerVehicle[]
+  terms?: CustomerTermsStatus
+}
+
+function mapTermsStatus(raw: unknown): CustomerTermsStatus | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const t = raw as Record<string, unknown>
+  return {
+    required_version: String(t.required_version ?? ''),
+    accepted_version: (t.accepted_version as string | null) ?? null,
+    accepted_at: (t.accepted_at as string | null) ?? null,
+    needs_acceptance: Boolean(t.needs_acceptance),
+  }
 }
 
 function mapVehicle(raw: Record<string, unknown>, index: number): CustomerVehicle {
@@ -40,6 +59,8 @@ function rpcErrorMessage(error: { message?: string } | null, fallback: string): 
   if (raw.includes('Session expired')) return 'Session expired.'
   if (raw.includes('Vehicle not found')) return 'Vehicle not found for this session.'
   if (raw.includes('forbidden')) return 'Not allowed.'
+  if (raw.includes('terms_acceptance_required')) return 'Please accept Terms & Conditions to continue.'
+  if (raw.includes('terms_version_mismatch')) return 'Terms were updated. Please review and accept again.'
   return fallback
 }
 
@@ -72,8 +93,34 @@ export async function customerStartSession(
       expires_at: payload.expires_at,
       phone: payload.phone,
       vehicles,
+      terms: mapTermsStatus((payload as unknown as Record<string, unknown>).terms),
     },
   }
+}
+
+export async function customerGetTermsStatus(
+  sessionToken: string,
+): Promise<CustomerTermsStatus | null> {
+  const { data, error } = await supabase.rpc('customer_get_terms_status', {
+    p_session_token: sessionToken,
+  })
+  if (error || !data) return null
+  return mapTermsStatus(data) ?? null
+}
+
+export async function customerAcceptTerms(
+  sessionToken: string,
+  termsVersion: string,
+): Promise<{ success: boolean; terms?: CustomerTermsStatus; error?: string }> {
+  const { data, error } = await supabase.rpc('customer_accept_terms', {
+    p_session_token: sessionToken,
+    p_terms_version: termsVersion,
+  })
+  if (error || !data) {
+    return { success: false, error: rpcErrorMessage(error, 'Unable to save acceptance.') }
+  }
+  const terms = mapTermsStatus(data)
+  return { success: true, terms: terms ?? undefined }
 }
 
 export async function customerEndSession(sessionToken: string | null | undefined): Promise<void> {

@@ -1086,7 +1086,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return null
     }
   })
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {

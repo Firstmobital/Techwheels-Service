@@ -26,11 +26,14 @@ import {
   formatChatMessageTime,
 } from '../../lib/chatTimestamps'
 
+/** Under vehicle reg — match customer chat: advisor name for service-advisor threads. */
 function subtitle(row: StaffAdvisorChatThread): string {
-  if (row.contact_key && row.contact_key !== 'advisor' && row.sa_name) {
-    return `${row.sa_name} · ${row.phone_10}`
+  const advisor = row.sa_name?.trim()
+  const contact = (row.contact_key || 'advisor').toLowerCase()
+  if (contact === 'advisor') {
+    return advisor || row.phone_10
   }
-  return row.phone_10
+  return advisor ? `${advisor} · ${row.phone_10}` : row.phone_10
 }
 
 export default function StaffChatScreen() {

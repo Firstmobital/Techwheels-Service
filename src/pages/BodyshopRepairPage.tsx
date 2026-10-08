@@ -924,6 +924,7 @@ type BodyshopDocKey =
   | 'doc_company_pan'
   | 'doc_bank_detail'
   | 'doc_tp_affidavit'
+  | 'doc_towing_bill'
   | 'doc_estimate'
   | 'doc_survey_approval'
   | 'doc_job_card'
@@ -1008,7 +1009,12 @@ async function postUniversalDriveWithRetry(
   return { res, body }
 }
 
-const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card' | 'job_card'>; label: string; mandatoryFor: CustomerType[] }[] = [
+const BODYSHOP_DOCS: {
+  k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card' | 'job_card'>
+  label: string
+  mandatoryFor: CustomerType[]
+  optionalHint?: string
+}[] = [
   { k: 'doc_claim_form', label: 'Claim Form (PDF)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc', label: 'RC (Front)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc_back', label: 'RC (Back)', mandatoryFor: ['individual', 'firm'] },
@@ -1018,11 +1024,12 @@ const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_a
   { k: 'doc_aadhaar', label: 'Aadhaar Card (Front)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_aadhaar_back', label: 'Aadhaar Card (Back)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_pan', label: 'PAN Card', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_kyc', label: 'KYC (PDF)', mandatoryFor: [] },
+  { k: 'doc_kyc', label: 'KYC (PDF)', mandatoryFor: [], optionalHint: 'Firm Applicable' },
   { k: 'doc_gst', label: 'GST (PDF)', mandatoryFor: ['firm'] },
   { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
   { k: 'doc_bank_detail', label: 'Bank Detail (PDF)', mandatoryFor: ['firm'] },
-  { k: 'doc_tp_affidavit', label: 'T/P Affidavit (PDF)', mandatoryFor: [] },
+  { k: 'doc_tp_affidavit', label: 'T/P Affidavit (PDF)', mandatoryFor: [], optionalHint: 'Firm Applicable' },
+  { k: 'doc_towing_bill', label: 'Towing Bill (PDF)', mandatoryFor: [], optionalHint: 'Individual & Firm' },
 ]
 
 const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card' | 'job_card'> => (
@@ -3203,10 +3210,10 @@ export default function BodyshopRepairPage() {
 
       const uploadRes = await withTimeout(
         supabase.storage
-          .from(AUTODOC_BUCKET)
-          .upload(storagePath, file, {
-            upsert: false,
-            contentType: file.type || 'application/octet-stream',
+        .from(AUTODOC_BUCKET)
+        .upload(storagePath, file, {
+          upsert: false,
+          contentType: file.type || 'application/octet-stream',
           }),
         45000,
         'Supabase storage upload',
@@ -3227,26 +3234,26 @@ export default function BodyshopRepairPage() {
 
       const { data: upsertedRows, error: upsertErr } = await withTimeout(
         supabase
-          .from('bodyshop_repair_card_documents')
-          .upsert({
+        .from('bodyshop_repair_card_documents')
+        .upsert({
             dealer_code: metadataDealerCode,
-            repair_card_id: selected.id,
+          repair_card_id: selected.id,
             reception_entry_id: Number.isFinite(receptionEntryId) && receptionEntryId > 0 ? receptionEntryId : null,
-            reg_number: regNo || null,
-            doc_key: docKey,
-            storage_bucket: AUTODOC_BUCKET,
-            storage_path: storagePath,
-            file_name: file.name,
-            content_type: file.type || null,
-            file_size_bytes: file.size,
-            uploaded_by: uploadedBy,
-            uploaded_at: new Date().toISOString(),
+          reg_number: regNo || null,
+          doc_key: docKey,
+          storage_bucket: AUTODOC_BUCKET,
+          storage_path: storagePath,
+          file_name: file.name,
+          content_type: file.type || null,
+          file_size_bytes: file.size,
+          uploaded_by: uploadedBy,
+          uploaded_at: new Date().toISOString(),
             ...(action.mode === 'replace'
               ? { drive_url: null, drive_file_id: null }
               : {}),
-          }, {
-            onConflict: 'repair_card_id,doc_key',
-          })
+        }, {
+          onConflict: 'repair_card_id,doc_key',
+        })
           .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at'),
         20000,
         'Metadata save',
@@ -3681,8 +3688,8 @@ export default function BodyshopRepairPage() {
     // 1. Try Supabase Storage first - returns direct binary image URL with valid CORS headers
     if (row.storage_path) {
       try {
-        const { data, error } = await supabase.storage
-          .from(row.storage_bucket || AUTODOC_BUCKET)
+      const { data, error } = await supabase.storage
+        .from(row.storage_bucket || AUTODOC_BUCKET)
           .createSignedUrl(row.storage_path, 3600)
         if (!error && data?.signedUrl) {
           return { displayUrl: data.signedUrl, driveUrl, isPdf, fileName }
@@ -4025,7 +4032,7 @@ export default function BodyshopRepairPage() {
 </body>
 </html>`)
           previewTab.document.close()
-          return
+      return
         }
       }
     }
@@ -4061,7 +4068,7 @@ export default function BodyshopRepairPage() {
           .maybeSingle()
         if (dbRow?.drive_url) {
           window.open(dbRow.drive_url, '_blank', 'noopener,noreferrer')
-          return
+      return
         }
       }
     }
@@ -6181,16 +6188,16 @@ export default function BodyshopRepairPage() {
                               <div className="brx-sa-box">
                                 <div className="brx-sa-box-k">Job Card</div>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                  <input
-                                    className="inp"
-                                    type="text"
-                                    value={jcDraft}
-                                    onChange={(event) => {
-                                      setJcDraft(event.target.value.toUpperCase())
-                                      setReceivingSaveError(null)
-                                    }}
-                                    placeholder="Enter Job Card"
-                                    autoComplete="off"
+                                <input
+                                  className="inp"
+                                  type="text"
+                                  value={jcDraft}
+                                  onChange={(event) => {
+                                    setJcDraft(event.target.value.toUpperCase())
+                                    setReceivingSaveError(null)
+                                  }}
+                                  placeholder="Enter Job Card"
+                                  autoComplete="off"
                                     style={{ flex: 1, minWidth: '130px' }}
                                   />
                                   {(() => {
@@ -6502,14 +6509,14 @@ export default function BodyshopRepairPage() {
                                         {checked ? (
                                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                                             {attachedDoc && (
-                                              <button
-                                                type="button"
-                                                className="btn brx-doc-btn"
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
                                                 style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '4px 8px', fontSize: '11px', fontWeight: '600' }}
-                                                onClick={() => void handleViewBodyshopDoc(k)}
-                                              >
-                                                👁️ View
-                                              </button>
+                                              onClick={() => void handleViewBodyshopDoc(k)}
+                                            >
+                                              👁️ View
+                                            </button>
                                             )}
                                             <button
                                               type="button"
@@ -6525,46 +6532,46 @@ export default function BodyshopRepairPage() {
                                         ) : attachedDoc ? (
                                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                                             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                              <button
-                                                type="button"
-                                                className="btn brx-doc-btn"
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
                                                 style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
                                                 onClick={() => void handleViewBodyshopDoc(k)}
-                                              >
+                                            >
                                                 👁️ View
-                                              </button>
-                                              <button
-                                                type="button"
-                                                className="btn brx-doc-btn"
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
                                                 style={{ backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
-                                                onClick={() => startBodyshopDocUpload(k, 'replace')}
-                                                disabled={busy}
+                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                              disabled={busy}
                                                 title="Reupload or replace this document"
-                                              >
+                                            >
                                                 {busy ? 'Uploading…' : '🔄 Reupload'}
-                                              </button>
+                                            </button>
                                             </div>
                                             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                              <button
-                                                type="button"
+                                            <button
+                                              type="button"
                                                 className="btn brx-doc-btn"
                                                 style={{ backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
                                                 onClick={() => approveDoc(k)}
                                                 title="Approve this document"
-                                                disabled={busy}
-                                              >
+                                              disabled={busy}
+                                            >
                                                 ✓ Approve
-                                              </button>
-                                              <button
-                                                type="button"
-                                                className="btn brx-doc-btn"
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
                                                 style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', padding: '3px 8px', fontSize: '11px', fontWeight: '600' }}
                                                 onClick={() => rejectDoc(k)}
                                                 title="Reject this document"
                                                 disabled={busy}
                                               >
                                                 ✕ Reject
-                                              </button>
+                                            </button>
                                             </div>
                                           </div>
                                         ) : (
@@ -6589,7 +6596,7 @@ export default function BodyshopRepairPage() {
                                     Optional Documents
                                   </div>
                                   <div className="brx-docs-grid">
-                                    {optionalDocs.map(({ k, label }) => {
+                                    {optionalDocs.map(({ k, label, optionalHint }) => {
                                       const attachedDoc = bodyshopDocsByKey[k]
                                       const checked = advisorVerifiedDoc(selected, k)
                                       const busy = uploadingDocKey === k
@@ -6600,7 +6607,7 @@ export default function BodyshopRepairPage() {
                                           </button>
                                           <div className="brx-doc-meta">
                                             <div className="brx-doc-name is-optional">{label}</div>
-                                            <div className="brx-doc-sub">Firm Applicable</div>
+                                            <div className="brx-doc-sub">{optionalHint || 'Optional'}</div>
                                           </div>
                                           <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                             {attachedDoc ? (
@@ -6881,7 +6888,7 @@ export default function BodyshopRepairPage() {
                       ? { label: 'Rejected by customer', tone: 'is-rejected' as const }
                       : customerSurveyStatus === 'pending'
                         ? { label: 'Pending in customer app', tone: 'is-pending' as const }
-                        : null
+                  : null
 
                 return (
                   <div className="brx-survey-wrap">
@@ -6962,53 +6969,53 @@ export default function BodyshopRepairPage() {
                         <div className="brx-approval-panel">
                           <div className="brx-approval-grid" style={{ gridTemplateColumns: '1fr' }}>
                             <div className="brx-approval-box brx-approval-box--row">
-                              <div>
+                          <div>
                                 <div className="brx-approval-k">Survey approval document</div>
                                 <div className="brx-approval-v">
                                   {surveyApprovalDoc
                                     ? (surveyApprovalDoc.file_name || 'Uploaded')
                                     : 'Upload insurer / surveyor approval (photo or PDF)'}
-                                </div>
-                                {bodyshopDocsLoadError && (
-                                  <div className="brx-survey-feedback is-error">
-                                    Cannot read uploaded document metadata: {bodyshopDocsLoadError}
-                                  </div>
-                                )}
-                                {surveyApprovalFeedback?.text && (
-                                  <div className={`brx-survey-feedback ${surveyApprovalFeedback.tone === 'error' ? 'is-error' : surveyApprovalFeedback.tone === 'ok' ? 'is-ok' : 'is-info'}`}>
-                                    {surveyApprovalFeedback.text}
-                                  </div>
-                                )}
+                            </div>
+                            {bodyshopDocsLoadError && (
+                              <div className="brx-survey-feedback is-error">
+                                Cannot read uploaded document metadata: {bodyshopDocsLoadError}
                               </div>
-                              {!surveyApprovalDoc ? (
-                                <button
-                                  type="button"
+                            )}
+                            {surveyApprovalFeedback?.text && (
+                              <div className={`brx-survey-feedback ${surveyApprovalFeedback.tone === 'error' ? 'is-error' : surveyApprovalFeedback.tone === 'ok' ? 'is-ok' : 'is-info'}`}>
+                                {surveyApprovalFeedback.text}
+                              </div>
+                            )}
+                          </div>
+                          {!surveyApprovalDoc ? (
+                            <button
+                              type="button"
                                   className="btn btn--primary brx-approval-view-btn"
-                                  disabled={surveyApprovalDocBusy}
-                                  onClick={() => startBodyshopDocUpload('doc_survey_approval', 'upload')}
-                                >
+                              disabled={surveyApprovalDocBusy}
+                              onClick={() => startBodyshopDocUpload('doc_survey_approval', 'upload')}
+                            >
                                   {surveyApprovalDocBusy ? 'Uploading…' : 'Upload document'}
-                                </button>
-                              ) : (
+                            </button>
+                          ) : (
                                 <div className="brx-survey-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                   <button
                                     type="button"
                                     className="btn btn--ghost brx-approval-view-btn"
                                     onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}
                                   >
-                                    View
-                                  </button>
-                                  <button
-                                    type="button"
+                                View
+                              </button>
+                              <button
+                                type="button"
                                     className="btn brx-approval-view-btn"
-                                    disabled={surveyApprovalDocBusy}
-                                    onClick={() => startBodyshopDocUpload('doc_survey_approval', 'replace')}
-                                  >
-                                    {surveyApprovalDocBusy ? 'Uploading…' : 'Replace'}
-                                  </button>
-                                </div>
-                              )}
+                                disabled={surveyApprovalDocBusy}
+                                onClick={() => startBodyshopDocUpload('doc_survey_approval', 'replace')}
+                              >
+                                {surveyApprovalDocBusy ? 'Uploading…' : 'Replace'}
+                              </button>
                             </div>
+                          )}
+                        </div>
                           </div>
                           {!surveyApprovalDoc && (
                             <p className="brx-survey-approval-sub" style={{ margin: 0 }}>
@@ -7059,24 +7066,24 @@ export default function BodyshopRepairPage() {
                                 ) : null}
                               </div>
                               <div className="brx-survey-actions" style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
-                                <button
-                                  type="button"
+                            <button
+                              type="button"
                                   className="btn btn--ghost btn--xs"
                                   onClick={() => void refreshSelectedSurveyCustomerStatus({ silent: false })}
-                                >
+                            >
                                   Refresh status
-                                </button>
+                            </button>
                                 {customerSurveyStatus === 'rejected' ? (
-                                  <button
-                                    type="button"
+                            <button
+                              type="button"
                                     className="btn btn--primary btn--xs"
                                     disabled={saving}
                                     onClick={() => void handleResendSurveyApprovalToCustomer()}
                                   >
                                     {saving ? 'Sending…' : 'Resend to customer app'}
-                                  </button>
+                            </button>
                                 ) : null}
-                              </div>
+                          </div>
                             </div>
                           ) : null}
                         </div>
@@ -7436,7 +7443,7 @@ export default function BodyshopRepairPage() {
                         ) : null
                       })()}
                       <span>
-                        Assigned roles: {floorRoleSnapshots.filter((r) => r.assigned).length} / {FLOOR_ROLES.length}
+                      Assigned roles: {floorRoleSnapshots.filter((r) => r.assigned).length} / {FLOOR_ROLES.length}
                       </span>
                     </div>
                   </div>

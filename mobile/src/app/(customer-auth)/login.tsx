@@ -26,6 +26,8 @@ export default function CustomerLoginScreen() {
       const result = await signIn(username.trim(), password.trim())
       if (result.error) {
         setError(result.error)
+      } else if (result.needsTerms) {
+        router.replace('/(customer-auth)/terms')
       } else {
         router.replace('/(customer)')
       }

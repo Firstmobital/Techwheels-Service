@@ -14,6 +14,15 @@ import {
 } from '../lib/chatTimestamps'
 import './ChatPage.css'
 
+function staffChatPeerSubtitle(row: AdvisorChatThread): string {
+  const advisor = row.sa_name?.trim()
+  const contact = (row.contact_key || 'advisor').toLowerCase()
+  if (contact === 'advisor') {
+    return advisor || row.phone_10
+  }
+  return advisor ? `${advisor} · ${row.phone_10}` : row.phone_10
+}
+
 function mergeMessage(current: AdvisorChatMessage[], next: AdvisorChatMessage): AdvisorChatMessage[] {
   if (current.some((row) => row.id === next.id)) return current
   return [...current, next].sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -153,11 +162,7 @@ export default function ChatPage() {
               >
                 <span className="chat-row__main">
                   <div className="chat-row__title">{row.reg_number}</div>
-                  <div className="chat-row__sub">
-                    {row.contact_key && row.contact_key !== 'advisor' && row.sa_name
-                      ? `${row.sa_name} · ${row.phone_10}`
-                      : row.phone_10}
-                  </div>
+                  <div className="chat-row__sub">{staffChatPeerSubtitle(row)}</div>
                   <div className="chat-row__preview">{row.last_message_preview || ''}</div>
                 </span>
                 <span className="chat-row__side">
@@ -180,10 +185,7 @@ export default function ChatPage() {
               <header className="chat-thread__head">
                 <div className="chat-thread__title">{selected.reg_number}</div>
                 <div className="chat-thread__sub">
-                  {selected.contact_key && selected.contact_key !== 'advisor' && selected.sa_name
-                    ? `${selected.sa_name} · `
-                    : ''}
-                  {selected.phone_10}
+                  {staffChatPeerSubtitle(selected)}
                   {selected.customer_name ? ` · ${selected.customer_name}` : ''}
                   {selected.jc_number ? ` · ${selected.jc_number}` : ''}
                 </div>

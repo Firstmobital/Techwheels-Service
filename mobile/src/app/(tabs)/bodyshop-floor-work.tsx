@@ -148,31 +148,59 @@ function mergeFloorWorkDrivePhotoRows(
   return prev.map((p) => byId.get(p.id) ?? p)
 }
 
+type VehicleOutcomeFilter = 'all' | 'pending' | 'done'
+
 function FloorWorkStatsThree({
   total,
   pending,
   done,
   compact,
+  activeFilter,
+  onFilterPress,
 }: {
   total: number
   pending: number
   done: number
   compact?: boolean
+  activeFilter?: VehicleOutcomeFilter
+  onFilterPress?: (filter: VehicleOutcomeFilter) => void
 }) {
+  const cells: Array<{ key: VehicleOutcomeFilter; label: string; value: number }> = [
+    { key: 'all', label: 'Total', value: total },
+    { key: 'pending', label: 'Pending', value: pending },
+    { key: 'done', label: 'Done', value: done },
+  ]
   return (
     <View style={[S.statsThreeRow, compact && S.statsThreeRowCompact]}>
-      <View style={S.statsThreeCell}>
-        <Text style={S.statsThreeL}>Total</Text>
-        <Text style={S.statsThreeN}>{total}</Text>
-      </View>
-      <View style={S.statsThreeCell}>
-        <Text style={S.statsThreeL}>Pending</Text>
-        <Text style={S.statsThreeN}>{pending}</Text>
-      </View>
-      <View style={S.statsThreeCell}>
-        <Text style={S.statsThreeL}>Done</Text>
-        <Text style={S.statsThreeN}>{done}</Text>
-      </View>
+      {cells.map(({ key, label, value }) => {
+        const active = onFilterPress != null && activeFilter === key
+        const inner = (
+          <>
+            <Text style={[S.statsThreeL, active && S.statsThreeLActive]}>{label}</Text>
+            <Text style={[S.statsThreeN, active && S.statsThreeNActive]}>{value}</Text>
+          </>
+        )
+        if (!onFilterPress) {
+          return (
+            <View key={key} style={S.statsThreeCell}>
+              {inner}
+            </View>
+          )
+        }
+        return (
+          <TouchableOpacity
+            key={key}
+            style={[S.statsThreeCell, S.statsThreeCellBtn, active && S.statsThreeCellActive]}
+            onPress={() => onFilterPress(active ? 'all' : key)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`Show ${label.toLowerCase()} vehicles, ${value}`}
+          >
+            {inner}
+          </TouchableOpacity>
+        )
+      })}
     </View>
   )
 }
@@ -292,6 +320,7 @@ export default function BodyshopFloorWorkScreen() {
   const [adminPrimaryRows, setAdminPrimaryRows] = useState<Record<string, unknown>[]>([])
   const [adminSupportRows, setAdminSupportRows] = useState<Record<string, unknown>[]>([])
   const [assignmentMonthFilter, setAssignmentMonthFilter] = useState('all')
+  const [vehicleOutcomeFilter, setVehicleOutcomeFilter] = useState<VehicleOutcomeFilter>('all')
   const [assignmentByJc, setAssignmentByJc] = useState<Record<string, Record<string, unknown>>>({})
   const [workerAssignedSlotCount, setWorkerAssignedSlotCount] = useState(0)
   const [trackerIncomeMonth, setTrackerIncomeMonth] = useState<number | null>(null)
@@ -424,7 +453,50 @@ export default function BodyshopFloorWorkScreen() {
     repairCardQcForJc,
   ])
 
-  const pagedTasks = visibleListTasks
+  useEffect(() => {
+    setVehicleOutcomeFilter('all')
+  }, [selectedAdminEmployee?.employeeCode, assignmentMonthFilter, isAdminOverview])
+
+  const workerTaskStats = useMemo(() => {
+    if (isAdminOverview) return null
+    let pending = 0
+    let done = 0
+    for (const t of visibleListTasks) {
+      const row = assignmentByJc[t.jobCardNumber]
+      if (isFloorWorkTaskStepCompleted(t, row)) done += 1
+      else pending += 1
+    }
+    return { total: visibleListTasks.length, pending, done }
+  }, [isAdminOverview, visibleListTasks, assignmentByJc])
+
+  const listTasksForFlatList = useMemo(() => {
+    if (vehicleOutcomeFilter === 'all') return visibleListTasks
+    if (isAdminOverview && selectedAdminEmployee) {
+      const code = selectedAdminEmployee.employeeCode
+      return visibleListTasks.filter((t) => {
+        const isPending = vehicleStepPendingForAdmin(t.jobCardNumber, code)
+        return vehicleOutcomeFilter === 'pending' ? isPending : !isPending
+      })
+    }
+    if (!isAdminOverview) {
+      return visibleListTasks.filter((t) => {
+        const row = assignmentByJc[t.jobCardNumber]
+        const isPending = !isFloorWorkTaskStepCompleted(t, row)
+        return vehicleOutcomeFilter === 'pending' ? isPending : !isPending
+      })
+    }
+    return visibleListTasks
+  }, [
+    visibleListTasks,
+    vehicleOutcomeFilter,
+    isAdminOverview,
+    selectedAdminEmployee,
+    vehicleStepPendingForAdmin,
+    isAdminOverview,
+    assignmentByJc,
+  ])
+
+  const pagedTasks = listTasksForFlatList
 
   const adminEmployeeVehicleStats = useMemo(() => {
     if (!isAdminOverview || !selectedAdminEmployee) return null
@@ -1165,7 +1237,7 @@ export default function BodyshopFloorWorkScreen() {
         />
       ) : null}
       {!selected && !isAdminOverview ? (
-        <View style={S.incomeBanner}>
+        <View style={S.workerSummaryCard}>
           <Text style={S.incomeBannerLabel}>Bodyshop income · {currentIstYearMonth(today)}</Text>
           {incomeLoading ? (
             <ActivityIndicator color="#065f46" style={{ marginTop: 8, alignSelf: 'flex-start' }} />
@@ -1175,6 +1247,22 @@ export default function BodyshopFloorWorkScreen() {
             </Text>
           )}
           <Text style={S.incomeBannerHint}>Tracker / payroll calculation (closed accident jobs)</Text>
+          {workerTaskStats ? (
+            <>
+              <FloorWorkStatsThree
+                total={workerTaskStats.total}
+                pending={workerTaskStats.pending}
+                done={workerTaskStats.done}
+                activeFilter={vehicleOutcomeFilter}
+                onFilterPress={setVehicleOutcomeFilter}
+              />
+              {vehicleOutcomeFilter !== 'all' ? (
+                <Text style={S.statsFilterHint}>
+                  Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap again to show all
+                </Text>
+              ) : null}
+            </>
+          ) : null}
         </View>
       ) : null}
 
@@ -1444,7 +1532,14 @@ export default function BodyshopFloorWorkScreen() {
                   total={adminEmployeeVehicleStats?.total ?? selectedAdminEmployee.vehiclesTotal}
                   pending={adminEmployeeVehicleStats?.pending ?? selectedAdminEmployee.vehiclesPending}
                   done={adminEmployeeVehicleStats?.done ?? selectedAdminEmployee.vehiclesDone}
+                  activeFilter={vehicleOutcomeFilter}
+                  onFilterPress={setVehicleOutcomeFilter}
                 />
+                {vehicleOutcomeFilter !== 'all' ? (
+                  <Text style={S.statsFilterHint}>
+                    Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap again to show all
+                  </Text>
+                ) : null}
                 <Text style={S.adminStatsIncome}>
                   Bodyshop income · {formatBodyshopIncomeInr(selectedAdminEmployee.bodyshopIncomeMonth)}
                 </Text>
@@ -1480,6 +1575,9 @@ export default function BodyshopFloorWorkScreen() {
             {' · '}
             Showing {pagedTasks.length} of {visibleListTasks.length}{' '}
             {adminEmployeeWorkView ? 'vehicles' : 'rows'}
+            {vehicleOutcomeFilter !== 'all'
+              ? ` · ${vehicleOutcomeFilter === 'pending' ? 'Pending' : 'Done'} filter`
+              : ''}
             {loadingMoreMeta ? ' · loading details…' : ''}
           </Text>
 
@@ -1496,7 +1594,9 @@ export default function BodyshopFloorWorkScreen() {
               <View style={S.empty}>
                 <Text style={S.emptyIcon}>🚗</Text>
                 <Text style={S.emptyText}>
-                  {isAdminOverview
+                  {vehicleOutcomeFilter !== 'all' && visibleListTasks.length > 0 && pagedTasks.length === 0
+                    ? `No ${vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} vehicles — tap Total to show all.`
+                    : isAdminOverview
                     ? adminEmployeeWorkView
                       ? tasksForList.length === 0
                         ? 'No active assignments for this employee.'
@@ -1649,8 +1749,32 @@ const S = StyleSheet.create({
   },
   statsThreeRowCompact: { marginTop: 10, marginBottom: 8 },
   statsThreeCell: { flex: 1, alignItems: 'center' },
+  statsThreeCellBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  statsThreeCellActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#c7d2fe',
+  },
   statsThreeL: { fontSize: 10, color: '#82858f', fontWeight: '700', textTransform: 'uppercase' },
+  statsThreeLActive: { color: '#2a4cd0' },
   statsThreeN: { fontSize: 18, fontWeight: '800', color: '#1a1b21', marginTop: 4 },
+  statsThreeNActive: { color: '#2a4cd0' },
+  statsFilterHint: { fontSize: 11, color: '#2a4cd0', fontWeight: '600', marginTop: 6 },
+  workerSummaryCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
   rosterIncome: { fontSize: 14, fontWeight: '800', color: '#065f46', marginTop: 4 },
   adminStatsCard: {
     marginHorizontal: 16,
