@@ -216,11 +216,32 @@ function RatingPicker({
   )
 }
 
-function StatCard({ label, value, color = 'text-gray-800' }: { label: string; value: number | string; color?: string }) {
+type MetricVariant = 'neutral' | 'positive' | 'negative' | 'warn' | 'info' | 'orange' | 'purple'
+
+const METRIC_VARIANT_CLASS: Record<MetricVariant, { shell: string; value: string }> = {
+  neutral:  { shell: 'bg-slate-50 border-slate-200/80',     value: 'text-slate-800' },
+  positive: { shell: 'bg-emerald-50/90 border-emerald-100', value: 'text-emerald-800' },
+  negative: { shell: 'bg-red-50/90 border-red-100',         value: 'text-red-800' },
+  warn:     { shell: 'bg-amber-50/90 border-amber-100',     value: 'text-amber-800' },
+  info:     { shell: 'bg-sky-50/90 border-sky-100',         value: 'text-sky-800' },
+  orange:   { shell: 'bg-orange-50/90 border-orange-100',   value: 'text-orange-800' },
+  purple:   { shell: 'bg-violet-50/90 border-violet-100',   value: 'text-violet-800' },
+}
+
+function MetricTile({
+  label,
+  value,
+  variant = 'neutral',
+}: {
+  label: string
+  value: number | string
+  variant?: MetricVariant
+}) {
+  const v = METRIC_VARIANT_CLASS[variant]
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
-      <div className="text-xs text-gray-500 mt-1">{label}</div>
+    <div className={`rounded-md border px-2.5 py-1.5 min-w-[6.5rem] flex-1 basis-[7.5rem] max-w-[11rem] ${v.shell}`}>
+      <div className={`text-base font-bold tabular-nums leading-none ${v.value}`}>{value}</div>
+      <div className="text-[10px] leading-tight text-gray-500 mt-1">{label}</div>
     </div>
   )
 }
@@ -691,178 +712,174 @@ export default function PostServiceFeedbackCREPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Post Service Feedback</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+    <div className="flex w-full max-w-none flex-col gap-2 min-h-0 h-[calc(100dvh-var(--util-h)-var(--nav-h)-5.25rem)]">
+      <div className="flex shrink-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Post Service Feedback</h1>
+          <p className="text-xs text-gray-500 mt-0.5 leading-snug">
             Follow up on low ratings, call customers who have not responded, and review the positive ones.
           </p>
         </div>
         <button
           onClick={() => void load()}
-          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm text-gray-700"
+          className="shrink-0 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-700"
         >
           Refresh
         </button>
       </div>
 
-      <div>
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Overview</h2>
-        <div className="grid grid-cols-3 gap-3">
-          <StatCard label="Messages Sent" value={overview.totalSent} />
-          <StatCard label="4★ & Above" value={overview.positiveCount} color="text-green-700" />
-          <StatCard label="3★ & Below" value={overview.needsFollowupCount} color="text-red-700" />
-        </div>
+      <div className="shrink-0 flex flex-wrap gap-1.5">
+        <MetricTile label="Messages Sent" value={overview.totalSent} variant="neutral" />
+        <MetricTile label="4★ & Above" value={overview.positiveCount} variant="positive" />
+        <MetricTile label="3★ & Below" value={overview.needsFollowupCount} variant="negative" />
       </div>
 
-      <div className="border-b border-gray-200 flex flex-wrap gap-6">
+      <div className="shrink-0 border-b border-gray-200 flex flex-wrap gap-x-4 gap-y-0">
         <button
           onClick={() => { setTier('low'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
-          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'low' ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          className={`py-1.5 text-sm font-medium border-b-2 transition-colors ${tier === 'low' ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           Needs Follow-up (≤3★)
-          <span className="ml-2 text-xs text-gray-400">{overview.needsFollowupCount}</span>
+          <span className="ml-1.5 text-xs text-gray-400">{overview.needsFollowupCount}</span>
         </button>
         <button
           onClick={() => { setTier('unrated'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
-          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'unrated' ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          className={`py-1.5 text-sm font-medium border-b-2 transition-colors ${tier === 'unrated' ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           No Rating / No Response
-          <span className="ml-2 text-xs text-gray-400">{overview.unratedCount}</span>
+          <span className="ml-1.5 text-xs text-gray-400">{overview.unratedCount}</span>
         </button>
         <button
           onClick={() => { setTier('high'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
-          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'high' ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          className={`py-1.5 text-sm font-medium border-b-2 transition-colors ${tier === 'high' ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           Positive (≥4★)
-          <span className="ml-2 text-xs text-gray-400">{overview.positiveCount}</span>
+          <span className="ml-1.5 text-xs text-gray-400">{overview.positiveCount}</span>
         </button>
         <button
           onClick={() => { setTier('today'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
-          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'today' ? 'border-sky-600 text-sky-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          className={`py-1.5 text-sm font-medium border-b-2 transition-colors ${tier === 'today' ? 'border-sky-600 text-sky-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           Today's Follow-ups
-          <span className="ml-2 text-xs text-gray-400">{overview.todayCount}</span>
+          <span className="ml-1.5 text-xs text-gray-400">{overview.todayCount}</span>
         </button>
       </div>
 
-      {showStatusFilter && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Cases" value={statusStats.total} />
-          <StatCard label="Open" value={statusStats.open} color="text-red-700" />
-          <StatCard label="In Progress" value={statusStats.in_progress} color="text-yellow-700" />
-          <StatCard label="Resolved" value={statusStats.resolved} color="text-green-700" />
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-        <StatCard label="Today's 4★ & Above" value={todayProductivity.positive} color="text-green-700" />
-        <StatCard label="Today's 3★ & Below" value={todayProductivity.needsFollowup} color="text-red-700" />
-        <StatCard label="Today's In Progress" value={todayProductivity.inProgress} color="text-yellow-700" />
-        <StatCard label="Today's Call Not Picked" value={todayProductivity.callNotPicked} color="text-orange-700" />
-        <StatCard label="Today's Resolved" value={todayProductivity.resolved} color="text-green-700" />
-        <StatCard label="Today's Total Unique Calls" value={todayProductivity.total} color="text-blue-700" />
-        <StatCard label="Today's WA Sent" value={todayProductivity.waSent} color="text-purple-700" />
+      <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5">
+        {showStatusFilter && (
+          <>
+            <MetricTile label="Total Cases" value={statusStats.total} variant="neutral" />
+            <MetricTile label="Open" value={statusStats.open} variant="negative" />
+            <MetricTile label="In Progress" value={statusStats.in_progress} variant="warn" />
+            <MetricTile label="Resolved" value={statusStats.resolved} variant="positive" />
+          </>
+        )}
+        <MetricTile label="Today's 4★ & Above" value={todayProductivity.positive} variant="positive" />
+        <MetricTile label="Today's 3★ & Below" value={todayProductivity.needsFollowup} variant="negative" />
+        <MetricTile label="Today's In Progress" value={todayProductivity.inProgress} variant="warn" />
+        <MetricTile label="Today's Call Not Picked" value={todayProductivity.callNotPicked} variant="orange" />
+        <MetricTile label="Today's Resolved" value={todayProductivity.resolved} variant="positive" />
+        <MetricTile label="Today's Total Unique Calls" value={todayProductivity.total} variant="info" />
+        <MetricTile label="Today's WA Sent" value={todayProductivity.waSent} variant="purple" />
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:items-end">
-          {showStatusFilter && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Status</label>
-              <select
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                value={filterStatus}
-                onChange={e => { setFilterStatus(e.target.value as typeof filterStatus); setPage(1); setExpandedId(null) }}
-              >
-                <option value="all">All</option>
-                <option value="open">Open</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-              </select>
-            </div>
-          )}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs text-gray-500">Service Date</label>
-              {(serviceDateFrom || serviceDateTo) && (
-                <button
-                  type="button"
-                  className="text-xs text-gray-500 hover:text-gray-800"
-                  onClick={() => {
-                    setServiceDateFrom('')
-                    setServiceDateTo('')
-                    setPage(1)
-                    setExpandedId(null)
-                  }}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="shrink-0 border-b border-gray-100 px-3 py-2">
+          <div className="flex flex-wrap items-end gap-2 gap-y-1.5">
+            {showStatusFilter && (
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-gray-500">Status</span>
+                <select
+                  className="w-[7.5rem] border border-gray-300 rounded px-2 py-1 text-sm"
+                  value={filterStatus}
+                  onChange={e => { setFilterStatus(e.target.value as typeof filterStatus); setPage(1); setExpandedId(null) }}
                 >
-                  Clear
-                </button>
-              )}
+                  <option value="all">All</option>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+              </label>
+            )}
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-gray-500">Service Date</span>
+                {(serviceDateFrom || serviceDateTo) && (
+                  <button
+                    type="button"
+                    className="text-[10px] text-gray-500 hover:text-gray-800"
+                    onClick={() => {
+                      setServiceDateFrom('')
+                      setServiceDateTo('')
+                      setPage(1)
+                      setExpandedId(null)
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  aria-label="Service Date from"
+                  className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm"
+                  value={serviceDateFrom}
+                  onChange={e => { setServiceDateFrom(e.target.value); setPage(1); setExpandedId(null) }}
+                />
+                <span className="text-xs text-gray-400 shrink-0">–</span>
+                <input
+                  type="date"
+                  aria-label="Service Date to"
+                  className="w-[8.5rem] min-w-0 border border-gray-300 rounded px-2 py-1 text-sm"
+                  value={serviceDateTo}
+                  onChange={e => { setServiceDateTo(e.target.value); setPage(1); setExpandedId(null) }}
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-1">
+            <label className="flex min-w-[12rem] flex-1 flex-col gap-0.5">
+              <span className="text-[10px] text-gray-500">Search (name, mobile, reg no, branch)</span>
               <input
-                type="date"
-                aria-label="Service Date from"
-                className="w-full min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm"
-                value={serviceDateFrom}
-                onChange={e => { setServiceDateFrom(e.target.value); setPage(1); setExpandedId(null) }}
+                type="text"
+                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search…"
               />
-              <span className="text-xs text-gray-400 shrink-0">–</span>
-              <input
-                type="date"
-                aria-label="Service Date to"
-                className="w-full min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm"
-                value={serviceDateTo}
-                onChange={e => { setServiceDateTo(e.target.value); setPage(1); setExpandedId(null) }}
-              />
-            </div>
+            </label>
+            <p className="ml-auto shrink-0 text-xs text-gray-400 pb-1">
+              {filteredTotal} cases
+              {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
+              {loading ? ' · Updating…' : ''}
+            </p>
           </div>
-          <div className={showStatusFilter ? '' : 'lg:col-span-2'}>
-            <label className="block text-xs text-gray-500 mb-1">Search (name, mobile, reg no, branch)</label>
-            <input
-              type="text"
-              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search…"
-            />
-          </div>
+          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
         </div>
-        <p className="text-xs text-gray-400 mt-2">
-          {filteredTotal} cases
-          {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
-          {loading ? ' · Updating…' : ''}
-        </p>
-        {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-      </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
-                <th className="px-4 py-3 font-medium">Customer</th>
-                <th className="px-4 py-3 font-medium">Reg No</th>
-                <th className="px-4 py-3 font-medium">Branch</th>
-                <th className="px-4 py-3 font-medium">Service Date</th>
-                <th className="px-4 py-3 font-medium">Service Type</th>
-                <th className="px-4 py-3 font-medium">Service Advisor</th>
-                <th className="px-4 py-3 font-medium">Mobile</th>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[960px] text-sm">
+            <thead className="sticky top-0 z-10 bg-gray-50 shadow-[0_1px_0_0_rgb(229,231,235)]">
+              <tr className="border-b border-gray-200 text-left text-[11px] text-gray-500 uppercase tracking-wide">
+                <th className="px-3 py-2 font-medium">Customer</th>
+                <th className="px-3 py-2 font-medium">Reg No</th>
+                <th className="px-3 py-2 font-medium">Branch</th>
+                <th className="px-3 py-2 font-medium">Service Date</th>
+                <th className="px-3 py-2 font-medium">Service Type</th>
+                <th className="px-3 py-2 font-medium">Service Advisor</th>
+                <th className="px-3 py-2 font-medium">Mobile</th>
                 {tier === 'unrated' ? (
                   <>
-                    <th className="px-4 py-3 font-medium">Message Sent At</th>
-                    <th className="px-4 py-3 font-medium">Days Since Sent</th>
+                    <th className="px-3 py-2 font-medium">Message Sent At</th>
+                    <th className="px-3 py-2 font-medium">Days Since Sent</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-4 py-3 font-medium">Rating</th>
-                    <th className="px-4 py-3 font-medium">Remark</th>
+                    <th className="px-3 py-2 font-medium">Rating</th>
+                    <th className="px-3 py-2 font-medium">Remark</th>
                   </>
                 )}
-                <th className="px-4 py-3 font-medium">{tier === 'high' ? 'Review Link' : 'Status'}</th>
-                <th className="px-4 py-3 font-medium"></th>
+                <th className="px-3 py-2 font-medium">{tier === 'high' ? 'Review Link' : 'Status'}</th>
+                <th className="px-3 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -875,27 +892,27 @@ export default function PostServiceFeedbackCREPage() {
               ) : rows.map(r => (
                 <Fragment key={r.id}>
                   <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}>
-                    <td className="px-4 py-3 font-medium text-gray-800">{r.customer_name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600 font-mono">{r.vehicle_registration_number || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{r.branch || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{fmtDate(r.closed_date)}</td>
-                    <td className="px-4 py-3 text-gray-600">{r.service_type || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{r.service_advisor_name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600 font-mono">{r.mobile_number}</td>
+                    <td className="px-3 py-2 font-medium text-gray-800">{r.customer_name || '—'}</td>
+                    <td className="px-3 py-2 text-gray-600 font-mono">{r.vehicle_registration_number || '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{r.branch || '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{fmtDate(r.closed_date)}</td>
+                    <td className="px-3 py-2 text-gray-600">{r.service_type || '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{r.service_advisor_name || '—'}</td>
+                    <td className="px-3 py-2 text-gray-600 font-mono">{r.mobile_number}</td>
                     {tier === 'unrated' ? (
                       <>
-                        <td className="px-4 py-3 text-gray-600 text-xs">{fmtDateTime(r.sent_at)}</td>
-                        <td className="px-4 py-3 text-gray-600">{daysSinceSent(r.sent_at)}</td>
+                        <td className="px-3 py-2 text-gray-600 text-xs">{fmtDateTime(r.sent_at)}</td>
+                        <td className="px-3 py-2 text-gray-600">{daysSinceSent(r.sent_at)}</td>
                       </>
                     ) : (
                       <>
-                        <td className="px-4 py-3"><Stars rating={r.effective_rating} /></td>
-                        <td className="px-4 py-3 text-xs text-gray-600 max-w-[220px] truncate" title={r.feedback_text || ''}>
+                        <td className="px-3 py-2"><Stars rating={r.effective_rating} /></td>
+                        <td className="px-3 py-2 text-xs text-gray-600 max-w-[220px] truncate" title={r.feedback_text || ''}>
                           {r.feedback_text || '—'}
                         </td>
                       </>
                     )}
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       {tier === 'high' ? (
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.review_link_sent ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                           {r.review_link_sent ? 'Sent' : '—'}
@@ -906,7 +923,7 @@ export default function PostServiceFeedbackCREPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
+                    <td className="px-3 py-2 text-gray-400 text-xs">
                       <div className="flex items-center justify-end gap-2">
                         <PsfWhatsAppButton mobile={r.mobile_number} />
                         <span>{expandedId === r.id ? '▲' : '▼'}</span>
@@ -926,7 +943,7 @@ export default function PostServiceFeedbackCREPage() {
           </table>
         </div>
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
+          <div className="shrink-0 px-3 py-2 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
             <span>Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button
