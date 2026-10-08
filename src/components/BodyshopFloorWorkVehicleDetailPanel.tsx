@@ -13,8 +13,8 @@ import type {
   BodyshopFloorRoleDailyLogRow,
 } from '../lib/bodyshopFloorRoleWorkLog'
 import {
-  createSignedRoleLogPhotoUrl,
   fetchRoleDailyLogPhotos,
+  resolveRoleLogPhotoPreviewUrl,
   fetchRoleDailyLogsForVehicleKeys,
   openRoleDailyLogPhoto,
   type FloorWorkPhotoWithLog,
@@ -133,15 +133,15 @@ export function BodyshopFloorWorkVehicleDetailPanel({
       const seen = new Set<number>()
       for (const p of allPhotos) {
         seen.add(p.id)
-        if (p.drive_url) continue
-        const res = await createSignedRoleLogPhotoUrl(p.storage_bucket, p.storage_path, 3600)
-        if (res.data) next[p.id] = res.data
+        const url = await resolveRoleLogPhotoPreviewUrl(p, 3600)
+        if (url) next[p.id] = url
       }
       for (const list of Object.values(photosByLogIdFetched)) {
         for (const p of list) {
-          if (seen.has(p.id) || p.drive_url) continue
-          const res = await createSignedRoleLogPhotoUrl(p.storage_bucket, p.storage_path, 3600)
-          if (res.data) next[p.id] = res.data
+          if (seen.has(p.id)) continue
+          seen.add(p.id)
+          const url = await resolveRoleLogPhotoPreviewUrl(p, 3600)
+          if (url) next[p.id] = url
         }
       }
       if (!cancelled) setThumbByPhotoId(next)
@@ -195,11 +195,12 @@ export function BodyshopFloorWorkVehicleDetailPanel({
               if (res.data) window.open(res.data, '_blank', 'noopener,noreferrer')
             })}
           >
-            {p.drive_url || thumbByPhotoId[p.id] ? (
+            {thumbByPhotoId[p.id] ? (
               <img
-                src={p.drive_url || thumbByPhotoId[p.id]}
+                src={thumbByPhotoId[p.id]}
                 alt=""
                 className="bfw-log-card__thumb"
+                loading="lazy"
               />
             ) : (
               <span className="bfw-log-card__thumb-ph">Photo</span>

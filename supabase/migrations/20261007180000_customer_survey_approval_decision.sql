@@ -3,7 +3,8 @@
 ALTER TABLE public.bodyshop_repair_cards
   ADD COLUMN IF NOT EXISTS customer_survey_approval_status text,
   ADD COLUMN IF NOT EXISTS customer_survey_rejection_reason text,
-  ADD COLUMN IF NOT EXISTS customer_survey_decided_at timestamp with time zone;
+  ADD COLUMN IF NOT EXISTS customer_survey_decided_at timestamp with time zone,
+  ADD COLUMN IF NOT EXISTS doc_survey_approval boolean;
 
 ALTER TABLE public.bodyshop_repair_cards
   DROP CONSTRAINT IF EXISTS bodyshop_repair_cards_customer_survey_approval_status_check;

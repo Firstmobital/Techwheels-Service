@@ -121,6 +121,9 @@ describe('customerPortal API query patterns', () => {
     expect(ctx.repair_card?.id).toBe(11)
     expect(ctx.repair_card?.claim_intimation_no).toBe('MOTI8202441')
     expect(ctx.visit_kind).toBe('bodyshop')
+    expect(rpcCalls.filter((c) => c.fn === 'customer_get_repair_card').length).toBe(0)
+    expect(fromCalls.some((c) => c.table === 'bodyshop_repair_cards')).toBe(false)
+    expect(fromCalls.some((c) => c.table === 'technician_assignments')).toBe(false)
   })
 
   it('customerSetEstimateDecision batch-syncs bot payloads via RPC instead of row loops', async () => {

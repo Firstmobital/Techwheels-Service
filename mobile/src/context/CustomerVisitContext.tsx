@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 import { CUSTOMER_VISIT_BACKGROUND_POLL_MS } from '../lib/customer/customerAdvisorPoll'
-import { customerGetVisitContext, customerSetCustomerType } from '../lib/api/customerPortal'
+import { customerGetRepairCard, customerGetVisitContext, customerSetCustomerType } from '../lib/api/customerPortal'
 import { beginCustomerQueryScope, endCustomerQueryScope } from '../lib/api/customerPortalQueryLog'
 import type { MechanicalCasePayload } from '../lib/customer/mechanicalCustomerUi'
 import {
@@ -169,6 +169,17 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
           : null,
       )
       setRepairCard(cardForState)
+      // Survey document and stage names are not on the fast card. Load them after
+      // claim / insurance / surveyor are already on screen.
+      if (resolvedKind === 'bodyshop') {
+        const seqAtFetch = seq
+        void customerGetRepairCard(token, selectedReg, { bypassCache: opts?.bypassCache })
+          .then((full) => {
+            if (seqAtFetch !== loadSeq.current || !full) return
+            setRepairCard((prev) => (prev ? { ...prev, ...full } : full))
+          })
+          .catch(() => {})
+      }
       return resolvedKind
     } catch (err) {
       if (seq !== loadSeq.current) return 'other'

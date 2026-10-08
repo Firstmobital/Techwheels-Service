@@ -203,54 +203,46 @@ export async function customerGetVisitContext(
   }
 
   let job = res.job ? { ...res.job } : null
-  if (job) {
+  const serverVisitKind = String(res.visit_kind ?? '').trim()
+  const accidentReception = isBodyshopReceptionServiceType(String(job?.service_type ?? ''))
+  const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
+  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
+
+  // Bodyshop card first. Do not trust a mechanical label until we know there is
+  // no active accident repair card (stale paid-service reception must not win).
+  if (!isActiveBodyshopRepairCard(repair_card) && serverVisitKind === 'mechanical' && !accidentReception) {
+    const bodyshopCard = await customerGetRepairCard(sessionToken, reg, {
+      bypassCache: opts?.bypassCache,
+    }).catch(() => null)
+    if (isActiveBodyshopRepairCard(bodyshopCard)) {
+      repair_card = bodyshopCard
+      const cardJc = String(bodyshopCard?.job_card_no ?? '').trim()
+      job = {
+        ...(job || {}),
+        source: 'bodyshop',
+        service_type: 'Accident',
+        ...(cardJc ? { jc_number: cardJc } : {}),
+      }
+    }
+  }
+
+  const classifiedBodyshop =
+    accidentReception ||
+    serverVisitKind === 'bodyshop' ||
+    String(job?.source ?? '').trim() === 'bodyshop' ||
+    isActiveBodyshopRepairCard(repair_card)
+
+  if (job && !classifiedBodyshop) {
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  const serverVisitKind = String(res.visit_kind ?? '').trim()
-  const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
-  const accidentReception = isBodyshopReceptionServiceType(String(job?.service_type ?? ''))
-  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
-
-  const mustLoadBodyshopCard =
-    accidentReception ||
-    serverVisitKind === 'bodyshop' ||
-    String(job?.source ?? '').trim() === 'bodyshop'
-
-  if (mustLoadBodyshopCard || serverVisitKind !== 'mechanical') {
-    const rpcHasId = Boolean(repair_card && Number(repair_card.id || 0) > 0)
-    if (opts?.bypassCache || !rpcHasId || jcNo || accidentReception) {
-      const sessionCard = await customerGetRepairCard(sessionToken, reg, {
-        bypassCache: opts?.bypassCache ?? accidentReception,
-        jobCardNo: jcNo,
-      }).catch(() => null)
-      if (sessionCard) {
-        repair_card = sessionCard
-      } else if (!repair_card) {
-        repair_card = await resolveLatestRepairCardRow(reg, jcNo, null)
-      }
-    } else if (repair_card && !parseBodyshopEstimateDocument(repair_card)) {
-      repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
-    }
-  }
-
-  if (
-    serverVisitKind === 'mechanical' &&
-    !accidentReception &&
-    String(job?.source ?? '').trim() === 'reception'
-  ) {
-    const bodyshopCard = repair_card
-      ?? (await customerGetRepairCard(sessionToken, reg, {
-        bypassCache: opts?.bypassCache,
-        jobCardNo: jcNo,
-      }).catch(() => null))
-    if (
-      bodyshopCard &&
-      isActiveBodyshopRepairCard(bodyshopCard) &&
-      resolveCustomerVisitKind(job, serverVisitKind, bodyshopCard) === 'bodyshop'
-    ) {
-      repair_card = bodyshopCard
-    }
+  const mustLoadBodyshopCard = classifiedBodyshop
+  const rpcHasId = Boolean(repair_card && Number(repair_card.id || 0) > 0)
+  if (!rpcHasId && mustLoadBodyshopCard) {
+    const sessionCard = await customerGetRepairCard(sessionToken, reg, {
+      bypassCache: opts?.bypassCache,
+    }).catch(() => null)
+    if (sessionCard) repair_card = sessionCard
   }
 
   let visitKind = resolveCustomerVisitKind(job, serverVisitKind, repair_card)
@@ -312,23 +304,24 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
   }
 
   let job = res.job ? { ...res.job } : null
-  if (job) {
+  const serverVisitKind = String(res.visit_kind ?? '').trim()
+  let repair_card: Record<string, unknown> | null = await customerGetRepairCard(sessionToken, reg).catch(() => null)
+  let visit_kind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
+
+  if (visit_kind === 'bodyshop' && isActiveBodyshopRepairCard(repair_card) && serverVisitKind === 'mechanical') {
+    const cardJc = String(repair_card?.job_card_no ?? '').trim()
+    job = {
+      ...(job || {}),
+      source: 'bodyshop',
+      service_type: 'Accident',
+      ...(cardJc ? { jc_number: cardJc } : {}),
+    }
+  } else if (job && visit_kind === 'mechanical') {
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  const serverVisitKind = String(res.visit_kind ?? '').trim()
-  let repair_card: Record<string, unknown> | null = null
-  let visit_kind: CustomerVisitKind
-
-  if (serverVisitKind === 'mechanical') {
-    visit_kind = 'mechanical'
-  } else {
-    const jcForCard = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
-    repair_card = await resolveLatestRepairCardRow(reg, jcForCard, null)
-    visit_kind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
-    if (visit_kind !== 'bodyshop') {
-      repair_card = null
-    }
+  if (visit_kind !== 'bodyshop') {
+    repair_card = null
   }
 
   return setCache(cacheKey, { ...res, job, visit_kind, repair_card })
@@ -1444,13 +1437,12 @@ export async function customerGetRepairCard(
     console.warn('customer_get_repair_card RPC note:', rpcErr)
   }
 
-  const jcHint = String(opts?.jobCardNo ?? '').trim()
-  if (rpcCard && Number(rpcCard.id || 0) > 0 && !opts?.bypassCache && !jcHint) {
-    const row = await attachEstimateDocumentToRepairCard(
-      sessionToken,
-      regNumber || normReg,
-      rpcCard
-    )
+  // RPC already returns the active card (claim, surveyor, survey document). Do not
+  // block on a direct bodyshop_repair_cards scan just because a JC number is known.
+  if (rpcCard && Number(rpcCard.id || 0) > 0) {
+    const row = parseBodyshopEstimateDocument(rpcCard)
+      ? rpcCard
+      : await attachEstimateDocumentToRepairCard(sessionToken, regNumber || normReg, rpcCard)
     return setCache(cacheKey, row)
   }
 

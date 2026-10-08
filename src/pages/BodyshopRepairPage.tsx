@@ -7361,7 +7361,9 @@ export default function BodyshopRepairPage() {
                 <div className="brx-floor-wrap">
                   {(() => {
                     const surveyApprovalDoc = bodyshopDocsByKey.doc_survey_approval
-                    const customerOk = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase() === 'approved'
+                    const customerSurvey = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+                    const customerOk = customerSurvey === 'approved'
+                    const customerRemark = String(selected.customer_survey_rejection_reason ?? '').trim()
                     const currentFloor = String(selected.bodyshop_floor ?? '').trim()
                     const hasFloorSelection = currentFloor === 'Floor 2' || currentFloor === 'Floor 3'
                     const selectedCardId = Number(selected.id)
@@ -7370,14 +7372,23 @@ export default function BodyshopRepairPage() {
                       : null
                     const floorChanged = Boolean(initialFloor && hasFloorSelection && initialFloor !== currentFloor)
                     const floorChangeLocked = false
-                    if (!surveyApprovalDoc) return null
+                    const lockMessage = !surveyApprovalDoc
+                      ? 'Upload the survey approval document on the Survey tab and wait for the customer to approve it. This vehicle cannot go to the floor before that.'
+                      : customerSurvey === 'rejected'
+                        ? 'Customer rejected the survey document. The vehicle stays off the floor until they approve a revised upload.'
+                        : customerSurvey === 'approved'
+                          ? ''
+                          : 'Waiting for customer approval in the app. Floor 2 and Floor 3 stay locked until the customer approves.'
                     return (
                       <div className="brx-survey-approval brx-grid-full" style={{ marginBottom: 14 }}>
                         <div className="brx-survey-approval-title">Physical floor</div>
                         {!customerOk ? (
-                          <p className="brx-survey-approval-sub">
-                            Customer must approve the survey document in the app before you can send this vehicle to a floor.
-                          </p>
+                          <div className="brx-survey-feedback is-error" style={{ marginTop: 8 }}>
+                            {lockMessage}
+                            {customerSurvey === 'rejected' && customerRemark ? (
+                              <div style={{ marginTop: 6 }}><strong>Customer remark:</strong> {customerRemark}</div>
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="brx-survey-actions brx-survey-floor-actions">
                             <button

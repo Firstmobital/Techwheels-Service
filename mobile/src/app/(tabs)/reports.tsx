@@ -54,6 +54,27 @@ import VasBillingHoursEfficiencyMobile from '../../components/reports/VasBilling
 import VehicleWiseRevenueMobile from '../../components/reports/VehicleWiseRevenueMobile'
 import PartsFastMovingMobile from '../../components/reports/PartsFastMovingMobile'
 import PartsInTransitMobile from '../../components/reports/PartsInTransitMobile'
+import DatePickerField from '../../components/common/DatePickerField'
+
+function getTodayDateInputValue(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const DATE_PRESET_OPTIONS: Array<{ value: DateRangePreset; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: 'this-week', label: 'This Week' },
+  { value: 'this-month', label: 'This Month' },
+  { value: 'last-month', label: 'Last Month' },
+  { value: 'custom', label: 'Custom' },
+]
+
+/** Use blue-600 for selected chips — `slate-900` etc. are invalid (theme overrides `slate` to one hex). */
+const FILTER_CHIP_ACTIVE = 'bg-blue-600 border-blue-600'
+const FILTER_CHIP_IDLE = 'bg-white border-line-strong'
 
 export default function ReportsScreen() {
   const [selectedCategoryId, setSelectedCategoryId] =
@@ -64,6 +85,8 @@ export default function ReportsScreen() {
   const [branch, setBranch] = useState<BranchFilter>('ALL')
   const [fuelType, setFuelType] = useState<'ALL' | 'PV' | 'EV'>('ALL')
   const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
+  const [customFrom, setCustomFrom] = useState(getTodayDateInputValue)
+  const [customTo, setCustomTo] = useState(getTodayDateInputValue)
   const [dateFieldType, setDateFieldType] = useState<DateFieldType>('closed_date')
 
   const [loading, setLoading] = useState(true)
@@ -152,13 +175,24 @@ export default function ReportsScreen() {
     return dateFieldType
   }, [dateFieldType, selectedCategoryId])
 
+  const customDateError = useMemo(() => {
+    if (datePreset !== 'custom') return null
+    if (!customFrom.trim() || !customTo.trim()) return 'Select both From and To dates.'
+    if (customTo < customFrom) return 'To date cannot be earlier than From date.'
+    return null
+  }, [customFrom, customTo, datePreset])
+
   const dateFilter = useMemo<DateRangeFilter>(
     () => ({
       preset: datePreset,
+      customFrom: datePreset === 'custom' ? customFrom : undefined,
+      customTo: datePreset === 'custom' ? customTo : undefined,
       dateFieldType: effectiveDateFieldType,
     }),
-    [datePreset, effectiveDateFieldType],
+    [customFrom, customTo, datePreset, effectiveDateFieldType],
   )
+
+  const dateFilterReady = !customDateError
 
   useEffect(() => {
     if (reportsInCategory.some((report) => report.id === selectedReportId)) return
@@ -176,6 +210,12 @@ export default function ReportsScreen() {
     let active = true
 
     const loadHeaderStats = async () => {
+      if (!dateFilterReady) {
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+
       setLoading(true)
       setError(null)
 
@@ -198,7 +238,7 @@ export default function ReportsScreen() {
     return () => {
       active = false
     }
-  }, [dateFilter, effectiveBranchFilter, reloadTick])
+  }, [dateFilter, dateFilterReady, effectiveBranchFilter, reloadTick])
 
   const onRefresh = () => {
     setRefreshing(true)
@@ -206,13 +246,11 @@ export default function ReportsScreen() {
   }
 
   return (
-    <StaffScreenShell
-      title="Reports"
-      subtitle="Revenue and service analytics aligned with the web portal."
-    >
+    <StaffScreenShell title="Reports" compactHeader>
       <ScrollView
         className="flex-1 bg-slate-50"
         contentContainerStyle={{ paddingBottom: 24 }}
+        keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
       {loading ? (
@@ -237,7 +275,7 @@ export default function ReportsScreen() {
         </View>
       ) : (
         <>
-          <View className="px-4 mt-2">
+          <View className="px-4 mt-1">
             <View className="bg-white rounded-xl border border-slate-200 p-4">
               <Text className="text-xs uppercase tracking-wide text-slate-500">Revenue This Month</Text>
               <Text className="text-3xl font-bold text-slate-900 mt-1">
@@ -329,14 +367,15 @@ export default function ReportsScreen() {
                 <View className="flex-row mb-2">
                   {(['ALL', ...REPORT_BRANCH_OPTIONS] as Array<'ALL' | string>).map((option) => {
                     const isActive = branch === option
+                    const label = option === 'ALL' ? 'All' : option
                     return (
                       <TouchableOpacity
                         key={option}
-                        className={`mr-2 rounded-full px-3 py-1 border ${isActive ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-300'}`}
+                        className={`mr-2 rounded-full px-3 py-1 border ${isActive ? FILTER_CHIP_ACTIVE : FILTER_CHIP_IDLE}`}
                         onPress={() => setBranch(option)}
                       >
-                        <Text className={`${isActive ? 'text-white' : 'text-slate-700'} text-xs`}>
-                          {option}
+                        <Text className={`${isActive ? 'text-white' : 'text-ink-2'} text-xs font-medium`}>
+                          {label}
                         </Text>
                       </TouchableOpacity>
                     )
@@ -353,11 +392,11 @@ export default function ReportsScreen() {
                       return (
                         <TouchableOpacity
                           key={option}
-                          className={`mr-2 rounded-full px-3 py-1 border ${isActive ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-300'}`}
+                          className={`mr-2 rounded-full px-3 py-1 border ${isActive ? FILTER_CHIP_ACTIVE : FILTER_CHIP_IDLE}`}
                           onPress={() => setFuelType(option)}
                         >
-                          <Text className={`${isActive ? 'text-white' : 'text-slate-700'} text-xs`}>
-                            {option}
+                          <Text className={`${isActive ? 'text-white' : 'text-ink-2'} text-xs font-medium`}>
+                            {option === 'ALL' ? 'All' : option}
                           </Text>
                         </TouchableOpacity>
                       )
@@ -367,26 +406,50 @@ export default function ReportsScreen() {
               ) : null}
 
               <Text className="text-xs text-slate-500 mb-2">Date Range</Text>
-              <View className="flex-row mb-2">
-                {([
-                  ['today', 'Today'],
-                  ['this-week', 'This Week'],
-                  ['this-month', 'This Month'],
-                ] as Array<[DateRangePreset, string]>).map(([value, label]) => {
-                  const isActive = datePreset === value
-                  return (
-                    <TouchableOpacity
-                      key={value}
-                      className={`mr-2 rounded-full px-3 py-1 border ${isActive ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-300'}`}
-                      onPress={() => setDatePreset(value)}
-                    >
-                      <Text className={`${isActive ? 'text-white' : 'text-slate-700'} text-xs`}>
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
+                <View className="flex-row">
+                  {DATE_PRESET_OPTIONS.map(({ value, label }) => {
+                    const isActive = datePreset === value
+                    return (
+                      <TouchableOpacity
+                        key={value}
+                        className={`mr-2 rounded-full px-3 py-2 border ${isActive ? FILTER_CHIP_ACTIVE : FILTER_CHIP_IDLE}`}
+                        onPress={() => setDatePreset(value)}
+                      >
+                        <Text className={`${isActive ? 'text-white' : 'text-ink-2'} text-xs font-semibold`}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </ScrollView>
+
+              {datePreset === 'custom' ? (
+                <View className="mb-2">
+                  <View className="flex-row gap-3 mb-2">
+                    <View className="flex-1">
+                      <Text className="text-xs text-slate-500 mb-1">From</Text>
+                      <DatePickerField value={customFrom} onChange={setCustomFrom} />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-xs text-slate-500 mb-1">To</Text>
+                      <DatePickerField value={customTo} onChange={setCustomTo} />
+                    </View>
+                  </View>
+                  {customDateError ? (
+                    <Text className="text-xs text-red-600 mb-1">{customDateError}</Text>
+                  ) : (
+                    <Text className="text-xs text-slate-500 mb-1">
+                      {customFrom} → {customTo}
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text className="text-xs text-slate-500 mb-2">
+                  Active: {DATE_PRESET_OPTIONS.find((o) => o.value === datePreset)?.label ?? datePreset}
+                </Text>
+              )}
 
               {selectedCategoryId !== 'labour-revenue' ? (
                 <>
@@ -400,10 +463,10 @@ export default function ReportsScreen() {
                       return (
                         <TouchableOpacity
                           key={value}
-                          className={`mr-2 rounded-full px-3 py-1 border ${isActive ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-300'}`}
+                          className={`mr-2 rounded-full px-3 py-1 border ${isActive ? FILTER_CHIP_ACTIVE : FILTER_CHIP_IDLE}`}
                           onPress={() => setDateFieldType(value)}
                         >
-                          <Text className={`${isActive ? 'text-white' : 'text-slate-700'} text-xs`}>
+                          <Text className={`${isActive ? 'text-white' : 'text-ink-2'} text-xs`}>
                             {label}
                           </Text>
                         </TouchableOpacity>
@@ -416,7 +479,12 @@ export default function ReportsScreen() {
           </View>
 
           <View className="px-4 pt-1 pb-6">
-            {selectedReportId === 'service-type-labour-revenue' ? (
+            {customDateError ? (
+              <View className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <Text className="text-amber-900 text-sm font-semibold">Fix date range to load report</Text>
+                <Text className="text-amber-800 text-xs mt-1">{customDateError}</Text>
+              </View>
+            ) : selectedReportId === 'service-type-labour-revenue' ? (
               <ServiceTypeLabourRevenueMobile
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}

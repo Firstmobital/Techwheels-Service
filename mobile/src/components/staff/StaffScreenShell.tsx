@@ -13,9 +13,18 @@ export type StaffShellHeaderProps = {
   onOpenMenu: () => void
 }
 
-export function StaffShellHeader({ title, subtitle, rightAction, leadingExtra, onOpenMenu }: StaffShellHeaderProps) {
+export function StaffShellHeader({
+  title,
+  subtitle,
+  rightAction,
+  leadingExtra,
+  onOpenMenu,
+  compact,
+}: StaffShellHeaderProps & { compact?: boolean }) {
   return (
-    <View className="bg-white border-b border-slate-200 px-4 py-3 flex-row items-center gap-2">
+    <View
+      className={`bg-white border-b border-slate-200 px-4 flex-row items-center gap-2 ${compact ? 'py-2' : 'py-3'}`}
+    >
       <TouchableOpacity
         onPress={onOpenMenu}
         accessibilityRole="button"
@@ -26,10 +35,13 @@ export function StaffShellHeader({ title, subtitle, rightAction, leadingExtra, o
       </TouchableOpacity>
       {leadingExtra ? <View>{leadingExtra}</View> : null}
       <View className="flex-1 min-w-0">
-        <Text className="text-slate-900 text-xl font-bold" numberOfLines={1}>
+        <Text
+          className={`text-slate-900 font-bold ${compact ? 'text-lg' : 'text-xl'}`}
+          numberOfLines={1}
+        >
           {title}
         </Text>
-        {subtitle ? (
+        {!compact && subtitle ? (
           typeof subtitle === 'string' ? (
             <Text className="text-slate-500 text-sm mt-0.5" numberOfLines={2}>
               {subtitle}
@@ -49,7 +61,8 @@ export function StaffNavigationChrome({
   subtitle,
   rightAction,
   leadingExtra,
-}: Omit<StaffShellHeaderProps, 'onOpenMenu'>) {
+  compact,
+}: Omit<StaffShellHeaderProps, 'onOpenMenu'> & { compact?: boolean }) {
   const { showMenu, openMenu, closeMenu, allowedModules, displayName } = useStaffNavigationMenu()
 
   return (
@@ -66,6 +79,7 @@ export function StaffNavigationChrome({
         rightAction={rightAction}
         leadingExtra={leadingExtra}
         onOpenMenu={openMenu}
+        compact={compact}
       />
     </>
   )
@@ -109,10 +123,18 @@ type Props = {
   subtitle?: ReactNode
   rightAction?: ReactNode
   leadingExtra?: ReactNode
+  compactHeader?: boolean
   children: ReactNode
 }
 
-export function StaffScreenShell({ title, subtitle, rightAction, leadingExtra, children }: Props) {
+export function StaffScreenShell({
+  title,
+  subtitle,
+  rightAction,
+  leadingExtra,
+  compactHeader,
+  children,
+}: Props) {
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       <StaffNavigationChrome
@@ -120,6 +142,7 @@ export function StaffScreenShell({ title, subtitle, rightAction, leadingExtra, c
         subtitle={subtitle}
         rightAction={rightAction}
         leadingExtra={leadingExtra}
+        compact={compactHeader}
       />
       {children}
     </SafeAreaView>

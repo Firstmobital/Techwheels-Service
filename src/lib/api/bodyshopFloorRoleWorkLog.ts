@@ -449,6 +449,42 @@ export async function openRoleDailyLogPhoto(photo: BodyshopFloorRoleDailyLogPhot
   return createSignedRoleLogPhotoUrl(photo.storage_bucket, photo.storage_path)
 }
 
+/** Extract Google Drive file id from stored id or /file/d/…/view URL. */
+export function extractGoogleDriveFileId(urlOrId: string | null | undefined): string | null {
+  const raw = String(urlOrId ?? '').trim()
+  if (!raw) return null
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(raw) && !raw.includes('/')) return raw
+  const fromPath = raw.match(/\/file\/d\/([^/]+)/)
+  if (fromPath?.[1]) return fromPath[1]
+  const fromQuery = raw.match(/[?&]id=([^&]+)/)
+  if (fromQuery?.[1]) return fromQuery[1]
+  return null
+}
+
+export function googleDriveThumbnailUrl(fileId: string, size = 'w400'): string {
+  return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=${size}`
+}
+
+/**
+ * Inline <img> preview — never use drive_url /view links (they break in img tags).
+ * Prefer Supabase signed URL, then Drive thumbnail API.
+ */
+export async function resolveRoleLogPhotoPreviewUrl(
+  photo: BodyshopFloorRoleDailyLogPhotoRow,
+  expiresSec = 3600,
+): Promise<string | null> {
+  const bucket = String(photo.storage_bucket ?? '').trim()
+  const path = String(photo.storage_path ?? '').trim()
+  if (bucket && path) {
+    const signed = await createSignedRoleLogPhotoUrl(bucket, path, expiresSec)
+    if (signed.data) return signed.data
+  }
+  const fileId =
+    extractGoogleDriveFileId(photo.drive_file_id) || extractGoogleDriveFileId(photo.drive_url)
+  if (fileId) return googleDriveThumbnailUrl(fileId)
+  return null
+}
+
 export async function createSignedRoleLogPhotoUrl(
   bucket: string,
   path: string,

@@ -4672,11 +4672,23 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 }
 
 .bfw-log-card__thumb {
+  display: block;
   width: 64px;
   height: 48px;
   object-fit: cover;
+  object-position: center;
   border-radius: 4px;
   border: 1px solid var(--border);
+}
+
+.bfw-log-card__thumb--table {
+  width: 72px;
+  height: 54px;
+}
+
+.bfw-log-card__thumb-ph--table {
+  width: 72px;
+  height: 54px;
 }
 
 .bfw-log-card__thumb-ph {

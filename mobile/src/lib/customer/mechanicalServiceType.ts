@@ -89,15 +89,10 @@ export function resolveCustomerVisitKind(
   }
 
   const fromServer = String(serverVisitKind ?? '').trim()
-  // Open reception row can classify as mechanical while an active bodyshop card is the real visit.
+  // Bodyshop is the default workshop visit. A server "mechanical" label loses
+  // whenever an active bodyshop card still exists (stale paid-service reception).
   if (fromServer === 'mechanical') {
-    if (
-      repairCard &&
-      isActiveBodyshopRepairCard(repairCard) &&
-      String(job?.source ?? '').trim() === 'reception'
-    ) {
-      return 'bodyshop'
-    }
+    if (repairCard && isActiveBodyshopRepairCard(repairCard)) return 'bodyshop'
     return 'mechanical'
   }
   if (fromServer === 'bodyshop') {

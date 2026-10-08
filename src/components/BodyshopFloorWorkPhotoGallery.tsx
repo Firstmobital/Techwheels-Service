@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BODYSHOP_FLOOR_WORK_ROLE_LABELS } from '../lib/bodyshopFloorWork/roles'
 import type { FloorWorkPhotoWithLog } from '../lib/api/bodyshopFloorRoleWorkLog'
-import { createSignedRoleLogPhotoUrl, openRoleDailyLogPhoto } from '../lib/api/bodyshopFloorRoleWorkLog'
+import { openRoleDailyLogPhoto, resolveRoleLogPhotoPreviewUrl } from '../lib/api/bodyshopFloorRoleWorkLog'
 
 function photoRowIndex(index: number): string {
   if (index < 26) return String.fromCharCode(65 + index)
@@ -21,9 +21,8 @@ export function BodyshopFloorWorkPhotoGallery({ photos, title = 'All work photos
     void (async () => {
       const next: Record<number, string> = {}
       for (const p of photos) {
-        if (p.drive_url) continue
-        const res = await createSignedRoleLogPhotoUrl(p.storage_bucket, p.storage_path, 3600)
-        if (res.data) next[p.id] = res.data
+        const url = await resolveRoleLogPhotoPreviewUrl(p, 3600)
+        if (url) next[p.id] = url
       }
       if (!cancelled) setThumbById(next)
     })()
@@ -59,7 +58,7 @@ export function BodyshopFloorWorkPhotoGallery({ photos, title = 'All work photos
                 String(p.log_employee_code ?? '').trim() ||
                 'Unknown'
               const role = BODYSHOP_FLOOR_WORK_ROLE_LABELS[p.log_floor_role] ?? p.log_floor_role
-              const preview = p.drive_url || thumbById[p.id] || ''
+              const preview = thumbById[p.id] || ''
               return (
                 <tr key={p.id}>
                   <td>{photoRowIndex(idx)}</td>
@@ -68,10 +67,10 @@ export function BodyshopFloorWorkPhotoGallery({ photos, title = 'All work photos
                       <img
                         src={preview}
                         alt=""
-                        style={{ width: 72, height: 54, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border, #e5e7eb)' }}
+                        className="bfw-log-card__thumb bfw-log-card__thumb--table"
                       />
                     ) : (
-                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>…</span>
+                      <span className="bfw-log-card__thumb-ph bfw-log-card__thumb-ph--table">…</span>
                     )}
                   </td>
                   <td><strong>{name}</strong></td>

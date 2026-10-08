@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
-import { getDealerContext, getReceptionEntriesByIds, listAccidentReceptionEntriesByDateRange } from '../lib/api'
+import { getDealerContext, getReceptionEntriesByIds } from '../lib/api'
 import type { ReceptionEntryLite } from '../lib/api/reception'
 import {
   BODYSHOP_FLOOR_LIVE_LIST_LABEL,
@@ -57,33 +57,6 @@ interface AccidentCar {
   bodyshop_floor: string | null
   bodyshop_floor_since_at?: string | null
   survay_info_updated_at?: string | null
-}
-
-async function fetchAccidentCarsByDateRange(range: DateRange): Promise<{ data: AccidentCar[] | null; error: unknown | null }> {
-  const result = await listAccidentReceptionEntriesByDateRange({
-    from: range.from ?? '',
-    to: range.to ?? '',
-  })
-
-  if (result.error) return { data: null, error: result.error }
-
-  const rows = (result.data ?? []).map((row) => ({
-    id: row.id,
-    jc_number: row.jc_number,
-    sa_employee_code: row.sa_employee_code,
-    dealer_code: row.dealer_code,
-    reg_number: row.reg_number,
-    model: row.model,
-    owner_name: row.owner_name,
-    owner_phone: row.owner_phone,
-    sa_name: row.sa_name,
-    sa_display_name: row.sa_display_name,
-    branch: row.branch,
-    created_at: row.created_at,
-    bodyshop_floor: null,
-  })) as AccidentCar[]
-
-  return { data: rows, error: null }
 }
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
@@ -1060,29 +1033,65 @@ export default function BodyshopFloorPage() {
         setCars(carList)
         jcKeysForSecondary = Array.from(latestByJc.keys())
       } else {
-        // 2. Accident reception entries (restricted to sent vehicles only)
-        const { data: recData, error: recErr } = await fetchAccidentCarsByDateRange(dateRange)
-        if (recErr) throw recErr
+        // Intake period: the full historical bodyshop set (previously 600+), not the
+        // 90-day reception lookback. A chosen month still filters by intake date.
+        const entryIds = Array.from(new Set(
+          Array.from(latestByJc.values())
+            .map((row) => row.receptionEntryId)
+            .filter((id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0),
+        ))
 
-        const carList = ((recData ?? []) as AccidentCar[])
-          .filter((car) => {
-            const jc = jcKey(car)
-            return jc ? sentByJc.has(jc) : false
-          })
-          .map((car) => {
-            const jc = jcKey(car)
-            const floor = (jc ? sentByJc.get(jc) : undefined) ?? null
-            const meta = jc ? latestByJc.get(jc) : undefined
-            return {
-              ...car,
-              bodyshop_floor: floor,
-              bodyshop_floor_since_at: meta?.bodyshopFloorSinceAt ?? null,
-              survay_info_updated_at: meta?.survayInfoUpdatedAt ?? null,
-            }
-          })
+        const recByJc = new Map<string, ReceptionEntryLite>()
+        const chunkSize = 400
+        for (let i = 0; i < entryIds.length; i += chunkSize) {
+          const chunk = entryIds.slice(i, i + chunkSize)
+          const recRes = await getReceptionEntriesByIds(chunk)
+          if (recRes.error) throw recRes.error
+          for (const entry of recRes.data ?? []) {
+            const jc = String(entry.jc_number ?? '').trim().toUpperCase()
+            if (jc) recByJc.set(jc, entry)
+          }
+        }
 
+        const periodFrom = String(dateRange.from ?? '').trim()
+        const periodTo = String(dateRange.to ?? '').trim()
+        const carList: AccidentCar[] = []
+        latestByJc.forEach((meta, jc) => {
+          const rec = recByJc.get(jc)
+          const intakeAt = rec?.created_at ?? meta.cardCreatedAt
+          if (periodFrom && periodTo && intakeAt) {
+            const day = String(intakeAt).slice(0, 10)
+            if (day < periodFrom || day > periodTo) return
+          }
+          const floor = sentByJc.get(jc) ?? null
+          carList.push({
+            id: rec?.id ?? meta.repairCardId ?? 0,
+            jc_number: rec?.jc_number ?? jc,
+            sa_employee_code: null,
+            dealer_code: rec?.dealer_code ?? null,
+            reg_number: rec?.reg_number ?? meta.regNumber,
+            model: rec?.model ?? null,
+            owner_name: rec?.owner_name ?? meta.customerName,
+            owner_phone: rec?.owner_phone ?? null,
+            sa_name: meta.saName,
+            sa_display_name: meta.saName,
+            branch: rec?.branch ?? meta.branch,
+            created_at: intakeAt,
+            bodyshop_floor: floor,
+            bodyshop_floor_since_at: meta.bodyshopFloorSinceAt,
+            survay_info_updated_at: meta.survayInfoUpdatedAt,
+          })
+        })
+
+        carList.sort((a, b) => {
+          const ta = new Date(String(a.created_at ?? '')).getTime()
+          const tb = new Date(String(b.created_at ?? '')).getTime()
+          return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
+        })
         setCars(carList)
-        jcKeysForSecondary = Array.from(latestByJc.keys())
+        jcKeysForSecondary = carList
+          .map((car) => String(car.jc_number ?? '').trim().toUpperCase())
+          .filter(Boolean)
       }
 
       if (jcKeysForSecondary.length > 0) {
@@ -2456,6 +2465,12 @@ export default function BodyshopFloorPage() {
               value={vehicleListMode}
               onChange={(e) => setVehicleListMode(e.target.value as BodyshopFloorVehicleListMode)}
             >
+              onChange={(e) => {
+                const next = e.target.value as BodyshopFloorVehicleListMode
+                setVehicleListMode(next)
+                if (next === 'intake_period') setDateRange({ from: '', to: '' })
+              }}
+            >
               <option value="live_on_floor">{BODYSHOP_FLOOR_LIVE_LIST_LABEL}</option>
               <option value="intake_period">Intake period</option>
             </select>
@@ -2465,8 +2480,7 @@ export default function BodyshopFloorPage() {
             onChange={setDateRange}
             label="Period:"
             includeAll
-            disabled={vehicleListMode === 'live_on_floor'}
-          />
+            allLabel="All intake"
           <button type="button" className="btn btn--ghost btn--sm"
             onClick={() => setExpandedCards(new Set(filtered.map((c) => jcKey(c))))}>
             Expand All

@@ -22,6 +22,7 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetGatePass } from '../../lib/api/customerPortal'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import {
+  isBodyshopReceptionServiceType,
   isEffectiveBodyshopCustomerVisit,
   isEffectiveMechanicalCustomerVisit,
 } from '../../lib/customer/mechanicalServiceType'
@@ -66,7 +67,7 @@ export default function CustomerDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadGatePass()
-      void refreshVisit({ bypassCache: true })
+      void refreshVisit({ bypassCache: false })
     }, [loadGatePass, refreshVisit])
   )
 
@@ -95,7 +96,8 @@ export default function CustomerDashboardScreen() {
   const customerName =
     asText(selected?.owner_name) ||
     asText(repairCard?.customer_name) ||
-    asText(job?.owner_name)
+    asText(job?.owner_name) ||
+    asText(job?.customer_name)
   const model = asText(job?.model) || asText(selected?.model)
   const variant = asText(job?.variant) || asText(selected?.variant)
   const km = formatKm(job?.km_reading ?? selected?.km_reading)
@@ -108,27 +110,26 @@ export default function CustomerDashboardScreen() {
     asText(repairCard?.sa_display_name) ||
     asText(repairCard?.sa_name) ||
     asText(repairCard?.service_advisor_name)
+  const card = repairCard
   const insuranceCompany =
-    asText(repairCard?.insurance_company) ||
+    asText(card?.insurance_company) ||
     asText(job?.insurance_company) ||
-    asText(job?.insurance_company)
-  const surveyorName = asText(repairCard?.surveyor_name) || asText(job?.surveyor_name)
+    asText(selected?.insurance_company)
+  const surveyorName = asText(card?.surveyor_name) || asText(job?.surveyor_name)
   const surveyorMobile =
-    asText(repairCard?.surveyor_contact) ||
-    asText(repairCard?.surveyor_mobile) ||
-    asText(repairCard?.surveyor_phone) ||
+    asText(card?.surveyor_contact) ||
+    asText(card?.surveyor_mobile) ||
+    asText(card?.surveyor_phone) ||
     asText(job?.surveyor_contact) ||
     asText(job?.surveyor_mobile)
-  const jc = asText(job?.jc_number) || asText(selected?.jc_number)
+  const jc = asText(job?.jc_number) || asText(card?.job_card_no) || asText(selected?.jc_number)
   const claimIntimation =
-    asText(repairCard?.claim_intimation_no) ||
-    asText(job?.claim_intimation_no) ||
+    asText(card?.claim_intimation_no) ||
     asText(job?.claim_intimation_no)
   const insurancePolicyNo =
-    asText(repairCard?.insurance_policy_no) ||
-    asText(job?.insurance_policy_no) ||
+    asText(card?.insurance_policy_no) ||
     asText(job?.insurance_policy_no)
-  const approvedEstimateRaw = repairCard?.estimated_amount ?? job?.estimated_amount
+  const approvedEstimateRaw = card?.estimated_amount ?? job?.estimated_amount
   const approvedEstimate =
     approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
@@ -146,8 +147,14 @@ export default function CustomerDashboardScreen() {
     job,
   })
   const mechanicalStatus = isEffectiveMechanical ? mechanicalStatusLabel(mechCase) : null
-  const showBodyshopFields = isEffectiveBodyshop
+  // Same label as the Accident badge. If that badge is Accident, these rows show — never KM.
+  const showBodyshopFields =
+    isBodyshopReceptionServiceType(serviceType) ||
+    isEffectiveBodyshop ||
+    isBodyshop ||
+    visitKind === 'bodyshop'
   const homeContentReady = visitReady && Boolean(selected)
+
   return (
     <CustomerScreen title="" subtitle="">
       {!homeContentReady ? (

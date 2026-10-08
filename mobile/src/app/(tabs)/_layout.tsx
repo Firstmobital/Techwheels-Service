@@ -235,7 +235,7 @@ export default function TabsLayout() {
         name="reports"
         options={{
           title: 'Reports',
-          headerShown: true,
+          headerShown: false,
           href: null,
         }}
       />
