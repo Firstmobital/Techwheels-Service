@@ -76,6 +76,8 @@ interface Props {
   /** Override the All option label. Defaults to `All (${allLookbackDays}d)`. */
   allLabel?: string
   disabled?: boolean
+  /** When Custom is active, show date inputs on a row below the preset dropdown (e.g. BUSY top bar). */
+  stackCustomDates?: boolean
 }
 
 export default function DateRangeFilter({
@@ -87,6 +89,7 @@ export default function DateRangeFilter({
   allLookbackDays = 90,
   allLabel,
   disabled = false,
+  stackCustomDates = false,
 }: Props) {
   const [preset, setPreset] = useState<DateRangePreset | 'all'>(() => inferPresetFromRange(range))
   const [custom, setCustom] = useState<DateRange>(range)
@@ -125,50 +128,74 @@ export default function DateRangeFilter({
     { key: 'custom',     label: 'Custom'       },
   ]
 
+  const presetSelect = (
+    <select
+      className="cft__sel"
+      value={preset}
+      disabled={disabled}
+      onChange={(e) => handleSelect(e.target.value as DateRangePreset | 'all')}
+    >
+      {OPTIONS.map((o) => (
+        <option key={o.key} value={o.key} disabled={o.key !== 'all' && disabledSet.has(o.key as DateRangePreset)}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+
+  const customDateInputs = preset === 'custom' && (
+    <>
+      <input
+        type="date"
+        className="cft__sel"
+        value={custom.from}
+        style={{ width: 130 }}
+        disabled={disabled}
+        aria-label="From date"
+        onChange={(e) => {
+          const next = { ...custom, from: e.target.value }
+          setCustom(next)
+          apply('custom', next)
+        }}
+      />
+      <span className="cft__label">→</span>
+      <input
+        type="date"
+        className="cft__sel"
+        value={custom.to}
+        style={{ width: 130 }}
+        disabled={disabled}
+        aria-label="To date"
+        onChange={(e) => {
+          const next = { ...custom, to: e.target.value }
+          setCustom(next)
+          apply('custom', next)
+        }}
+      />
+    </>
+  )
+
+  if (stackCustomDates) {
+    return (
+      <div className="cft cft--stack-custom">
+        <div className="cft__preset-row">
+          {label && <span className="cft__label">{label}</span>}
+          {presetSelect}
+        </div>
+        {customDateInputs && (
+          <div className="cft__custom-row">
+            {customDateInputs}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       {label && <span className="cft__label">{label}</span>}
-      <select
-        className="cft__sel"
-        value={preset}
-        disabled={disabled}
-        onChange={(e) => handleSelect(e.target.value as DateRangePreset | 'all')}
-      >
-        {OPTIONS.map((o) => (
-          <option key={o.key} value={o.key} disabled={o.key !== 'all' && disabledSet.has(o.key as DateRangePreset)}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {preset === 'custom' && (
-        <>
-          <input
-            type="date"
-            className="cft__sel"
-            value={custom.from}
-            style={{ width: 130 }}
-            disabled={disabled}
-            onChange={(e) => {
-              const next = { ...custom, from: e.target.value }
-              setCustom(next)
-              apply('custom', next)
-            }}
-          />
-          <span className="cft__label">→</span>
-          <input
-            type="date"
-            className="cft__sel"
-            value={custom.to}
-            style={{ width: 130 }}
-            disabled={disabled}
-            onChange={(e) => {
-              const next = { ...custom, to: e.target.value }
-              setCustom(next)
-              apply('custom', next)
-            }}
-          />
-        </>
-      )}
+      {presetSelect}
+      {customDateInputs}
     </>
   )
 }

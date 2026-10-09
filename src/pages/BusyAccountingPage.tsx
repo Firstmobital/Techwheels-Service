@@ -426,7 +426,12 @@ export default function BusyAccountingPage() {
     <div className="page busy-page">
       <div className="busy-top">
         <div className="busy-top-period">
-          <DateRangeFilter range={{ from: fromDate, to: toDate }} onChange={handlePeriodRangeChange} label="Period:" />
+          <DateRangeFilter
+            range={{ from: fromDate, to: toDate }}
+            onChange={handlePeriodRangeChange}
+            label="Period:"
+            stackCustomDates
+          />
         </div>
         <div className="busy-top-row">
           <h1 className="busy-top-title">BUSY</h1>
@@ -534,16 +539,6 @@ export default function BusyAccountingPage() {
               </button>
             </div>
           </div>
-          {(labourLoading || (result && (result.unmatchedParts.length > 0 || result.summary.excluded > 0))) && (
-            <div className="sub busy-preview-summary">
-              {labourLoading
-                ? 'Loading Labour invoices…'
-                : [
-                    result!.unmatchedParts.length > 0 ? `${result!.unmatchedParts.length} unmatched Parts lines (not exported)` : null,
-                    result!.summary.excluded > 0 ? `${result!.summary.excluded} excluded by business rule` : null,
-                  ].filter(Boolean).join(' · ')}
-            </div>
-          )}
         </div>
         <div className="card__body dense">
           {voucherSourceWarning && (
