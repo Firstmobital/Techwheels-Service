@@ -424,92 +424,82 @@ export default function BusyAccountingPage() {
 
   return (
     <div className="page busy-page">
-      <div className="pagehead">
-        <h1>BUSY</h1>
-        <div className="toolbar toolbar--tight busy-pagehead-period">
+      <div className="busy-top">
+        <div className="busy-top-period">
           <DateRangeFilter range={{ from: fromDate, to: toDate }} onChange={handlePeriodRangeChange} label="Period:" />
         </div>
+        <div className="busy-top-row">
+          <h1 className="busy-top-title">BUSY</h1>
+          <LabourSourceCompact status={labourStatus} />
+          <PartsUploadCompact
+            title="Parts – PV"
+            slot={pvParts}
+            inputRef={pvInputRef}
+            onPick={() => pvInputRef.current?.click()}
+            onFile={(file) => void handlePartsFile(file, 'PV')}
+          />
+          <PartsUploadCompact
+            title="Parts – EV"
+            slot={evParts}
+            inputRef={evInputRef}
+            onPick={() => evInputRef.current?.click()}
+            onFile={(file) => void handlePartsFile(file, 'EV')}
+          />
+        </div>
       </div>
 
-      {rangeIssue && (
-        <div className="toast error busy-inline-alert">
-          <Icon name="alert" size={14} />
-          {rangeIssue}
-        </div>
-      )}
-
-      <div className="busy-sources">
-        <div className="card busy-source-card">
-          <div className="card__head">
-            <h3>Labour source</h3>
-          </div>
-          <div className="card__body">
-            <LabourPill label="PV Labour" available={labourStatus?.pvAvailable ?? false} count={labourStatus?.pvCount ?? 0} latest={labourStatus?.latestPvDate} />
-            <LabourPill label="EV Labour" available={labourStatus?.evAvailable ?? false} count={labourStatus?.evCount ?? 0} latest={labourStatus?.latestEvDate} />
-            {labourStatus?.error && <div className="toast error" style={{ marginTop: 6 }}>{labourStatus.error}</div>}
-          </div>
-        </div>
-
-        <PartsUploadCard
-          title="Parts - PV"
-          slot={pvParts}
-          inputRef={pvInputRef}
-          onPick={() => pvInputRef.current?.click()}
-          onFile={(file) => void handlePartsFile(file, 'PV')}
-        />
-        <PartsUploadCard
-          title="Parts - EV"
-          slot={evParts}
-          inputRef={evInputRef}
-          onPick={() => evInputRef.current?.click()}
-          onFile={(file) => void handlePartsFile(file, 'EV')}
-        />
-      </div>
-
-      {processError && (
-        <div className="toast error busy-inline-alert">
-          <Icon name="alert" size={14} />
-          {processError}
-        </div>
-      )}
-      {partsStatus?.error && (
-        <div className="toast error busy-inline-alert">
-          <Icon name="alert" size={14} />
-          Parts source status: {partsStatus.error}
-        </div>
-      )}
-      {partsLinesLoadError && (
-        <div className="toast error busy-inline-alert">
-          <Icon name="alert" size={14} />
-          Parts lines: {partsLinesLoadError}
-        </div>
-      )}
-
-      {partsAccountLoadError && !isAdmin && (
-        <div className="toast error busy-inline-alert">
-          <Icon name="alert" size={14} />
-          Parts dealer accounts: {partsAccountLoadError}
+      {(rangeIssue || processError || partsStatus?.error || partsLinesLoadError || (partsAccountLoadError && !isAdmin)) && (
+        <div className="busy-alert-strip">
+          {rangeIssue && (
+            <div className="busy-alert-strip__item toast error">
+              <Icon name="alert" size={12} />
+              {rangeIssue}
+            </div>
+          )}
+          {processError && (
+            <div className="busy-alert-strip__item toast error">
+              <Icon name="alert" size={12} />
+              {processError}
+            </div>
+          )}
+          {partsStatus?.error && (
+            <div className="busy-alert-strip__item toast error">
+              <Icon name="alert" size={12} />
+              Parts source status: {partsStatus.error}
+            </div>
+          )}
+          {partsLinesLoadError && (
+            <div className="busy-alert-strip__item toast error">
+              <Icon name="alert" size={12} />
+              Parts lines: {partsLinesLoadError}
+            </div>
+          )}
+          {partsAccountLoadError && !isAdmin && (
+            <div className="busy-alert-strip__item toast error">
+              <Icon name="alert" size={12} />
+              Parts dealer accounts: {partsAccountLoadError}
+            </div>
+          )}
         </div>
       )}
 
       {isAdmin && (
-        <BusyInsuranceMasterCard
-          rows={insuranceStored}
-          loading={insuranceLoading}
-          loadError={insuranceLoadError}
-          usingFallback={insuranceStored.length === 0}
-          fallbackCount={BUSY_INSURANCE_MASTER.length}
-          onReload={() => void reloadInsuranceMaster()}
-        />
-      )}
-
-      {isAdmin && (
-        <BusyPartsAccountMasterCard
-          rows={partsAccountStored}
-          loading={partsAccountLoading}
-          loadError={partsAccountLoadError}
-          onReload={() => void reloadPartsAccountMaster()}
-        />
+        <div className="busy-acc-row">
+          <BusyInsuranceMasterCard
+            rows={insuranceStored}
+            loading={insuranceLoading}
+            loadError={insuranceLoadError}
+            usingFallback={insuranceStored.length === 0}
+            fallbackCount={BUSY_INSURANCE_MASTER.length}
+            onReload={() => void reloadInsuranceMaster()}
+          />
+          <BusyPartsAccountMasterCard
+            rows={partsAccountStored}
+            loading={partsAccountLoading}
+            loadError={partsAccountLoadError}
+            onReload={() => void reloadPartsAccountMaster()}
+          />
+        </div>
       )}
 
       <div className="busy-kpis">
@@ -528,9 +518,9 @@ export default function BusyAccountingPage() {
       <div className="card busy-workspace">
         <div className="card__head busy-preview-head">
           <div className="busy-preview-toolbar">
-            <h3>Invoice preview</h3>
+            <h3>Invoice Preview</h3>
             <div className="toolbar toolbar--tight busy-preview-toolbar__actions">
-              <select className="sel" value={previewFilter} onChange={(e) => setPreviewFilter(e.target.value as typeof previewFilter)}>
+              <select className="sel busy-preview-filter" value={previewFilter} onChange={(e) => setPreviewFilter(e.target.value as typeof previewFilter)}>
                 <option value="all">All</option>
                 <option value="ready">Ready / Warning</option>
                 <option value="blocked">Blocked</option>
@@ -557,8 +547,8 @@ export default function BusyAccountingPage() {
         </div>
         <div className="card__body dense">
           {voucherSourceWarning && (
-            <div className="alert alert--err" style={{ marginBottom: 12 }}>
-              <Icon name="alert" size={14} />
+            <div className="alert alert--err busy-workspace-alert">
+              <Icon name="alert" size={12} />
               {voucherSourceWarning}
             </div>
           )}
@@ -639,24 +629,49 @@ function SummaryChip({ label, value, color, bg }: { label: string; value: string
   )
 }
 
-function LabourPill({ label, available, count, latest }: { label: string; available: boolean; count: number; latest: string | null | undefined }) {
+function LabourSourceCompact({ status }: { status: BusyLabourSourceStatus | null }) {
   return (
-    <div className="busy-labour-row">
-      <div>
-        <div className="busy-labour-row__label">{label}</div>
-        <div className="busy-labour-row__sub">{latest ? `Latest invoice ${latest}` : 'No invoice date yet'}</div>
+    <div className="busy-top-cell busy-labour-compact">
+      <div className="busy-top-cell__label">Labour source</div>
+      <div className="busy-labour-compact__lines">
+        <LabourSourceLine label="PV" available={status?.pvAvailable ?? false} count={status?.pvCount ?? 0} latest={status?.latestPvDate} />
+        <LabourSourceLine label="EV" available={status?.evAvailable ?? false} count={status?.evCount ?? 0} latest={status?.latestEvDate} />
       </div>
-      <div>
-        <div className={`busy-labour-row__status ${available ? 'is-ok' : 'is-warn'}`}>
-          {available ? 'Available' : 'Not loaded'}
+      {status?.error && (
+        <div className="busy-top-cell__err" title={status.error}>
+          {status.error}
         </div>
-        <div className="busy-labour-row__count">{count.toLocaleString('en-IN')} rows</div>
-      </div>
+      )}
     </div>
   )
 }
 
-function PartsUploadCard({
+function LabourSourceLine({
+  label,
+  available,
+  count,
+  latest,
+}: {
+  label: string
+  available: boolean
+  count: number
+  latest: string | null | undefined
+}) {
+  return (
+    <div className="busy-labour-line">
+      <span className="busy-labour-line__tag">{label}</span>
+      <span className={`busy-labour-line__state ${available ? 'is-ok' : 'is-warn'}`}>
+        {available ? 'Available' : 'Not loaded'}
+      </span>
+      <span className="busy-labour-line__count">{count.toLocaleString('en-IN')} rows</span>
+      <span className="busy-labour-line__latest" title={latest ? `Latest invoice ${latest}` : 'No invoice date yet'}>
+        {latest ? `Latest ${latest}` : 'No date'}
+      </span>
+    </div>
+  )
+}
+
+function PartsUploadCompact({
   title,
   slot,
   inputRef,
@@ -669,49 +684,54 @@ function PartsUploadCard({
   onPick: () => void
   onFile: (file: File) => void
 }) {
-  const dropHint = slot.saving
-    ? 'Saving Parts lines…'
+  const fileLabel = slot.fileName ?? 'Browse file…'
+  const lineHint = slot.saving
+    ? 'Saving…'
     : slot.fileName
-      ? `${slot.rowCount.toLocaleString('en-IN')} lines${slot.persisted ? ' persisted' : ''}`
-      : 'Drop or browse · append-only upload'
+      ? `${slot.rowCount.toLocaleString('en-IN')} lines${slot.persisted ? ' · persisted' : ''}`
+      : 'Append-only CSV / Excel'
+  const uploadMeta = slot.uploadedAt && (slot.persisted || slot.fileName)
+    ? `Uploaded ${new Date(slot.uploadedAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}`
+    : null
+  const statusHint = slot.summary ?? slot.error
 
   return (
-    <div className="card busy-source-card">
-      <div className="card__head">
-        <h3>{title}</h3>
+    <div className="busy-top-cell busy-parts-compact">
+      <div className="busy-top-cell__label">{title}</div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv,.txt"
+        className="hidden"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onFile(file)
+          e.currentTarget.value = ''
+        }}
+      />
+      <button
+        type="button"
+        className="busy-parts-compact__btn"
+        onClick={onPick}
+        disabled={slot.saving}
+        title={slot.fileName ?? 'Choose CSV or Excel file'}
+      >
+        <Icon name="upload" size={14} />
+        <span className="busy-parts-compact__name">{fileLabel}</span>
+      </button>
+      <div className="busy-parts-compact__meta">
+        <span>{lineHint}</span>
+        {uploadMeta && <span className="busy-parts-compact__time">{uploadMeta}</span>}
       </div>
-      <div className="card__body">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv,.txt"
-          className="hidden"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) onFile(file)
-            e.currentTarget.value = ''
-          }}
-        />
-        <div className="imp-drop" onClick={onPick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() } }}>
-          <Icon name="upload" size={16} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {slot.fileName ?? 'Choose CSV / Excel'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>{dropHint}</div>
-          </div>
+      {statusHint && (
+        <div
+          className={`busy-parts-compact__status ${slot.error ? 'is-err' : 'is-ok'}`}
+          title={statusHint}
+        >
+          {statusHint}
         </div>
-        <div className="busy-parts-meta">
-          {slot.uploadedAt && (slot.persisted || slot.fileName) && (
-            <div>Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}</div>
-          )}
-          {slot.error && <div className="toast error">{slot.error}</div>}
-          {slot.summary && (
-            <div className="toast" style={{ whiteSpace: 'pre-line' }}>{slot.summary}</div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
