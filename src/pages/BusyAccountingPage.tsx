@@ -526,34 +526,34 @@ export default function BusyAccountingPage() {
       </div>
 
       <div className="card busy-workspace">
-        <div className="card__head">
-          <div>
+        <div className="card__head busy-preview-head">
+          <div className="busy-preview-toolbar">
             <h3>Invoice preview</h3>
-            {(labourLoading || (result && (result.unmatchedParts.length > 0 || result.summary.excluded > 0))) && (
-              <div className="sub">
-                {labourLoading
-                  ? 'Loading Labour invoices…'
-                  : [
-                      result!.unmatchedParts.length > 0 ? `${result!.unmatchedParts.length} unmatched Parts lines (not exported)` : null,
-                      result!.summary.excluded > 0 ? `${result!.summary.excluded} excluded by business rule` : null,
-                    ].filter(Boolean).join(' · ')}
-              </div>
-            )}
+            <div className="toolbar toolbar--tight busy-preview-toolbar__actions">
+              <select className="sel" value={previewFilter} onChange={(e) => setPreviewFilter(e.target.value as typeof previewFilter)}>
+                <option value="all">All</option>
+                <option value="ready">Ready / Warning</option>
+                <option value="blocked">Blocked</option>
+                <option value="excluded">Excluded</option>
+              </select>
+              <button type="button" className="btn btn--ghost btn--sm" disabled={!canExportParties} onClick={exportParties}>
+                Export Party Accounts
+              </button>
+              <button type="button" className="btn btn--primary btn--sm" disabled={!canExportInvoices} onClick={exportInvoices}>
+                Export Invoice Vouchers
+              </button>
+            </div>
           </div>
-          <div className="toolbar toolbar--tight">
-            <select className="sel" value={previewFilter} onChange={(e) => setPreviewFilter(e.target.value as typeof previewFilter)}>
-              <option value="all">All</option>
-              <option value="ready">Ready / Warning</option>
-              <option value="blocked">Blocked</option>
-              <option value="excluded">Excluded</option>
-            </select>
-            <button type="button" className="btn btn--ghost btn--sm" disabled={!canExportParties} onClick={exportParties}>
-              Export Party Accounts
-            </button>
-            <button type="button" className="btn btn--primary btn--sm" disabled={!canExportInvoices} onClick={exportInvoices}>
-              Export Invoice Vouchers
-            </button>
-          </div>
+          {(labourLoading || (result && (result.unmatchedParts.length > 0 || result.summary.excluded > 0))) && (
+            <div className="sub busy-preview-summary">
+              {labourLoading
+                ? 'Loading Labour invoices…'
+                : [
+                    result!.unmatchedParts.length > 0 ? `${result!.unmatchedParts.length} unmatched Parts lines (not exported)` : null,
+                    result!.summary.excluded > 0 ? `${result!.summary.excluded} excluded by business rule` : null,
+                  ].filter(Boolean).join(' · ')}
+            </div>
+          )}
         </div>
         <div className="card__body dense">
           {voucherSourceWarning && (
@@ -568,8 +568,9 @@ export default function BusyAccountingPage() {
           {filteredPreview.length === 0 && !labourLoading ? (
             <div className="empty-state">No invoices in this view.</div>
           ) : (
-            <div className="busy-table-scroll">
-              <table className="tbl">
+            <div className="busy-preview-table-panel">
+              <div className="busy-table-scroll">
+                <table className="tbl">
                 <thead>
                   <tr>
                     <th>Status</th>
@@ -619,7 +620,8 @@ export default function BusyAccountingPage() {
                     )
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </div>

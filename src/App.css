@@ -1259,12 +1259,47 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   padding: 10px 14px;
   flex: none;
 }
+.busy-page .busy-workspace .card__head.busy-preview-head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.busy-page .busy-workspace .card__head.busy-preview-head > .busy-preview-toolbar {
+  flex: none;
+}
+.busy-page .busy-workspace .card__head.busy-preview-head > .busy-preview-summary {
+  flex: none;
+}
+.busy-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+.busy-preview-toolbar h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+.busy-preview-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 auto;
+  margin-left: auto;
+}
 .busy-page .busy-workspace .card__head h3 {
   font-size: 14px;
 }
-.busy-page .busy-workspace .card__head .sub {
+.busy-page .busy-workspace .card__head .sub,
+.busy-preview-summary {
   font-size: 12px;
-  margin-top: 1px;
+  margin-top: 0;
 }
 .busy-page .busy-workspace .card__body {
   flex: 1 1 auto;
@@ -1272,6 +1307,19 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   display: flex;
   flex-direction: column;
   padding: 0 12px 12px;
+  overflow: hidden;
+}
+.busy-page .busy-workspace .busy-preview-table-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.busy-page .busy-workspace .busy-preview-table-panel .busy-table-scroll {
+  flex: 1 1 auto;
+  height: 0;
+  min-height: min(500px, 100%);
 }
 .busy-table-scroll {
   flex: 1 1 auto;
@@ -1321,7 +1369,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .busy-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .busy-table-scroll {
+  .busy-page .busy-workspace .busy-preview-table-panel .busy-table-scroll {
     min-height: 280px;
     max-height: 70vh;
   }
