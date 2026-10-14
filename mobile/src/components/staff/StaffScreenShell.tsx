@@ -63,7 +63,7 @@ export function StaffNavigationChrome({
   leadingExtra,
   compact,
 }: Omit<StaffShellHeaderProps, 'onOpenMenu'> & { compact?: boolean }) {
-  const { showMenu, openMenu, closeMenu, allowedModules, displayName } = useStaffNavigationMenu()
+  const { showMenu, openMenu, closeMenu, allowedModules, linkedEmployee, displayName } = useStaffNavigationMenu()
 
   return (
     <>
@@ -71,6 +71,7 @@ export function StaffNavigationChrome({
         visible={showMenu}
         onClose={closeMenu}
         allowedModules={allowedModules}
+        linkedEmployee={linkedEmployee}
         userDisplayName={displayName}
       />
       <StaffShellHeader
@@ -87,7 +88,7 @@ export function StaffNavigationChrome({
 
 /** Compact ☰ + drawer for detail screens that already have their own back row. */
 export function StaffInlineMenuButton() {
-  const { showMenu, openMenu, closeMenu, allowedModules, displayName } = useStaffNavigationMenu()
+  const { showMenu, openMenu, closeMenu, allowedModules, linkedEmployee, displayName } = useStaffNavigationMenu()
 
   return (
     <>
@@ -95,6 +96,7 @@ export function StaffInlineMenuButton() {
         visible={showMenu}
         onClose={closeMenu}
         allowedModules={allowedModules}
+        linkedEmployee={linkedEmployee}
         userDisplayName={displayName}
       />
       <TouchableOpacity

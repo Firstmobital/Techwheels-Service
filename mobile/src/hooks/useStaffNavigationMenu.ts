@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BackHandler } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { useStaffAllowedModules } from './useStaffAllowedModules'
+import { useStaffLinkedEmployeeProfile } from './useStaffLinkedEmployeeProfile'
 
 export function useStaffDisplayName() {
   const { user } = useAuth()
@@ -20,6 +21,7 @@ export function useStaffDisplayName() {
 export function useStaffNavigationMenu() {
   const { user } = useAuth()
   const allowedModules = useStaffAllowedModules(user)
+  const linkedEmployee = useStaffLinkedEmployeeProfile(user)
   const displayName = useStaffDisplayName()
   const [showMenu, setShowMenu] = useState(false)
 
@@ -40,6 +42,7 @@ export function useStaffNavigationMenu() {
     openMenu: () => setShowMenu(true),
     closeMenu: () => setShowMenu(false),
     allowedModules,
+    linkedEmployee,
     displayName,
   }
 }

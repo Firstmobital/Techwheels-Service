@@ -58,7 +58,7 @@ function formatRelativeUpdateTime(isoDate: string | null): string {
 
 export default function PlatformHomeScreen() {
   const router = useRouter()
-  const { showMenu, openMenu, closeMenu, allowedModules, displayName } = useStaffNavigationMenu()
+  const { showMenu, openMenu, closeMenu, allowedModules, linkedEmployee, displayName } = useStaffNavigationMenu()
   const [metrics, setMetrics] = useState<HomeDashboardMetrics>(DEFAULT_METRICS)
   const [floorWorkerHome, setFloorWorkerHome] = useState<BodyshopFloorWorkerHomeMetrics | null>(null)
   const [showFloorWorkerHome, setShowFloorWorkerHome] = useState(false)
@@ -135,11 +135,11 @@ export default function PlatformHomeScreen() {
       settings: '',
     }
 
-    return filterStaffHomeModules(allowedModules).map((module) => ({
+    return filterStaffHomeModules(allowedModules, linkedEmployee).map((module) => ({
       ...module,
       status: statusByKey[module.key] ?? '',
     }))
-  }, [metrics.activeUsers, metrics.importDatasets, metrics.latestImportUpdatedAt, metrics.openJobCards, allowedModules])
+  }, [metrics.activeUsers, metrics.importDatasets, metrics.latestImportUpdatedAt, metrics.openJobCards, allowedModules, linkedEmployee])
 
   const openModule = (tile: StaffHomeModule) => {
     if (!tile.route) {
@@ -154,6 +154,7 @@ export default function PlatformHomeScreen() {
         visible={showMenu}
         onClose={closeMenu}
         allowedModules={allowedModules}
+        linkedEmployee={linkedEmployee}
         userDisplayName={displayName}
       />
 

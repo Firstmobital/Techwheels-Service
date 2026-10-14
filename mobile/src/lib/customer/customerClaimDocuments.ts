@@ -133,6 +133,14 @@ export const CUSTOMER_CLAIM_DOCUMENTS: CustomerClaimDocumentDef[] = [
     mandatoryFor: [],
     hint: '📄 Optional: Upload as a PDF file.',
   },
+  {
+    docKey: 'doc_towing_bill',
+    title: 'Towing Bill (PDF)',
+    subtitle: 'Optional — individual & firm',
+    required: false,
+    mandatoryFor: [],
+    hint: '📄 Optional: Upload towing invoice or bill as PDF.',
+  },
 ]
 
 export function documentAppliesToCustomerType(

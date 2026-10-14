@@ -9,20 +9,22 @@ import {
   type StaffDrawerExtraRoute,
   type StaffModuleRoute,
 } from '../../lib/staffHomeModules'
+import type { StaffLinkedEmployeeProfile } from '../../lib/staffMechanicalFloorInchargeAccess'
 
 type Props = {
   visible: boolean
   onClose: () => void
   allowedModules: Set<string>
+  linkedEmployee?: StaffLinkedEmployeeProfile | null
   userDisplayName?: string
 }
 
-export function StaffDrawerMenu({ visible, onClose, allowedModules, userDisplayName }: Props) {
+export function StaffDrawerMenu({ visible, onClose, allowedModules, linkedEmployee, userDisplayName }: Props) {
   const router = useRouter()
 
   if (!visible) return null
 
-  const modules = filterStaffHomeModules(allowedModules)
+  const modules = filterStaffHomeModules(allowedModules, linkedEmployee)
 
   const navigate = (route: StaffModuleRoute | StaffDrawerExtraRoute) => {
     onClose()

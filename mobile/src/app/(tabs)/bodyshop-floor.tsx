@@ -10,19 +10,27 @@ import {
   RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StaffNavigationChrome, StaffInlineMenuButton } from '../../components/staff/StaffScreenShell'
 import { StaffRefreshButton } from '../../components/staff/StaffRefreshButton'
 import { OptimisticActionErrorBar } from '../../components/OptimisticActionErrorBar'
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { supabase } from '../../lib/supabase'
-import { type BodyshopRepairCardListRow } from '../../lib/api/bodyshopFloorList'
 import {
-  fetchActiveTableRowsLegacyFull,
-  fetchBodyshopRepairCardsLegacyFull,
-} from '../../lib/staff/staffListLoadLegacy'
+  fetchBodyshopAssignmentsForJobCards,
+  fetchBodyshopSupportAssignmentsForJobCards,
+  type BodyshopRepairCardListRow,
+} from '../../lib/api/bodyshopFloorList'
+import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
+import { StaffRenderErrorBoundary } from '../../components/staff/StaffRenderErrorBoundary'
+import {
+  BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE,
+  BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
+  BODYSHOP_FLOOR_MOBILE_MAX_RECEPTION_ENRICH,
+  BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
+  BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_LIVE,
+} from '../../lib/bodyshopFloorMobileLimits'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
   BODYSHOP_FLOOR_LIVE_LIST_LABEL,
@@ -50,6 +58,7 @@ import {
   canEditBodyshopFloorAssignments,
   carMatchesBodyshopFloorInchargeScope,
   loadBodyshopFloorInchargeScope,
+  shouldRestrictBodyshopFloorList,
   normalizeBodyshopPhysicalFloor,
   BODYSHOP_PHYSICAL_FLOORS,
   type BodyshopFloorInchargeScope,
@@ -547,10 +556,14 @@ function labelForRiDoneBy(raw: string | null | undefined): string {
   return match?.label ?? (value || '—')
 }
 
-async function buildFloorCarsFromRaw(rawCards: BodyshopRepairCardListRow[]): Promise<FloorCar[]> {
-  const entryIds = Array.from(new Set(
+async function buildFloorCarsFromRaw(
+  rawCards: BodyshopRepairCardListRow[],
+  maxReceptionEnrich = 500,
+): Promise<FloorCar[]> {
+  const entryIdsAll = Array.from(new Set(
     rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null && v > 0),
   ))
+  const entryIds = entryIdsAll.slice(0, Math.max(0, maxReceptionEnrich))
   type ReceptionRow = {
     id: number
     model: string | null
@@ -631,7 +644,51 @@ function qcRiStateFromCars(carList: FloorCar[]): { qc: Record<string, QcState>; 
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function BodyshopFloorScreen() {
+function applyAssignmentRowsToState(
+  assRows: DBAssignmentRow[],
+  supRows: SupportAssignment[],
+  setters: {
+    setAssignments: (v: Record<string, Record<BSRole, BSAssignment | undefined>>) => void
+    setAssignmentRawByJc: (v: Record<string, DBAssignmentRow>) => void
+    setBsFloorStatus: (v: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }>) => void
+    setStageDrafts: (v: Record<string, Record<BSRole, { work_status: string; remark: string }>>) => void
+    setSupportAssignments: (v: Record<string, Record<SupportRole, SupportAssignment[]>>) => void
+  },
+) {
+  const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
+  const rawByJc: Record<string, DBAssignmentRow> = {}
+  const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
+  const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
+  for (const row of assRows) {
+    mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
+  }
+  for (const k of Object.keys(assMap)) {
+    drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
+    for (const role of ALL_ROLES) {
+      const a = assMap[k][role]
+      drafts[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
+    }
+  }
+  setters.setAssignments(assMap)
+  setters.setAssignmentRawByJc(rawByJc)
+  setters.setBsFloorStatus(floorMap)
+  setters.setStageDrafts(drafts)
+
+  const supMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
+  for (const s of supRows) {
+    const k = jcKey(s.job_card_number)
+    const role = s.support_role as SupportRole
+    if (!supMap[k]) {
+      supMap[k] = { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
+    }
+    const bucket = supMap[k][role]
+    if (!bucket) continue
+    bucket.push(s)
+  }
+  setters.setSupportAssignments(supMap)
+}
+
+function BodyshopFloorScreenInner() {
   const [loading,    setLoading]    = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [toast,      setToast]      = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -653,8 +710,8 @@ export default function BodyshopFloorScreen() {
   const [branchFilter,   setBranchFilter]   = useState('all')
   const [floorFilter,    setFloorFilter]    = useState('all')
   const loadSeq = useRef(0)
-  const assignmentRefreshSeq = useRef(0)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [listTruncated, setListTruncated] = useState(false)
   const [searchDraft,    setSearchDraft]    = useState('')
   const [appliedSearch,  setAppliedSearch]  = useState('')
   // Detail
@@ -697,20 +754,37 @@ export default function BodyshopFloorScreen() {
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
     setLoadError(null)
+    setListTruncated(false)
     try {
       const scope = await loadBodyshopFloorInchargeScope()
       if (seq !== loadSeq.current) return
       setInchargeScope(scope)
       const liveOnFloor = vehicleListMode === 'live_on_floor'
+      const rpcFloor =
+        shouldRestrictBodyshopFloorList(scope) && scope.lockedBodyshopFloor
+          ? scope.lockedBodyshopFloor
+          : null
 
       // One full fetch — search / floor chips filter client-side (no re-query per keystroke).
+      const maxRows = liveOnFloor
+        ? BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE
+        : BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE
+      const maxPages = liveOnFloor
+        ? BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_LIVE
+        : BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL
       const mergedRows = await fetchBodyshopRepairCardsLegacyFull({
         searchQuery: null,
-        bodyshopFloor: null,
+        bodyshopFloor: rpcFloor,
         liveOnFloor,
+        maxPages,
+        maxRows,
       })
+      if (mergedRows.length >= maxRows) setListTruncated(true)
       if (seq !== loadSeq.current) return
-      const carList = await buildFloorCarsFromRaw(mergedRows)
+      const carList = await buildFloorCarsFromRaw(
+        mergedRows,
+        BODYSHOP_FLOOR_MOBILE_MAX_RECEPTION_ENRICH,
+      )
       if (seq !== loadSeq.current) return
       setCars(carList)
 
@@ -718,56 +792,34 @@ export default function BodyshopFloorScreen() {
       setQcByJc(qc)
       setRiByJc(ri)
 
-      const [assRowsRaw, supRowsRaw] = await Promise.all([
-        fetchActiveTableRowsLegacyFull('bodyshop_assignments'),
-        fetchActiveTableRowsLegacyFull('bodyshop_floor_support_assignments'),
+      // Show vehicle list before heavy assignment / employee fetches (avoids white-screen OOM).
+      if (!isRefresh) setLoading(false)
+
+      const jcNumbers = carList.map((c) => c.job_card_no).filter(Boolean)
+      const [assRowsRaw, supRowsRaw, empRes] = await Promise.all([
+        fetchBodyshopAssignmentsForJobCards<DBAssignmentRow>(jcNumbers),
+        fetchBodyshopSupportAssignmentsForJobCards<SupportAssignment>(jcNumbers),
+        supabase
+          .from('employee_master')
+          .select('employee_code, employee_name, department, role, fuel_type, location')
+          .eq('is_active', true)
+          .or('department.ilike.%body%,role.ilike.%floor%incharge%')
+          .order('employee_name')
+          .limit(400),
       ])
-      const assRows = assRowsRaw as unknown as DBAssignmentRow[]
-      const supRows = supRowsRaw as unknown as SupportAssignment[]
-
-      const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
-      const rawByJc: Record<string, DBAssignmentRow> = {}
-      const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
-      const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
-      for (const row of assRows) {
-        mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
-      }
-      for (const k of Object.keys(assMap)) {
-        drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
-        for (const role of ALL_ROLES) {
-          const a = assMap[k][role]
-          drafts[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
-        }
-      }
-      setAssignments(assMap)
-      setAssignmentRawByJc(rawByJc)
-      setBsFloorStatus(floorMap)
-      setStageDrafts(drafts)
-
-      const supMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
-      for (const s of supRows) {
-        const k = jcKey(s.job_card_number)
-        const role = s.support_role
-        if (!supMap[k]) {
-          supMap[k] = { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
-        }
-        supMap[k][role].push(s)
-      }
-      setSupportAssignments(supMap)
-
-      // 2. Employees
-      const { data: empData } = await supabase
-        .from('employee_master')
-        .select('employee_code, employee_name, department, role, fuel_type, location')
-        .eq('is_active', true)
-        .or('department.ilike.%body%,role.ilike.%floor%incharge%')
-        .order('employee_name')
-        .limit(1000)
-      setEmployees((empData ?? []) as Employee[])
+      if (seq !== loadSeq.current) return
+      applyAssignmentRowsToState(assRowsRaw, supRowsRaw, {
+        setAssignments,
+        setAssignmentRawByJc,
+        setBsFloorStatus,
+        setStageDrafts,
+        setSupportAssignments,
+      })
+      setEmployees((empRes.data ?? []) as Employee[])
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load'
       setLoadError(msg)
-      showToast(msg, 'error')
+      setToast({ msg, type: 'error' })
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -778,57 +830,6 @@ export default function BodyshopFloorScreen() {
     void loadAll()
   }, [loadAll])
 
-  /** Sync dentor/painter Done from Floor Work when returning to this tab (no full repair-card reload). */
-  const reloadAssignmentsOnly = useCallback(async () => {
-    if (loading) return
-    const seq = ++assignmentRefreshSeq.current
-    try {
-      const [assRowsRaw, supRowsRaw] = await Promise.all([
-        fetchActiveTableRowsLegacyFull('bodyshop_assignments'),
-        fetchActiveTableRowsLegacyFull('bodyshop_floor_support_assignments'),
-      ])
-      if (seq !== assignmentRefreshSeq.current) return
-      const assRows = assRowsRaw as unknown as DBAssignmentRow[]
-      const supRows = supRowsRaw as unknown as SupportAssignment[]
-
-      const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
-      const rawByJc: Record<string, DBAssignmentRow> = {}
-      const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
-      const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
-      for (const row of assRows) {
-        mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, row)
-      }
-      for (const k of Object.keys(assMap)) {
-        drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
-        for (const role of ALL_ROLES) {
-          const a = assMap[k][role]
-          drafts[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
-        }
-      }
-      setAssignments(assMap)
-      setAssignmentRawByJc(rawByJc)
-      setBsFloorStatus(floorMap)
-      setStageDrafts(drafts)
-
-      const supMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
-      for (const s of supRows) {
-        const sk = jcKey(s.job_card_number)
-        const role = s.support_role
-        if (!supMap[sk]) {
-          supMap[sk] = { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
-        }
-        supMap[sk][role].push(s)
-      }
-      setSupportAssignments(supMap)
-    } catch {
-      /* keep cached list on background sync failure */
-    }
-  }, [loading])
-
-  useFocusEffect(useCallback(() => {
-    void reloadAssignmentsOnly()
-  }, [reloadAssignmentsOnly]))
-
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
@@ -838,6 +839,7 @@ export default function BodyshopFloorScreen() {
       if (roles.length === 0) return
       for (const r of roles) {
         if (!isBodyshopDepartment(e.department)) continue
+        if (!m[r]) continue
         m[r].push(e)
       }
     })
@@ -2490,6 +2492,14 @@ export default function BodyshopFloorScreen() {
 
       <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
 
+      {listTruncated ? (
+        <View style={{ marginHorizontal: 12, marginBottom: 6, padding: 10, backgroundColor: '#fff8e6', borderRadius: 8, borderWidth: 1, borderColor: '#e8d48a' }}>
+          <Text style={{ fontSize: 12, color: '#6b5a1a', fontWeight: '600' }}>
+            Showing the newest {vehicleListMode === 'live_on_floor' ? BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE : BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE} vehicles. Use Search or Live floor to narrow the list.
+          </Text>
+        </View>
+      ) : null}
+
       <StaffNavigationChrome
         title="Bodyshop Floor"
         subtitle={`${primaryCounts.all} cards${assignmentView !== 'all' ? ` · ${filtered.length} shown` : ''}`}
@@ -2640,6 +2650,10 @@ export default function BodyshopFloorScreen() {
         style={S.listFlex}
         data={filtered}
         keyExtractor={item => String(item.id)}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={8}
+        initialNumToRender={14}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} />}
         contentContainerStyle={{ padding: 14, paddingBottom: 80, gap: 10 }}
         ListEmptyComponent={
@@ -2698,6 +2712,18 @@ export default function BodyshopFloorScreen() {
         }}
       />
     </SafeAreaView>
+  )
+}
+
+export default function BodyshopFloorScreen() {
+  const [remountKey, setRemountKey] = useState(0)
+  return (
+    <StaffRenderErrorBoundary
+      screenName="Bodyshop Floor"
+      onRetry={() => setRemountKey((k) => k + 1)}
+    >
+      <BodyshopFloorScreenInner key={remountKey} />
+    </StaffRenderErrorBoundary>
   )
 }
 

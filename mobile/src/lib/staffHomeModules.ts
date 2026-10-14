@@ -1,4 +1,8 @@
 import type { IconName } from '../components/ui/Icon'
+import {
+  shouldUseMechanicalFloorInchargeScreen,
+  type StaffLinkedEmployeeProfile,
+} from './staffMechanicalFloorInchargeAccess'
 
 export type StaffModuleRoute =
   | '/(tabs)/home'
@@ -76,10 +80,16 @@ export const STAFF_MODULE_KEY_TO_DB: Record<string, string[]> = {
   driver_tasks: ['driver_tasks', 'driver_management', 'driver'],
 }
 
-export function filterStaffHomeModules(allowedModules: Set<string>): StaffHomeModule[] {
+export function filterStaffHomeModules(
+  allowedModules: Set<string>,
+  linkedEmployee?: StaffLinkedEmployeeProfile | null,
+): StaffHomeModule[] {
   if (allowedModules.size === 0) return []
   if (allowedModules.has('admin')) return [...STAFF_HOME_MODULES]
   return STAFF_HOME_MODULES.filter((module) => {
+    if (module.key === 'floor-incharge' && linkedEmployee) {
+      if (!shouldUseMechanicalFloorInchargeScreen(linkedEmployee)) return false
+    }
     const dbNames = STAFF_MODULE_KEY_TO_DB[module.key]
     return dbNames ? dbNames.some((name) => allowedModules.has(name)) : false
   })

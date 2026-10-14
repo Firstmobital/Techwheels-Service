@@ -10,7 +10,7 @@ import {
   RefreshControl, ScrollView, Text, TextInput,
   TouchableOpacity, View, KeyboardAvoidingView,
   Dimensions} from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StaffNavigationChrome } from '../../components/staff/StaffScreenShell'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
@@ -19,6 +19,13 @@ import { OptimisticActionErrorBar } from '../../components/OptimisticActionError
 import { useOptimisticAction } from '../../hooks/useOptimisticAction'
 import { useListSearch } from '../../hooks/useListSearch'
 import { supabase } from '../../lib/supabase'
+import { humanizeFloorInchargeLoadError } from '../../lib/staffAuthErrors'
+import { useAuth } from '../../context/AuthContext'
+import { useStaffLinkedEmployeeProfile } from '../../hooks/useStaffLinkedEmployeeProfile'
+import {
+  mechanicalFloorInchargeMisrouteMessage,
+  shouldUseMechanicalFloorInchargeScreen,
+} from '../../lib/staffMechanicalFloorInchargeAccess'
 import {
   isTechnicianBusinessRole,
   parseEmployeeSupportRoles,
@@ -34,7 +41,9 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
 
 const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'
 const NOT_REQUIRED_TECHNICIAN_NAME = 'Not Required'
-const QUERY_PAGE_SIZE = 1000
+const JOB_CARD_BATCH_SIZE = 100
+/** Cap reception RPC pages (60-day lookback) — avoids runaway mobile loads. */
+const MAX_RECEPTION_RPC_PAGES = 50
 
 const STATUS_OPTIONS = [
   { value: 'work_inprocess', label: 'Work Inprocess' },
@@ -345,7 +354,7 @@ async function fetchFloorInchargeEntries(searchQuery?: string | null): Promise<{
   let rpcError: string | null = null
   const batchRows: ReceptionBatchRow[] = []
 
-  while (true) {
+  for (let page = 0; page < MAX_RECEPTION_RPC_PAGES; page += 1) {
     const { data, error } = await supabase.rpc('list_reception_entries_page', {
       p_created_at_from: lookback.from,
       p_created_at_to: lookback.to,
@@ -376,47 +385,38 @@ async function fetchFloorInchargeEntries(searchQuery?: string | null): Promise<{
   return { rows: mapReceptionBatchToJobCards(batchRows), rpcError }
 }
 
-async function loadRecentTechnicianAssignments(): Promise<TechnicianAssignment[]> {
+/** Same as web: only assignments for reception job cards (never full-table scan). */
+async function loadTechnicianAssignmentsForJobCards(jobCardNumbers: string[]): Promise<TechnicianAssignment[]> {
+  const keys = Array.from(new Set(jobCardNumbers.map((j) => normalizeJobCardNumber(j)).filter(Boolean)))
+  if (keys.length === 0) return []
   const rows: TechnicianAssignment[] = []
-  let cursorId: number | null = null
-  while (true) {
-    let query = supabase
+  for (let offset = 0; offset < keys.length; offset += JOB_CARD_BATCH_SIZE) {
+    const batch = keys.slice(offset, offset + JOB_CARD_BATCH_SIZE)
+    const { data, error } = await supabase
       .from('technician_assignments')
       .select('*')
+      .in('job_card_number', batch)
       .order('id', { ascending: false })
-      .limit(QUERY_PAGE_SIZE)
-    if (cursorId !== null) query = query.lt('id', cursorId)
-    const { data, error } = await query
-    if (error) break
-    const batch = (data ?? []) as TechnicianAssignment[]
-    rows.push(...batch)
-    if (batch.length < QUERY_PAGE_SIZE) break
-    const lastId = Number(batch[batch.length - 1]?.id)
-    if (!Number.isFinite(lastId) || lastId <= 0) break
-    cursorId = lastId
+    if (error) throw new Error(error.message)
+    rows.push(...((data ?? []) as TechnicianAssignment[]))
   }
   return rows
 }
 
-async function loadRecentSupportAssignments(): Promise<SupportAssignment[]> {
+async function loadSupportAssignmentsForJobCards(jobCardNumbers: string[]): Promise<SupportAssignment[]> {
+  const keys = Array.from(new Set(jobCardNumbers.map((j) => String(j ?? '').trim().toUpperCase()).filter(Boolean)))
+  if (keys.length === 0) return []
   const rows: SupportAssignment[] = []
-  let cursorId: number | null = null
-  while (true) {
-    let query = supabase
+  for (let offset = 0; offset < keys.length; offset += JOB_CARD_BATCH_SIZE) {
+    const batch = keys.slice(offset, offset + JOB_CARD_BATCH_SIZE)
+    const { data, error } = await supabase
       .from('job_card_support_assignments')
       .select('*')
       .eq('is_active', true)
+      .in('job_card_number', batch)
       .order('id', { ascending: false })
-      .limit(QUERY_PAGE_SIZE)
-    if (cursorId !== null) query = query.lt('id', cursorId)
-    const { data, error } = await query
-    if (error) break
-    const batch = (data ?? []) as SupportAssignment[]
-    rows.push(...batch)
-    if (batch.length < QUERY_PAGE_SIZE) break
-    const lastId = Number(batch[batch.length - 1]?.id)
-    if (!Number.isFinite(lastId) || lastId <= 0) break
-    cursorId = lastId
+    if (error) throw new Error(error.message)
+    rows.push(...((data ?? []) as SupportAssignment[]))
   }
   return rows
 }
@@ -438,6 +438,40 @@ function mergeTechnicianAssignmentRows(assignmentRows: TechnicianAssignment[]): 
   return { assignMap, nextDrafts }
 }
 
+/** Status tab filter — applied last (same order as web FloorInchargePage). */
+function applyAssignmentViewFilter(
+  rows: JobCard[],
+  assignmentView: AssignmentView,
+  assignments: Record<string, TechnicianAssignment>,
+): JobCard[] {
+  if (assignmentView === 'all') return rows
+  if (assignmentView === 'assigned') {
+    return rows.filter((jc) => Boolean(assignments[jc.assignment_key]))
+  }
+  if (assignmentView === 'unassigned') {
+    return rows.filter((jc) => !assignments[jc.assignment_key])
+  }
+  if (assignmentView === 'hold') {
+    return rows.filter((jc) => {
+      const assignment = assignments[jc.assignment_key]
+      return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'
+    })
+  }
+  if (assignmentView === 'work_inprocess') {
+    return rows.filter((jc) => {
+      const assignment = assignments[jc.assignment_key]
+      return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'work_inprocess'
+    })
+  }
+  if (assignmentView === 'completed') {
+    return rows.filter((jc) => {
+      const assignment = assignments[jc.assignment_key]
+      return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
+    })
+  }
+  return rows
+}
+
 function mergeSupportAssignmentRows(supportRows: SupportAssignment[]): Record<string, SupportAssignment[]> {
   const suppMap: Record<string, SupportAssignment[]> = {}
   for (const sa of supportRows) {
@@ -454,6 +488,9 @@ function mergeSupportAssignmentRows(supportRows: SupportAssignment[]): Record<st
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function FloorInchargeScreen() {
+  const router = useRouter()
+  const { user } = useAuth()
+  const linkedEmployee = useStaffLinkedEmployeeProfile(user)
   const optimistic = useOptimisticAction()
   const [jobCards,           setJobCards]           = useState<JobCard[]>([])
   const [allEmployees,       setAllEmployees]       = useState<Employee[]>([])
@@ -492,6 +529,14 @@ export default function FloorInchargeScreen() {
   const [supportModalCode, setSupportModalCode] = useState('')
   const autoAssignedRevisitRef = useRef<Set<string>>(new Set())
   const loadSeqRef = useRef(0)
+  const misrouteRedirectRef = useRef(false)
+
+  useEffect(() => {
+    if (!linkedEmployee || misrouteRedirectRef.current) return
+    if (shouldUseMechanicalFloorInchargeScreen(linkedEmployee)) return
+    misrouteRedirectRef.current = true
+    router.replace('/(tabs)/bodyshop-floor')
+  }, [linkedEmployee, router])
 
   const enrichJobCardsWithSaFuel = useCallback(async (rawEntries: JobCard[]) => {
     const saCodes = [...new Set(rawEntries.map(r => normalizeEmployeeCode(r.sa_employee_code)).filter(Boolean))]
@@ -512,6 +557,12 @@ export default function FloorInchargeScreen() {
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async (isRefresh = false) => {
+    if (linkedEmployee && !shouldUseMechanicalFloorInchargeScreen(linkedEmployee)) {
+      setLoading(false)
+      setRefreshing(false)
+      setLoadError(mechanicalFloorInchargeMisrouteMessage())
+      return
+    }
     const seq = ++loadSeqRef.current
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
@@ -524,9 +575,10 @@ export default function FloorInchargeScreen() {
         supabase.from('employee_master').select('id, employee_code, employee_name, department, location, fuel_type, role').eq('is_active', true).order('employee_name'),
       ])
       if (seq !== loadSeqRef.current) return
+      if (empRes.error) throw new Error(empRes.error.message)
 
       if (entryRes.rpcError && entryRes.rows.length === 0) {
-        setLoadError(entryRes.rpcError)
+        setLoadError(humanizeFloorInchargeLoadError(entryRes.rpcError))
         setJobCards([])
         setAssignments({})
         setStageDrafts({})
@@ -534,7 +586,7 @@ export default function FloorInchargeScreen() {
         return
       }
       if (entryRes.rpcError) {
-        setLoadError(`${entryRes.rpcError} (showing ${entryRes.rows.length} loaded job cards)`)
+        setLoadError(humanizeFloorInchargeLoadError(`${entryRes.rpcError} (showing ${entryRes.rows.length} loaded job cards)`))
       }
 
       const receptionRows = await enrichJobCardsWithSaFuel(entryRes.rows)
@@ -545,9 +597,10 @@ export default function FloorInchargeScreen() {
       setAllEmployees(empList)
       setEmployees(empList.filter(e => isServiceDepartment(e.department) && isTechnicianBusinessRole(e.role)))
 
+      const jcNumbers = receptionRows.map((r) => r.assignment_key).filter(Boolean)
       const [assignmentRows, supportRows] = await Promise.all([
-        loadRecentTechnicianAssignments(),
-        loadRecentSupportAssignments(),
+        loadTechnicianAssignmentsForJobCards(jcNumbers),
+        loadSupportAssignmentsForJobCards(jcNumbers),
       ])
       if (seq !== loadSeqRef.current) return
 
@@ -558,7 +611,7 @@ export default function FloorInchargeScreen() {
       setSupportAssignments(suppMap)
     } catch (err) {
       if (seq !== loadSeqRef.current) return
-      const msg = err instanceof Error ? err.message : 'Failed to load Floor Incharge data'
+      const msg = humanizeFloorInchargeLoadError(err instanceof Error ? err.message : 'Failed to load Floor Incharge data')
       setLoadError(msg)
       console.error(err)
     } finally {
@@ -567,28 +620,15 @@ export default function FloorInchargeScreen() {
         setRefreshing(false)
       }
     }
-  }, [enrichJobCardsWithSaFuel])
+  }, [enrichJobCardsWithSaFuel, linkedEmployee])
 
   useFocusEffect(useCallback(() => { void fetchAll() }, [fetchAll]))
 
-  // ── Derived state — exact web filter chain ────────────────────────────────
-  const statusScopedRows = useMemo(() => {
-    if (assignmentView === 'all') return jobCards
-    return jobCards.filter(jc => {
-      const a = assignments[jc.assignment_key]
-      if (assignmentView === 'assigned')       return Boolean(a)
-      if (assignmentView === 'unassigned')     return !a
-      if (assignmentView === 'hold')           return Boolean(a) && normalizeStatusValue(a?.work_status) === 'hold'
-      if (assignmentView === 'work_inprocess') return Boolean(a) && normalizeStatusValue(a?.work_status) === 'work_inprocess'
-      if (assignmentView === 'completed')      return Boolean(a) && normalizeStatusValue(a?.work_status) === 'completed'
-      return true
-    })
-  }, [jobCards, assignmentView, assignments])
-
+  // ── Derived state — same filter order as web (status tab last, not first) ──
   const searchScopedRows = useMemo(() => {
     const searchQuery = listSearch.appliedNorm
-    if (!searchQuery) return statusScopedRows
-    return statusScopedRows.filter(jc => {
+    if (!searchQuery) return jobCards
+    return jobCards.filter(jc => {
       const a = assignments[jc.assignment_key]
       const sp = supportAssignments[jc.assignment_key] ?? []
       return [
@@ -601,65 +641,76 @@ export default function FloorInchargeScreen() {
         sp.map(p => p.employee_code).join(' '),
       ].join(' ').toLowerCase().includes(searchQuery)
     })
-  }, [statusScopedRows, listSearch.appliedNorm, assignments, supportAssignments])
+  }, [jobCards, listSearch.appliedNorm, assignments, supportAssignments])
+
+  const locCountRows = useMemo(() => searchScopedRows.filter(jc => {
+    const portalOk = fuelTypeFilter === 'all' || jobCardPortalLabel(jc) === fuelTypeFilter
+    const techOk = technicianFilter === 'all' || getTechnicianFilterKey(assignments[jc.assignment_key]) === technicianFilter
+    return portalOk && techOk
+  }), [searchScopedRows, fuelTypeFilter, technicianFilter, assignments])
+
+  const portalCountRows = useMemo(() => searchScopedRows.filter(jc => {
+    const locOk = branchFilter === 'all' || getLocationLabel(jc.location ?? jc.branch) === branchFilter
+    const techOk = technicianFilter === 'all' || getTechnicianFilterKey(assignments[jc.assignment_key]) === technicianFilter
+    return locOk && techOk
+  }), [searchScopedRows, branchFilter, technicianFilter, assignments])
+
+  const techCountRows = useMemo(() => searchScopedRows.filter(jc => {
+    const locOk = branchFilter === 'all' || getLocationLabel(jc.location ?? jc.branch) === branchFilter
+    const portalOk = fuelTypeFilter === 'all' || jobCardPortalLabel(jc) === fuelTypeFilter
+    return locOk && portalOk
+  }), [searchScopedRows, branchFilter, fuelTypeFilter])
+
+  const scopedJobCards = useMemo(() => searchScopedRows.filter(jc => {
+    const locOk = branchFilter === 'all' || getLocationLabel(jc.location ?? jc.branch) === branchFilter
+    const portalOk = fuelTypeFilter === 'all' || jobCardPortalLabel(jc) === fuelTypeFilter
+    const techOk = technicianFilter === 'all' || getTechnicianFilterKey(assignments[jc.assignment_key]) === technicianFilter
+    return locOk && portalOk && techOk
+  }), [searchScopedRows, branchFilter, fuelTypeFilter, technicianFilter, assignments])
+
+  const filtered = useMemo(
+    () => applyAssignmentViewFilter(scopedJobCards, assignmentView, assignments),
+    [scopedJobCards, assignmentView, assignments],
+  )
+
+  const tabCounts = useMemo(() => ({
+    all:            scopedJobCards.length,
+    unassigned:     scopedJobCards.filter(jc => !assignments[jc.assignment_key]).length,
+    assigned:       scopedJobCards.filter(jc => Boolean(assignments[jc.assignment_key])).length,
+    hold:           scopedJobCards.filter(jc => {
+      const a = assignments[jc.assignment_key]
+      return Boolean(a) && normalizeStatusValue(a?.work_status) === 'hold'
+    }).length,
+    work_inprocess: scopedJobCards.filter(jc => {
+      const a = assignments[jc.assignment_key]
+      return Boolean(a) && normalizeStatusValue(a?.work_status) === 'work_inprocess'
+    }).length,
+    completed:      scopedJobCards.filter(jc => {
+      const a = assignments[jc.assignment_key]
+      return Boolean(a) && normalizeStatusValue(a?.work_status) === 'completed'
+    }).length,
+  }), [scopedJobCards, assignments])
 
   const branches = useMemo(() => {
-    const b = new Set(searchScopedRows.map(jc => getLocationLabel(jc.location ?? jc.branch)))
+    const b = new Set(locCountRows.map(jc => getLocationLabel(jc.location ?? jc.branch)))
     return Array.from(b).sort((a, b) => a === UNKNOWN_LOCATION ? 1 : b === UNKNOWN_LOCATION ? -1 : a.localeCompare(b))
-  }, [searchScopedRows])
-
-  const statusScopedBranchRows = useMemo(() =>
-    branchFilter === 'all' ? searchScopedRows
-      : searchScopedRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === branchFilter),
-    [searchScopedRows, branchFilter])
+  }, [locCountRows])
 
   const fuelTypeOptions = useMemo(() => {
-    const s = new Set(statusScopedBranchRows.map(jc => jobCardPortalLabel(jc)))
+    const s = new Set(portalCountRows.map(jc => jobCardPortalLabel(jc)))
     return Array.from(s).sort((a, b) => a === UNKNOWN_PORTAL ? 1 : b === UNKNOWN_PORTAL ? -1 : a.localeCompare(b))
-  }, [statusScopedBranchRows])
-
-  const statusScopedFuelRows = useMemo(() =>
-    fuelTypeFilter === 'all' ? statusScopedBranchRows
-      : statusScopedBranchRows.filter(jc => jobCardPortalLabel(jc) === fuelTypeFilter),
-    [statusScopedBranchRows, fuelTypeFilter])
+  }, [portalCountRows])
 
   const technicianOptions = useMemo(() => {
     const map = new Map<string, string>()
-    statusScopedFuelRows.forEach(jc => {
+    techCountRows.forEach(jc => {
       const a = assignments[jc.assignment_key]
       map.set(getTechnicianFilterKey(a), getTechnicianFilterLabel(a))
     })
     return Array.from(map.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.value === 'unassigned' ? 1 : b.value === 'unassigned' ? -1 : a.label.localeCompare(b.label))
-  }, [statusScopedFuelRows, assignments])
-
-  const scopedJobCards = useMemo(() =>
-    statusScopedFuelRows.filter(jc =>
-      technicianFilter === 'all' || getTechnicianFilterKey(assignments[jc.assignment_key]) === technicianFilter
-    ), [statusScopedFuelRows, assignments, technicianFilter])
-
-  const filtered = useMemo(() => {
-    if (assignmentView === 'all') return scopedJobCards
-    return scopedJobCards.filter(jc => {
-      const a = assignments[jc.assignment_key]
-      if (assignmentView === 'assigned')       return Boolean(a)
-      if (assignmentView === 'unassigned')     return !a
-      if (assignmentView === 'hold')           return normalizeStatusValue(a?.work_status) === 'hold'
-      if (assignmentView === 'work_inprocess') return normalizeStatusValue(a?.work_status) === 'work_inprocess'
-      if (assignmentView === 'completed')      return normalizeStatusValue(a?.work_status) === 'completed'
-      return true
-    })
-  }, [assignmentView, assignments, scopedJobCards])
-
-  const tabCounts = useMemo(() => ({
-    all:            scopedJobCards.length,
-    unassigned:     scopedJobCards.filter(jc => !assignments[jc.assignment_key]).length,
-    assigned:       scopedJobCards.filter(jc => Boolean(assignments[jc.assignment_key])).length,
-    hold:           scopedJobCards.filter(jc => normalizeStatusValue(assignments[jc.assignment_key]?.work_status) === 'hold').length,
-    work_inprocess: scopedJobCards.filter(jc => normalizeStatusValue(assignments[jc.assignment_key]?.work_status) === 'work_inprocess').length,
-    completed:      scopedJobCards.filter(jc => normalizeStatusValue(assignments[jc.assignment_key]?.work_status) === 'completed').length,
-  }), [scopedJobCards, assignments])
+  }, [techCountRows, assignments])
 
   const techniciansByJobCard = useMemo<Record<string, Employee[]>>(() => {
     const map: Record<string, Employee[]> = {}
@@ -1267,41 +1318,64 @@ export default function FloorInchargeScreen() {
         <Text style={S.searchAppliedHint}>Showing matches for “{listSearch.applied}”</Text>
       ) : null}
 
-      {/* ── Status tabs — horizontal scroll, 5 statuses clearly visible ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={S.slideTabBar}
-        contentContainerStyle={S.slideTabContent}
-      >
-        {(['unassigned', 'hold', 'assigned', 'work_inprocess', 'completed'] as const).map(key => {
-          const tab = TAB_DEFS.find(t => t.key === key)!
-          const cnt  = tabCounts[key]
-          const active = assignmentView === key
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[S.slideTab, {
-                borderColor: active ? tab.color : '#e2e8f0',
-                backgroundColor: active ? tab.color : '#fff',
-              }]}
-              onPress={() => setAssignmentView(key as AssignmentView)}
-              activeOpacity={0.75}>
-              <Text style={[S.slideTabCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
-              <Text style={[S.slideTabLabel, { color: active ? '#fff' : '#475569' }]}>{tab.label}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+      {/* ── Status tabs — 2 rows so nothing is clipped on narrow screens ── */}
+      <View style={S.tabsGrid}>
+        <View style={S.tabsRow1}>
+          {(['unassigned', 'hold', 'assigned'] as const).map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[S.tabBig, {
+                  borderColor: active ? tab.color : '#e2e8f0',
+                  backgroundColor: active ? tab.color : '#fff',
+                }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}
+                activeOpacity={0.75}
+              >
+                <Text style={[S.tabBigCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+                <Text style={[S.tabBigLabel, { color: active ? '#fff' : '#475569' }]} numberOfLines={1}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+        <View style={S.tabsRow2}>
+          {(['work_inprocess', 'completed'] as const).map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[S.tabSmall, {
+                  borderColor: active ? tab.color : '#e2e8f0',
+                  backgroundColor: active ? tab.color : '#fff',
+                }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}
+                activeOpacity={0.75}
+              >
+                <Text style={[S.tabPillCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+                <Text style={[S.tabSmallText, { color: active ? '#fff' : '#475569' }]} numberOfLines={1}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      </View>
 
       {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
       <View style={S.dropdownBar}>
         {/* Location dropdown */}
         <TouchableOpacity style={S.dropdownBtn} onPress={() => setFilterModal('loc')} activeOpacity={0.75}>
-          <View style={{ flex: 1 }}>
+          <View style={S.dropdownBtnInner}>
             <Text style={S.dropdownLabel}>Location</Text>
-            <Text style={S.dropdownVal} numberOfLines={1}>
-              {branchFilter === 'all' ? `All (${searchScopedRows.length})` : branchFilter}
+            <Text style={S.dropdownVal} numberOfLines={1} ellipsizeMode="tail">
+              {branchFilter === 'all' ? `All (${locCountRows.length})` : branchFilter}
             </Text>
           </View>
           <Text style={[S.dropdownArrow, branchFilter !== 'all' && S.dropdownArrowActive]}>▾</Text>
@@ -1312,9 +1386,9 @@ export default function FloorInchargeScreen() {
 
         {/* Portal dropdown */}
         <TouchableOpacity style={S.dropdownBtn} onPress={() => setFilterModal('portal')} activeOpacity={0.75}>
-          <View style={{ flex: 1 }}>
+          <View style={S.dropdownBtnInner}>
             <Text style={S.dropdownLabel}>Portal</Text>
-            <Text style={[S.dropdownVal, fuelTypeFilter !== 'all' && { color: '#2563eb', fontWeight: '700' }]} numberOfLines={1}>
+            <Text style={[S.dropdownVal, fuelTypeFilter !== 'all' && S.dropdownValActive]} numberOfLines={1} ellipsizeMode="tail">
               {fuelTypeFilter === 'all' ? 'All' : fuelTypeFilter}
             </Text>
           </View>
@@ -1326,9 +1400,9 @@ export default function FloorInchargeScreen() {
 
         {/* Technician dropdown */}
         <TouchableOpacity style={S.dropdownBtn} onPress={() => setFilterModal('tech')} activeOpacity={0.75}>
-          <View style={{ flex: 1 }}>
+          <View style={S.dropdownBtnInner}>
             <Text style={S.dropdownLabel}>Technician</Text>
-            <Text style={[S.dropdownVal, technicianFilter !== 'all' && { color: '#2563eb', fontWeight: '700' }]} numberOfLines={1}>
+            <Text style={[S.dropdownVal, technicianFilter !== 'all' && S.dropdownValActive]} numberOfLines={1} ellipsizeMode="middle">
               {technicianFilter === 'all'
                 ? 'All'
                 : technicianOptions.find(o => o.value === technicianFilter)?.label.split(' (')[0] ?? 'All'}
@@ -1362,14 +1436,14 @@ export default function FloorInchargeScreen() {
                 <>
                   <FilterOption
                     label={`All Locations`}
-                    subLabel={`${searchScopedRows.length} job cards`}
+                    subLabel={`${locCountRows.length} job cards`}
                     active={branchFilter === 'all'}
                     onPress={() => { setBranchFilter('all'); setFilterModal(null) }}
                   />
                   {branches.map(b => (
                     <FilterOption key={b}
                       label={b}
-                      subLabel={`${searchScopedRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === b).length} job cards`}
+                      subLabel={`${locCountRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === b).length} job cards`}
                       active={branchFilter === b}
                       onPress={() => { setBranchFilter(b); setFilterModal(null) }}
                     />
@@ -1381,14 +1455,14 @@ export default function FloorInchargeScreen() {
                 <>
                   <FilterOption
                     label="All Portals"
-                    subLabel={`${statusScopedBranchRows.length} job cards`}
+                    subLabel={`${portalCountRows.length} job cards`}
                     active={fuelTypeFilter === 'all'}
                     onPress={() => { setFuelTypeFilter('all'); setFilterModal(null) }}
                   />
                   {fuelTypeOptions.map(ft => (
                     <FilterOption key={ft}
                       label={ft}
-                      subLabel={`${statusScopedBranchRows.filter(jc => jobCardPortalLabel(jc) === ft).length} job cards`}
+                      subLabel={`${portalCountRows.filter(jc => jobCardPortalLabel(jc) === ft).length} job cards`}
                       active={fuelTypeFilter === ft}
                       onPress={() => { setFuelTypeFilter(ft); setFilterModal(null) }}
                     />
@@ -1400,12 +1474,12 @@ export default function FloorInchargeScreen() {
                 <>
                   <FilterOption
                     label="All Technicians"
-                    subLabel={`${statusScopedFuelRows.length} job cards`}
+                    subLabel={`${techCountRows.length} job cards`}
                     active={technicianFilter === 'all'}
                     onPress={() => { setTechnicianFilter('all'); setFilterModal(null) }}
                   />
                   {technicianOptions.map(opt => {
-                    const cnt = statusScopedFuelRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
+                    const cnt = techCountRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
                     return (
                       <FilterOption key={opt.value}
                         label={opt.label}
@@ -1427,6 +1501,7 @@ export default function FloorInchargeScreen() {
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563eb" />
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={filtered}
           keyExtractor={jc => String(jc.id)}
           renderItem={({ item }) => <JobCardItem jc={item} />}
@@ -1437,7 +1512,7 @@ export default function FloorInchargeScreen() {
               <Text style={S.emptyIcon}>🏭</Text>
               <Text style={S.emptyTitle}>No job cards</Text>
               <Text style={S.emptySub}>
-                {search || branchFilter !== 'all' || fuelTypeFilter !== 'all'
+                {listSearch.hasApplied || branchFilter !== 'all' || fuelTypeFilter !== 'all'
                   ? 'No job cards match your filters'
                   : 'No job cards visible in your Floor Incharge scope'}
               </Text>
@@ -1681,21 +1756,23 @@ const S = {
   ageingBadgeText:          { fontSize: 11, fontWeight: '700' as const },
   ageingBadgeTextHold:      { color: '#c2410c' },
   ageingBadgeTextInProcess: { color: '#0369a1' },
-  tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 6, borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  tabsRow1:          { flexDirection: 'row' as const, gap: 8 },
-  tabsRow2:          { flexDirection: 'row' as const, gap: 6 },
-  tabBig:            { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' as const, borderWidth: 2 },
-  tabBigCount:       { fontSize: 22, fontWeight: '800' as const, lineHeight: 26 },
-  tabBigLabel:       { fontSize: 12, fontWeight: '700' as const, marginTop: 1 },
-  tabSmall:          { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' as const, borderWidth: 1.5 },
-  tabSmallText:      { fontSize: 11, fontWeight: '600' as const },
+  tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8, gap: 8, borderBottomWidth: 1, borderColor: '#e2e8f0', flexGrow: 0, flexShrink: 0 },
+  tabsRow1:          { flexDirection: 'row' as const, gap: 8, alignItems: 'stretch' as const },
+  tabsRow2:          { flexDirection: 'row' as const, gap: 8, alignItems: 'stretch' as const },
+  tabBig:            { flex: 1, minWidth: 0, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 2 },
+  tabBigCount:       { fontSize: 20, fontWeight: '800' as const, lineHeight: 24 },
+  tabBigLabel:       { fontSize: 10, fontWeight: '700' as const, marginTop: 2, textAlign: 'center' as const, width: '100%' as const },
+  tabSmall:          { flex: 1, minWidth: 0, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 2 },
+  tabSmallText:      { fontSize: 11, fontWeight: '700' as const, marginTop: 2, textAlign: 'center' as const },
   tabPillText:       { fontSize: 12, fontWeight: '600' as const },
 
   // ── dropdown filter bar ──
-  dropdownBar:       { flexDirection: 'row' as const, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  dropdownBtn:       { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 10, paddingVertical: 7, minHeight: 44 },
+  dropdownBar:       { flexDirection: 'row' as const, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', flexGrow: 0, flexShrink: 0 },
+  dropdownBtn:       { flex: 1, minWidth: 0, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 8, paddingVertical: 7, minHeight: 48 },
+  dropdownBtnInner:  { flex: 1, minWidth: 0, paddingRight: 4 },
   dropdownLabel:     { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' as const, marginBottom: 1 },
-  dropdownVal:       { fontSize: 12, fontWeight: '600' as const, color: '#1e293b' },
+  dropdownVal:       { fontSize: 11, fontWeight: '600' as const, color: '#1e293b' },
+  dropdownValActive: { color: '#2563eb', fontWeight: '700' as const } as const,
   dropdownArrow:     { fontSize: 12, color: '#cbd5e1', marginLeft: 3 },
   dropdownArrowActive:{ color: '#2563eb' } as const,
   dropdownDot:       { position: 'absolute' as const, top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: '#2563eb' },
@@ -1766,46 +1843,6 @@ const S = {
   tsRow:             { flexDirection: 'row' as const, backgroundColor: '#f8fafc', borderRadius: 10, overflow: 'hidden' as const },
   tsCell:            { flex: 1, padding: 10, alignItems: 'center' as const },
   tsDivider:         { width: 1, backgroundColor: '#e2e8f0' },
-  tsLabel:           { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.8, marginBottom: 2 },
-  tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
-
-  remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, fontSize: 13, color: '#1e293b', minHeight: 56, textAlignVertical: 'top' as const },
-  saveBtn:           { backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 13, alignItems: 'center' as const, marginTop: 12, shadowColor: '#2563eb', shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
-  saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
-
-  addSupportBtn:     { backgroundColor: '#eff6ff', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#bfdbfe' },
-  addSupportBtnText: { fontSize: 12, fontWeight: '700' as const, color: '#2563eb' },
-  supportPill:       { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#e2e8f0', gap: 7, marginBottom: 4 },
-  supportRoleTag:    { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
-  supportRoleTagText:{ fontSize: 10, fontWeight: '800' as const, color: '#1d4ed8' },
-  supportPillName:   { fontSize: 13, color: '#334155', fontWeight: '500' as const, flex: 1 },
-  emptyHint:         { fontSize: 11, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 2, marginBottom: 4 },
-
-  pickerHeader:      { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#0f172a', flex: 1 },
-  pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, fontSize: 14, color: '#1e293b' },
-  pickerItem:        { paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9', minHeight: 50, justifyContent: 'center' as const },
-  pickerItemText:    { fontSize: 15, color: '#1e293b', fontWeight: '500' as const },
-  pickerItemSub:     { fontSize: 12, color: '#64748b', marginTop: 2 },
-  pickerEmpty:       { textAlign: 'center' as const, color: '#94a3b8', marginTop: 48, padding: 16 },
-
-  bayChip:           { flex: 1, margin: 4, backgroundColor: '#f1f5f9', borderRadius: 8, paddingVertical: 12, alignItems: 'center' as const, borderWidth: 1, borderColor: '#e2e8f0' },
-  bayChipActive:     { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  bayChipText:       { fontSize: 14, fontWeight: '700' as const, color: '#475569' },
-
-  supportMeta:       { backgroundColor: '#f8fafc', borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  supportMetaText:   { fontSize: 13, color: '#475569', fontWeight: '500' as const },
-  roleChip:          { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0' },
-  roleChipActive:    { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  roleChipText:      { fontSize: 13, color: '#64748b', fontWeight: '500' as const },
-  roleChipTextActive:{ color: '#2563eb', fontWeight: '700' as const } as const,
-  empRow:            { padding: 12, borderRadius: 8, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#fff', marginBottom: 5 },
-  empRowActive:      { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  empRowText:        { fontSize: 14, color: '#1e293b', fontWeight: '500' as const },
-  existingSupportRow:{ flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 9, borderBottomWidth: 1, borderColor: '#f1f5f9', gap: 8 },
-  removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5 },
-  removeBtnText:     { fontSize: 12, fontWeight: '700' as const, color: '#dc2626' },
-
   tsLabel:           { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.8, marginBottom: 2 },
   tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
 

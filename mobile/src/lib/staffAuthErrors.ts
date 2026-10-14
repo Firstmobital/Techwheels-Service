@@ -29,3 +29,17 @@ export function humanizeStaffAuthError(message: string | undefined | null): stri
 
   return raw
 }
+
+/** Floor Incharge list / assignment fetch errors (Postgres statement timeout, etc.). */
+export function humanizeFloorInchargeLoadError(message: string | undefined | null): string {
+  const raw = String(message ?? '').trim()
+  const lower = raw.toLowerCase()
+  if (!raw) return 'Could not load Floor Incharge data. Pull down to retry.'
+  if (lower.includes('statement timeout') || lower.includes('canceling statement')) {
+    return 'Load timed out — server took too long. Pull to refresh, or search by JC/reg to narrow the list. If this repeats, ask admin to confirm your Employee Master location matches your floor (PV/EV).'
+  }
+  if (lower.includes('failed to fetch') || lower.includes('network')) {
+    return humanizeStaffAuthError(raw)
+  }
+  return raw
+}

@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase'
 import {
   fetchBodyshopAssignmentsForJobCards,
 } from '../../lib/api/bodyshopFloorList'
+import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
@@ -62,6 +63,7 @@ interface RepairCard {
   doc_company_pan: boolean
   doc_bank_detail: boolean
   doc_tp_affidavit?: boolean
+  doc_towing_bill?: boolean
   doc_survey_approval: boolean | null
   doc_rejected_keys?: string[] | null
   survey_date: string | null
@@ -150,7 +152,7 @@ function labelForRiDoneBy(raw: string | null | undefined): string {
   return match?.label ?? (value || '—')
 }
 
-type DocDef = { key: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }
+type DocDef = { key: keyof RepairCard; label: string; mandatoryFor: CustomerType[]; optionalHint?: string }
 const DOC_DEFS: DocDef[] = [
   { key: 'doc_claim_form',  label: 'Claim Form',   mandatoryFor: ['individual', 'firm'] },
   { key: 'doc_rc',          label: 'RC (Front)',   mandatoryFor: ['individual', 'firm'] },
@@ -161,11 +163,12 @@ const DOC_DEFS: DocDef[] = [
   { key: 'doc_aadhaar',     label: 'Aadhaar (Front)', mandatoryFor: ['individual', 'firm'] },
   { key: 'doc_aadhaar_back',label: 'Aadhaar (Back)',  mandatoryFor: ['individual', 'firm'] },
   { key: 'doc_pan',         label: 'PAN',          mandatoryFor: ['individual', 'firm'] },
-  { key: 'doc_kyc',         label: 'KYC',          mandatoryFor: [] },
+  { key: 'doc_kyc',         label: 'KYC',          mandatoryFor: [], optionalHint: 'Firm Applicable' },
   { key: 'doc_gst',         label: 'GST',          mandatoryFor: ['firm'] },
   { key: 'doc_company_pan', label: 'Company PAN',  mandatoryFor: ['firm'] },
-  { key: 'doc_bank_detail', label: 'Bank Detail',  mandatoryFor: [] },
-  { key: 'doc_tp_affidavit', label: 'T/P Affidavit', mandatoryFor: [] },
+  { key: 'doc_bank_detail', label: 'Bank Detail',  mandatoryFor: ['firm'] },
+  { key: 'doc_tp_affidavit', label: 'T/P Affidavit', mandatoryFor: [], optionalHint: 'Firm Applicable' },
+  { key: 'doc_towing_bill', label: 'Towing Bill', mandatoryFor: [], optionalHint: 'Individual & Firm' },
   { key: 'doc_survey_approval', label: 'Survey Approval', mandatoryFor: [] },
 ]
 
@@ -258,13 +261,11 @@ export default function BodyshopRepairScreen() {
     else setRefreshing(true)
     setLoadError(null)
     try {
-      const { data, error } = await supabase
-        .from('bodyshop_repair_cards')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(2000)
-      if (error) throw error
-      const cardList = (data ?? []) as RepairCard[]
+      const cardList = (await fetchBodyshopRepairCardsLegacyFull({
+        searchQuery: null,
+        bodyshopFloor: null,
+        liveOnFloor: false,
+      })) as RepairCard[]
       setCards(cardList)
 
       const { data: empData } = await supabase
@@ -294,7 +295,9 @@ export default function BodyshopRepairScreen() {
       })
       setFloorAssignments(assMap)
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Load failed', 'error')
+      const msg = err instanceof Error ? err.message : 'Load failed'
+      setLoadError(msg)
+      showToast(msg, 'error')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -698,7 +701,9 @@ export default function BodyshopRepairScreen() {
     const ct: CustomerType = card.customer_type ?? 'individual'
     const showInsurance = ct !== 'cash' && ct !== 'foc'
     const mandatoryDocs = DOC_DEFS.filter(d => d.mandatoryFor.includes(ct))
-    const optionalDocs  = DOC_DEFS.filter(d => !d.mandatoryFor.includes(ct))
+    const optionalDocs = DOC_DEFS.filter(
+      (d) => d.mandatoryFor.length === 0 && d.key !== 'doc_survey_approval',
+    )
     const mandatoryDone = mandatoryDocs.filter(d => Boolean(card[d.key])).length
     const qcCheckers = parseQcNames(card.qc_checked_by)
     const otherNorm = qcOtherSearch.trim().toLowerCase()
@@ -945,6 +950,9 @@ export default function BodyshopRepairScreen() {
                       return (
                         <View key={doc.key} style={[S.docRow, i < optionalDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
                           <View style={{ flex: 1, marginRight: 8 }}>
+                            {doc.optionalHint ? (
+                              <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>{doc.optionalHint}</Text>
+                            ) : null}
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                               <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '400' }}>{doc.label}</Text>
                               {approved ? (

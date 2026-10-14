@@ -17,6 +17,7 @@ const DOC_LABELS: Record<string, string> = {
   doc_company_pan: 'Company PAN',
   doc_bank_detail: 'Bank Detail',
   doc_tp_affidavit: 'T/P Affidavit',
+  doc_towing_bill: 'Towing Bill',
   doc_estimate: 'Estimate Upload',
   doc_survey_approval: 'Survey Approval',
   doc_job_card: 'Job Card',
@@ -120,6 +121,7 @@ const INTAKE_DOC_KEYS = [
   'doc_company_pan',
   'doc_bank_detail',
   'doc_tp_affidavit',
+  'doc_towing_bill',
 ] as const
 
 function docChecklist(card: Record<string, unknown> | null): string {

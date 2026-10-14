@@ -1,12 +1,15 @@
 import { supabase } from '../supabase'
 import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
 import { normalizeBodyshopPhysicalFloor } from '../bodyshopFloorInchargeScope'
-import type { BodyshopRepairCardListRow } from '../api/bodyshopFloorList'
+import { fetchBodyshopRepairCardsPage, type BodyshopRepairCardListRow } from '../api/bodyshopFloorList'
+import type { IdCreatedAtCursor } from '../pagination/listPage'
 import type { ReceptionListRow } from '../api/receptionListPage'
 import type { ClaimSummaryRow } from '../api/claimTrackerPage'
 import type { FetchReceptionPageOptions } from '../api/receptionListPage'
 
 const TABLE_PAGE = 1000
+/** Cap full-list walks so mobile cannot OOM or white-screen on huge dealer histories. */
+const MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES = 60
 
 function matchesBodyshopFloorFilter(
   rowFloor: string | null | undefined,
@@ -28,28 +31,45 @@ function matchesSearch(row: { job_card_no?: string | null; reg_number?: string |
   )
 }
 
-/** Full bodyshop repair card list — direct table reads (no paginated RPC). */
+/** Full bodyshop repair card list via definer RPC (avoids per-row RLS timeouts on mobile). */
 export async function fetchBodyshopRepairCardsLegacyFull(options: {
   searchQuery?: string | null
   bodyshopFloor?: string | null
   liveOnFloor?: boolean
+  maxPages?: number
+  maxRows?: number
 }): Promise<BodyshopRepairCardListRow[]> {
   const search = (options.searchQuery ?? '').trim()
   const floorFilter = (options.bodyshopFloor ?? '').trim() || null
   const liveOnFloor = options.liveOnFloor === true
+  const maxPages = Math.min(
+    Math.max(options.maxPages ?? MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES, 1),
+    MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES,
+  )
+  const maxRows = options.maxRows != null && options.maxRows > 0 ? options.maxRows : null
   const all: BodyshopRepairCardListRow[] = []
+  const seenIds = new Set<number>()
+  let cursor: IdCreatedAtCursor | null = null
 
-  for (let from = 0; ; from += TABLE_PAGE) {
-    const { data, error } = await supabase
-      .from('bodyshop_repair_cards')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(from, from + TABLE_PAGE - 1)
-    if (error) throw new Error(error.message)
-    const batch = (data ?? []) as BodyshopRepairCardListRow[]
-    all.push(...batch)
-    if (batch.length < TABLE_PAGE) break
+  for (let pageNum = 0; pageNum < maxPages; pageNum += 1) {
+    const page = await fetchBodyshopRepairCardsPage({
+      cursor,
+      pageSize: 100,
+      searchQuery: null,
+      bodyshopFloor: floorFilter,
+      liveOnFloor,
+    })
+    if (page.rows.length === 0) break
+    for (const row of page.rows) {
+      const id = Number(row.id)
+      if (Number.isFinite(id) && seenIds.has(id)) continue
+      if (Number.isFinite(id)) seenIds.add(id)
+      all.push(row)
+      if (maxRows != null && all.length >= maxRows) break
+    }
+    if (maxRows != null && all.length >= maxRows) break
+    if (!page.hasMore || page.nextCursor == null) break
+    cursor = page.nextCursor
   }
 
   return all.filter((row) => {
