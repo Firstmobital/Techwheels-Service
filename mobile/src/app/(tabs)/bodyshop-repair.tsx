@@ -24,6 +24,19 @@ import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoa
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
+import {
+  humanizeBodyshopRepairSaveError,
+  isBodyshopFloorAssigned,
+  normalizeBodyshopSurveyStatusForDb,
+  prepareBodyshopRepairPatchForSave,
+  validateSurveyFieldsForStage9,
+  type BodyshopSurveyStatusDb,
+} from '../../lib/bodyshopSurveyStatus'
+import { pickBodyshopRepairDocument } from '../../lib/bodyshopRepairDocPicker'
+import {
+  resendSurveyApprovalToCustomer,
+  uploadBodyshopRepairDocument,
+} from '../../lib/api/bodyshopRepairDocumentUpload'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +81,14 @@ interface RepairCard {
   doc_rejected_keys?: string[] | null
   survey_date: string | null
   survey_status: string | null
+  survey_hold_reason: string | null
   survay_info_by: string | null
+  survay_info_updated_by?: string | null
+  survay_info_updated_at?: string | null
+  customer_survey_approval_status?: string | null
+  customer_survey_rejection_reason?: string | null
+  customer_survey_decided_at?: string | null
+  bodyshop_floor_since_at?: string | null
   claim_intimation_no: string | null
   surveyor_name: string | null
   surveyor_contact: string | null
@@ -315,6 +335,8 @@ export default function BodyshopRepairScreen() {
 
   const [uploadedDocsByKey, setUploadedDocsByKey] = useState<Record<string, { id: number; file_name: string; storage_path: string; drive_url?: string | null }>>({})
   const [loadingDocs, setLoadingDocs] = useState(false)
+  const [uploadingDocKey, setUploadingDocKey] = useState<string | null>(null)
+  const [surveyDocFeedback, setSurveyDocFeedback] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null)
 
   const loadUploadedDocs = useCallback(async (cardId: number) => {
     setLoadingDocs(true)
@@ -342,6 +364,7 @@ export default function BodyshopRepairScreen() {
     setActiveTab('overview')
     setPatch({})
     setQcOtherOpen(false)
+    setSurveyDocFeedback(null)
     void loadUploadedDocs(card.id)
   }
 
@@ -382,6 +405,108 @@ export default function BodyshopRepairScreen() {
       },
       onSuccess: () => showToast(approved ? 'Document Approved ✓' : 'Document Rejected ✕', 'success'),
     })
+  }
+
+  async function refreshSurveyCustomerStatus(silent = false) {
+    if (!selectedCard) return
+    try {
+      const { data, error } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('customer_survey_approval_status, customer_survey_rejection_reason, customer_survey_decided_at, doc_survey_approval')
+        .eq('id', selectedCard.id)
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return
+      const merged = { ...selectedCard, ...data }
+      setSelectedCard(merged)
+      setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+    } catch (err) {
+      if (!silent) showToast(err instanceof Error ? err.message : 'Could not refresh customer status', 'error')
+    }
+  }
+
+  async function startSurveyApprovalUpload(mode: 'upload' | 'replace') {
+    if (!effectiveCard) return
+    if (normalizeBodyshopSurveyStatusForDb(effectiveCard.survey_status) !== 'approved') {
+      showToast('Set Survey Status to Approved before uploading the survey approval document.', 'error')
+      return
+    }
+    const picked = await pickBodyshopRepairDocument()
+    if (!picked) return
+
+    setUploadingDocKey('doc_survey_approval')
+    setSurveyDocFeedback(null)
+    try {
+      const { docRow, cardPatch, missingFields } = await uploadBodyshopRepairDocument({
+        card: effectiveCard,
+        draftPatch: patch as Record<string, unknown>,
+        docKey: 'doc_survey_approval',
+        localUri: picked.uri,
+        fileName: picked.fileName,
+        contentType: picked.contentType,
+        fileSizeBytes: picked.fileSizeBytes,
+        mode,
+      })
+
+      const { error: cardUpdateErr } = await supabase
+        .from('bodyshop_repair_cards')
+        .update(cardPatch)
+        .eq('id', effectiveCard.id)
+      if (cardUpdateErr) throw cardUpdateErr
+
+      const mergedCard = { ...effectiveCard, ...cardPatch } as RepairCard
+      setSelectedCard(mergedCard)
+      setCards((prev) => prev.map((c) => (c.id === mergedCard.id ? mergedCard : c)))
+      setPatch({})
+      setUploadedDocsByKey((prev) => ({
+        ...prev,
+        doc_survey_approval: {
+          id: docRow.id,
+          file_name: docRow.file_name,
+          storage_path: docRow.storage_path,
+          drive_url: docRow.drive_url,
+        },
+      }))
+
+      if (missingFields.length === 0) {
+        setSurveyDocFeedback({
+          tone: 'ok',
+          text: mode === 'replace'
+            ? 'Document replaced. Sent to customer app for approval.'
+            : 'Document uploaded. Customer will approve or reject in the app.',
+        })
+        showToast('Survey approval document uploaded', 'success')
+      } else {
+        setSurveyDocFeedback({
+          tone: 'info',
+          text: `Document sent to customer app. Complete ${missingFields.join(', ')} and Save when ready.`,
+        })
+        showToast('Uploaded — finish survey fields and Save', 'success')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed'
+      setSurveyDocFeedback({ tone: 'error', text: msg })
+      showToast(msg, 'error')
+    } finally {
+      setUploadingDocKey(null)
+    }
+  }
+
+  async function handleResendSurveyApprovalToCustomer() {
+    if (!selectedCard) return
+    if (!uploadedDocsByKey.doc_survey_approval) {
+      showToast('Upload a survey approval document first', 'error')
+      return
+    }
+    try {
+      const cardPatch = await resendSurveyApprovalToCustomer(selectedCard.id)
+      const merged = { ...selectedCard, ...cardPatch } as RepairCard
+      setSelectedCard(merged)
+      setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+      showToast('Sent again to customer app for approval', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Resend failed', 'error')
+    }
   }
 
   async function openUploadedDoc(docKey: string) {
@@ -436,11 +561,20 @@ export default function BodyshopRepairScreen() {
     const prevCards = cards
     const prevPatch = patch
     const merged = { ...selectedCard, ...nextPatch }
+    const { data: authData } = await supabase.auth.getUser()
+    const actor = authData.user?.email ?? authData.user?.id ?? null
+    const prepared = prepareBodyshopRepairPatchForSave(merged, nextPatch as Record<string, unknown>, actor)
+    if (!prepared.ok) {
+      showToast(prepared.message, 'error')
+      return
+    }
+    const dbPatch = prepared.patch as Partial<RepairCard>
+    const mergedSaved = { ...merged, ...dbPatch }
 
     await optimistic.run('save-patch', {
       apply: () => {
-        setSelectedCard(merged)
-        setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+        setSelectedCard(mergedSaved)
+        setCards((prev) => prev.map((c) => (c.id === mergedSaved.id ? mergedSaved : c)))
         setPatch({})
       },
       rollback: () => {
@@ -449,15 +583,101 @@ export default function BodyshopRepairScreen() {
         setPatch(prevPatch)
       },
       execute: async () => {
-        const { error } = await supabase.from('bodyshop_repair_cards').update(nextPatch).eq('id', selectedCard.id)
+        const { error } = await supabase.from('bodyshop_repair_cards').update(dbPatch).eq('id', selectedCard.id)
         if (error) throw error
       },
       onSuccess: () => showToast('Saved', 'success'),
+      errorMessage: humanizeBodyshopRepairSaveError,
+    })
+  }
+
+  async function sendToBodyshopFloor(floorValue: 'Floor 2' | 'Floor 3') {
+    if (!effectiveCard) return
+    const card = effectiveCard
+    const currentFloor = String(card.bodyshop_floor ?? '').trim()
+    if (currentFloor === floorValue) {
+      showToast(`Already on ${floorValue}`, 'success')
+      return
+    }
+    if (!uploadedDocsByKey.doc_survey_approval) {
+      showToast('Upload Survey Approval document on SA & Docs tab first.', 'error')
+      return
+    }
+    const customerSurvey = String(card.customer_survey_approval_status ?? '').trim().toLowerCase()
+    if (customerSurvey !== 'approved') {
+      showToast(
+        customerSurvey === 'rejected'
+          ? 'Customer rejected the survey document. Re-upload and get approval in the customer app.'
+          : 'Waiting for customer to approve the survey document in the customer app.',
+        'error',
+      )
+      return
+    }
+    const surveyCheck = validateSurveyFieldsForStage9({
+      ...card,
+      bodyshop_floor: floorValue,
+    })
+    if (!surveyCheck.ok) {
+      showToast(surveyCheck.message, 'error')
+      return
+    }
+    const status = normalizeBodyshopSurveyStatusForDb(card.survey_status)!
+    const holdReason = String(card.survey_hold_reason ?? '').trim()
+    const { data: authData } = await supabase.auth.getUser()
+    const actor = authData.user?.email ?? authData.user?.id ?? null
+    const now = new Date().toISOString()
+    const update: Partial<RepairCard> = {
+      bodyshop_floor: floorValue,
+      survey_date: String(card.survey_date ?? '').trim(),
+      survey_status: status,
+      survey_hold_reason: status === 'hold' ? holdReason : null,
+      surveyor_name: String(card.surveyor_name ?? '').trim() || null,
+      surveyor_contact: String(card.surveyor_contact ?? '').trim() || null,
+      survay_info_updated_by: actor,
+      survay_info_updated_at: now,
+    }
+    if (!card.survay_info_by && actor) update.survay_info_by = actor
+    if (!isBodyshopFloorAssigned(card.bodyshop_floor) && !card.bodyshop_floor_since_at) {
+      update.bodyshop_floor_since_at = now
+    }
+    if (card.current_stage === 9) {
+      update.current_stage = 10
+      update.current_stage_name = STAGE_LABELS[10] ?? 'Parts Status'
+    }
+
+    const prevSelected = selectedCard
+    const prevCards = cards
+    const prevPatch = patch
+    await optimistic.run(`floor-${card.id}`, {
+      apply: () => {
+        const merged = { ...card, ...update }
+        setSelectedCard(merged)
+        setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+        setPatch({})
+      },
+      rollback: () => {
+        if (prevSelected) setSelectedCard(prevSelected)
+        setCards(prevCards)
+        setPatch(prevPatch)
+      },
+      execute: async () => {
+        const { error } = await supabase.from('bodyshop_repair_cards').update(update).eq('id', card.id)
+        if (error) throw error
+      },
+      onSuccess: () => showToast(`Sent to ${floorValue}${card.current_stage === 9 ? ' · Stage 10' : ''}`, 'success'),
+      errorMessage: humanizeBodyshopRepairSaveError,
     })
   }
 
   async function advanceStage(card: RepairCard) {
     if (card.overall_status !== 'active') return
+    if (card.current_stage === 9) {
+      Alert.alert(
+        'Survey stage',
+        'Complete Survey (Hold or Approved + date), upload survey approval, get customer approval, then use Floor tab → Send to Floor 2 or Floor 3. That moves the vehicle to Stage 10.',
+      )
+      return
+    }
     const nextStage = card.current_stage + 1
     if (nextStage > 18) return
     Alert.alert(
@@ -1033,22 +1253,141 @@ export default function BodyshopRepairScreen() {
 
                 <Text style={[S.fieldLabel, { marginTop: 10 }]}>Survey Status</Text>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  {['pending', 'scheduled', 'done', 'hold'].map(s => {
-                    const active = (card.survey_status ?? '') === s
+                  {([
+                    { value: 'pending' as BodyshopSurveyStatusDb, label: 'Pending' },
+                    { value: 'hold' as BodyshopSurveyStatusDb, label: 'Hold' },
+                    { value: 'approved' as BodyshopSurveyStatusDb, label: 'Approved' },
+                  ]).map(({ value, label }) => {
+                    const active = normalizeBodyshopSurveyStatusForDb(card.survey_status) === value
                     return (
-                      <TouchableOpacity key={s} onPress={() => applyPatch({ survey_status: s })}>
+                      <TouchableOpacity key={value} onPress={() => applyPatch({ survey_status: value })}>
                         <View style={[S.chip, active && { backgroundColor: '#7048cf', borderColor: '#7048cf' }]}>
-                          <Text style={[S.chipText, active && { color: '#fff' }]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
+                          <Text style={[S.chipText, active && { color: '#fff' }]}>{label}</Text>
                         </View>
                       </TouchableOpacity>
                     )
                   })}
                 </View>
 
+                {normalizeBodyshopSurveyStatusForDb(card.survey_status) === 'hold' && (
+                  <>
+                    <Text style={[S.fieldLabel, { marginTop: 10 }]}>Hold Remark</Text>
+                    <TextInput
+                      style={S.input}
+                      placeholder="Why survey is on hold"
+                      placeholderTextColor="#a7a99f"
+                      value={card.survey_hold_reason ?? ''}
+                      onChangeText={(t) => applyPatch({ survey_hold_reason: t || null })}
+                    />
+                  </>
+                )}
+
                 <Text style={[S.fieldLabel, { marginTop: 10 }]}>Survey Date (YYYY-MM-DD)</Text>
                 <TextInput style={S.input} placeholder="2025-07-01" placeholderTextColor="#a7a99f"
                   value={card.survey_date ?? ''} onChangeText={t => applyPatch({ survey_date: t || null })} />
               </View>
+
+              {normalizeBodyshopSurveyStatusForDb(card.survey_status) === 'approved' && (
+                <>
+                  <Text style={[S.sectionTitle, { marginTop: 16 }]}>Survey approval document</Text>
+                  <View style={[S.formCard, { borderColor: '#e7e3d9' }]}>
+                    <Text style={{ fontSize: 13, color: '#1a1b21', fontWeight: '600' }}>
+                      {uploadedDocsByKey.doc_survey_approval?.file_name ?? 'Upload insurer / surveyor approval (photo or PDF)'}
+                    </Text>
+                    {!uploadedDocsByKey.doc_survey_approval ? (
+                      <Text style={{ fontSize: 12, color: '#82858f', marginTop: 6 }}>
+                        After upload, the customer approves or rejects this document in the customer app.
+                      </Text>
+                    ) : null}
+                    {surveyDocFeedback?.text ? (
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          marginTop: 8,
+                          color: surveyDocFeedback.tone === 'error' ? '#b91c1c' : surveyDocFeedback.tone === 'ok' ? '#15803d' : '#b45309',
+                        }}
+                      >
+                        {surveyDocFeedback.text}
+                      </Text>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                      {!uploadedDocsByKey.doc_survey_approval ? (
+                        <TouchableOpacity
+                          disabled={uploadingDocKey === 'doc_survey_approval'}
+                          onPress={() => void startSurveyApprovalUpload('upload')}
+                          style={[S.saveBtnSmall, uploadingDocKey === 'doc_survey_approval' && { opacity: 0.6 }]}
+                        >
+                          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                            {uploadingDocKey === 'doc_survey_approval' ? 'Uploading…' : 'Upload document'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => void openUploadedDoc('doc_survey_approval')}
+                            style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1d4ed8' }}>View</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            disabled={uploadingDocKey === 'doc_survey_approval'}
+                            onPress={() => void startSurveyApprovalUpload('replace')}
+                            style={{ backgroundColor: '#f6f4ee', borderColor: '#e7e3d9', borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>
+                              {uploadingDocKey === 'doc_survey_approval' ? 'Uploading…' : 'Replace'}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+
+                    {uploadedDocsByKey.doc_survey_approval ? (
+                      <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f6f4ee' }}>
+                        <Text style={S.fieldLabel}>Customer app status</Text>
+                        {(() => {
+                          const st = String(card.customer_survey_approval_status ?? '').trim().toLowerCase()
+                          const label = st === 'approved' ? 'Approved by customer'
+                            : st === 'rejected' ? 'Rejected by customer'
+                              : st === 'pending' ? 'Waiting for customer approval'
+                                : 'Not sent yet'
+                          const color = st === 'approved' ? '#15803d' : st === 'rejected' ? '#b91c1c' : '#b45309'
+                          return (
+                            <>
+                              <Text style={{ fontSize: 13, fontWeight: '700', color, marginTop: 4 }}>{label}</Text>
+                              {st === 'rejected' && card.customer_survey_rejection_reason ? (
+                                <Text style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
+                                  Customer remark: {card.customer_survey_rejection_reason}
+                                </Text>
+                              ) : null}
+                              {st === 'pending' ? (
+                                <Text style={{ fontSize: 12, color: '#82858f', marginTop: 6 }}>
+                                  Customer must approve in the mobile app. Then use Floor tab → Send to Floor 2/3.
+                                </Text>
+                              ) : null}
+                              {st === 'approved' ? (
+                                <Text style={{ fontSize: 12, color: '#15803d', marginTop: 6 }}>
+                                  You can send this vehicle to Floor 2 or Floor 3 from the Floor tab.
+                                </Text>
+                              ) : null}
+                            </>
+                          )
+                        })()}
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                          <TouchableOpacity onPress={() => void refreshSurveyCustomerStatus(false)}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#2f63cf' }}>Refresh status</Text>
+                          </TouchableOpacity>
+                          {String(card.customer_survey_approval_status ?? '').trim().toLowerCase() === 'rejected' ? (
+                            <TouchableOpacity onPress={() => void handleResendSurveyApprovalToCustomer()}>
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#7048cf' }}>Resend to customer app</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </>
+              )}
 
               {/* Estimation */}
               <Text style={[S.sectionTitle, { marginTop: 16 }]}>Estimation</Text>
@@ -1087,8 +1426,55 @@ export default function BodyshopRepairScreen() {
 
           {activeTab === 'floor' && (
             <>
-              <Text style={S.sectionTitle}>Floor Assignment (read-only)</Text>
-              <Text style={{ fontSize: 12, color: '#82858f', marginBottom: 12 }}>Edit assignments in the Bodyshop Floor screen.</Text>
+              <Text style={S.sectionTitle}>Physical floor</Text>
+              <View style={S.formCard}>
+                {(() => {
+                  const customerSurvey = String(card.customer_survey_approval_status ?? '').trim().toLowerCase()
+                  const surveyDoc = Boolean(uploadedDocsByKey.doc_survey_approval)
+                  const customerOk = customerSurvey === 'approved'
+                  const lockMsg = !surveyDoc
+                    ? 'Upload Survey Approval on SA & Docs, then wait for customer approval in the app.'
+                    : customerSurvey === 'rejected'
+                      ? `Customer rejected survey${card.customer_survey_rejection_reason ? `: ${card.customer_survey_rejection_reason}` : ''}`
+                      : !customerOk
+                        ? 'Waiting for customer approval in the customer app.'
+                        : null
+                  return (
+                    <>
+                      {lockMsg ? (
+                        <Text style={{ fontSize: 12, color: '#b45309', marginBottom: 10 }}>{lockMsg}</Text>
+                      ) : null}
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {(['Floor 2', 'Floor 3'] as const).map((fl) => {
+                          const selected = String(card.bodyshop_floor ?? '').trim() === fl
+                          const disabled = Boolean(lockMsg) || saving
+                          return (
+                            <TouchableOpacity
+                              key={fl}
+                              disabled={disabled}
+                              onPress={() => void sendToBodyshopFloor(fl)}
+                              style={{ flex: 1, minWidth: '40%', opacity: disabled ? 0.5 : 1 }}
+                            >
+                              <View style={[S.segChip, selected && { backgroundColor: '#efeafb', borderColor: '#7048cf' }]}>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: selected ? '#7048cf' : '#82858f' }}>
+                                  {selected ? `On ${fl}` : `Send to ${fl}`}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
+                      <Text style={{ fontSize: 11, color: '#82858f', marginTop: 8 }}>
+                        Current: {card.bodyshop_floor ?? 'Not on floor yet'}
+                        {card.current_stage === 9 ? ' · Completing survey sends vehicle to Stage 10' : ''}
+                      </Text>
+                    </>
+                  )
+                })()}
+              </View>
+
+              <Text style={[S.sectionTitle, { marginTop: 16 }]}>Floor Assignment (read-only)</Text>
+              <Text style={{ fontSize: 12, color: '#82858f', marginBottom: 12 }}>Edit role assignments in the Bodyshop Floor screen.</Text>
               {floorRoles.length === 0 ? (
                 <Text style={{ fontSize: 13, color: '#82858f' }}>No floor assignments found.</Text>
               ) : floorRoles.map(r => {

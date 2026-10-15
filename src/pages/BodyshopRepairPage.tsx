@@ -1096,6 +1096,7 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopSaAccess, setHasBodyshopSaAccess] = useState(false)
   const [hasBodyshopSsaAccess, setHasBodyshopSsaAccess] = useState(false)
   const [hasBodyshopSurveyAccess, setHasBodyshopSurveyAccess] = useState(false)
+  const [hasBodyshopRepairModuleAccess, setHasBodyshopRepairModuleAccess] = useState(false)
   const [hasBodyshopFloorAccess, setHasBodyshopFloorAccess] = useState(false)
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
   const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
@@ -1276,6 +1277,7 @@ export default function BodyshopRepairPage() {
           setHasBodyshopSaAccess(false)
           setHasBodyshopSsaAccess(false)
           setHasBodyshopSurveyAccess(false)
+          setHasBodyshopRepairModuleAccess(false)
           setHasBodyshopFloorAccess(false)
           setBodyshopSaCodesForUser([])
           setBodyshopSsaBranchesForUser([])
@@ -1285,13 +1287,15 @@ export default function BodyshopRepairPage() {
           return
         }
 
-        const [profileRes, scopeRes] = await Promise.all([
+        const [profileRes, scopeRes, repairViewRes, repairModifyRes] = await Promise.all([
           supabase
             .from('users')
             .select('role, is_active, full_name')
             .eq('id', userId)
             .maybeSingle(),
           supabase.rpc('get_my_bodyshop_employee_scope'),
+          supabase.rpc('has_module_view', { p_module: 'bodyshop_repair' }),
+          supabase.rpc('has_module_modify', { p_module: 'bodyshop_repair' }),
         ])
 
         const profile = profileRes.data
@@ -1341,12 +1345,15 @@ export default function BodyshopRepairPage() {
         const hasSsaRole = hasSsaRoleFromMaster
         const hasSurveyRole = hasSurveyRoleFromMaster
         const hasFloorRole = hasFloorRoleFromMaster
+        const hasRepairModuleAccess =
+          repairViewRes.data === true || repairModifyRes.data === true
 
         if (cancelled) return
         setIsAdminLikeUser(nextIsAdminLike)
         setHasBodyshopSaAccess(hasSaRole)
         setHasBodyshopSsaAccess(hasSsaRole)
         setHasBodyshopSurveyAccess(hasSurveyRole)
+        setHasBodyshopRepairModuleAccess(hasRepairModuleAccess)
         setHasBodyshopFloorAccess(hasFloorRole)
         setBodyshopSaCodesForUser(saCodes)
         setBodyshopSsaBranchesForUser(ssaBranches)
@@ -1359,6 +1366,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSaAccess(false)
         setHasBodyshopSsaAccess(false)
         setHasBodyshopSurveyAccess(false)
+        setHasBodyshopRepairModuleAccess(false)
         setHasBodyshopFloorAccess(false)
         setBodyshopSaCodesForUser([])
         setBodyshopSsaBranchesForUser([])
@@ -1379,7 +1387,12 @@ export default function BodyshopRepairPage() {
     let cancelled = false
 
     ;(async () => {
-      const shouldHaveSurveyorAccess = isAdminLikeUser || hasBodyshopSurveyAccess || hasBodyshopSaAccess || hasBodyshopSsaAccess
+      const shouldHaveSurveyorAccess =
+        isAdminLikeUser
+        || hasBodyshopSurveyAccess
+        || hasBodyshopSaAccess
+        || hasBodyshopSsaAccess
+        || hasBodyshopRepairModuleAccess
       if (!shouldHaveSurveyorAccess) {
         setBodyshopSurveyors([])
         return
@@ -1413,7 +1426,7 @@ export default function BodyshopRepairPage() {
     return () => {
       cancelled = true
     }
-  }, [userScopeResolved, isAdminLikeUser, hasBodyshopSurveyAccess, hasBodyshopSaAccess, hasBodyshopSsaAccess])
+  }, [userScopeResolved, isAdminLikeUser, hasBodyshopSurveyAccess, hasBodyshopSaAccess, hasBodyshopSsaAccess, hasBodyshopRepairModuleAccess])
 
   useEffect(() => {
     const receptionEntryId = Number(selected?.reception_entry_id)
@@ -5192,7 +5205,7 @@ export default function BodyshopRepairPage() {
     if (isAdminLikeUser || hasBodyshopSsaAccess) {
       nextTabs.push('approval')
     }
-    if (isAdminLikeUser || hasBodyshopSurveyAccess) {
+    if (isAdminLikeUser || hasBodyshopSurveyAccess || hasBodyshopRepairModuleAccess) {
       nextTabs.push('survey')
     }
     if (isAdminLikeUser || hasBodyshopFloorAccess) {
@@ -5206,7 +5219,7 @@ export default function BodyshopRepairPage() {
     }
 
     return nextTabs
-  }, [isAdminLikeUser, hasBodyshopSaAccess, hasBodyshopSsaAccess, hasBodyshopSurveyAccess, hasBodyshopFloorAccess])
+  }, [isAdminLikeUser, hasBodyshopSaAccess, hasBodyshopSsaAccess, hasBodyshopSurveyAccess, hasBodyshopRepairModuleAccess, hasBodyshopFloorAccess])
 
   useEffect(() => {
     if (!tabs.includes(detailTab)) {
