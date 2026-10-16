@@ -13,16 +13,27 @@ export function useStaffAllowedModules(user: User | null) {
         return
       }
       try {
-        const [{ data: profile }, { data: permissionRows }] = await Promise.all([
-          supabase.from('users').select('role, name, dealer_code').eq('id', user.id).maybeSingle(),
-          supabase.rpc('get_all_my_permissions'),
-        ])
+        const { data: permissionRows, error: permError } = await supabase.rpc('get_all_my_permissions')
+        if (permError) {
+          console.warn('get_all_my_permissions failed:', permError.message)
+        }
+
+        const { data: profile } = await supabase
+          .from('users')
+          .select('role, full_name')
+          .eq('id', user.id)
+          .maybeSingle()
+
         const rawMods = ((permissionRows ?? []) as Array<{ module_name?: string }>)
           .map((r) => String(r.module_name ?? '').trim().toLowerCase())
           .filter(Boolean)
         const mods = new Set<string>(rawMods)
 
-        const userRole = String((profile as { role?: string } | null)?.role || user.user_metadata?.role || '').toLowerCase()
+        const userRole = String(
+          (profile as { role?: string } | null)?.role
+            || user.user_metadata?.role
+            || '',
+        ).toLowerCase()
 
         if (userRole === 'admin') {
           ;[

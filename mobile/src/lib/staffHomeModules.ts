@@ -1,4 +1,5 @@
 import type { IconName } from '../components/ui/Icon'
+import { employeeRowIsBodyshopFloorIncharge } from './bodyshopFloorInchargeScope'
 import {
   shouldUseMechanicalFloorInchargeScreen,
   type StaffLinkedEmployeeProfile,
@@ -41,7 +42,7 @@ export const STAFF_HOME_MODULES: StaffHomeModule[] = [
   { key: 'floor-incharge', label: 'Floor Incharge', icon: 'grid', iconBg: 'bg-indigo-100', description: 'Technician assignments · bay · status', route: '/(tabs)/floor-incharge' },
   { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
   { key: 'bodyshop-repair', label: 'Bodyshop Repair', icon: 'package', iconBg: 'bg-violet-100', description: '18-stage accident repair pipeline', route: '/(tabs)/bodyshop-repair' },
-  { key: 'bodyshop-floor', label: 'Bodyshop Floor', icon: 'sliders', iconBg: 'bg-rose-100', description: '9-role floor assignment · QC · approvals', route: '/(tabs)/bodyshop-floor' },
+  { key: 'bodyshop-floor', label: 'Bodyshop Floor Incharge', icon: 'sliders', iconBg: 'bg-rose-100', description: 'Assign dentor, painter & floor roles', route: '/(tabs)/bodyshop-floor' },
   { key: 'bodyshop-floor-work', label: 'Floor Work', icon: 'edit', iconBg: 'bg-orange-100', description: 'Work update · photos · Done → next step', route: '/(tabs)/bodyshop-floor-work' },
 ]
 
@@ -80,17 +81,36 @@ export const STAFF_MODULE_KEY_TO_DB: Record<string, string[]> = {
   driver_tasks: ['driver_tasks', 'driver_management', 'driver'],
 }
 
+/** Body Shop FI often gets legacy `floor_incharge` in Admin; mobile uses `bodyshop_floor` tiles. */
+function expandAllowedModulesForBodyshopFloorIncharge(
+  allowedModules: Set<string>,
+  linkedEmployee?: StaffLinkedEmployeeProfile | null,
+): Set<string> {
+  if (!linkedEmployee || !employeeRowIsBodyshopFloorIncharge(linkedEmployee)) {
+    return allowedModules
+  }
+  const next = new Set(allowedModules)
+  if (next.has('floor_incharge') || next.has('bodyshop_floor')) {
+    next.add('bodyshop_floor')
+  }
+  if (next.has('bodyshop_floor_work') || (next.has('floor_incharge') && next.has('bodyshop_floor'))) {
+    next.add('bodyshop_floor_work')
+  }
+  return next
+}
+
 export function filterStaffHomeModules(
   allowedModules: Set<string>,
   linkedEmployee?: StaffLinkedEmployeeProfile | null,
 ): StaffHomeModule[] {
-  if (allowedModules.size === 0) return []
-  if (allowedModules.has('admin')) return [...STAFF_HOME_MODULES]
+  const effectiveAllowed = expandAllowedModulesForBodyshopFloorIncharge(allowedModules, linkedEmployee)
+  if (effectiveAllowed.size === 0) return []
+  if (effectiveAllowed.has('admin')) return [...STAFF_HOME_MODULES]
   return STAFF_HOME_MODULES.filter((module) => {
     if (module.key === 'floor-incharge' && linkedEmployee) {
       if (!shouldUseMechanicalFloorInchargeScreen(linkedEmployee)) return false
     }
     const dbNames = STAFF_MODULE_KEY_TO_DB[module.key]
-    return dbNames ? dbNames.some((name) => allowedModules.has(name)) : false
+    return dbNames ? dbNames.some((name) => effectiveAllowed.has(name)) : false
   })
 }
