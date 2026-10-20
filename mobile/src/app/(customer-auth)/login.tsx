@@ -28,6 +28,8 @@ export default function CustomerLoginScreen() {
         setError(result.error)
       } else if (result.needsTerms) {
         router.replace('/(customer-auth)/terms')
+      } else if (result.isNewUser) {
+        router.replace('/(customer)/register-vehicle')
       } else {
         router.replace('/(customer)')
       }

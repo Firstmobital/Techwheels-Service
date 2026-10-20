@@ -57,12 +57,20 @@ export default function CustomerMyBookingsScreen() {
       subtitle="View your appointment details and live workshop booking status"
     >
       <View className="flex-row items-center justify-between mb-4">
-        <TouchableOpacity
-          onPress={() => router.push('/(customer)/booking')}
-          className="bg-blue-600 active:bg-blue-700 px-4 py-2.5 rounded-xl shadow-xs flex-row items-center gap-1.5"
-        >
-          <Text className="text-white text-xs font-black">+ Book New Service</Text>
-        </TouchableOpacity>
+        <View className="flex-row gap-2">
+          <TouchableOpacity
+            onPress={() => router.push('/(customer)/booking')}
+            className="bg-blue-600 active:bg-blue-700 px-4 py-2.5 rounded-xl shadow-xs flex-row items-center gap-1.5"
+          >
+            <Text className="text-white text-xs font-black">+ Book Service</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/(customer)/register-vehicle')}
+            className="bg-slate-100 active:bg-slate-200 px-3 py-2.5 rounded-xl border border-slate-200 flex-row items-center gap-1"
+          >
+            <Text className="text-slate-600 text-xs font-bold">+ Vehicle</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           onPress={() => router.back()}
           className="bg-slate-100 px-3 py-2 rounded-xl border border-slate-200"

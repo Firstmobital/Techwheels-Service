@@ -29,7 +29,8 @@ interface CustomerSessionContextType {
   termsNeedsAcceptance: boolean
   setSelectedReg: (reg: string) => void
   rememberAudience: (audience: Audience) => Promise<void>
-  signIn: (username: string, password: string) => Promise<{ error?: string; needsTerms?: boolean }>
+  signIn: (username: string, password: string) => Promise<{ error?: string; needsTerms?: boolean; isNewUser?: boolean }>
+  addVehicle: (vehicle: CustomerVehicle) => void
   acceptTerms: () => Promise<{ error?: string }>
   refreshTermsStatus: () => Promise<void>
   signOut: () => Promise<void>
@@ -46,6 +47,7 @@ const defaultCustomerSession: CustomerSessionContextType = {
   setSelectedReg: () => {},
   rememberAudience: async () => {},
   signIn: async () => ({ error: 'Not initialized' }),
+  addVehicle: () => {},
   acceptTerms: async () => ({ error: 'Not initialized' }),
   refreshTermsStatus: async () => {},
   signOut: async () => {},
@@ -108,13 +110,9 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
             if (list.length > 0) {
               setVehicles(list)
               setSelectedReg(list[0].reg_number)
-            } else {
-              setToken(null)
-              setPhone(null)
-              setTermsNeedsAcceptance(false)
-              await safeStorage.deleteItem(TOKEN_KEY)
-              await safeStorage.deleteItem(PHONE_KEY)
             }
+            // No vehicles = new user mid-registration; keep the session alive
+            // so they can complete vehicle registration on the register-vehicle screen.
           } catch (error) {
             console.error('Failed to refresh customer vehicles on boot:', error)
             // Keep saved token so a slow network does not bounce the user to the audience screen.
@@ -159,8 +157,14 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     }
     const needsTerms = resolveNeedsTerms(terms ?? null)
     applyTermsStatus(terms)
-    return { needsTerms }
+    const isNewUser = result.data.vehicles.length === 0
+    return { needsTerms, isNewUser }
   }, [applyTermsStatus])
+
+  const addVehicle = useCallback((vehicle: CustomerVehicle) => {
+    setVehicles((prev) => [...prev, vehicle])
+    setSelectedReg(vehicle.reg_number)
+  }, [])
 
   const acceptTerms = useCallback(async () => {
     if (!token) return { error: 'Session expired. Please sign in again.' }
@@ -213,6 +217,7 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
         setSelectedReg,
         rememberAudience,
         signIn,
+        addVehicle,
         acceptTerms,
         refreshTermsStatus,
         signOut,

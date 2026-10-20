@@ -366,6 +366,22 @@ export default function CustomerDashboardScreen() {
           ) : null}
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
+          {/* ── SERVICE BOOKING TILES ── */}
+          <View style={{ marginBottom: 10, gap: 10 }}>
+            <ActionTile
+              icon="calendar"
+              title="Book a Service"
+              subtitle="Schedule maintenance, repairs or doorstep pickup"
+              onPress={() => router.push('/(customer)/booking')}
+            />
+            <ActionTile
+              icon="list"
+              title="My Bookings"
+              subtitle="View appointment status and history"
+              onPress={() => router.push('/(customer)/my-bookings')}
+            />
+          </View>
+
           <View style={{ marginBottom: 14 }}>
             <ActionTile
               highlighted

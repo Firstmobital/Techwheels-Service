@@ -146,6 +146,7 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="chat" options={{ href: null, title: 'Chat' }} />
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
+      <Tabs.Screen name="register-vehicle" options={{ href: null, title: 'Register Vehicle' }} />
     </Tabs>
     </CustomerVisitProvider>
   )

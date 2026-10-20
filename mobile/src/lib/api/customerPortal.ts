@@ -1189,6 +1189,30 @@ export async function customerSubmitBooking(
   }
 }
 
+export async function customerRegisterVehicle(
+  token: string,
+  payload: {
+    reg_number: string
+    owner_name: string
+    model: string
+    variant?: string
+    km_reading?: number
+    branch?: string
+  }
+): Promise<CustomerVehicle> {
+  const { data, error } = await cpRpc('customer_register_vehicle', {
+    p_session_token: token,
+    p_reg_number:    payload.reg_number,
+    p_owner_name:    payload.owner_name,
+    p_model:         payload.model,
+    p_variant:       payload.variant ?? null,
+    p_km_reading:    payload.km_reading ?? null,
+    p_branch:        payload.branch ?? null,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Could not register vehicle.'))
+  return data as CustomerVehicle
+}
+
 export async function customerListMyBookings(
   sessionToken: string,
   regNumber?: string | null,
