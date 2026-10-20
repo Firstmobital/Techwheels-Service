@@ -135,15 +135,15 @@ export async function customerStartSession(
     return { success: false, error: rpcErrorMessage(error, 'Invalid mobile number.') }
   }
 
-  const payload = data as CustomerSessionResult
+  const payload = data as CustomerSessionResult & { new_user?: boolean }
+  if (!payload.session_token) {
+    return { success: false, error: 'Invalid mobile number.' }
+  }
+
   const rawVehicles = Array.isArray(payload.vehicles)
     ? payload.vehicles.map((v, i) => mapVehicle(v as unknown as Record<string, unknown>, i))
     : []
-  const vehicles = filterToLatestVehicleOnly(rawVehicles)
-
-  if (!payload.session_token || vehicles.length === 0) {
-    return { success: false, error: 'No vehicle found for this mobile number.' }
-  }
+  const vehicles = payload.new_user ? rawVehicles : filterToLatestVehicleOnly(rawVehicles)
 
   return {
     success: true,
