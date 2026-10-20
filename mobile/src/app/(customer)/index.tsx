@@ -366,18 +366,18 @@ export default function CustomerDashboardScreen() {
           ) : null}
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
-          {/* ── SERVICE BOOKING TILES ── */}
-          <View style={{ marginBottom: 10, gap: 10 }}>
+          {/* ── SERVICE BOOKING TILES (single row) ── */}
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
             <ActionTile
               icon="calendar"
               title="Book a Service"
-              subtitle="Schedule maintenance, repairs or doorstep pickup"
+              subtitle="Schedule or doorstep pickup"
               onPress={() => router.push('/(customer)/booking')}
             />
             <ActionTile
               icon="list"
               title="My Bookings"
-              subtitle="View appointment status and history"
+              subtitle="Status & history"
               onPress={() => router.push('/(customer)/my-bookings')}
             />
           </View>
@@ -475,42 +475,42 @@ function ActionTile({
       onPress={onPress}
       activeOpacity={0.8}
       style={{
-        width: highlighted ? '100%' : '48%',
-        flexGrow: 1,
+        flex: 1,
         backgroundColor: highlighted ? CustomerTheme.primaryLight : CustomerTheme.card,
         borderWidth: highlighted ? 2 : 1,
         borderColor: highlighted ? CustomerTheme.primary : CustomerTheme.border,
         borderLeftWidth: highlighted ? 4 : 1,
         borderLeftColor: highlighted ? CustomerTheme.primary : CustomerTheme.border,
         borderRadius: CustomerTheme.radiusCard,
-        padding: highlighted ? 16 : 14,
+        padding: 14,
         shadowColor: CustomerTheme.navy,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: highlighted ? 0.1 : 0.05,
         shadowRadius: highlighted ? 12 : 8,
         elevation: highlighted ? 3 : 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
       }}
     >
-      <View style={{ flexDirection: highlighted ? 'row' : 'column', alignItems: highlighted ? 'center' : 'flex-start', gap: highlighted ? 12 : 0 }}>
-        <View
-          style={{
-            width: highlighted ? 44 : 36,
-            height: highlighted ? 44 : 36,
-            borderRadius: 12,
-            backgroundColor: highlighted ? '#FFFFFF' : CustomerTheme.bgMuted,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: highlighted ? 0 : 8,
-          }}
-        >
-          <Icon name={icon} size={highlighted ? 20 : 18} color={CustomerTheme.primary} strokeWidth={2.2} />
-        </View>
-        <View style={{ flex: highlighted ? 1 : undefined }}>
-          <Text style={{ fontSize: highlighted ? 15 : 13.5, fontWeight: '900', color: CustomerTheme.ink, letterSpacing: -0.2 }}>{title}</Text>
-          <Text style={{ fontSize: 11.5, color: CustomerTheme.inkMuted, marginTop: 3, fontWeight: '500' }}>{subtitle}</Text>
-        </View>
-        {highlighted ? <Icon name="chevron-right" size={20} color={CustomerTheme.primary} strokeWidth={2.2} /> : null}
+      <View
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: 11,
+          backgroundColor: highlighted ? '#FFFFFF' : CustomerTheme.bgMuted,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <Icon name={icon} size={18} color={CustomerTheme.primary} strokeWidth={2.2} />
       </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 13.5, fontWeight: '900', color: CustomerTheme.ink, letterSpacing: -0.2 }}>{title}</Text>
+        <Text style={{ fontSize: 11, color: CustomerTheme.inkMuted, marginTop: 2, fontWeight: '500' }}>{subtitle}</Text>
+      </View>
+      {highlighted ? <Icon name="chevron-right" size={18} color={CustomerTheme.primary} strokeWidth={2.2} /> : null}
     </TouchableOpacity>
   )
 }
