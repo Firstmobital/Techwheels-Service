@@ -40,6 +40,13 @@ export default function CustomerDashboardScreen() {
   const router = useRouter()
   const { token, vehicles, selectedReg } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
+
+  // New user — no vehicles registered yet; send to registration
+  useEffect(() => {
+    if (token && vehicles.length === 0) {
+      router.replace('/(customer)/register-vehicle')
+    }
+  }, [token, vehicles.length, router])
   const {
     ready: visitReady,
     job,
