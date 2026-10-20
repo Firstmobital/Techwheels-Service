@@ -30,14 +30,14 @@ export default function CustomerMyBookingsScreen() {
     if (!token) return
     setError(null)
     try {
-      const list = await customerListMyBookings(token, selected?.reg_number, phone)
+      const list = await customerListMyBookings(token, null, phone)
       setBookings(list)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load bookings.')
     } finally {
       setLoading(false)
     }
-  }, [token, selected?.reg_number, phone])
+  }, [token, phone])
 
   useFocusEffect(
     useCallback(() => {
