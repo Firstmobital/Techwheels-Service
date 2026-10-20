@@ -924,6 +924,9 @@ export default function ServiceBookingPage() {
                     <select style={selInp} value={form.booking_time ?? ''} onChange={e => setForm(p => ({ ...p, booking_time: e.target.value }))}>
                       <option value="">Select slot…</option>
                       {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                      {form.booking_time && !TIME_SLOTS.includes(form.booking_time) && (
+                        <option key="__raw" value={form.booking_time}>{form.booking_time}</option>
+                      )}
                     </select>
                   </Field>
 
@@ -1343,6 +1346,9 @@ export default function ServiceBookingPage() {
                           >
                             <option value="">Select slot…</option>
                             {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                            {selectedBooking.booking_time && !TIME_SLOTS.includes(selectedBooking.booking_time) && (
+                              <option key="__raw" value={selectedBooking.booking_time}>{selectedBooking.booking_time}</option>
+                            )}
                           </select>
                         </div>
                         <div>
@@ -1370,6 +1376,9 @@ export default function ServiceBookingPage() {
                     >
                       <option value="">Select service type…</option>
                       {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      {selectedBooking.service_type && !SERVICE_TYPES.includes(selectedBooking.service_type) && (
+                        <option key="__raw" value={selectedBooking.service_type}>{selectedBooking.service_type}</option>
+                      )}
                     </select>
                     {selectedBooking.jc_number && (
                       <div style={{ marginTop: '0.45rem', display: 'inline-block', background: '#dcfce7', color: '#15803d', borderRadius: '20px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 800 }}>
