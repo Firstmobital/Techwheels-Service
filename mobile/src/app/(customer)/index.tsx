@@ -371,13 +371,11 @@ export default function CustomerDashboardScreen() {
             <ActionTile
               icon="calendar"
               title="Book a Service"
-              subtitle="Schedule or doorstep pickup"
               onPress={() => router.push('/(customer)/booking')}
             />
             <ActionTile
               icon="list"
               title="My Bookings"
-              subtitle="Status & history"
               onPress={() => router.push('/(customer)/my-bookings')}
             />
           </View>
@@ -466,7 +464,7 @@ function ActionTile({
 }: {
   icon: IconName
   title: string
-  subtitle: string
+  subtitle?: string
   highlighted?: boolean
   onPress: () => void
 }) {
@@ -508,7 +506,7 @@ function ActionTile({
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 13.5, fontWeight: '900', color: CustomerTheme.ink, letterSpacing: -0.2 }}>{title}</Text>
-        <Text style={{ fontSize: 11, color: CustomerTheme.inkMuted, marginTop: 2, fontWeight: '500' }}>{subtitle}</Text>
+        {subtitle ? <Text style={{ fontSize: 11, color: CustomerTheme.inkMuted, marginTop: 2, fontWeight: '500' }}>{subtitle}</Text> : null}
       </View>
       {highlighted ? <Icon name="chevron-right" size={18} color={CustomerTheme.primary} strokeWidth={2.2} /> : null}
     </TouchableOpacity>
