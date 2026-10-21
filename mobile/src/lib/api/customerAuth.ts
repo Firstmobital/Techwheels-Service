@@ -159,12 +159,15 @@ export async function customerStartSession(
 
 export async function customerGetTermsStatus(
   sessionToken: string,
-): Promise<CustomerTermsStatus | null> {
+): Promise<{ terms: CustomerTermsStatus | null; expired: boolean }> {
   const { data, error } = await supabase.rpc('customer_get_terms_status', {
     p_session_token: sessionToken,
   })
-  if (error || !data) return null
-  return mapTermsStatus(data) ?? null
+  if (error || !data) {
+    const raw = error?.message || ''
+    return { terms: null, expired: raw.includes('Session expired') }
+  }
+  return { terms: mapTermsStatus(data) ?? null, expired: false }
 }
 
 export async function customerAcceptTerms(

@@ -99,18 +99,41 @@ function expandAllowedModulesForBodyshopFloorIncharge(
   return next
 }
 
+function isLinkedBodyshopFloorIncharge(linkedEmployee?: StaffLinkedEmployeeProfile | null): boolean {
+  return Boolean(linkedEmployee && employeeRowIsBodyshopFloorIncharge(linkedEmployee))
+}
+
+/** Body Shop FI keeps the home label "Floor Incharge" and opens bodyshop assignment, not mechanical bays. */
+function presentFloorInchargeModule(
+  module: StaffHomeModule,
+  linkedEmployee?: StaffLinkedEmployeeProfile | null,
+): StaffHomeModule {
+  if (module.key !== 'floor-incharge' || !isLinkedBodyshopFloorIncharge(linkedEmployee)) return module
+  return {
+    ...module,
+    label: 'Floor Incharge',
+    description: 'Assign dentor, painter & floor roles',
+    route: '/(tabs)/bodyshop-floor',
+  }
+}
+
 export function filterStaffHomeModules(
   allowedModules: Set<string>,
   linkedEmployee?: StaffLinkedEmployeeProfile | null,
 ): StaffHomeModule[] {
   const effectiveAllowed = expandAllowedModulesForBodyshopFloorIncharge(allowedModules, linkedEmployee)
   if (effectiveAllowed.size === 0) return []
-  if (effectiveAllowed.has('admin')) return [...STAFF_HOME_MODULES]
+  const bodyShopFloorIncharge = isLinkedBodyshopFloorIncharge(linkedEmployee)
+  if (effectiveAllowed.has('admin') && !bodyShopFloorIncharge) return [...STAFF_HOME_MODULES]
   return STAFF_HOME_MODULES.filter((module) => {
+    if (module.key === 'bodyshop-floor' && bodyShopFloorIncharge) return false
+    if (module.key === 'floor-incharge' && bodyShopFloorIncharge) {
+      return effectiveAllowed.has('floor_incharge') || effectiveAllowed.has('bodyshop_floor')
+    }
     if (module.key === 'floor-incharge' && linkedEmployee) {
       if (!shouldUseMechanicalFloorInchargeScreen(linkedEmployee)) return false
     }
     const dbNames = STAFF_MODULE_KEY_TO_DB[module.key]
     return dbNames ? dbNames.some((name) => effectiveAllowed.has(name)) : false
-  })
+  }).map((module) => presentFloorInchargeModule(module, linkedEmployee))
 }

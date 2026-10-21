@@ -54,8 +54,7 @@ const defaultCustomerSession: CustomerSessionContextType = {
 }
 
 function resolveNeedsTerms(terms: CustomerTermsStatus | null | undefined): boolean {
-  if (!terms) return true
-  return Boolean(terms.needs_acceptance)
+  return Boolean(terms?.needs_acceptance)
 }
 
 const CustomerSessionContext = createContext<CustomerSessionContextType>(defaultCustomerSession)
@@ -78,8 +77,18 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
       setTermsNeedsAcceptance(false)
       return
     }
-    const terms = await customerGetTermsStatus(token)
-    applyTermsStatus(terms)
+    const looked = await customerGetTermsStatus(token)
+    if (looked.expired) {
+      setToken(null)
+      setPhone(null)
+      setVehicles([])
+      setSelectedReg(null)
+      setTermsNeedsAcceptance(false)
+      await safeStorage.deleteItem(TOKEN_KEY)
+      await safeStorage.deleteItem(PHONE_KEY)
+      return
+    }
+    if (looked.terms) applyTermsStatus(looked.terms)
   }, [token, applyTermsStatus])
 
   useEffect(() => {
@@ -99,10 +108,19 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
           setToken(savedToken)
           setPhone(savedPhone)
           try {
-            const terms = await customerGetTermsStatus(savedToken)
+            const looked = await customerGetTermsStatus(savedToken)
             if (!mounted) return
-            applyTermsStatus(terms)
-            if (resolveNeedsTerms(terms)) {
+            if (looked.expired) {
+              setToken(null)
+              setPhone(null)
+              setTermsNeedsAcceptance(false)
+              await safeStorage.deleteItem(TOKEN_KEY)
+              await safeStorage.deleteItem(PHONE_KEY)
+              return
+            }
+            if (!looked.terms) return
+            applyTermsStatus(looked.terms)
+            if (looked.terms.needs_acceptance) {
               return
             }
             const list = await customerListMyVehicles(savedToken)
@@ -151,11 +169,12 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     setLastAudience('customer')
     clearCustomerPortalCache()
 
-    let terms = result.data.terms
+    let terms = result.data.terms ?? null
     if (!terms) {
-      terms = await customerGetTermsStatus(result.data.session_token)
+      const looked = await customerGetTermsStatus(result.data.session_token)
+      terms = looked.terms
     }
-    const needsTerms = resolveNeedsTerms(terms ?? null)
+    const needsTerms = resolveNeedsTerms(terms)
     applyTermsStatus(terms)
     const isNewUser = result.data.vehicles.length === 0
     return { needsTerms, isNewUser }

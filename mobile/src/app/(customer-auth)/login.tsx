@@ -1,18 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ActivityIndicator, Text, TextInput, TouchableOpacity } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { SimpleServiceLoginShell } from '../../components/auth/SimpleServiceLoginShell'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 export default function CustomerLoginScreen() {
   const router = useRouter()
+  const params = useLocalSearchParams<{ reason?: string }>()
   const { signIn } = useCustomerSession()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (params.reason === 'expired') {
+      setError('Session expired. Please sign in again with your mobile number.')
+    }
+  }, [params.reason])
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {

@@ -21,6 +21,10 @@ import {
   fetchBodyshopAssignmentsForJobCards,
 } from '../../lib/api/bodyshopFloorList'
 import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
+import {
+  BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
+  BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
+} from '../../lib/bodyshopFloorMobileLimits'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
@@ -265,6 +269,7 @@ export default function BodyshopRepairScreen() {
   const [branchFilter, setBranchFilter] = useState('all')
   const listSearch = useListSearch()
   const [loadError,    setLoadError]    = useState<string | null>(null)
+  const [listTruncated, setListTruncated] = useState(false)
 
   const [selectedCard, setSelectedCard] = useState<RepairCard | null>(null)
   const [activeTab,    setActiveTab]    = useState<RepairTab>('overview')
@@ -280,12 +285,16 @@ export default function BodyshopRepairScreen() {
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
     setLoadError(null)
+    setListTruncated(false)
     try {
       const cardList = (await fetchBodyshopRepairCardsLegacyFull({
         searchQuery: null,
         bodyshopFloor: null,
         liveOnFloor: false,
+        maxPages: BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
+        maxRows: BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
       })) as RepairCard[]
+      setListTruncated(cardList.length >= BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE)
       setCards(cardList)
 
       const { data: empData } = await supabase
@@ -727,9 +736,9 @@ export default function BodyshopRepairScreen() {
     if (listSearch.appliedNorm) {
       const q = listSearch.appliedNorm
       list = list.filter(c =>
-        c.job_card_no.toLowerCase().includes(q) ||
-        (c.reg_number ?? '').toLowerCase().includes(q) ||
-        (c.customer_name ?? '').toLowerCase().includes(q)
+        String(c.job_card_no ?? '').toLowerCase().includes(q) ||
+        String(c.reg_number ?? '').toLowerCase().includes(q) ||
+        String(c.customer_name ?? '').toLowerCase().includes(q)
       )
     }
     return list
@@ -765,8 +774,14 @@ export default function BodyshopRepairScreen() {
     const seen = new Set<string>()
     return employees
       .filter(e => String(e.department ?? '').toUpperCase().includes('BODY'))
-      .map(e => e.employee_name)
-      .filter(n => { const k = n.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true })
+      .map(e => String(e.employee_name ?? '').trim())
+      .filter(n => {
+        if (!n) return false
+        const k = n.toLowerCase()
+        if (seen.has(k)) return false
+        seen.add(k)
+        return true
+      })
       .sort((a, b) => a.localeCompare(b))
   }, [employees])
 
@@ -952,7 +967,7 @@ export default function BodyshopRepairScreen() {
           <View style={{ flex: 1 }}>
             <Text style={S.detailTitle} numberOfLines={1}>{card.job_card_no} — {card.reg_number ?? '—'}</Text>
             <Text style={S.detailSub} numberOfLines={1}>{[
-              card.reg_number?.trim().toUpperCase() !== card.job_card_no?.trim().toUpperCase() ? card.reg_number : null,
+              String(card.reg_number ?? '').trim().toUpperCase() !== String(card.job_card_no ?? '').trim().toUpperCase() ? card.reg_number : null,
               card.customer_name,
               card.branch,
             ].filter(Boolean).join(' · ')}</Text>
@@ -1716,7 +1731,7 @@ export default function BodyshopRepairScreen() {
 
       <StaffNavigationChrome
         title="Bodyshop Repair"
-        subtitle={`${filtered.length} shown${pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}`}
+        subtitle={`${filtered.length} shown${listTruncated ? ` · newest ${BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE}` : ''}${pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}`}
         rightAction={<StaffRefreshButton onPress={() => loadAll(true)} />}
       />
 
@@ -1742,7 +1757,7 @@ export default function BodyshopRepairScreen() {
                 </View>
               </View>
               <Text style={S.cardReg}>{[
-                card.reg_number?.trim().toUpperCase() !== card.job_card_no?.trim().toUpperCase() ? card.reg_number : null,
+                String(card.reg_number ?? '').trim().toUpperCase() !== String(card.job_card_no ?? '').trim().toUpperCase() ? card.reg_number : null,
                 card.customer_name,
                 bodyshopBranchLabel(card.branch) !== 'Unknown' ? bodyshopBranchLabel(card.branch) : null,
               ].filter(Boolean).join(' · ')}</Text>

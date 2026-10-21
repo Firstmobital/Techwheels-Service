@@ -846,7 +846,7 @@ function BodyshopFloorScreenInner() {
     m.FLOOR_INCHARGE = listBodyshopFloorInchargeEmployees(employees)
     ALL_ROLES.forEach(r => {
       if (r === 'FLOOR_INCHARGE') return
-      m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name))
+      m[r].sort((a, b) => String(a.employee_name ?? '').localeCompare(String(b.employee_name ?? '')))
     })
     return m
   }, [employees])
@@ -855,8 +855,14 @@ function BodyshopFloorScreenInner() {
     const seen = new Set<string>()
     return employees
       .filter(e => isBodyshopDepartment(e.department))
-      .map(e => e.employee_name)
-      .filter(n => { const k = n.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true })
+      .map(e => String(e.employee_name ?? '').trim())
+      .filter(n => {
+        if (!n) return false
+        const k = n.toLowerCase()
+        if (seen.has(k)) return false
+        seen.add(k)
+        return true
+      })
       .sort((a, b) => a.localeCompare(b))
   }, [employees])
 

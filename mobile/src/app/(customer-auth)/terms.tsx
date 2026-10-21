@@ -51,6 +51,11 @@ export default function CustomerTermsScreen() {
     const result = await acceptTerms()
     setLoading(false)
     if (result.error) {
+      if (result.error.includes('Session expired')) {
+        await signOut()
+        router.replace('/(customer-auth)/login?reason=expired')
+        return
+      }
       setError(result.error)
       return
     }
