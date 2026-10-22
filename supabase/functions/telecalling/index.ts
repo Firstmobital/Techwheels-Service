@@ -710,7 +710,7 @@ export default async function handler(req: Request) {
         const { data: byRegCandidates } = await serviceClient
           .from('all_service_data')
           .select('id, vehicle_registration_number')
-          .ilike('vehicle_registration_number', `%${escapeIlike(regNorm.slice(0, Math.min(regNorm.length, 8))}%`)
+          .ilike('vehicle_registration_number', `%${escapeIlike(regNorm.slice(0, Math.min(regNorm.length, 8)))}%`)
           .limit(80)
         for (const row of byRegCandidates || []) {
           if (normReg(String(row.vehicle_registration_number || '')) === regNorm
