@@ -47,6 +47,8 @@ interface Assignment {
   whatsapp_sent: boolean
   whatsapp_status: string | null
   assigned_at: string | null
+  assigned_to?: string | null
+  campaign?: { campaign_name: string } | null
   customer: Customer
 }
 
@@ -105,6 +107,13 @@ async function callEdge(action: string, body: Record<string, unknown> = {}) {
 function formatDate(d: string | null): string {
   if (!d) return '—'
   try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { return d }
+}
+
+function formatDateTime(d: string | null): string {
+  if (!d) return '—'
+  try {
+    return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  } catch { return d }
 }
 
 function daysFromToday(d: string | null): number | null {
@@ -295,10 +304,19 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
+  const [activeView, setActiveView] = useState<'call' | 'queue' | 'find' | 'summary'>('call')
   const [bookingConfirmation, setBookingConfirmation] = useState<{ id: number } | null>(null)
   // Queue search
   const [queueSearch, setQueueSearch] = useState('')
+  // Find Customer (server-side telecalling search)
+  const [findQuery, setFindQuery] = useState('')
+  const [findResults, setFindResults] = useState<Assignment[]>([])
+  const [findLoading, setFindLoading] = useState(false)
+  const [findError, setFindError] = useState<string | null>(null)
+  const [findSearched, setFindSearched] = useState(false)
+  const [findOpenBusy, setFindOpenBusy] = useState<number | null>(null)
+  const [userEmail, setUserEmail] = useState<string>('')
+  const [canMutateCallCard, setCanMutateCallCard] = useState(true)
   // Call form
   const [notes, setNotes] = useState('')
   const [bookingDate, setBookingDate] = useState('')
@@ -338,6 +356,12 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   useEffect(() => { refreshQueue(); refreshSummary() }, [refreshQueue, refreshSummary])
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email) setUserEmail(session.user.email)
+    })
+  }, [])
+
+  useEffect(() => {
     supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
       .then(({ data }) => {
         if (data) {
@@ -366,7 +390,11 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     setBusy(true); setError(null)
     try {
       const data = await callEdge('get_next', { campaign_id: activeCampaign.id })
-      if (data.assignment) { setCurrentAssignment(data.assignment); setActiveView('call') }
+      if (data.assignment) {
+        setCurrentAssignment(data.assignment)
+        setCanMutateCallCard(true)
+        setActiveView('call')
+      }
       else setError('No more pending customers in this campaign. Great job! 🎉')
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
@@ -419,6 +447,48 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     catch (err) { console.error('WA log error:', err) }
   }
 
+  const handleFindCustomers = async () => {
+    if (!activeCampaign) return
+    const q = findQuery.trim()
+    if (!q) {
+      setFindError('Enter a mobile number, registration number, name, or chassis number.')
+      setFindResults([])
+      setFindSearched(false)
+      return
+    }
+    setFindLoading(true)
+    setFindError(null)
+    setFindSearched(true)
+    try {
+      const data = await callEdge('find_customers', { query: q, campaign_id: activeCampaign.id })
+      setFindResults(data.results || [])
+      if ((data.results || []).length === 0 && data.message) setFindError(data.message)
+    } catch (err) {
+      setFindResults([])
+      setFindError((err as Error).message)
+    } finally {
+      setFindLoading(false)
+    }
+  }
+
+  const handleOpenFromFind = async (assignmentId: number) => {
+    setFindOpenBusy(assignmentId)
+    setError(null)
+    try {
+      const data = await callEdge('get_assignment', { assignment_id: assignmentId })
+      if (data.assignment) {
+        setCurrentAssignment(data.assignment)
+        setCanMutateCallCard(data.can_update !== false)
+        resetCallForm()
+        setActiveView('call')
+      }
+    } catch (err) {
+      setFindError((err as Error).message)
+    } finally {
+      setFindOpenBusy(null)
+    }
+  }
+
   if (!activeCampaign) return (
     <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
       <div className="text-4xl mb-3">📞</div>
@@ -432,6 +502,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       <div className="flex gap-2">
         <button onClick={() => setActiveView('call')} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'call' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📞 Call</button>
         <button onClick={() => { setActiveView('queue'); refreshQueue() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'queue' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📋 My Queue ({queue.length})</button>
+        <button onClick={() => setActiveView('find')} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'find' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>🔍 Find Customer</button>
         <button onClick={() => { setActiveView('summary'); refreshSummary() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'summary' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📊 Today&apos;s Summary</button>
       </div>
 
@@ -463,6 +534,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
           <CallCard
             assignment={currentAssignment}
             busy={busy}
+            canMutate={canMutateCallCard}
+            viewerEmail={userEmail}
             notes={notes} setNotes={setNotes}
             showNotes={showNotes} setShowNotes={setShowNotes}
             bookingDate={bookingDate} setBookingDate={setBookingDate}
@@ -481,6 +554,89 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
             onLogWA={handleLogWA}
           />
         )
+      )}
+
+      {/* ── FIND CUSTOMER VIEW ───────────────────────────────────────────── */}
+      {activeView === 'find' && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+            <p className="text-sm text-gray-600">
+              Search Telecalling customers in the selected campaign by mobile, registration number, name, or chassis. Lookup does not change assignment status or queue.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={findQuery}
+                  onChange={e => { setFindQuery(e.target.value); setFindError(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleFindCustomers() }}
+                  placeholder="Mobile, reg. no., name, or chassis…"
+                  className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+              </div>
+              <button
+                onClick={handleFindCustomers}
+                disabled={findLoading || !findQuery.trim()}
+                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {findLoading ? 'Searching…' : 'Search'}
+              </button>
+            </div>
+            {findError && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{findError}</div>
+            )}
+          </div>
+
+          {findLoading && (
+            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">Searching Telecalling records…</div>
+          )}
+
+          {!findLoading && findSearched && findResults.length === 0 && !findError && (
+            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+              No Telecalling customer found for this search.
+            </div>
+          )}
+
+          {!findLoading && findResults.length > 0 && (
+            <div className="space-y-2">
+              {findResults.length > 1 && (
+                <p className="text-xs text-gray-500 px-1">{findResults.length} matches — select the correct customer.</p>
+              )}
+              {findResults.map((asgn: Assignment) => (
+                <div key={asgn.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900">{asgn.customer.first_name} {asgn.customer.last_name || ''}</div>
+                      <div className="text-sm text-gray-500 mt-0.5">
+                        📱 {asgn.customer.contact_phones || '—'} · 🚗 {asgn.customer.model || '—'} · {asgn.customer.vehicle_registration_number || '—'}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                        <span>Campaign: {asgn.campaign?.campaign_name || `#${asgn.campaign_id}`}</span>
+                        <span>Last called: {formatDateTime(asgn.called_at)}</span>
+                        <span>Executive: {asgn.assigned_to ? asgn.assigned_to.split('@')[0] : '— (unassigned)'}</span>
+                        <span>Calls: {asgn.call_count ?? 0} · No answer: {asgn.no_answer_count ?? 0}</span>
+                      </div>
+                      {asgn.call_notes && (
+                        <div className="mt-2 rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">📝 {asgn.call_notes}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <StatusBadge status={asgn.status} />
+                      <button
+                        onClick={() => handleOpenFromFind(asgn.id)}
+                        disabled={findOpenBusy === asgn.id}
+                        className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {findOpenBusy === asgn.id ? 'Opening…' : 'Open Customer'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── QUEUE VIEW ─────────────────────────────────────────────────────── */}
@@ -597,7 +753,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
 
 // ── Call Card ───────────────────────────────────────────────────────────────────
 function CallCard({
-  assignment, busy,
+  assignment, busy, canMutate, viewerEmail,
   notes, setNotes, showNotes, setShowNotes,
   bookingDate, setBookingDate, bookingTime, setBookingTime,
   callbackDate, setCallbackDate,
@@ -613,6 +769,8 @@ function CallCard({
   onUpdateStatus, onLogWA,
 }: {
   assignment: Assignment; busy: boolean
+  canMutate: boolean
+  viewerEmail: string
   notes: string; setNotes: (v: string) => void
   showNotes: boolean; setShowNotes: (v: boolean) => void
   bookingDate: string; setBookingDate: (v: string) => void
@@ -638,9 +796,16 @@ function CallCard({
   const isDueToday = daysLeft === 0
   const ewExpired = c.extended_warranty_end_date ? new Date(c.extended_warranty_end_date) < new Date() : false
   const insExpired = c.last_insurance_expiry_date ? new Date(c.last_insurance_expiry_date) < new Date() : false
+  const ownerLabel = assignment.assigned_to ? assignment.assigned_to.split('@')[0] : null
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      {!canMutate && assignment.assigned_to && assignment.assigned_to !== viewerEmail && (
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
+          View only — this assignment belongs to <span className="font-semibold">{ownerLabel || assignment.assigned_to}</span>.
+          Find Customer is for identification; ask that executive or an admin to record outcomes.
+        </div>
+      )}
       {/* Header */}
       <div className={`px-6 py-4 text-white ${isOverdue ? 'bg-gradient-to-r from-red-600 to-red-700' : isDueToday ? 'bg-gradient-to-r from-orange-500 to-orange-600' : 'bg-gradient-to-r from-blue-600 to-blue-700'}`}>
         <div className="flex items-start justify-between gap-4">
@@ -663,10 +828,10 @@ function CallCard({
         <a href={`tel:${phone}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-500 px-6 py-3 text-base font-semibold text-white hover:bg-green-600 min-w-0">
           📞 Call {phone}
         </a>
-        <a href={getWhatsAppLink(phone, buildServiceReminderMsg(c))} target="_blank" rel="noreferrer" onClick={() => onLogWA(assignment.id, 'service_reminder')} className="flex items-center gap-1.5 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 hover:bg-green-100">
+        <a href={getWhatsAppLink(phone, buildServiceReminderMsg(c))} target="_blank" rel="noreferrer" onClick={canMutate ? () => onLogWA(assignment.id, 'service_reminder') : undefined} className={`flex items-center gap-1.5 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 ${canMutate ? 'hover:bg-green-100' : 'opacity-50 pointer-events-none'}`}>
           💬 WA Reminder
         </a>
-        <a href={getWhatsAppLink(phone, buildNoPickMsg(c))} target="_blank" rel="noreferrer" onClick={() => onLogWA(assignment.id, 'not_picked')} className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100">
+        <a href={getWhatsAppLink(phone, buildNoPickMsg(c))} target="_blank" rel="noreferrer" onClick={canMutate ? () => onLogWA(assignment.id, 'not_picked') : undefined} className={`flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 ${canMutate ? 'hover:bg-gray-100' : 'opacity-50 pointer-events-none'}`}>
           📵 WA No-Pick
         </a>
       </div>
@@ -710,6 +875,12 @@ function CallCard({
 
       {/* Action buttons */}
       <div className="px-6 py-4 space-y-4">
+        {!canMutate ? (
+          <p className="text-sm text-gray-500 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            Call outcomes are disabled for this assignment. Customer details above remain available for callback identification.
+          </p>
+        ) : (
+        <>
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
           <button onClick={() => { setShowBooking(true); setShowNotes(true) }} disabled={busy} className="rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-50">✅ Booked</button>
           <button onClick={() => { setShowCallback(true); setShowNotes(true) }} disabled={busy} className="rounded-xl bg-purple-500 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50">🔁 Callback Later</button>
@@ -807,6 +978,8 @@ function CallCard({
               {busy ? 'Saving…' : '🔁 Schedule Callback'}
             </button>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

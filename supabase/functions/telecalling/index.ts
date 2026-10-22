@@ -87,6 +87,23 @@ export default async function handler(req: Request) {
     // 'pending' here means "actually callable via get_next" — claimed
     // (assigned/calling) and deferred (callback_later) leads get their own
     // buckets so the summary bar doesn't overstate what's left to call.
+    const normReg = (p: string) => {
+      const n = (p || '').replace(/\s+/g, '').toUpperCase()
+      return n.length > 0 ? n : null
+    }
+    const phoneDigits = (p: string) => (p || '').replace(/\D/g, '')
+    const escapeIlike = (s: string) => s.replace(/[%_\\]/g, '\\$&')
+
+    /** Same rule as edit_assignment: admin, unassigned pool, or current assignee only. */
+    const canMutateAssignment = (assignedTo: string | null | undefined) =>
+      isAdmin || !assignedTo || assignedTo === userEmail
+
+    const assertCanMutateAssignment = (assignedTo: string | null | undefined) => {
+      if (!canMutateAssignment(assignedTo)) {
+        throw new Error('Not authorised to update this assignment')
+      }
+    }
+
     const computeCampaignCounts = (rows: { status: string }[]) => ({
       pending: rows.filter(r => r.status === 'pending').length,
       in_progress: rows.filter(r => r.status === 'assigned' || r.status === 'calling').length,
@@ -403,7 +420,7 @@ export default async function handler(req: Request) {
           .in('id', staleRows.map((r: any) => r.id))
       }
 
-      const CUST_SELECT = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, whatsapp_sent, whatsapp_status, assigned_at,
+      const CUST_SELECT = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, retry_after, whatsapp_sent, whatsapp_status, assigned_to, assigned_at,
         customer:customer_id (
           id, chassis_no, vehicle_registration_number, first_name, last_name, contact_phones,
           model, powertrain_type, product_line,
@@ -492,6 +509,14 @@ export default async function handler(req: Request) {
       const { assignment_id, campaign_id, status, call_notes, booking_date, callback_date, pickup_required, service_centre, pickup_address, alt_phone, cre_name, driver_name } = body
       if (!assignment_id || !status) throw new Error('Missing assignment_id or status')
 
+      const { data: existingRow } = await serviceClient
+        .from('telecall_assignments')
+        .select('assigned_to, no_answer_count, call_count')
+        .eq('id', assignment_id)
+        .single()
+      if (!existingRow) throw new Error('Assignment not found')
+      assertCanMutateAssignment(existingRow.assigned_to)
+
       const update: Record<string, unknown> = {
         status,
         called_at: new Date().toISOString(),
@@ -503,10 +528,9 @@ export default async function handler(req: Request) {
       if (callback_date) update.callback_date = callback_date
 
       if (status === 'no_answer') {
-        const { data: current } = await serviceClient.from('telecall_assignments').select('no_answer_count, call_count').eq('id', assignment_id).single()
-        const newNoAnswer = (current?.no_answer_count || 0) + 1
+        const newNoAnswer = (existingRow.no_answer_count || 0) + 1
         update.no_answer_count = newNoAnswer
-        update.call_count = (current?.call_count || 0) + 1
+        update.call_count = (existingRow.call_count || 0) + 1
         if (newNoAnswer >= 3) {
           // 3rd no-answer — permanently done
           update.status = 'not_reachable'
@@ -520,8 +544,7 @@ export default async function handler(req: Request) {
           update.assigned_at = null
         }
       } else {
-        const { data: current } = await serviceClient.from('telecall_assignments').select('call_count').eq('id', assignment_id).single()
-        update.call_count = (current?.call_count || 0) + 1
+        update.call_count = (existingRow.call_count || 0) + 1
       }
 
       const { error: updateErr } = await serviceClient.from('telecall_assignments').update(update).eq('id', assignment_id)
@@ -614,6 +637,9 @@ export default async function handler(req: Request) {
     if (action === 'log_whatsapp') {
       const { assignment_id, wa_type } = body
       if (!assignment_id) throw new Error('Missing assignment_id')
+      const { data: waRow } = await serviceClient.from('telecall_assignments').select('assigned_to').eq('id', assignment_id).single()
+      if (!waRow) throw new Error('Assignment not found')
+      assertCanMutateAssignment(waRow.assigned_to)
       await serviceClient.from('telecall_assignments').update({ whatsapp_sent: true, whatsapp_status: wa_type, updated_at: new Date().toISOString() }).eq('id', assignment_id)
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
@@ -653,6 +679,130 @@ export default async function handler(req: Request) {
       }
 
       return new Response(JSON.stringify({ success: true, message: 'Assignment updated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: find_customers (read-only search) ─────────────────────────
+    if (action === 'find_customers') {
+      const { query: rawQuery, campaign_id } = body
+      const query = String(rawQuery || '').trim()
+      if (!query) throw new Error('Enter a mobile number, registration number, name, or chassis number to search')
+      if (query.length < 3) throw new Error('Search term must be at least 3 characters')
+
+      const digits = phoneDigits(query)
+      const regNorm = normReg(query)
+      const ilikeTerm = escapeIlike(query)
+      const customerIdSet = new Set<number>()
+
+      if (digits.length >= 10) {
+        const last10 = digits.slice(-10)
+        const { data: byPhone } = await serviceClient
+          .from('all_service_data')
+          .select('id, contact_phones')
+          .ilike('contact_phones', `%${escapeIlike(last10)}%`)
+          .limit(50)
+        for (const row of byPhone || []) {
+          const stored = phoneDigits(String(row.contact_phones || ''))
+          if (stored.endsWith(last10) || stored.includes(last10)) customerIdSet.add(row.id as number)
+        }
+      }
+
+      if (regNorm && regNorm.length >= 4) {
+        const { data: byRegCandidates } = await serviceClient
+          .from('all_service_data')
+          .select('id, vehicle_registration_number')
+          .ilike('vehicle_registration_number', `%${escapeIlike(regNorm.slice(0, Math.min(regNorm.length, 8))}%`)
+          .limit(80)
+        for (const row of byRegCandidates || []) {
+          if (normReg(String(row.vehicle_registration_number || '')) === regNorm
+            || normReg(String(row.vehicle_registration_number || '')).includes(regNorm)) {
+            customerIdSet.add(row.id as number)
+          }
+        }
+      }
+
+      if (query.length >= 5 && /^[A-Za-z0-9-]+$/.test(query.replace(/\s/g, ''))) {
+        const chassisNorm = query.replace(/\s/g, '').toUpperCase()
+        const { data: byChassis } = await serviceClient
+          .from('all_service_data')
+          .select('id')
+          .ilike('chassis_no', `%${escapeIlike(chassisNorm)}%`)
+          .limit(30)
+        for (const row of byChassis || []) customerIdSet.add(row.id as number)
+      }
+
+      if (!/^\d+$/.test(query.replace(/\s/g, '')) && query.length >= 3) {
+        const { data: byName } = await serviceClient
+          .from('all_service_data')
+          .select('id')
+          .or(`first_name.ilike.%${ilikeTerm}%,last_name.ilike.%${ilikeTerm}%`)
+          .limit(30)
+        for (const row of byName || []) customerIdSet.add(row.id as number)
+      }
+
+      if (customerIdSet.size === 0) {
+        return new Response(JSON.stringify({ success: true, results: [], message: 'No Telecalling customer found for this search.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const FIND_SELECT = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, retry_after, whatsapp_sent, whatsapp_status, assigned_to, assigned_at,
+        campaign:campaign_id (campaign_name),
+        customer:customer_id (
+          id, chassis_no, vehicle_registration_number, first_name, last_name, contact_phones,
+          model, powertrain_type, product_line,
+          assumed_next_service_date, assumed_next_service_type,
+          scheduled_next_service_date, scheduled_next_service_type,
+          last_service_date, last_service_type, last_service_km, last_service_dealer, sold_dealer,
+          extended_warranty_end_date, extended_warranty_product, extended_warranty_end_kms,
+          extended_warranty_policy_no, extended_warranty_order_status,
+          last_insurance_expiry_date, last_insurance_comapny, last_insurance_policy_number
+        )`
+
+      const customerIds = [...customerIdSet].slice(0, 50)
+      let asgnQuery = serviceClient
+        .from('telecall_assignments')
+        .select(FIND_SELECT)
+        .in('customer_id', customerIds)
+        .order('called_at', { ascending: false, nullsFirst: false })
+        .limit(25)
+      if (campaign_id) asgnQuery = asgnQuery.eq('campaign_id', campaign_id)
+
+      const { data: results, error: findErr } = await asgnQuery
+      if (findErr) throw new Error(`Search failed: ${findErr.message}`)
+
+      return new Response(JSON.stringify({
+        success: true,
+        results: results || [],
+        message: (results || []).length === 0 ? 'No Telecalling customer found for this search.' : undefined,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: get_assignment (read-only — for opening a customer from search)
+    if (action === 'get_assignment') {
+      const { assignment_id } = body
+      if (!assignment_id) throw new Error('Missing assignment_id')
+
+      const CUST_SELECT_FULL = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, retry_after, whatsapp_sent, whatsapp_status, assigned_to, assigned_at,
+        customer:customer_id (
+          id, chassis_no, vehicle_registration_number, first_name, last_name, contact_phones,
+          model, powertrain_type, product_line,
+          assumed_next_service_date, assumed_next_service_type,
+          scheduled_next_service_date, scheduled_next_service_type,
+          last_service_date, last_service_type, last_service_km, last_service_dealer, sold_dealer,
+          extended_warranty_end_date, extended_warranty_product, extended_warranty_end_kms,
+          extended_warranty_policy_no, extended_warranty_order_status,
+          last_insurance_expiry_date, last_insurance_comapny, last_insurance_policy_number
+        )`
+
+      const { data: assignment, error: getErr } = await serviceClient
+        .from('telecall_assignments')
+        .select(CUST_SELECT_FULL)
+        .eq('id', assignment_id)
+        .maybeSingle()
+      if (getErr) throw new Error(`Failed to load assignment: ${getErr.message}`)
+      if (!assignment) throw new Error('Assignment not found')
+
+      const can_update = canMutateAssignment((assignment as { assigned_to?: string | null }).assigned_to)
+
+      return new Response(JSON.stringify({ success: true, assignment, can_update }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // ── ACTION: my_queue ──────────────────────────────────────────────────

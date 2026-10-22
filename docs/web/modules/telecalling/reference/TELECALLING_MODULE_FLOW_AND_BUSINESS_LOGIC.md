@@ -1,6 +1,6 @@
 # OPS-TELECALL-001: Telecalling Module Flow and Business Logic
 
-Last Updated: 2026-06-23
+Last Updated: 2026-10-22
 Owner: Operations Team + Platform Team
 Scope: Web route /telecalling, shared Supabase edge function, and mobile parity screen
 Status: Active operations authority for module behavior
@@ -201,6 +201,41 @@ Logic:
 2. Include statuses: `assigned`, `calling`, `callback_later`, `booked`.
 3. Return joined customer summary fields.
 
+My Queue remains the actionable working queue. Customers in other statuses (for example `pending` with a retry after no answer, `no_answer`, `not_reachable`, or completed outcomes) are not listed here by design.
+
+### 7.4a `find_customers` (read-only)
+
+Input:
+1. `query` (required) — mobile, vehicle registration, customer name, or chassis
+2. optional `campaign_id` — when provided, limits results to that campaign
+
+Logic:
+1. Authenticated user only (same JWT gate as other telecalling actions).
+2. Resolve matching `all_service_data` rows using bounded server-side lookups (phone last-10 match, normalized registration, partial name/chassis where safe).
+3. Return matching `telecall_assignments` joined to customer and campaign name, any status, up to 25 rows ordered by most recent `called_at`.
+4. Does not mutate assignments (no reassignment, status change, counter increment, or queue changes).
+
+Empty result message: `No Telecalling customer found for this search.`
+
+### 7.4b `get_assignment` (read-only)
+
+Input:
+1. `assignment_id`
+
+Logic:
+1. Return full assignment + customer payload for the existing call card (same shape as `get_next` customer view).
+2. Read-only — used when opening a customer from Find Customer without side effects.
+3. Returns `can_update`: whether the current user may mutate this assignment via `update_status` / `log_whatsapp` (same rule as `edit_assignment`: admin, unassigned `assigned_to`, or assignee email).
+
+### 7.4c Mutation ownership (`update_status`, `log_whatsapp`)
+
+Before persisting outcomes or WhatsApp log flags:
+1. Load assignment `assigned_to`.
+2. Allow if user is admin, or `assigned_to` is null (unassigned pool — e.g. after no-answer retry queue), or `assigned_to` equals current user email.
+3. Otherwise reject with `Not authorised to update this assignment`.
+
+Find Customer open does not change `assigned_to`. Another executive may view a peer-owned assignment for identification but cannot record outcomes unless admin.
+
 ### 7.5 `my_summary`
 
 Logic:
@@ -238,13 +273,20 @@ Logic:
 Views:
 1. Call view
 2. My Queue view
-3. Today Summary view
+3. Find Customer view
+4. Today Summary view
 
 Primary journey:
 1. Telecaller clicks Get Next Customer.
 2. System returns one assignment.
 3. Telecaller calls customer and sets outcome.
 4. Queue and summary refresh after status update.
+
+Find Customer journey (callback / re-open):
+1. Telecaller opens Find Customer (alongside Call, My Queue, Today's Summary).
+2. Searches by mobile or registration (also name or chassis when useful).
+3. Picks a result and clicks Open Customer — loads the existing call card via `get_assignment` without changing assignment state.
+4. Telecaller continues the conversation and records an outcome only through normal call actions.
 
 ### 8.3 Admin dashboard
 
@@ -345,3 +387,5 @@ Compare action list from command output with section 7 before closing change.
 2. 2026-06-23: Classified under web operations category as per docs tree governance.
 3. 2026-07-01: Documented CRE and Driver booking/lead form dropdown sourcing from `employee_master` by role (section 8.4); aligns with Service Booking page and upstream PR #16.
 4. 2026-07-22: Removed the dead, unwired `insurance_expiry` `priority_mode` branch from `create_campaign`/`preview_campaign` in the edge function, and the corresponding dropdown option in the admin dashboard — insurance renewal now has its own dedicated module (`OPS-INSURANCE-RENEWAL-001`, route `/insurance-renewal-telecalling`) rather than being a priority mode on this one. No other action, schema, or access-control change to this module.
+5. 2026-10-22: Added Find Customer telecaller view plus read-only edge actions `find_customers` and `get_assignment` so executives can locate assignments outside My Queue (for example after no answer) without lookup mutating assignment state.
+6. 2026-10-22: Aligned `update_status` and `log_whatsapp` ownership with `edit_assignment`; `get_assignment` returns `can_update` for read-only CallCard when another executive owns the assignment.
