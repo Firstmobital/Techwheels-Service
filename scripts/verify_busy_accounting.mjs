@@ -46,9 +46,22 @@ function test(name, fn) {
   }
 }
 
+const DEFAULT_LABOUR_INVOICE = 'IMBTAI2627000001'
+const DEFAULT_LABOUR_DATE = '2026-09-01'
+
+const partsForLabour = (overrides) => ({
+  portal: 'PV',
+  invoiceNumber: DEFAULT_LABOUR_INVOICE,
+  invoiceDate: DEFAULT_LABOUR_DATE,
+  taxAmount: null,
+  gstIssue: null,
+  sourceRowNumber: 2,
+  ...overrides,
+})
+
 const labour = (overrides) => ({
-  invoice_number: 'IMBTAI2627000001',
-  invoice_date: '2026-09-01',
+  invoice_number: DEFAULT_LABOUR_INVOICE,
+  invoice_date: DEFAULT_LABOUR_DATE,
   account: 'CASH',
   first_name: 'RAMESH',
   last_name: 'KUMAR',
@@ -311,8 +324,8 @@ test('16. invoice with both 5% and 18% Parts produces separated accounting rows'
   const result = transformBusyAccounting({
     labourRows: [labour({ job_card_number: 'JC-BOTH' })],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-BOTH', invoiceNumber: 'OTHER', netAmount: 100, taxAmount: null, gstRate: 5, gstIssue: null, sourceRowNumber: 2 },
-      { portal: 'PV', jobCardNumber: 'JC-BOTH', invoiceNumber: 'OTHER', netAmount: 200, taxAmount: null, gstRate: 18, gstIssue: null, sourceRowNumber: 3 },
+      partsForLabour({ jobCardNumber: 'JC-BOTH', netAmount: 100, gstRate: 5, sourceRowNumber: 2 }),
+      partsForLabour({ jobCardNumber: 'JC-BOTH', netAmount: 200, gstRate: 18, sourceRowNumber: 3 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
@@ -329,7 +342,7 @@ test('17. no 5% source line does not create a 5% row', () => {
   const result = transformBusyAccounting({
     labourRows: [labour()],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-1001', invoiceNumber: '', netAmount: 200, taxAmount: null, gstRate: 18, gstIssue: null, sourceRowNumber: 2 },
+      partsForLabour({ jobCardNumber: 'JC-1001', netAmount: 200, gstRate: 18 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
@@ -344,8 +357,8 @@ test('18. multiple Parts rows for same invoice aggregate correctly', () => {
   const result = transformBusyAccounting({
     labourRows: [labour({ job_card_number: 'JC-AGG', final_labour_amount: 0 })],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-AGG', invoiceNumber: '', netAmount: 100, taxAmount: null, gstRate: 5, gstIssue: null, sourceRowNumber: 2 },
-      { portal: 'PV', jobCardNumber: 'JC-AGG', invoiceNumber: '', netAmount: 50, taxAmount: null, gstRate: 5, gstIssue: null, sourceRowNumber: 3 },
+      partsForLabour({ jobCardNumber: 'JC-AGG', netAmount: 100, gstRate: 5, sourceRowNumber: 2 }),
+      partsForLabour({ jobCardNumber: 'JC-AGG', netAmount: 50, gstRate: 5, sourceRowNumber: 3 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
@@ -361,14 +374,16 @@ test('19. mismatched Parts invoice number does not override Labour invoice', () 
   const result = transformBusyAccounting({
     labourRows: [labour({ job_card_number: 'JC-MIS' })],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-MIS', invoiceNumber: 'PARTS-INV-9', netAmount: 100, taxAmount: null, gstRate: 18, gstIssue: null, sourceRowNumber: 2 },
+      partsForLabour({ jobCardNumber: 'JC-MIS', invoiceNumber: 'PARTS-INV-9', netAmount: 100, gstRate: 18 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
   })
-  assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows[0]['bill no'], 'IMBTAI2627000001')
-  assert.equal(result.preview[0].status, 'warning')
+  assert.equal(result.preview[0].status, 'blocked')
+  assert.match(result.preview[0].issue, /none match Labour invoice/)
+  assert.equal(result.preview[0].parts18, 0)
+  assert.equal(result.summary.eligible, 0)
+  assert.equal(result.invoiceRows.length, 0)
 })
 
 test('mandatory 18% Parts and Labour rows are retained at Amount 0', () => {
@@ -388,7 +403,7 @@ test('5% row is created from a genuine 5% line even when Amount is 0', () => {
   const result = transformBusyAccounting({
     labourRows: [labour({ job_card_number: 'JC-ZERO5' })],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-ZERO5', invoiceNumber: '', netAmount: 0, taxAmount: null, gstRate: 5, gstIssue: null, sourceRowNumber: 2 },
+      partsForLabour({ jobCardNumber: 'JC-ZERO5', netAmount: 0, gstRate: 5 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
@@ -576,7 +591,7 @@ test('eligible invoices do not always emit 3 voucher rows', () => {
       labour({ invoice_number: 'IMBTAI2', job_card_number: 'JC-B' }),
     ],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-A', invoiceNumber: '', netAmount: 100, taxAmount: null, gstRate: 5, gstIssue: null, sourceRowNumber: 2 },
+      partsForLabour({ jobCardNumber: 'JC-A', invoiceNumber: 'IMBTAI1', netAmount: 100, gstRate: 5 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
@@ -597,8 +612,8 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
       labour({ invoice_number: 'IMBTAI2', job_card_number: 'JC-B' }),
     ],
     partsLines: [
-      { portal: 'PV', jobCardNumber: 'JC-A', invoiceNumber: '', netAmount: 100, taxAmount: null, gstRate: 5, gstIssue: null, sourceRowNumber: 2 },
-      { portal: 'PV', jobCardNumber: 'JC-B', invoiceNumber: '', netAmount: 200, taxAmount: null, gstRate: 18, gstIssue: null, sourceRowNumber: 3 },
+      partsForLabour({ jobCardNumber: 'JC-A', invoiceNumber: 'IMBTAI1', netAmount: 100, gstRate: 5 }),
+      partsForLabour({ jobCardNumber: 'JC-B', invoiceNumber: 'IMBTAI2', netAmount: 200, gstRate: 18, sourceRowNumber: 3 }),
     ],
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
@@ -684,11 +699,10 @@ test('Parts CRM Invoice_No and Invoice_Date are mapped and persisted as evidence
     fromDate: '2026-09-01',
     toDate: '2026-09-10',
   })
-  assert.equal(result.invoiceRows[0]['bill no'], 'IMBTAI2627000001')
-  assert.equal(result.invoiceRows[0]['Bill date'], '01-09-2026')
-  assert.match(result.preview[0].issue, /Invoice_No PARTS-INV-9/)
-  assert.match(result.preview[0].issue, /Invoice_Date 2026-09-08/)
-  assert.equal(result.preview[0].status, 'warning')
+  assert.equal(result.preview[0].status, 'blocked')
+  assert.match(result.preview[0].issue, /none match Labour invoice IMBTAI2627000001 dated 2026-09-01/)
+  assert.equal(result.invoiceRows.length, 0)
+  assert.equal(result.unmatchedParts.length, 1)
 })
 
 test('re-upload of the same Parts content keeps the same source_row_key', () => {
@@ -1886,6 +1900,174 @@ test('enrichBusyPartsSourceStatusFromLines fills filename and uploadedAt from pe
   assert.equal(enriched.pvFileName, 'Parts - PV.csv')
   assert.equal(enriched.latestPvUploadedAt, '2026-09-06T10:00:00.000Z')
   assert.equal(enriched.error, null)
+})
+
+test('Parts match: reissued invoice on same job card uses only matching Parts B', () => {
+  const jobCard = 'JC-REISSUE'
+  const labourB = labour({
+    invoice_number: 'IMBTAI2627009002',
+    invoice_date: '2026-09-10',
+    job_card_number: jobCard,
+    final_labour_amount: 500,
+  })
+  const result = transformBusyAccounting({
+    labourRows: [labourB],
+    partsLines: [
+      partsForLabour({
+        jobCardNumber: jobCard,
+        invoiceNumber: 'IMBTAI2627009001',
+        invoiceDate: '2026-09-09',
+        netAmount: 1000,
+        gstRate: 18,
+        sourceRowKey: 'parts-a',
+      }),
+      partsForLabour({
+        jobCardNumber: jobCard,
+        invoiceNumber: 'IMBTAI2627009002',
+        invoiceDate: '2026-09-10',
+        netAmount: 200,
+        gstRate: 18,
+        sourceRowKey: 'parts-b',
+      }),
+    ],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-15',
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.preview[0].status, 'warning')
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(200, 18))
+  assert.equal(result.preview[0].labour, 500)
+  assert.notEqual(result.preview[0].parts18, inclusiveFromNet(1200, 18))
+  const partsRow = result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%')
+  assert.equal(partsRow.Amount, inclusiveFromNet(200, 18))
+  assert.equal(result.unmatchedParts.length, 1)
+  assert.equal(result.unmatchedParts[0].sourceRowKey, 'parts-a')
+})
+
+test('Parts match: foreign Parts on job card excluded from amount with warning', () => {
+  const jobCard = 'JC-FOREIGN-WARN'
+  const result = transformBusyAccounting({
+    labourRows: [labour({ job_card_number: jobCard, final_labour_amount: 1180 })],
+    partsLines: [
+      partsForLabour({ jobCardNumber: jobCard, netAmount: 100, gstRate: 18, sourceRowKey: 'match' }),
+      partsForLabour({
+        jobCardNumber: jobCard,
+        invoiceNumber: 'IMBTAI2627009999',
+        invoiceDate: '2026-09-02',
+        netAmount: 900,
+        gstRate: 18,
+        sourceRowKey: 'foreign',
+      }),
+    ],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.preview[0].status, 'warning')
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(100, 18))
+  assert.match(result.preview[0].issue, /IMBTAI2627009999/)
+})
+
+test('Parts match: foreign job-card Parts with no invoice match blocks Labour export', () => {
+  const result = transformBusyAccounting({
+    labourRows: [labour({ job_card_number: 'JC-BLOCK-FOREIGN' })],
+    partsLines: [
+      partsForLabour({
+        jobCardNumber: 'JC-BLOCK-FOREIGN',
+        invoiceNumber: 'IMBTAI2627008888',
+        invoiceDate: '2026-09-05',
+        netAmount: 500,
+        gstRate: 18,
+      }),
+    ],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.preview[0].status, 'blocked')
+  assert.match(result.preview[0].issue, /none match Labour invoice/)
+  assert.equal(result.summary.eligible, 0)
+  assert.equal(result.unmatchedParts.length, 1)
+})
+
+test('Parts match: single matching invoice on job card unchanged', () => {
+  const result = transformBusyAccounting({
+    labourRows: [labour()],
+    partsLines: [partsForLabour({ jobCardNumber: 'JC-1001', netAmount: 100, gstRate: 18 })],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.preview[0].status, 'ready')
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(100, 18))
+  assert.equal(result.preview[0].labour, 1180)
+})
+
+test('Parts match: Parts-only Dealer invoice path unchanged', () => {
+  const result = transformBusyAccounting({
+    labourRows: [],
+    partsLines: [partsLine({
+      jobCardNumber: 'CPOTC-DEALER-ONLY',
+      invoiceNumber: 'IMBTAI2627007499',
+      invoiceDate: '2026-09-09',
+      netAmount: 100,
+      accountCode: '300A150',
+    })],
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assert.equal(result.preview.length, 1)
+  assert.equal(result.preview[0].classification, 'Dealer')
+  assert.equal(result.preview[0].status, 'ready')
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(100, 18))
+  assert.equal(result.invoiceRows.length, 2)
+  assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, inclusiveFromNet(100, 18))
+})
+
+test('Parts match: production reissue job card IMBTAI2627008642 regression', () => {
+  const jobCard = 'JC-MBTPLT-JP1-2627-004117'
+  const netA = 523518.54189
+  const netB = 517368.54188
+  const makeLines = (invoiceNo, invoiceDate, netTotal, keyPrefix, lineCount) => {
+    const per = netTotal / lineCount
+    return Array.from({ length: lineCount }, (_, index) => partsForLabour({
+      jobCardNumber: jobCard,
+      invoiceNumber: invoiceNo,
+      invoiceDate,
+      netAmount: per,
+      gstRate: 18,
+      sourceRowKey: `${keyPrefix}-${index}`,
+    }))
+  }
+  const result = transformBusyAccounting({
+    labourRows: [labour({
+      invoice_number: 'IMBTAI2627008642',
+      invoice_date: '2026-10-09',
+      job_card_number: jobCard,
+      final_labour_amount: 30680,
+      sr_type: 'Accident',
+      sr_assigned_to: 'PAK1_3000840',
+      account: 'M/S THE NEW INDIA ASSURANCE CO.LTD C/O RAJENDRA KUMHAR',
+      first_name: '',
+      last_name: '',
+      vehicle_registration_number: 'RJ14UK0337',
+    })],
+    partsLines: [
+      ...makeLines('IMBTAI2627008600', '2026-10-08', netA, 'a', 35),
+      ...makeLines('IMBTAI2627008642', '2026-10-09', netB, 'b', 34),
+    ],
+    fromDate: '2026-10-01',
+    toDate: '2026-10-31',
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.preview[0].status, 'warning')
+  assert.equal(result.preview[0].labour, 30680)
+  const expectedParts18 = inclusiveFromNet(netB, 18)
+  assert.equal(result.preview[0].parts18, expectedParts18)
+  assert.notEqual(result.preview[0].parts18, inclusiveFromNet(netA + netB, 18))
+  const partsVoucher = result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%')
+  assert.equal(partsVoucher.Amount, expectedParts18)
+  assert.notEqual(partsVoucher.Amount, 1228246.75)
 })
 
 if (failed > 0) {

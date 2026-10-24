@@ -88,6 +88,19 @@ function normalizeJobCard(raw: unknown): string {
   return String(raw ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
 }
 
+/** Labour voucher identity: portal + normalized invoice number + ISO invoice date. */
+function partsLineMatchesLabourVoucher(
+  line: BusyPartsLine,
+  portal: VehiclePortal,
+  labourInvoiceNumber: string,
+  labourInvoiceDate: string,
+): boolean {
+  if (line.portal !== portal) return false
+  const partsInvoice = normalizeInvoiceNumber(line.invoiceNumber)
+  if (!partsInvoice || partsInvoice.toUpperCase() !== labourInvoiceNumber.toUpperCase()) return false
+  return String(line.invoiceDate ?? '').slice(0, 10) === labourInvoiceDate
+}
+
 function labourDateIso(value: unknown): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10)
@@ -171,7 +184,7 @@ function partsAccountMasterByCode(
 function buildPartsOnlyDealerPreviews(input: {
   preview: BusyPreviewRow[]
   partsLines: BusyPartsLine[]
-  matchedPartKeys: Set<string>
+  labourMatchedSourceRowKeys: Set<string>
   fromDate: string
   toDate: string
   masterByCode: Map<string, BusyPartsAccountMasterRow>
@@ -188,8 +201,7 @@ function buildPartsOnlyDealerPreviews(input: {
 
   const groups = new Map<string, BusyPartsLine[]>()
   for (const line of input.partsLines) {
-    const jobKey = `${line.portal}::${normalizeJobCard(line.jobCardNumber)}`
-    if (input.matchedPartKeys.has(jobKey)) continue
+    if (line.sourceRowKey && input.labourMatchedSourceRowKeys.has(line.sourceRowKey)) continue
     const invoiceKey = normalizeInvoiceNumber(line.invoiceNumber).toUpperCase()
     if (!invoiceKey || labourOwnedInvoices.has(invoiceKey)) continue
     const groupKey = `${line.portal}::${invoiceKey}`
@@ -328,7 +340,7 @@ export function transformBusyAccounting(input: {
     partsByJob.set(key, list)
   }
 
-  const matchedPartKeys = new Set<string>()
+  const labourMatchedSourceRowKeys = new Set<string>()
   const preview: BusyPreviewRow[] = []
   const invoiceNumberOwners = new Map<string, string[]>()
 
@@ -444,34 +456,50 @@ export function transformBusyAccounting(input: {
       : customerGstin
 
     const partsKey = `${portal}::${normalizeJobCard(jobCard)}`
-    const partsLines = partsByJob.get(partsKey) ?? []
-    if (partsLines.length > 0) matchedPartKeys.add(partsKey)
+    const jobCardParts = partsByJob.get(partsKey) ?? []
+    const voucherParts = jobCardParts.filter((line) =>
+      partsLineMatchesLabourVoucher(line, portal, invoiceNumber, invoiceDate),
+    )
+    for (const line of voucherParts) {
+      if (line.sourceRowKey) labourMatchedSourceRowKeys.add(line.sourceRowKey)
+    }
 
-    const partsAgg = aggregateParts(partsLines)
+    const partsAgg = aggregateParts(voucherParts)
+    const foreignJobCardParts = jobCardParts.filter(
+      (line) => !partsLineMatchesLabourVoucher(line, portal, invoiceNumber, invoiceDate),
+    )
     const mismatchedInvoices = [...new Set(
-      partsLines
+      foreignJobCardParts
         .map((line) => normalizeInvoiceNumber(line.invoiceNumber))
-        .filter((partsInvoice) => partsInvoice && partsInvoice.toUpperCase() !== invoiceNumber.toUpperCase()),
+        .filter(Boolean),
     )]
     const mismatchedDates = [...new Set(
-      partsLines
+      foreignJobCardParts
         .map((line) => String(line.invoiceDate ?? '').slice(0, 10))
-        .filter((partsDate) => partsDate && partsDate !== invoiceDate),
+        .filter(Boolean),
     )]
 
     const issues: string[] = []
     if (party.issue) issues.push(party.issue)
     if (insurance?.issue) issues.push(insurance.issue)
     if (partsAgg.gstIssue) issues.push(partsAgg.gstIssue)
-    if (mismatchedInvoices.length > 0) {
-      issues.push(`Parts Invoice_No ${mismatchedInvoices.join(', ')} stored but ignored; Labour invoice ${invoiceNumber} used`)
+    if (jobCardParts.length > 0 && voucherParts.length === 0) {
+      issues.push(`Parts exist for this job card but none match Labour invoice ${invoiceNumber} dated ${invoiceDate}`)
     }
-    if (mismatchedDates.length > 0) {
-      issues.push(`Parts Invoice_Date ${mismatchedDates.join(', ')} stored but ignored; Labour invoice date ${invoiceDate} used`)
+    if (voucherParts.length > 0 && mismatchedInvoices.length > 0) {
+      issues.push(`Parts Invoice_No ${mismatchedInvoices.join(', ')} on this job card stored but ignored; Labour invoice ${invoiceNumber} used`)
+    }
+    if (voucherParts.length > 0 && mismatchedDates.length > 0) {
+      issues.push(`Parts Invoice_Date ${mismatchedDates.join(', ')} on this job card stored but ignored; Labour invoice date ${invoiceDate} used`)
     }
 
-    const blocked = Boolean(party.issue || insurance?.issue || partsAgg.gstIssue)
-    const warning = !blocked && (mismatchedInvoices.length > 0 || mismatchedDates.length > 0)
+    const blocked = Boolean(
+      party.issue
+      || insurance?.issue
+      || partsAgg.gstIssue
+      || (jobCardParts.length > 0 && voucherParts.length === 0),
+    )
+    const warning = !blocked && voucherParts.length > 0 && foreignJobCardParts.length > 0
     const status: BusyRowStatus = blocked ? 'blocked' : warning ? 'warning' : 'ready'
     const subtotal = roundPaise(partsAgg.parts5 + partsAgg.parts18 + labourAmount)
     const roundOff = roundOffToNearestRupee(subtotal)
@@ -521,7 +549,7 @@ export function transformBusyAccounting(input: {
   const dealer = buildPartsOnlyDealerPreviews({
     preview,
     partsLines: input.partsLines,
-    matchedPartKeys,
+    labourMatchedSourceRowKeys,
     fromDate: input.fromDate,
     toDate: input.toDate,
     masterByCode: partsAccountMasterByCode(input.partsAccountMaster),
@@ -529,8 +557,8 @@ export function transformBusyAccounting(input: {
   preview.push(...dealer.previews)
 
   const unmatchedParts = input.partsLines.filter((line) => {
-    const key = `${line.portal}::${normalizeJobCard(line.jobCardNumber)}`
-    return !matchedPartKeys.has(key) && !dealer.consumed.has(line)
+    if (line.sourceRowKey && labourMatchedSourceRowKeys.has(line.sourceRowKey)) return false
+    return !dealer.consumed.has(line)
   })
 
   const exportable = preview.filter((row) => row.status === 'ready' || row.status === 'warning')
