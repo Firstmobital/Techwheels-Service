@@ -74,6 +74,7 @@ import {
   buildBodyshopConsolidatedCustomerReceiptPayload,
   isBodyshopConsolidatedCustomerReceiptEligible,
   resolveBodyshopInsurerGstin,
+  resolveBodyshopReceiptBusyPartyName,
 } from '../lib/accounts/bodyshopCustomerReceipt'
 import { openBodyshopCustomerReceiptPrint } from '../lib/accounts/bodyshopCustomerReceiptPrint'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
@@ -920,14 +921,9 @@ export default function AccountsPage() {
     setGatepassConfirmTarget({ type: 'bodyshop', bsRow: row })
   }
 
-  function onBodyshopReceiptClick(row: AccountsBodyshopCase) {
-    const payload = buildBodyshopConsolidatedCustomerReceiptPayload({
-      caseRow: row,
-      allPaymentLines: bsPayLines,
-      insurerGstin: resolveBodyshopInsurerGstin(row, busyInsuranceMaster),
-      customerGstin: null,
-    })
-    if (!payload) {
+  async function onBodyshopReceiptClick(row: AccountsBodyshopCase) {
+    const lines = bodyshopCustomerReceiptLinesForCase(bsPayLines, row.repair_card_id)
+    if (!isBodyshopConsolidatedCustomerReceiptEligible(row, lines)) {
       if (!isCustomerPaymentClosed(row)) {
         flash('Receipt is available after customer payment is fully received', false)
       } else {
@@ -936,6 +932,18 @@ export default function AccountsPage() {
       return
     }
     try {
+      const busyPartyName = await resolveBodyshopReceiptBusyPartyName(row)
+      const payload = buildBodyshopConsolidatedCustomerReceiptPayload({
+        caseRow: row,
+        allPaymentLines: bsPayLines,
+        busyPartyName,
+        insurerGstin: resolveBodyshopInsurerGstin(row, busyInsuranceMaster),
+        customerGstin: null,
+      })
+      if (!payload) {
+        flash('No customer payment posted for this case', false)
+        return
+      }
       openBodyshopCustomerReceiptPrint(payload)
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Could not open receipt', false)

@@ -65,7 +65,7 @@ function receiptBlockHtml(input: BodyshopCustomerReceiptPayload, copyLabel: stri
     <h2 class="title">RECEIPT</h2>
     <table class="meta">
       <tr><th>Receipt No.</th><td>${escapeHtml(receiptNo)}</td><th>Dated</th><td>${escapeHtml(receiptDate)}</td></tr>
-      <tr><th>Party</th><td colspan="3">${escapeHtml(caseRow.customer_name || '—')}</td></tr>
+      <tr><th>Party</th><td colspan="3">${escapeHtml(input.partyName || '—')}</td></tr>
       <tr><th>Party GSTIN / UIN</th><td colspan="3">${escapeHtml(partyGstin)}</td></tr>
       <tr><th>Place of Supply</th><td colspan="3">${escapeHtml(company.placeOfSupply)}</td></tr>
     </table>

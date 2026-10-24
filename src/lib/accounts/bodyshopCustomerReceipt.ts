@@ -1,10 +1,23 @@
 import { isCustomerPaymentLine } from '../bodyshopDoPaymentCpMode'
+import {
+  buildBusyPartyNameByInvoice,
+  buildBusyPartyNameByJobCard,
+  buildBusyPartyNameByVehicleRegistration,
+  dedupeBusyLabourRows,
+  fetchBusyLabourRowsByInvoiceNumbers,
+  fetchBusyLabourRowsByJobCardNumbers,
+  fetchBusyLabourRowsByVehicleRegistrationNumbers,
+  resolveBusyPaymentAccountCr,
+} from '../busy'
 import { matchBusyInsurance, type BusyInsuranceMasterRow } from '../busy/insuranceMaster'
 import type { AccountsBodyshopCase, AccountsBodyshopPaymentLine } from '../api/accounts'
 import {
   ACCOUNTS_VOUCHER_FY,
   bodyshopSettlementReceiptDate,
   isCustomerPaymentClosed,
+  mechanicalExportInvoiceNumbers,
+  mechanicalExportJcNumbers,
+  mechanicalExportRegNumbers,
   paymentModeLabel,
 } from '../api/accounts'
 
@@ -182,6 +195,8 @@ export function bodyshopCustomerReceiptBreakupRows(
 
 export type BodyshopCustomerReceiptPayload = {
   caseRow: AccountsBodyshopCase
+  /** Same resolver chain as BUSY / Accounts payment export (`resolveBusyPaymentAccountCr`). */
+  partyName: string
   lines: AccountsBodyshopPaymentLine[]
   receiptNumber: string
   receiptDateYmd: string | null
@@ -191,9 +206,41 @@ export type BodyshopCustomerReceiptPayload = {
   customerGstin: string | null
 }
 
+/**
+ * BUSY Party Name for one Accounts Bodyshop case (DMS labour → lookup maps → resolveBusyPaymentAccountCr).
+ * Matches /busy preview and Accounts BUSY payment export Account CR resolution.
+ */
+export async function resolveBodyshopReceiptBusyPartyName(
+  caseRow: Pick<AccountsBodyshopCase, 'invoice_number' | 'job_card_no' | 'reg_number'>,
+): Promise<string> {
+  const exportCases = [{
+    invoice_number: caseRow.invoice_number,
+    jc_number: caseRow.job_card_no,
+    reg_number: caseRow.reg_number,
+  }]
+  const [labourByInvoice, labourByJc, labourByVrn] = await Promise.all([
+    fetchBusyLabourRowsByInvoiceNumbers(mechanicalExportInvoiceNumbers(exportCases)),
+    fetchBusyLabourRowsByJobCardNumbers(mechanicalExportJcNumbers(exportCases)),
+    fetchBusyLabourRowsByVehicleRegistrationNumbers(mechanicalExportRegNumbers(exportCases)),
+  ])
+  const labour = dedupeBusyLabourRows([...labourByInvoice, ...labourByJc, ...labourByVrn])
+  const { partyNameByInvoice } = buildBusyPartyNameByInvoice(labour)
+  const { partyNameByJc } = buildBusyPartyNameByJobCard(labour)
+  const { partyNameByVrn } = buildBusyPartyNameByVehicleRegistration(labour)
+  return resolveBusyPaymentAccountCr({
+    invoiceNumber: caseRow.invoice_number,
+    jcNumber: caseRow.job_card_no,
+    vehicleRegistration: caseRow.reg_number,
+    busyPartyNameByInvoice: partyNameByInvoice,
+    busyPartyNameByJc: partyNameByJc,
+    busyPartyNameByVrn: partyNameByVrn,
+  })
+}
+
 export function buildBodyshopConsolidatedCustomerReceiptPayload(input: {
   caseRow: AccountsBodyshopCase
   allPaymentLines: AccountsBodyshopPaymentLine[]
+  busyPartyName: string
   insurerGstin: string | null
   customerGstin?: string | null
 }): BodyshopCustomerReceiptPayload | null {
@@ -202,6 +249,7 @@ export function buildBodyshopConsolidatedCustomerReceiptPayload(input: {
   const totalReceived = bodyshopCustomerReceiptTotal(lines)
   return {
     caseRow: input.caseRow,
+    partyName: input.busyPartyName,
     lines,
     receiptNumber: bodyshopConsolidatedCustomerReceiptNumber(input.caseRow.repair_card_id),
     receiptDateYmd: bodyshopConsolidatedCustomerReceiptDateYmd(lines),
