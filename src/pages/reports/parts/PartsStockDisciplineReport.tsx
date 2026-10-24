@@ -3,12 +3,16 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import { ReportLoadingState } from '../components/ReportLoadingState'
+import {
+  computeDisciplineOrderMetrics,
+  getIndianFiscalYearStart,
+  resolveDisciplineBranch,
+  windowDaysFromFiscalMonths,
+} from './partsStockDisciplineWindow'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const DAYS_COVER    = 30          // 30-day consumption cover
-const CALENDAR_DAYS = 91          // fallback: ~3 calendar months
 const WINDOW_SIZE   = 3           // last 3 complete months for consumption
 const PAGE_SIZE     = 50
 const EXCESS_STOCK_MULTIPLE = 2   // flag excess when stock > 2× requirement
@@ -39,6 +43,7 @@ interface StockRow {
   part_number: string
   part_description: string | null
   portal: string
+  snapshot_date: string | null
   on_hand_quantity: number
   weighted_avg_cost: number | null
   total_price_value: number | null
@@ -169,14 +174,11 @@ function consolidateEvPvSharedOrders(
 async function resolveActiveWindow(
   branch: string,
   portal: string,
-): Promise<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number; windowBasis: 'calendar' | 'fallback' }> {
+): Promise<{ fiscal_year: number; fiscal_months: number[]; window_days: number; windowBasis: 'calendar' | 'fallback' }> {
   const today    = new Date()
   const calMonth = today.getMonth() + 1        // 1-12
-  const calYear  = today.getFullYear()
 
-  // FY start: April 1 of current calendar year (if Apr-Dec) or prev year (Jan-Mar)
-  const fyStart     = calMonth >= 4 ? calYear : calYear - 1
-  const fyStartDate = new Date(fyStart, 3, 1)  // April 1
+  const { fiscalYear: fyStart } = getIndianFiscalYearStart(today)
 
   // Current fiscal month (April=FM1, July=FM4)
   const fmCurrent = ((calMonth - 4 + 12) % 12) + 1
@@ -190,9 +192,6 @@ async function resolveActiveWindow(
   }
   // If fewer than 3 complete months exist in FY (e.g. April/May), take what we have
   if (targetFMs.length === 0) targetFMs.push(fmCurrent)
-
-  // Calendar days = Apr 1 → today (for daily-average denominator)
-  const elapsedDays = Math.max(1, Math.floor((today.getTime() - fyStartDate.getTime()) / 86400000) + 1)
 
   // Check which target months have data in DB.
   // IMPORTANT: Use a DISTINCT query — NOT a row-count-limited one.
@@ -221,7 +220,13 @@ async function resolveActiveWindow(
   const availableTargetFMs = targetFMs.filter((m) => foundFMs.has(m))
 
   if (availableTargetFMs.length > 0) {
-    return { fiscal_year: fyStart, fiscal_months: availableTargetFMs, calendar_days: elapsedDays, windowBasis: 'calendar' }
+    const fiscal_months = availableTargetFMs
+    return {
+      fiscal_year: fyStart,
+      fiscal_months,
+      window_days: windowDaysFromFiscalMonths(fyStart, fiscal_months),
+      windowBasis: 'calendar',
+    }
   }
 
   // Fallback — use whatever months are available in DB for current FY
@@ -235,7 +240,13 @@ async function resolveActiveWindow(
   const { data: latestData } = await qLatest
 
   if (!latestData?.length) {
-    return { fiscal_year: fyStart, fiscal_months: targetFMs.length ? targetFMs : [1, 2, 3], calendar_days: elapsedDays, windowBasis: 'fallback' }
+    const fiscal_months = targetFMs.length ? targetFMs : [1, 2, 3]
+    return {
+      fiscal_year: fyStart,
+      fiscal_months,
+      window_days: windowDaysFromFiscalMonths(fyStart, fiscal_months),
+      windowBasis: 'fallback',
+    }
   }
 
   const seen = new Set<number>()
@@ -245,7 +256,53 @@ async function resolveActiveWindow(
   }
   const fiscal_year   = fyStart
   const fiscal_months = Array.from(seen).sort((a, b) => a - b).slice(0, WINDOW_SIZE)
-  return { fiscal_year, fiscal_months, calendar_days: elapsedDays, windowBasis: 'fallback' }
+  return {
+    fiscal_year,
+    fiscal_months,
+    window_days: windowDaysFromFiscalMonths(fyStart, fiscal_months),
+    windowBasis: 'fallback',
+  }
+}
+
+interface StockMapEntry { desc: string; qty: number; cost: number; snapshotDate: string | null }
+
+/** Latest snapshot_date wins; within the same snapshot, sum bins (legacy multi-row uploads). */
+function buildStockMapFromRows(stockRows: StockRow[]): Map<string, StockMapEntry> {
+  const stockMap = new Map<string, StockMapEntry>()
+  for (const row of stockRows) {
+    if (isAccessoryPart(row.part_number)) continue
+    const key = `${row.part_number}|${row.portal}`
+    const snap = row.snapshot_date ? String(row.snapshot_date).slice(0, 10) : null
+    const qty = Number(row.on_hand_quantity ?? 0)
+    const wac = Number(row.weighted_avg_cost ?? 0)
+
+    const existing = stockMap.get(key)
+    if (!existing) {
+      stockMap.set(key, {
+        desc: row.part_description ?? row.part_number,
+        qty,
+        cost: wac > 0 ? wac : 0,
+        snapshotDate: snap,
+      })
+      continue
+    }
+
+    const existingSnap = existing.snapshotDate ?? ''
+    const newSnap = snap ?? ''
+    if (newSnap > existingSnap) {
+      stockMap.set(key, {
+        desc: row.part_description ?? existing.desc,
+        qty,
+        cost: wac > 0 ? wac : existing.cost,
+        snapshotDate: snap,
+      })
+    } else if (newSnap === existingSnap) {
+      existing.qty += qty
+      if (wac > 0 && existing.cost === 0) existing.cost = wac
+      if (row.part_description) existing.desc = row.part_description
+    }
+  }
+  return stockMap
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,14 +418,19 @@ function resolveFmFromRow(row: { fiscal_month: number; month_name: string | null
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
-export default function PartsStockDisciplineReport(_props: ReportViewProps) {
-  const [branch, _setBranch] = useState('Sitapura')
+export default function PartsStockDisciplineReport({ branch: branchProp }: ReportViewProps) {
+  const branch = useMemo(() => resolveDisciplineBranch(branchProp), [branchProp])
   const [activePortal, setActivePortal] = useState<OrderPortal>('PV')
   const [rowsByPortal, setRowsByPortal] = useState<Record<OrderPortal, DisciplineRow[]>>({ PV: [], EV: [] })
-  const [activeWindow, setActiveWindow] = useState<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number; windowBasis: 'calendar' | 'fallback' }>({ fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 91, windowBasis: 'calendar' })
+  const [activeWindow, setActiveWindow] = useState<{ fiscal_year: number; fiscal_months: number[]; window_days: number; windowBasis: 'calendar' | 'fallback' }>(() => {
+    const { fiscalYear } = getIndianFiscalYearStart()
+    const fiscal_months = [1, 2, 3]
+    return { fiscal_year: fiscalYear, fiscal_months, window_days: windowDaysFromFiscalMonths(fiscalYear, fiscal_months), windowBasis: 'calendar' }
+  })
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Record<OrderPortal, string>>({ PV: '', EV: '' })
+  const [latestStockSnapshotDate, setLatestStockSnapshotDate] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CRITICAL' | 'LOW' | 'EXCESS' | 'DEAD' | 'OK'>('ALL')
   const [searchText, setSearchText]     = useState('')
   const [showOrderOnly, setShowOrderOnly] = useState(false)
@@ -376,8 +438,6 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
   const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const CALENDAR_DAYS_DYNAMIC = activeWindow.calendar_days
 
   const fetchData = useCallback(async (portalToLoad: OrderPortal, opts?: { manageLoading?: boolean }) => {
     const manageLoading = opts?.manageLoading !== false
@@ -388,17 +448,12 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
     try {
       const rawBranch = branch
       const portalFilter = portalToLoad
+      const { fiscalYearStartIso } = getIndianFiscalYearStart()
 
       // ── Resolve consumption window ────────────────────────────────────────
       const window_ = await resolveActiveWindow(rawBranch, portalFilter)
+      const windowDays = window_.window_days
       setActiveWindow(window_)
-
-      const baseFilters: Record<string, string | string[] | number[]> = {
-        portal: portalFilter,
-        fiscal_year: [window_.fiscal_year],
-        fiscal_month: window_.fiscal_months,
-      }
-      if (rawBranch !== 'ALL') baseFilters.branch = rawBranch
 
       // ── 1. Consumption — fetch ALL rows for this portal+branch+FY (no FM filter)
       // then resolve FM in JS using the multi-fallback helper (fiscal_month →
@@ -409,7 +464,7 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
         portal: portalFilter,
         fiscal_year: [window_.fiscal_year],
       }
-      if (rawBranch !== 'ALL') consumptionFilters.branch = rawBranch
+      consumptionFilters.branch = rawBranch
       const consumptionRows = await fetchAll<ConsumptionRow>(
         'service_parts_consumption_data',
         'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption,transaction_date',
@@ -417,20 +472,26 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       )
 
       // ── 2. Stock snapshot ─────────────────────────────────────────────────
-      const stockFilters: Record<string, string | string[] | number[]> = { portal: portalFilter }
-      if (rawBranch !== 'ALL') stockFilters.branch = rawBranch
+      const stockFilters: Record<string, string | string[] | number[]> = { portal: portalFilter, branch: rawBranch }
       const stockRows = await fetchAll<StockRow>(
         'service_parts_stock_snapshot_data',
-        'part_number,part_description,portal,on_hand_quantity,weighted_avg_cost,total_price_value',
+        'part_number,part_description,portal,snapshot_date,on_hand_quantity,weighted_avg_cost,total_price_value',
         stockFilters,
       )
+
+      let maxSnapshotDate: string | null = null
+      for (const row of stockRows) {
+        const snap = row.snapshot_date ? String(row.snapshot_date).slice(0, 10) : null
+        if (snap && (!maxSnapshotDate || snap > maxSnapshotDate)) maxSnapshotDate = snap
+      }
+      setLatestStockSnapshotDate(maxSnapshotDate)
 
       // ── 3. Orders (pipeline) — Confirmation Qty only, current FY ─────────
       const orderFilters: Record<string, string | string[] | number[]> = {
         portal: portalFilter,
-        order_date_gte: '2026-04-01',
+        order_date_gte: fiscalYearStartIso,
+        branch: rawBranch,
       }
-      if (rawBranch !== 'ALL') orderFilters.branch = rawBranch
       const orderRows = await fetchAll<OrderRow>(
         'service_parts_order_data',
         'part_number,portal,order_status,ordered_quantity,received_quantity,confirmation_qty,order_date',
@@ -455,20 +516,7 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
         if (row.part_description) entry.desc = row.part_description
       }
 
-      // ── Build stock map (sum all bins per part) ───────────────────────────
-      interface StockEntry { desc: string; qty: number; cost: number }
-      const stockMap = new Map<string, StockEntry>()
-      for (const row of stockRows) {
-        if (isAccessoryPart(row.part_number)) continue
-        const key = `${row.part_number}|${row.portal}`
-        if (!stockMap.has(key)) stockMap.set(key, { desc: row.part_description ?? row.part_number, qty: 0, cost: 0 })
-        const entry = stockMap.get(key)!
-        entry.qty  += Number(row.on_hand_quantity ?? 0)
-        // Unit price: prefer weighted_avg_cost; fallback to total_price_value/qty
-        const wac = Number(row.weighted_avg_cost ?? 0)
-        if (wac > 0 && entry.cost === 0) entry.cost = wac
-        if (row.part_description) entry.desc = row.part_description
-      }
+      const stockMap = buildStockMapFromRows(stockRows)
 
       // ── Build pipeline map — CONFIRMATION QTY only ────────────────────────
       // Actual Order Qty = 30-Day Req − Current Stock − Confirmation Qty
@@ -520,30 +568,19 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
         else if (monthsActive === 1) frequency = 'Weekly/Occasional Mover'
         else frequency = 'No Recent Use'
 
-        // ── Core formula (user spec) ──────────────────────────────────────
-        // Avg Daily = Total Consumption ÷ Total Days (Apr+May+Jun elapsed days)
-        // 30-Day Req = Avg Daily × 30
-        // Actual Order Qty = 30-Day Req − Current Stock − Confirmation Qty
-        //
-        // Use full-precision avgDailyRaw for math to avoid low-volume parts
-        // being silently zeroed (e.g. a part used once in 3 months: 1/91 = 0.011/day;
-        // round(0.011×30) = 1 requirement — correctly flags it for ordering)
-        const avgDailyRaw     = totalConsumption / (CALENDAR_DAYS_DYNAMIC || CALENDAR_DAYS)
-        const avgDailyDisplay = Math.round(avgDailyRaw * 100) / 100   // 2dp display
-        const weeklyAvgQty    = Math.round(totalConsumption / (CALENDAR_DAYS_DYNAMIC / 7))
-
-        // 30-Day requirement: ceil ensures at least 1 for any moving part
-        const requirement30Day = totalConsumption > 0
-          ? Math.max(1, Math.ceil(avgDailyRaw * DAYS_COVER))
-          : 0
-
         const currentStock    = sEntry?.qty ?? 0
         const confirmationQty = pipelineMap.get(key) ?? 0
         const unitPrice       = sEntry?.cost ?? 0
         const inventoryValue  = currentStock * unitPrice
 
-        // Actual Order Qty = 30-Day Req − On-Hand − Confirmation Qty (never negative)
-        const actualOrderQty  = Math.max(0, Math.ceil(requirement30Day - currentStock - confirmationQty))
+        const metrics = computeDisciplineOrderMetrics({
+          totalConsumption,
+          windowDays,
+          currentStock,
+          confirmationQty,
+        })
+        const { avgDailyRaw, avgDailyDisplay, requirement30Day, actualOrderQty } = metrics
+        const weeklyAvgQty = Math.round(totalConsumption / (windowDays / 7))
 
         // For ordering twice/week: ensure we don't over-order beyond one cycle's need
         // If actualOrderQty is positive, it already reflects the true gap.
@@ -614,7 +651,7 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
   }, [fetchData])
 
   useEffect(() => { void loadAllPortals() }, [loadAllPortals])
-  useEffect(() => { setCurrentPage(1) }, [activePortal, statusFilter, searchText, showOrderOnly])
+  useEffect(() => { setCurrentPage(1) }, [activePortal, statusFilter, searchText, showOrderOnly, branch])
 
   // ── Realtime subscription ───────────────────────────────────────────────
   useEffect(() => {
@@ -706,7 +743,7 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       ['Generated:', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })],
       [],
       ['FORMULA'],
-      ['Average Daily Consumption = Total Consumption (Apr+May+Jun) ÷ Total Calendar Days elapsed'],
+      [`Average Daily Consumption = Total Consumption (window months) ÷ Window calendar days (${activeWindow.window_days})`],
       ['30-Day Requirement        = ROUNDUP(Avg Daily × 30, 0)'],
       ['Confirmation Qty          = Already ordered, not yet received (from Order Sheet)'],
       ['Actual Order Qty          = MAX(0, 30-Day Req − Current Stock − Confirmation Qty)'],
@@ -715,7 +752,7 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       ['ORDERING SCHEDULE: Monday + Thursday (twice weekly)'],
       ['Stock planning maintains 30-day cover to avoid stockouts between ordering cycles.'],
       [],
-      [`Consumption Window: ${activeMonthLabels.join(' + ')} (${activeWindow.calendar_days} calendar days)`],
+      [`Consumption Window: ${activeMonthLabels.join(' + ')} (${activeWindow.window_days} calendar days)`],
       [`Portal: ${portalLabel} | Branch: ${branch}`],
       [],
       ['STATUS DEFINITIONS'],
@@ -887,12 +924,15 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Parts Stock Planning &amp; Order Recommendation</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Formula: 30-Day Req − On-Hand − Conf. Qty · Window: {activeMonthLabels.join(' + ')} ({activeWindow.calendar_days} days)
+              Formula: 30-Day Req − On-Hand − Conf. Qty · Window: {activeMonthLabels.join(' + ')} ({activeWindow.window_days} days)
               {activeWindow.windowBasis === 'fallback' ? ' ⚠ partial data' : ''}
               · Orders: Monday + Thursday
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {latestStockSnapshotDate && (
+              <span className="text-xs text-gray-400">stock snapshot {latestStockSnapshotDate}</span>
+            )}
             {lastUpdatedForActive && (
               <span className="text-xs text-gray-400">as of {lastUpdatedForActive}</span>
             )}
