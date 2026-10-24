@@ -1,10 +1,7 @@
 import { ACCOUNTS_RECEIPT_COMPANY } from './receiptCompanyProfile'
 import {
   amountInWordsInr,
-  bodyshopCustomerReceiptNumber,
-  bodyshopReceiptPaymentModeLabel,
-  bodyshopReceiptReferenceLine,
-  bodyshopReceiptDateForLine,
+  formatBodyshopReceiptDateYmd,
   type BodyshopCustomerReceiptPayload,
 } from './bodyshopCustomerReceipt'
 
@@ -20,14 +17,40 @@ function inr(amount: number): string {
   return `₹${Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function paymentDetailsHtml(input: BodyshopCustomerReceiptPayload): string {
+  const rows = input.breakup.map((row) => {
+    const ref = row.voucherRef && row.referenceCell !== '—'
+      ? `${escapeHtml(row.referenceCell)} <span class="voucher">(${escapeHtml(row.voucherRef)})</span>`
+      : row.voucherRef
+        ? `<span class="voucher">${escapeHtml(row.voucherRef)}</span>`
+        : escapeHtml(row.referenceCell)
+    return `<tr>
+      <td>${escapeHtml(row.dateLabel)}</td>
+      <td>${escapeHtml(row.modeLabel)}</td>
+      <td>${ref}</td>
+      <td class="amt">${escapeHtml(inr(row.amount))}</td>
+    </tr>`
+  }).join('')
+
+  return `
+    <div class="pay-section">
+      <div class="pay-heading">Payment Details</div>
+      <table class="pay-table">
+        <thead>
+          <tr><th>Date</th><th>Mode</th><th>Reference</th><th>Amount</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="pay-total"><span>Total Received:</span><strong>${escapeHtml(inr(input.totalReceived))}</strong></div>
+    </div>`
+}
+
 function receiptBlockHtml(input: BodyshopCustomerReceiptPayload, copyLabel: string): string {
-  const { caseRow, line, insurerGstin, customerGstin } = input
+  const { caseRow, insurerGstin, customerGstin } = input
   const company = ACCOUNTS_RECEIPT_COMPANY
-  const receiptNo = bodyshopCustomerReceiptNumber(line)
-  const receiptDate = bodyshopReceiptDateForLine(line)
-  const amount = Number(line.amount)
-  const mode = bodyshopReceiptPaymentModeLabel(line.payment_mode)
-  const refLine = bodyshopReceiptReferenceLine(line.payment_mode, line.reference)
+  const receiptNo = input.receiptNumber
+  const receiptDate = formatBodyshopReceiptDateYmd(input.receiptDateYmd)
+  const amount = input.totalReceived
   const partyGstin = customerGstin?.trim() || '—'
   const companyGstin = company.gstin?.trim() || '—'
 
@@ -54,9 +77,8 @@ function receiptBlockHtml(input: BodyshopCustomerReceiptPayload, copyLabel: stri
       <tr><th>Vehicle registration</th><td>${escapeHtml(caseRow.reg_number || '—')}</td></tr>
       <tr><th>Invoice / Job card</th><td>${escapeHtml(caseRow.invoice_number || '—')} · ${escapeHtml(caseRow.job_card_no)}</td></tr>
       <tr><th>Insurance company</th><td>${escapeHtml(caseRow.insurance_company || '—')}${insurerGstin ? ` · GSTIN ${escapeHtml(insurerGstin)}` : ''}</td></tr>
-      <tr><th>Mode of Payment</th><td>${escapeHtml(mode)}</td></tr>
-      ${refLine ? `<tr><th>Payment reference</th><td>${escapeHtml(refLine)}</td></tr>` : ''}
     </table>
+    ${paymentDetailsHtml(input)}
     <div class="amount-repeat">
       <div><span>Amount</span><strong>${escapeHtml(inr(amount))}</strong></div>
       <div class="words">${escapeHtml(amountInWordsInr(amount))}</div>
@@ -73,20 +95,20 @@ export function generateBodyshopCustomerReceiptHtml(input: BodyshopCustomerRecei
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Receipt · ${escapeHtml(bodyshopCustomerReceiptNumber(input.line))}</title>
+  <title>Receipt · ${escapeHtml(input.receiptNumber)}</title>
   <style>
     * { box-sizing: border-box; }
-    @page { size: A4 portrait; margin: 8mm; }
+    @page { size: A4 portrait; margin: 7mm; }
     body {
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       color: #0f172a;
       margin: 0;
-      padding: 8mm;
-      font-size: 10px;
-      line-height: 1.35;
+      padding: 7mm;
+      font-size: 9.5px;
+      line-height: 1.32;
       background: #fff;
     }
-    .actions { display: flex; gap: 8px; margin-bottom: 8px; }
+    .actions { display: flex; gap: 8px; margin-bottom: 6px; }
     .actions button {
       background: #0f172a;
       color: #fff;
@@ -101,80 +123,98 @@ export function generateBodyshopCustomerReceiptHtml(input: BodyshopCustomerRecei
       display: flex;
       flex-direction: column;
       gap: 0;
-      min-height: calc(297mm - 16mm);
-      max-height: calc(297mm - 16mm);
+      height: calc(297mm - 14mm);
+      max-height: calc(297mm - 14mm);
+      overflow: hidden;
     }
     .receipt-block {
       flex: 1 1 0;
       min-height: 0;
       border: 1px solid #cbd5e1;
       border-radius: 6px;
-      padding: 7mm 8mm 6mm;
+      padding: 5mm 6mm 4mm;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
     .copy-label {
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 800;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: #475569;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
-    .company-name { font-size: 12px; font-weight: 800; text-transform: uppercase; }
-    .company-meta { font-size: 9px; color: #475569; }
+    .company-name { font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .company-meta { font-size: 8.5px; color: #475569; }
     .title {
       text-align: center;
-      font-size: 13px;
+      font-size: 12px;
       letter-spacing: 0.2em;
-      margin: 6px 0 8px;
+      margin: 4px 0 6px;
       font-weight: 800;
     }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
     th, td {
       border: 1px solid #e2e8f0;
-      padding: 3px 6px;
+      padding: 2px 5px;
       vertical-align: top;
       word-break: break-word;
     }
-    th { width: 28%; background: #f8fafc; font-weight: 600; text-align: left; }
-    .meta th { width: 18%; }
+    th { background: #f8fafc; font-weight: 600; text-align: left; }
+    .meta th { width: 18%; font-size: 9px; }
+    .meta td { font-size: 9px; }
+    .detail th { width: 26%; font-size: 9px; }
+    .detail td { font-size: 9px; }
     .amount-banner {
       display: flex;
       justify-content: space-between;
       align-items: center;
       border: 1px solid #0f172a;
-      padding: 6px 10px;
-      margin: 4px 0 6px;
-      font-size: 11px;
-    }
-    .amount-banner strong { font-size: 14px; }
-    .amount-repeat {
-      border-top: 1px dashed #94a3b8;
-      padding-top: 6px;
-      margin-top: auto;
+      padding: 4px 8px;
+      margin: 3px 0 4px;
       font-size: 10px;
     }
-    .amount-repeat strong { font-size: 12px; margin-left: 8px; }
-    .words { margin-top: 4px; font-weight: 600; font-size: 9.5px; }
-    .sign { margin-top: 10px; text-align: right; font-size: 9px; }
-    .sign-line { margin-top: 28px; border-top: 1px solid #0f172a; display: inline-block; min-width: 160px; padding-top: 4px; }
+    .amount-banner strong { font-size: 13px; }
+    .pay-section { margin: 2px 0 4px; }
+    .pay-heading { font-weight: 700; font-size: 9px; margin-bottom: 2px; }
+    .pay-table th { font-size: 8.5px; }
+    .pay-table td { font-size: 8.5px; }
+    .pay-table .amt { text-align: right; white-space: nowrap; font-weight: 600; }
+    .pay-table th:last-child, .pay-table td.amt { width: 22%; }
+    .pay-total {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .voucher { color: #64748b; font-size: 8px; }
+    .amount-repeat {
+      border-top: 1px dashed #94a3b8;
+      padding-top: 4px;
+      margin-top: auto;
+      font-size: 9px;
+    }
+    .amount-repeat strong { font-size: 11px; margin-left: 6px; }
+    .words { margin-top: 2px; font-weight: 600; font-size: 8.5px; }
+    .sign { margin-top: 6px; text-align: right; font-size: 8.5px; }
+    .sign-line { margin-top: 18px; border-top: 1px solid #0f172a; display: inline-block; min-width: 140px; padding-top: 3px; }
     .cut-line {
       flex: 0 0 auto;
       border-top: 2px dashed #64748b;
-      margin: 4mm 0;
-      position: relative;
+      margin: 2.5mm 0;
       text-align: center;
-      font-size: 8px;
+      font-size: 7.5px;
       color: #64748b;
       letter-spacing: 0.08em;
     }
     .cut-line span {
       background: #fff;
-      padding: 0 8px;
+      padding: 0 6px;
       position: relative;
-      top: -7px;
+      top: -6px;
     }
     @media print {
       .actions { display: none !important; }

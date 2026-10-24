@@ -71,9 +71,8 @@ import {
 } from '../lib/api/accounts'
 import {
   bodyshopCustomerReceiptLinesForCase,
-  bodyshopCustomerReceiptNumber,
-  bodyshopReceiptDateForLine,
-  bodyshopReceiptPaymentModeLabel,
+  buildBodyshopConsolidatedCustomerReceiptPayload,
+  isBodyshopConsolidatedCustomerReceiptEligible,
   resolveBodyshopInsurerGstin,
 } from '../lib/accounts/bodyshopCustomerReceipt'
 import { openBodyshopCustomerReceiptPrint } from '../lib/accounts/bodyshopCustomerReceiptPrint'
@@ -250,11 +249,6 @@ export default function AccountsPage() {
   const [mechPayLines, setMechPayLines] = useState<AccountsMechanicalPayment[]>([])
   const [bsPayLines, setBsPayLines] = useState<AccountsBodyshopPaymentLine[]>([])
   const [busyInsuranceMaster, setBusyInsuranceMaster] = useState<readonly BusyInsuranceMasterRow[]>(BUSY_INSURANCE_MASTER)
-  const [bsReceiptPicker, setBsReceiptPicker] = useState<{
-    row: AccountsBodyshopCase
-    lines: AccountsBodyshopPaymentLine[]
-  } | null>(null)
-
   const [editRow, setEditRow] = useState<AccountsMechanicalCase | null>(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
@@ -854,30 +848,26 @@ export default function AccountsPage() {
     setGatepassConfirmTarget({ type: 'bodyshop', bsRow: row })
   }
 
-  function openBodyshopCustomerReceipt(row: AccountsBodyshopCase, line: AccountsBodyshopPaymentLine) {
+  function onBodyshopReceiptClick(row: AccountsBodyshopCase) {
+    const payload = buildBodyshopConsolidatedCustomerReceiptPayload({
+      caseRow: row,
+      allPaymentLines: bsPayLines,
+      insurerGstin: resolveBodyshopInsurerGstin(row, busyInsuranceMaster),
+      customerGstin: null,
+    })
+    if (!payload) {
+      if (!isCustomerPaymentClosed(row)) {
+        flash('Receipt is available after customer payment is fully received', false)
+      } else {
+        flash('No customer payment posted for this case', false)
+      }
+      return
+    }
     try {
-      openBodyshopCustomerReceiptPrint({
-        caseRow: row,
-        line,
-        insurerGstin: resolveBodyshopInsurerGstin(row, busyInsuranceMaster),
-        customerGstin: null,
-      })
+      openBodyshopCustomerReceiptPrint(payload)
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Could not open receipt', false)
     }
-  }
-
-  function onBodyshopReceiptClick(row: AccountsBodyshopCase) {
-    const lines = bodyshopCustomerReceiptLinesForCase(bsPayLines, row.repair_card_id)
-    if (lines.length === 0) {
-      flash('No customer payment posted for this case', false)
-      return
-    }
-    if (lines.length === 1) {
-      openBodyshopCustomerReceipt(row, lines[0])
-      return
-    }
-    setBsReceiptPicker({ row, lines })
   }
 
   async function handleConfirmIssueGatepass() {
@@ -1436,7 +1426,7 @@ export default function AccountsPage() {
               <tbody>
                 {searchedBs.map((r) => {
                   const customerReceiptLines = bodyshopCustomerReceiptLinesForCase(bsPayLines, r.repair_card_id)
-                  const canPrintCustomerReceipt = customerReceiptLines.length > 0
+                  const canPrintCustomerReceipt = isBodyshopConsolidatedCustomerReceiptEligible(r, customerReceiptLines)
                   return (
                   <tr key={r.repair_card_id}>
                     <td>
@@ -1479,10 +1469,10 @@ export default function AccountsPage() {
                           disabled={!canPrintCustomerReceipt}
                           title={
                             canPrintCustomerReceipt
-                              ? customerReceiptLines.length > 1
-                                ? 'Choose which posted customer payment to print'
-                                : 'Print customer payment receipt (PDF)'
-                              : 'Available after a customer payment is posted'
+                              ? 'Print consolidated customer payment receipt (PDF)'
+                              : isCustomerPaymentClosed(r)
+                                ? 'No customer payment lines to receipt'
+                                : 'Available after customer payment is fully received'
                           }
                           onClick={() => onBodyshopReceiptClick(r)}
                         >
@@ -2109,58 +2099,6 @@ export default function AccountsPage() {
               >
                 {deletingReceipt ? 'Deleting…' : 'Delete payment'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {bsReceiptPicker && (
-        <div className="modal-back" role="presentation" onClick={() => setBsReceiptPicker(null)}>
-          <div className="modal modal--sm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__head">
-              <h3>Customer payment receipt · {bsReceiptPicker.row.job_card_no}</h3>
-              <button type="button" className="modal__x" onClick={() => setBsReceiptPicker(null)} aria-label="Close">×</button>
-            </div>
-            <div className="modal__body">
-              <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: 13 }}>
-                Multiple customer payments are posted. Select the transaction for this receipt.
-              </p>
-              <table className="brx-settle-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Mode</th>
-                    <th>Amount</th>
-                    <th>Receipt No.</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bsReceiptPicker.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td>{bodyshopReceiptDateForLine(line)}</td>
-                      <td>{bodyshopReceiptPaymentModeLabel(line.payment_mode)}</td>
-                      <td>{inr(line.amount)}</td>
-                      <td className="mono">{bodyshopCustomerReceiptNumber(line)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn--sm btn--primary"
-                          onClick={() => {
-                            openBodyshopCustomerReceipt(bsReceiptPicker.row, line)
-                            setBsReceiptPicker(null)
-                          }}
-                        >
-                          Receipt
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="modal__foot">
-              <button type="button" className="btn" onClick={() => setBsReceiptPicker(null)}>Close</button>
             </div>
           </div>
         </div>

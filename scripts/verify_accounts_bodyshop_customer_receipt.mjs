@@ -1,83 +1,89 @@
 #!/usr/bin/env node
 /**
- * Pure checks for Bodyshop customer receipt helpers (mirrors src/lib/accounts/bodyshopCustomerReceipt.ts).
+ * Consolidated Bodyshop customer receipt helpers (mirrors src/lib/accounts/bodyshopCustomerReceipt.ts).
  * Run: node scripts/verify_accounts_bodyshop_customer_receipt.mjs
  */
 
-function bodyshopCustomerReceiptNumber(line) {
-  const voucher = String(line.voucher_no ?? '').trim()
-  if (voucher) return voucher
-  return `BS-RCPT-${line.id}`
+const FY = '26-27'
+
+function isCustomerPaymentLine(line) {
+  return String(line.party).toLowerCase() === 'customer'
+    && String(line.line_type).toLowerCase() === 'receipt'
+    && String(line.component).toUpperCase() === 'CUSTOMER'
+    && !line.is_reversed
 }
 
-function bodyshopReceiptReferenceLine(mode, reference) {
+function bodyshopCustomerReceiptLinesForCase(lines, repairCardId) {
+  return lines
+    .filter((line) => line.repair_card_id === repairCardId && isCustomerPaymentLine(line))
+    .sort((a, b) => a.id - b.id)
+}
+
+function bodyshopCustomerReceiptTotal(lines) {
+  return Math.round(lines.reduce((s, l) => s + Number(l.amount), 0) * 100) / 100
+}
+
+function bodyshopConsolidatedCustomerReceiptNumber(repairCardId) {
+  return `BS-CRP/${FY}/${String(repairCardId).padStart(6, '0')}`
+}
+
+function bodyshopConsolidatedCustomerReceiptDateYmd(lines) {
+  let latest = null
+  for (const line of lines) {
+    const ymd = String(line.txn_date ?? '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+    if (!latest || ymd > latest) latest = ymd
+  }
+  return latest
+}
+
+function bodyshopReceiptReferenceCell(mode, reference) {
   const ref = String(reference ?? '').trim()
-  if (!ref) return null
   const v = String(mode ?? '').trim().toLowerCase()
-  if (v === 'cash') return null
-  if (v === 'upi') return `UPI Reference: ${ref}`
-  return `Reference: ${ref}`
+  if (v === 'cash' || !ref) return '—'
+  return ref
 }
 
-const BELOW_TWENTY = [
-  'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
-]
-const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
-
-function twoDigitsWords(n) {
-  if (n < 20) return BELOW_TWENTY[n]
-  const tens = Math.floor(n / 10)
-  const ones = n % 10
-  return ones ? `${TENS[tens]} ${BELOW_TWENTY[ones]}` : TENS[tens]
+function isCustomerPaymentClosed(row) {
+  const kind = String(row.customer_settlement_kind ?? '').toLowerCase()
+  const status = String(row.customer_payment_status ?? 'pending').toLowerCase()
+  return status === 'received' || kind === 'none'
 }
 
-function threeDigitsWords(n) {
-  if (n === 0) return ''
-  if (n < 100) return twoDigitsWords(n)
-  const hundreds = Math.floor(n / 100)
-  const rest = n % 100
-  return rest ? `${BELOW_TWENTY[hundreds]} Hundred ${twoDigitsWords(rest)}` : `${BELOW_TWENTY[hundreds]} Hundred`
-}
-
-function amountInWordsInr(amount) {
-  const n = Math.round(Number(amount) * 100) / 100
-  if (!Number.isFinite(n) || n <= 0) return 'Zero Rupees Only'
-  const rupees = Math.floor(n)
-  const paise = Math.round((n - rupees) * 100)
-  if (rupees === 0) return paise ? `${twoDigitsWords(paise)} Paise Only` : 'Zero Rupees Only'
-  const crore = Math.floor(rupees / 10000000)
-  const lakh = Math.floor((rupees % 10000000) / 100000)
-  const thousand = Math.floor((rupees % 100000) / 1000)
-  const hundred = rupees % 1000
-  const parts = []
-  if (crore) parts.push(`${twoDigitsWords(crore)} Crore`)
-  if (lakh) parts.push(`${twoDigitsWords(lakh)} Lakh`)
-  if (thousand) parts.push(`${twoDigitsWords(thousand)} Thousand`)
-  if (hundred) parts.push(threeDigitsWords(hundred))
-  let words = `${parts.join(' ').replace(/\s+/g, ' ').trim()} Rupees`
-  if (paise) words += ` and ${twoDigitsWords(paise)} Paise`
-  return `${words} Only`
+function isEligible(caseRow, lines) {
+  if (!isCustomerPaymentClosed(caseRow)) return false
+  return lines.length > 0 && bodyshopCustomerReceiptTotal(lines) > 0
 }
 
 function assertEqual(label, actual, expected) {
   if (actual !== expected) throw new Error(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
 }
 
-assertEqual('receiptNo.voucher', bodyshopCustomerReceiptNumber({ id: 99, voucher_no: 'RApp/26-27/0042' }), 'RApp/26-27/0042')
-assertEqual('receiptNo.fallback', bodyshopCustomerReceiptNumber({ id: 99, voucher_no: null }), 'BS-RCPT-99')
-assertEqual(
-  'reprint.same',
-  bodyshopCustomerReceiptNumber({ id: 99, voucher_no: 'JApp/26-27/0001' }),
-  bodyshopCustomerReceiptNumber({ id: 99, voucher_no: 'JApp/26-27/0001' }),
-)
+const cardId = 42
+const lines = [
+  { id: 1, repair_card_id: cardId, party: 'customer', line_type: 'receipt', component: 'CUSTOMER', amount: 1200, txn_date: '2026-10-22', payment_mode: 'cash', reference: null, is_reversed: false },
+  { id: 2, repair_card_id: cardId, party: 'customer', line_type: 'receipt', component: 'CUSTOMER', amount: 32, txn_date: '2026-10-22', payment_mode: 'upi', reference: 'UPI123', is_reversed: false },
+  { id: 3, repair_card_id: cardId, party: 'insurance', line_type: 'do_component', component: 'MAIN', amount: 5000, txn_date: '2026-10-22', is_reversed: false },
+  { id: 4, repair_card_id: cardId, party: 'customer', line_type: 'receipt', component: 'CUSTOMER', amount: 99, txn_date: '2026-10-20', payment_mode: 'cash', is_reversed: true },
+]
 
-assertEqual('cash.noRef', bodyshopReceiptReferenceLine('cash', 'UTR123'), null)
-assertEqual('upi.ref', bodyshopReceiptReferenceLine('upi', 'UTR123'), 'UPI Reference: UTR123')
-assertEqual('card.ref', bodyshopReceiptReferenceLine('card', 'AUTH1'), 'Reference: AUTH1')
+const cust = bodyshopCustomerReceiptLinesForCase(lines, cardId)
+assertEqual('line.count', cust.length, 2)
+assertEqual('total.mixed', bodyshopCustomerReceiptTotal(cust), 1232)
+assertEqual('ref.cash', bodyshopReceiptReferenceCell('cash', 'x'), '—')
+assertEqual('ref.upi', bodyshopReceiptReferenceCell('upi', 'UPI123'), 'UPI123')
+assertEqual('receiptNo.case', bodyshopConsolidatedCustomerReceiptNumber(cardId), 'BS-CRP/26-27/000042')
+assertEqual('reprint', bodyshopConsolidatedCustomerReceiptNumber(cardId), bodyshopConsolidatedCustomerReceiptNumber(cardId))
+assertEqual('receiptDate', bodyshopConsolidatedCustomerReceiptDateYmd(cust), '2026-10-22')
 
-assertEqual('words.2200', amountInWordsInr(2200), 'Two Thousand Two Hundred Rupees Only')
-assertEqual('words.43395', amountInWordsInr(43395), 'Forty Three Thousand Three Hundred Ninety Five Rupees Only')
-assertEqual('words.paise', amountInWordsInr(100.50), 'One Hundred Rupees and Fifty Paise Only')
+const partialCase = { customer_payment_status: 'partial', customer_settlement_kind: 'due' }
+assertEqual('partial.ineligible', isEligible(partialCase, cust), false)
+const closedCase = { customer_payment_status: 'received', customer_settlement_kind: 'due' }
+assertEqual('closed.eligible', isEligible(closedCase, cust), true)
 
-console.log(JSON.stringify({ ok: true, checks: 'bodyshop_customer_receipt_helpers' }))
+console.log(JSON.stringify({
+  ok: true,
+  consolidated_total: 1232,
+  receipt_no: bodyshopConsolidatedCustomerReceiptNumber(cardId),
+  receipt_date: bodyshopConsolidatedCustomerReceiptDateYmd(cust),
+}))

@@ -1,7 +1,12 @@
 import { isCustomerPaymentLine } from '../bodyshopDoPaymentCpMode'
 import { matchBusyInsurance, type BusyInsuranceMasterRow } from '../busy/insuranceMaster'
 import type { AccountsBodyshopCase, AccountsBodyshopPaymentLine } from '../api/accounts'
-import { bodyshopSettlementReceiptDate, paymentModeLabel } from '../api/accounts'
+import {
+  ACCOUNTS_VOUCHER_FY,
+  bodyshopSettlementReceiptDate,
+  isCustomerPaymentClosed,
+  paymentModeLabel,
+} from '../api/accounts'
 
 export function bodyshopCustomerReceiptLinesForCase(
   lines: AccountsBodyshopPaymentLine[],
@@ -19,13 +24,47 @@ export function isBodyshopCustomerReceiptLine(
   return isCustomerPaymentLine(line)
 }
 
-/** Stable receipt number: DBL-0080 voucher when assigned, else deterministic line id. */
-export function bodyshopCustomerReceiptNumber(
-  line: Pick<AccountsBodyshopPaymentLine, 'id' | 'voucher_no'>,
-): string {
-  const voucher = String(line.voucher_no ?? '').trim()
-  if (voucher) return voucher
-  return `BS-RCPT-${line.id}`
+/** Sum of valid customer receipt lines only (not invoice / DO / insurance). */
+export function bodyshopCustomerReceiptTotal(lines: AccountsBodyshopPaymentLine[]): number {
+  return Math.round(
+    lines.reduce((sum, line) => sum + Number(line.amount ?? 0), 0) * 100,
+  ) / 100
+}
+
+/**
+ * Consolidated customer receipt is issued only when the case customer-payment obligation is closed
+ * (same gate as Gatepass customer clearance: `customer_payment_status = received` or kind `none`).
+ */
+export function isBodyshopConsolidatedCustomerReceiptEligible(
+  caseRow: Pick<AccountsBodyshopCase, 'customer_payment_status' | 'customer_settlement_kind'>,
+  receiptLines: AccountsBodyshopPaymentLine[],
+): boolean {
+  if (!isCustomerPaymentClosed(caseRow)) return false
+  return receiptLines.length > 0 && bodyshopCustomerReceiptTotal(receiptLines) > 0
+}
+
+/**
+ * Case-level formal Receipt No. (not RApp/JApp payment vouchers on individual lines).
+ * No repository table assigns consolidated receipt numbers; stable idempotent display id per repair card.
+ */
+export function bodyshopConsolidatedCustomerReceiptNumber(repairCardId: number): string {
+  return `BS-CRP/${ACCOUNTS_VOUCHER_FY}/${String(repairCardId).padStart(6, '0')}`
+}
+
+/**
+ * Receipt date when customer payment is fully closed: latest `txn_date` among included receipt lines
+ * (= date of the final posted customer payment on the consolidated receipt).
+ */
+export function bodyshopConsolidatedCustomerReceiptDateYmd(
+  lines: AccountsBodyshopPaymentLine[],
+): string | null {
+  let latest: string | null = null
+  for (const line of lines) {
+    const ymd = bodyshopSettlementReceiptDate(line)
+    if (!ymd) continue
+    if (!latest || ymd > latest) latest = ymd
+  }
+  return latest
 }
 
 export function bodyshopReceiptPaymentModeLabel(mode: string | null | undefined): string {
@@ -34,23 +73,15 @@ export function bodyshopReceiptPaymentModeLabel(mode: string | null | undefined)
   return paymentModeLabel(mode)
 }
 
-export function bodyshopReceiptReferenceLabel(mode: string | null | undefined): string {
-  const v = String(mode ?? '').trim().toLowerCase()
-  if (v === 'upi') return 'UPI Reference'
-  if (v === 'cheque') return 'Cheque / Reference'
-  if (v === 'bank') return 'Bank transfer reference'
-  return 'Reference'
-}
-
-export function bodyshopReceiptReferenceLine(
+/** Reference cell for payment-details table (not prefixed labels). */
+export function bodyshopReceiptReferenceCell(
   mode: string | null | undefined,
   reference: string | null | undefined,
-): string | null {
+): string {
   const ref = String(reference ?? '').trim()
-  if (!ref) return null
   const v = String(mode ?? '').trim().toLowerCase()
-  if (v === 'cash') return null
-  return `${bodyshopReceiptReferenceLabel(mode)}: ${ref}`
+  if (v === 'cash' || !ref) return '—'
+  return ref
 }
 
 export function resolveBodyshopInsurerGstin(
@@ -127,9 +158,56 @@ export function bodyshopReceiptDateForLine(line: AccountsBodyshopPaymentLine): s
   return formatBodyshopReceiptDateYmd(bodyshopSettlementReceiptDate(line))
 }
 
+export type BodyshopCustomerReceiptLineRow = {
+  line: AccountsBodyshopPaymentLine
+  dateLabel: string
+  modeLabel: string
+  referenceCell: string
+  voucherRef: string | null
+  amount: number
+}
+
+export function bodyshopCustomerReceiptBreakupRows(
+  lines: AccountsBodyshopPaymentLine[],
+): BodyshopCustomerReceiptLineRow[] {
+  return lines.map((line) => ({
+    line,
+    dateLabel: bodyshopReceiptDateForLine(line),
+    modeLabel: bodyshopReceiptPaymentModeLabel(line.payment_mode),
+    referenceCell: bodyshopReceiptReferenceCell(line.payment_mode, line.reference),
+    voucherRef: String(line.voucher_no ?? '').trim() || null,
+    amount: Number(line.amount),
+  }))
+}
+
 export type BodyshopCustomerReceiptPayload = {
   caseRow: AccountsBodyshopCase
-  line: AccountsBodyshopPaymentLine
+  lines: AccountsBodyshopPaymentLine[]
+  receiptNumber: string
+  receiptDateYmd: string | null
+  totalReceived: number
+  breakup: BodyshopCustomerReceiptLineRow[]
   insurerGstin: string | null
   customerGstin: string | null
+}
+
+export function buildBodyshopConsolidatedCustomerReceiptPayload(input: {
+  caseRow: AccountsBodyshopCase
+  allPaymentLines: AccountsBodyshopPaymentLine[]
+  insurerGstin: string | null
+  customerGstin?: string | null
+}): BodyshopCustomerReceiptPayload | null {
+  const lines = bodyshopCustomerReceiptLinesForCase(input.allPaymentLines, input.caseRow.repair_card_id)
+  if (!isBodyshopConsolidatedCustomerReceiptEligible(input.caseRow, lines)) return null
+  const totalReceived = bodyshopCustomerReceiptTotal(lines)
+  return {
+    caseRow: input.caseRow,
+    lines,
+    receiptNumber: bodyshopConsolidatedCustomerReceiptNumber(input.caseRow.repair_card_id),
+    receiptDateYmd: bodyshopConsolidatedCustomerReceiptDateYmd(lines),
+    totalReceived,
+    breakup: bodyshopCustomerReceiptBreakupRows(lines),
+    insurerGstin: input.insurerGstin,
+    customerGstin: input.customerGstin ?? null,
+  }
 }
