@@ -98,6 +98,37 @@ import {
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
 
+const ACCOUNTS_SA_FILTER_ALL = 'all'
+
+function mechanicalAccountsSaKey(
+  row: Pick<AccountsMechanicalCase, 'sa_employee_code' | 'sa_name' | 'sa_display_name'>,
+): string {
+  const code = String(row.sa_employee_code ?? '').trim().toUpperCase()
+  if (code) return `code:${code}`
+  const name = String(row.sa_display_name ?? row.sa_name ?? '').trim()
+  if (name) return `name:${name.toLowerCase()}`
+  return 'unknown'
+}
+
+function mechanicalAccountsSaLabel(row: Pick<AccountsMechanicalCase, 'sa_name' | 'sa_display_name'>): string {
+  return String(row.sa_display_name ?? row.sa_name ?? '').trim()
+}
+
+function bodyshopAccountsSaKey(row: Pick<AccountsBodyshopCase, 'sa_name'>): string {
+  const name = String(row.sa_name ?? '').trim()
+  if (name) return `name:${name.toLowerCase()}`
+  return 'unknown'
+}
+
+function bodyshopAccountsSaLabel(row: Pick<AccountsBodyshopCase, 'sa_name'>): string {
+  return String(row.sa_name ?? '').trim()
+}
+
+function filterAccountsRowsBySa<T>(rows: T[], saFilter: string, keyFn: (row: T) => string): T[] {
+  if (saFilter === ACCOUNTS_SA_FILTER_ALL) return rows
+  return rows.filter((row) => keyFn(row) === saFilter)
+}
+
 type MechanicalPaymentDraft = {
   key: string
   amount: string
@@ -241,6 +272,7 @@ export default function AccountsPage() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [search, setSearch] = useState('')
+  const [saFilter, setSaFilter] = useState(ACCOUNTS_SA_FILTER_ALL)
   const [dateRange, setDateRange] = useState<DateRange>(ACCOUNTS_DATE_RANGE_ALL)
   const [bsFilter, setBsFilter] = useState<BodyshopFilter>('remaining')
   const [mechStatusFilter, setMechStatusFilter] = useState<MechanicalStatusFilter>('all')
@@ -357,24 +389,59 @@ export default function AccountsPage() {
     return mechRows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
   }, [mechRows, search])
 
+  const mechSaOptions = useMemo(() => {
+    const byKey = new Map<string, string>()
+    for (const row of mechRows) {
+      const key = mechanicalAccountsSaKey(row)
+      if (key === 'unknown') continue
+      if (!byKey.has(key)) byKey.set(key, mechanicalAccountsSaLabel(row) || key)
+    }
+    return [...byKey.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'en-IN'))
+  }, [mechRows])
+
+  const bsSaOptions = useMemo(() => {
+    const byKey = new Map<string, string>()
+    for (const row of bsRows) {
+      const key = bodyshopAccountsSaKey(row)
+      if (key === 'unknown') continue
+      if (!byKey.has(key)) byKey.set(key, bodyshopAccountsSaLabel(row) || key)
+    }
+    return [...byKey.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'en-IN'))
+  }, [bsRows])
+
+  const activeSaFilter = useMemo(() => {
+    const options = section === 'mechanical' ? mechSaOptions : bsSaOptions
+    if (saFilter === ACCOUNTS_SA_FILTER_ALL) return ACCOUNTS_SA_FILTER_ALL
+    return options.some((opt) => opt.key === saFilter) ? saFilter : ACCOUNTS_SA_FILTER_ALL
+  }, [section, saFilter, mechSaOptions, bsSaOptions])
+
+  const saFilteredMechAllDates = useMemo(
+    () => filterAccountsRowsBySa(searchedMechAllDates, activeSaFilter, mechanicalAccountsSaKey),
+    [searchedMechAllDates, activeSaFilter],
+  )
+
   const periodMech = useMemo(() => {
     return filterAccountsCasesByViewDate(
-      searchedMechAllDates,
+      saFilteredMechAllDates,
       (r) => accountsMechanicalViewDateYmd(r.invoice_done_at),
       dateRange,
     )
-  }, [searchedMechAllDates, dateRange])
+  }, [saFilteredMechAllDates, dateRange])
 
   const searchedMech = useMemo(
     () =>
       filterMechanicalAccountsTableCases({
-        cases: searchedMechAllDates,
+        cases: saFilteredMechAllDates,
         lines: mechPayLines,
         range: dateRange,
         statusFilter: mechStatusFilter,
         paymentModeFilter: mechPaymentModeFilter,
       }),
-    [searchedMechAllDates, mechPayLines, dateRange, mechStatusFilter, mechPaymentModeFilter],
+    [saFilteredMechAllDates, mechPayLines, dateRange, mechStatusFilter, mechPaymentModeFilter],
   )
 
   const searchedBsAllDates = useMemo(() => {
@@ -383,13 +450,18 @@ export default function AccountsPage() {
     return bsRows.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
   }, [bsRows, search])
 
+  const saFilteredBsAllDates = useMemo(
+    () => filterAccountsRowsBySa(searchedBsAllDates, activeSaFilter, bodyshopAccountsSaKey),
+    [searchedBsAllDates, activeSaFilter],
+  )
+
   const periodBs = useMemo(() => {
     return filterAccountsCasesByViewDate(
-      searchedBsAllDates,
+      saFilteredBsAllDates,
       (r) => accountsBodyshopViewDateYmd(r.invoice_date),
       dateRange,
     )
-  }, [searchedBsAllDates, dateRange])
+  }, [saFilteredBsAllDates, dateRange])
 
   const searchedBs = useMemo(() => {
     let rows = periodBs
@@ -412,13 +484,13 @@ export default function AccountsPage() {
     const billed = periodMech.reduce((s, r) => s + Number(r.billed_amount ?? 0), 0)
     const remaining = periodMech.reduce((s, r) => s + Number(mechanicalRemaining(r) ?? 0), 0)
     const modes = sumAccountsMechanicalPaymentModeKpis({
-      cases: searchedMechAllDates,
+      cases: saFilteredMechAllDates,
       lines: mechPayLines,
       range: dateRange,
       statusFilter: mechStatusFilter,
     })
     return { count: periodMech.length, pending, received, billed, remaining, ...modes }
-  }, [periodMech, searchedMechAllDates, mechPayLines, dateRange, mechStatusFilter])
+  }, [periodMech, saFilteredMechAllDates, mechPayLines, dateRange, mechStatusFilter])
 
   const mechReceivedByCase = useMemo(
     () => mechanicalActualReceivedAmountByCase(mechPayLines),
@@ -432,7 +504,7 @@ export default function AccountsPage() {
     const received = periodBs.filter((r) => isBodyshopOverallReceived(r)).length
     const billed = periodBs.reduce((s, r) => s + Number(r.invoice_amount ?? r.billed_amount ?? 0), 0)
     const modes = sumAccountsBodyshopPaymentModeKpis({
-      cases: searchedBsAllDates,
+      cases: saFilteredBsAllDates,
       lines: bsPayLines,
       range: dateRange,
     })
@@ -444,7 +516,7 @@ export default function AccountsPage() {
       billedCount: periodBs.length,
       ...modes,
     }
-  }, [periodBs, searchedBsAllDates, bsPayLines, dateRange])
+  }, [periodBs, saFilteredBsAllDates, bsPayLines, dateRange])
 
   function patchMechRow(saved: AccountsMechanicalCase) {
     setMechRows((prev) => prev.map((r) => (r.reception_entry_id === saved.reception_entry_id ? { ...r, ...saved } : r)))
@@ -1113,7 +1185,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
-            onClick={() => { setSection('mechanical'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all'); setBsPaymentModeFilter('all') }}
+            onClick={() => { setSection('mechanical'); setSearch(''); setSaFilter(ACCOUNTS_SA_FILTER_ALL); setMechStatusFilter('all'); setMechPaymentModeFilter('all'); setBsPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{mechRows.length}</span>
             <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
@@ -1121,7 +1193,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
-            onClick={() => { setSection('bodyshop'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all'); setBsPaymentModeFilter('all') }}
+            onClick={() => { setSection('bodyshop'); setSearch(''); setSaFilter(ACCOUNTS_SA_FILTER_ALL); setMechStatusFilter('all'); setMechPaymentModeFilter('all'); setBsPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{bsRows.length}</span>
             <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
@@ -1136,6 +1208,24 @@ export default function AccountsPage() {
               includeAll
               allLabel="All"
             />
+          </div>
+          <div className="acct-date-range acct-sa-filter">
+            <label className="cft__label" htmlFor="acct-sa-filter">
+              SA:
+            </label>
+            <select
+              id="acct-sa-filter"
+              className="cft__sel acct-sa-filter__sel"
+              value={activeSaFilter}
+              onChange={(e) => setSaFilter(e.target.value)}
+            >
+              <option value={ACCOUNTS_SA_FILTER_ALL}>All SA</option>
+              {(section === 'mechanical' ? mechSaOptions : bsSaOptions).map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <input
             className="inp"
@@ -1410,6 +1500,7 @@ export default function AccountsPage() {
               <thead>
                 <tr>
                   <th>JC / VRN</th>
+                  <th>SA / Branch</th>
                   <th>Customer</th>
                   <th>Invoice</th>
                   <th>Billed</th>
@@ -1431,11 +1522,14 @@ export default function AccountsPage() {
                   <tr key={r.repair_card_id}>
                     <td>
                       <div>{r.job_card_no}</div>
-                      <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.reg_number || '—'} · {r.branch || '—'}</div>
+                      <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.reg_number || '—'}</div>
+                    </td>
+                    <td>
+                      <div>{bodyshopAccountsSaLabel(r) || '—'}</div>
+                      <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.branch || '—'}</div>
                     </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{r.customer_name || '—'}</div>
-                      <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.sa_name || '—'}</div>
                     </td>
                     <td>
                       <div>{r.invoice_number || '—'}</div>

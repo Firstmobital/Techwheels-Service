@@ -903,6 +903,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   gap: 6px;
   flex: 0 0 auto;
 }
+.acct-sa-filter__sel {
+  min-width: 108px;
+  max-width: 160px;
+}
 .acct-filter-end .cft__label {
   font-size: 11px;
   flex: none;
