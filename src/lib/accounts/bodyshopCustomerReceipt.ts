@@ -1,13 +1,10 @@
 import { isCustomerPaymentLine } from '../bodyshopDoPaymentCpMode'
 import {
-  buildBusyPartyNameByInvoice,
-  buildBusyPartyNameByJobCard,
-  buildBusyPartyNameByVehicleRegistration,
   dedupeBusyLabourRows,
   fetchBusyLabourRowsByInvoiceNumbers,
   fetchBusyLabourRowsByJobCardNumbers,
   fetchBusyLabourRowsByVehicleRegistrationNumbers,
-  resolveBusyPaymentAccountCr,
+  resolveBusyPartyNameFromLabourRows,
 } from '../busy'
 import { matchBusyInsurance, type BusyInsuranceMasterRow } from '../busy/insuranceMaster'
 import type { AccountsBodyshopCase, AccountsBodyshopPaymentLine } from '../api/accounts'
@@ -207,8 +204,8 @@ export type BodyshopCustomerReceiptPayload = {
 }
 
 /**
- * BUSY Party Name for one Accounts Bodyshop case (DMS labour → lookup maps → resolveBusyPaymentAccountCr).
- * Matches /busy preview and Accounts BUSY payment export Account CR resolution.
+ * BUSY Party Name for one Accounts Bodyshop case — uses `resolveBusyPartyNameFromLabourRows`
+ * (same `partyNameFromBusyLabour` / `resolvePartyName` rules as /busy preview).
  */
 export async function resolveBodyshopReceiptBusyPartyName(
   caseRow: Pick<AccountsBodyshopCase, 'invoice_number' | 'job_card_no' | 'reg_number'>,
@@ -224,16 +221,11 @@ export async function resolveBodyshopReceiptBusyPartyName(
     fetchBusyLabourRowsByVehicleRegistrationNumbers(mechanicalExportRegNumbers(exportCases)),
   ])
   const labour = dedupeBusyLabourRows([...labourByInvoice, ...labourByJc, ...labourByVrn])
-  const { partyNameByInvoice } = buildBusyPartyNameByInvoice(labour)
-  const { partyNameByJc } = buildBusyPartyNameByJobCard(labour)
-  const { partyNameByVrn } = buildBusyPartyNameByVehicleRegistration(labour)
-  return resolveBusyPaymentAccountCr({
+  return resolveBusyPartyNameFromLabourRows({
     invoiceNumber: caseRow.invoice_number,
     jcNumber: caseRow.job_card_no,
     vehicleRegistration: caseRow.reg_number,
-    busyPartyNameByInvoice: partyNameByInvoice,
-    busyPartyNameByJc: partyNameByJc,
-    busyPartyNameByVrn: partyNameByVrn,
+    labourRows: labour,
   })
 }
 

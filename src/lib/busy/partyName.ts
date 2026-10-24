@@ -260,6 +260,44 @@ export function buildBusyPartyNameByVehicleRegistration(
 }
 
 /**
+ * Party Name for an Accounts case from fetched DMS labour rows.
+ * Prefer unique invoice labour row (same as /busy preview `Party Name` for that invoice),
+ * then unique JC, then `resolveBusyPaymentAccountCr` (VRN → invoice → JC).
+ */
+export function resolveBusyPartyNameFromLabourRows(input: {
+  invoiceNumber?: unknown
+  jcNumber?: unknown
+  vehicleRegistration?: unknown
+  labourRows: readonly BusyLabourRow[]
+}): string {
+  const labour = dedupeBusyLabourRows([...input.labourRows])
+  const { partyNameByInvoice, duplicateInvoiceKeys } = buildBusyPartyNameByInvoice(labour)
+  const { partyNameByJc, duplicateJcKeys } = buildBusyPartyNameByJobCard(labour)
+  const { partyNameByVrn } = buildBusyPartyNameByVehicleRegistration(labour)
+
+  const invoiceKey = busyInvoiceLookupKey(input.invoiceNumber)
+  if (invoiceKey && !duplicateInvoiceKeys.includes(invoiceKey)) {
+    const byInvoice = partyNameByInvoice.get(invoiceKey)
+    if (byInvoice) return byInvoice
+  }
+
+  const jcKey = busyJobCardLookupKey(input.jcNumber)
+  if (jcKey && !duplicateJcKeys.includes(jcKey)) {
+    const byJc = partyNameByJc.get(jcKey)
+    if (byJc) return byJc
+  }
+
+  return resolveBusyPaymentAccountCr({
+    invoiceNumber: input.invoiceNumber,
+    jcNumber: input.jcNumber,
+    vehicleRegistration: input.vehicleRegistration,
+    busyPartyNameByInvoice: partyNameByInvoice,
+    busyPartyNameByJc: partyNameByJc,
+    busyPartyNameByVrn: partyNameByVrn,
+  })
+}
+
+/**
  * Mechanical Busy payment Account CR: VRN first, then invoice, then unique JC.
  * Does not use Accounts owner/branch/VRN construction.
  */

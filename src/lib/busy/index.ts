@@ -36,6 +36,7 @@ export {
   buildBusyPartyNameByInvoice,
   buildBusyPartyNameByJobCard,
   buildBusyPartyNameByVehicleRegistration,
+  resolveBusyPartyNameFromLabourRows,
   resolveBusyPaymentAccountCr,
   type BusyPartyNameLookup,
   type BusyPartyNameByJobCardLookup,
