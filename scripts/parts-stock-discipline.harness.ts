@@ -3,7 +3,10 @@
  * Run: npx tsx scripts/parts-stock-discipline.harness.ts
  */
 import {
+  classifyCombinedDisciplineSources,
   computeDisciplineOrderMetrics,
+  normalizeDisciplinePartNo,
+  resolveCommonPartUnitPrice,
   windowDaysFromFiscalMonths,
 } from '../src/pages/reports/parts/partsStockDisciplineWindow.ts'
 
@@ -36,5 +39,39 @@ assert(
   Math.abs(metrics.avgDailyRaw - total / 92) < 1e-9,
   `avgDailyRaw uses full precision (${metrics.avgDailyRaw})`,
 )
+
+// Common PV+EV: combine sources then compute (not sum of separate order qtys)
+const pvM1 = 1_000
+const evM1 = 500
+const pvStock = 100
+const evStock = 50
+const combined = classifyCombinedDisciplineSources(92, pvM1 + evM1, 0, 0, 0, pvStock + evStock, 0, 10)
+const pvOnly = classifyCombinedDisciplineSources(92, pvM1, 0, 0, 0, pvStock, 0, 10)
+const evOnly = classifyCombinedDisciplineSources(92, evM1, 0, 0, 0, evStock, 0, 10)
+const sumSeparateOrders = pvOnly.actualOrderQty + evOnly.actualOrderQty
+assert(
+  combined.actualOrderQty ===
+    computeDisciplineOrderMetrics({
+      totalConsumption: pvM1 + evM1,
+      windowDays: 92,
+      currentStock: pvStock + evStock,
+      confirmationQty: 0,
+    }).actualOrderQty,
+  'Common part order qty from combined sources',
+)
+assert(
+  combined.actualOrderQty !== sumSeparateOrders || pvOnly.actualOrderQty === 0,
+  'Combined order qty differs from naive sum of portal orders when both need order',
+)
+
+const price = resolveCommonPartUnitPrice(100, 100)
+assert(price.unitPrice === 100 && !price.priceMismatch, 'Matching PV/EV WAC')
+const mismatch = resolveCommonPartUnitPrice(100, 120)
+assert(mismatch.unitPrice === 100 && mismatch.priceMismatch, 'PV WAC authority on mismatch')
+
+const commonSet = new Set(['ABC123'])
+const evRows = [{ pn: 'ABC123' }, { pn: 'EV-ONLY' }]
+const evFiltered = evRows.filter((r) => !commonSet.has(normalizeDisciplinePartNo(r.pn)))
+assert(evFiltered.length === 1 && evFiltered[0].pn === 'EV-ONLY', 'Common part removed from EV list')
 
 console.log('\nAll parts-stock-discipline harness checks passed.')

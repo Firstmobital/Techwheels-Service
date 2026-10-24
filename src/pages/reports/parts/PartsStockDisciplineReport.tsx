@@ -4,8 +4,11 @@ import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import { ReportLoadingState } from '../components/ReportLoadingState'
 import {
+  classifyCombinedDisciplineSources,
   computeDisciplineOrderMetrics,
   getIndianFiscalYearStart,
+  normalizeDisciplinePartNo,
+  resolveCommonPartUnitPrice,
   resolveDisciplineBranch,
   windowDaysFromFiscalMonths,
 } from './partsStockDisciplineWindow'
@@ -97,71 +100,110 @@ interface DisciplineRow {
   avgDailyConsumption: number
   avgDailyConsumptionRaw: number
   total3M: number
+  /** Same part number exists in both PV and EV for this branch — combined on PV row only. */
+  commonPvEv?: boolean
 }
 
 type OrderPortal = 'PV' | 'EV'
 
 function normalizePartNo(partNumber: string): string {
-  return String(partNumber ?? '').trim().toUpperCase()
+  return normalizeDisciplinePartNo(partNumber)
 }
 
-function pvHasShortage(row: DisciplineRow): boolean {
-  return row.rowStatus === 'CRITICAL' || row.rowStatus === 'LOW STOCK'
+function mergeCommonPvEvRow(
+  pvRow: DisciplineRow,
+  evRow: DisciplineRow,
+  windowDays: number,
+): DisciplineRow {
+  const m1Qty = pvRow.m1Qty + evRow.m1Qty
+  const m2Qty = pvRow.m2Qty + evRow.m2Qty
+  const m3Qty = pvRow.m3Qty + evRow.m3Qty
+  const m4Qty = pvRow.m4Qty + evRow.m4Qty
+  const totalConsumption = m1Qty + m2Qty + m3Qty + m4Qty
+  const currentStock = pvRow.currentStock + evRow.currentStock
+  const confirmationQty = pvRow.confirmationQty + evRow.confirmationQty
+  const { unitPrice } = resolveCommonPartUnitPrice(pvRow.unitPrice, evRow.unitPrice)
+
+  const calc = classifyCombinedDisciplineSources(
+    windowDays,
+    m1Qty,
+    m2Qty,
+    m3Qty,
+    m4Qty,
+    currentStock,
+    confirmationQty,
+    unitPrice,
+  )
+
+  const partDescription =
+    pvRow.partDescription?.trim() ||
+    evRow.partDescription?.trim() ||
+    pvRow.partNumber
+
+  return {
+    partNumber: pvRow.partNumber,
+    partDescription,
+    portal: 'PV',
+    commonPvEv: true,
+    m1Qty,
+    m2Qty,
+    m3Qty,
+    m4Qty,
+    totalConsumption,
+    monthsActive: calc.monthsActive,
+    frequency: calc.frequency,
+    avgDailyRaw: calc.avgDailyRaw,
+    avgDailyDisplay: calc.avgDailyDisplay,
+    requirement30Day: calc.requirement30Day,
+    currentStock,
+    confirmationQty,
+    actualOrderQty: calc.actualOrderQty,
+    unitPrice,
+    orderValue: calc.orderValue,
+    inventoryValue: calc.inventoryValue,
+    stockStatus: calc.stockStatus,
+    deadStock: calc.deadStock,
+    excessStock: calc.excessStock,
+    critical: calc.critical,
+    rowStatus: calc.rowStatus,
+    effectiveStock: calc.effectiveStock,
+    netShortfall: calc.netShortfall,
+    qtyToOrder: calc.actualOrderQty,
+    required20Day: calc.requirement30Day,
+    pipelineQty: confirmationQty,
+    weeklyAvgQty: calc.weeklyAvgQty,
+    avgDailyConsumption: calc.avgDailyDisplay,
+    avgDailyConsumptionRaw: calc.avgDailyRaw,
+    total3M: totalConsumption,
+  }
 }
 
 /**
- * Shared part numbers: PV owns Critical/Low and the combined order line.
- * EV order qty is rolled into PV so one PO covers both; EV sheet shows OK + zero order.
+ * Common part numbers (both portals, same branch): combine source quantities on PV;
+ * remove from EV so counts and exports are not duplicated.
  */
-function consolidateEvPvSharedOrders(
+function consolidateCommonPvEvParts(
   pvRaw: DisciplineRow[],
   evRaw: DisciplineRow[],
+  windowDays: number,
 ): Record<OrderPortal, DisciplineRow[]> {
   const evByPart = new Map<string, DisciplineRow>()
   for (const r of evRaw) evByPart.set(normalizePartNo(r.partNumber), r)
 
-  const pvByPart = new Map<string, DisciplineRow>()
-  for (const r of pvRaw) pvByPart.set(normalizePartNo(r.partNumber), r)
+  const commonParts = new Set<string>()
+  for (const r of pvRaw) {
+    const norm = normalizePartNo(r.partNumber)
+    if (evByPart.has(norm)) commonParts.add(norm)
+  }
 
   const pvAdjusted = pvRaw.map((pvRow) => {
-    const evRow = evByPart.get(normalizePartNo(pvRow.partNumber))
-    if (!evRow || !pvHasShortage(pvRow)) return pvRow
-
-    const evOrderQty = evRow.actualOrderQty
-    if (evOrderQty <= 0) return pvRow
-
-    const mergedQty = pvRow.actualOrderQty + evOrderQty
-    return {
-      ...pvRow,
-      actualOrderQty: mergedQty,
-      qtyToOrder: mergedQty,
-      orderValue: mergedQty * pvRow.unitPrice,
-    }
+    const norm = normalizePartNo(pvRow.partNumber)
+    const evRow = evByPart.get(norm)
+    if (!evRow || !commonParts.has(norm)) return pvRow
+    return mergeCommonPvEvRow(pvRow, evRow, windowDays)
   })
 
-  const evAdjusted = evRaw.map((evRow) => {
-    const pvRow = pvByPart.get(normalizePartNo(evRow.partNumber))
-    if (!pvRow || !pvHasShortage(pvRow)) return evRow
-
-    const hadEvOrder = evRow.actualOrderQty > 0
-    const evShortage = pvHasShortage(evRow)
-    if (!hadEvOrder && !evShortage) return evRow
-
-    return {
-      ...evRow,
-      ...(evShortage
-        ? {
-            rowStatus: 'OK' as RowStatus,
-            critical: false,
-            stockStatus: 'OK' as const,
-            netShortfall: 0,
-          }
-        : {}),
-      actualOrderQty: 0,
-      qtyToOrder: 0,
-      orderValue: 0,
-    }
-  })
+  const evAdjusted = evRaw.filter((r) => !commonParts.has(normalizePartNo(r.partNumber)))
 
   return { PV: pvAdjusted, EV: evAdjusted }
 }
@@ -666,8 +708,8 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
   }, [loadAllPortals])
 
   const consolidatedByPortal = useMemo(
-    () => consolidateEvPvSharedOrders(rowsByPortal.PV, rowsByPortal.EV),
-    [rowsByPortal],
+    () => consolidateCommonPvEvParts(rowsByPortal.PV, rowsByPortal.EV, activeWindow.window_days),
+    [rowsByPortal, activeWindow.window_days],
   )
   const rows = consolidatedByPortal[activePortal]
   const lastUpdatedForActive = lastUpdated[activePortal]
@@ -767,10 +809,10 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
       [],
       ['Accessories excluded: 8855GOLD*, 8855EVCH*, 8857* series'],
       [],
-      ['EV / PV SHARED PARTS'],
-      ['If the same part number exists on both EV and PV and PV is Critical or Low Stock,'],
-      ['that shortage appears only on the PV order sheet (not duplicated on EV).'],
-      ['EV Actual Order Qty for that part is added to PV Actual Order Qty so one combined PO can be raised from PV.'],
+      ['COMMON PV + EV PARTS'],
+      ['If the same part number exists in both PV and EV for this branch, consumption, stock, and'],
+      ['pipeline are combined on one PV row (Scope = PV+EV). The part is omitted from EV tables and exports.'],
+      ['Order from PV only — one combined requirement and one order line.'],
     ]
     const ws0 = XLSX.utils.aoa_to_sheet(readMe)
     ws0['!cols'] = [{ wch: 80 }]
@@ -793,6 +835,7 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
       'Actual Order Value (Rs)',
       'Status',
       'Frequency',
+      'Scope',
       'Inventory Value (Rs)',
     ]
     const d1 = rows.map((r) => [
@@ -809,12 +852,13 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
       r.orderValue > 0 ? Math.round(r.orderValue) : 0,
       r.rowStatus,
       r.frequency,
+      r.commonPvEv ? 'PV+EV' : portalLabel,
       Math.round(r.inventoryValue),
     ])
     // Total row
     const totalOrderQty   = rows.reduce((s, r) => s + r.actualOrderQty, 0)
     const totalOrderValue = rows.reduce((s, r) => s + r.orderValue, 0)
-    d1.push(['', 'TOTAL', '', '', '', '', '', '', '', '', '', totalOrderQty, '', Math.round(totalOrderValue), '', '', ''])
+    d1.push(['', 'TOTAL', '', '', '', '', '', '', '', '', '', totalOrderQty, '', Math.round(totalOrderValue), '', '', '', ''])
     const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1])
     ws1['!cols'] = h1.map((_, i) => ({ wch: i < 2 ? 32 : 16 }))
     XLSX.utils.book_append_sheet(wb, ws1, `${portalLabel} Full Report`)
@@ -839,8 +883,11 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
     const orderRowsExport = rows.filter((r) => r.actualOrderQty > 0 && !r.deadStock)
       .sort((a, b) => b.orderValue - a.orderValue)
     const d2 = orderRowsExport.map((r) => {
-      const remarks = r.rowStatus === 'CRITICAL' ? '⚠ URGENT — Order immediately' :
+      const statusRemarks = r.rowStatus === 'CRITICAL' ? '⚠ URGENT — Order immediately' :
                       r.rowStatus === 'LOW STOCK' ? 'Low stock — order this cycle' : ''
+      const remarks = r.commonPvEv
+        ? [statusRemarks, 'Common PV+EV — order from PV sheet only'].filter(Boolean).join(' · ')
+        : statusRemarks
       return [
         r.partNumber, r.partDescription,
         r.m1Qty, r.m2Qty, r.m3Qty,
@@ -1068,7 +1115,14 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
                   return (
                     <tr key={r.partNumber + r.portal} className={`border-b border-gray-100 transition ${rowClass}`}>
                       <td className="px-3 py-2 text-xs text-gray-400">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
-                      <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800">{r.partNumber}</td>
+                      <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800">
+                        <span>{r.partNumber}</span>
+                        {r.commonPvEv && (
+                          <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                            PV+EV
+                          </span>
+                        )}
+                      </td>
                       <td className="max-w-[220px] px-3 py-2 text-xs text-gray-600">
                         <span className="block truncate" title={r.partDescription}>{r.partDescription}</span>
                       </td>
