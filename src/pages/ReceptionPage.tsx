@@ -1446,6 +1446,18 @@ export default function ReceptionPage() {
                 )}
               </label>
 
+              <label className="field">
+                <span className="label">Source <span className="req">*</span></span>
+                <select
+                  value={form.source}
+                  onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))}
+                  className="sel"
+                >
+                  {SOURCE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {/* ── VEHICLE INFORMATION CARD ── */}
@@ -1602,38 +1614,25 @@ export default function ReceptionPage() {
               </label>
 
               <label className="field">
-                <span className="label">Source <span className="req">*</span></span>
+                <span className="label">Service Type</span>
                 <select
-                  value={form.source}
-                  onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))}
+                  value={form.service_type}
+                  onChange={(event) => handleServiceTypeChange(event.target.value)}
                   className="sel"
+                  style={{ borderColor: form.service_type === 'Accident' ? '#ef4444' : undefined }}
                 >
-                  {SOURCE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option}</option>
+                  <option value="">- Select Service Type -</option>
+                  {RECEPTION_SERVICE_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
+                {form.service_type === 'Accident' && (
+                  <span style={{ fontSize: 12, color: '#ef4444', marginTop: 4, display: 'block', fontWeight: 600 }}>
+                    ⚠️ Accident — will appear in Bodyshop Repair Tracker
+                  </span>
+                )}
               </label>
             </div>
-
-            <label className="field">
-              <span className="label">Service Type</span>
-              <select
-                value={form.service_type}
-                onChange={(event) => handleServiceTypeChange(event.target.value)}
-                className="sel"
-                style={{ borderColor: form.service_type === 'Accident' ? '#ef4444' : undefined }}
-              >
-                <option value="">- Select Service Type -</option>
-                {RECEPTION_SERVICE_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-              {form.service_type === 'Accident' && (
-                <span style={{ fontSize: 12, color: '#ef4444', marginTop: 4, display: 'block', fontWeight: 600 }}>
-                  ⚠️ Accident — will appear in Bodyshop Repair Tracker
-                </span>
-              )}
-            </label>
 
             <div className="form-grid-2">
               <label className="field">
