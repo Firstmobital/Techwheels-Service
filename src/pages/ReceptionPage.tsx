@@ -17,6 +17,7 @@ import {
   listReceptionEmployees,
   lookupVehicleByRegNumber,
   suggestAdvisorForVehicle,
+  previewNextRunningRepairSa,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
@@ -361,6 +362,8 @@ export default function ReceptionPage() {
   const [canDelete, setCanDelete] = useState(false)
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  // True while the SA field holds the round-robin preview (not a manual pick); the DB re-allocates at save.
+  const [saAutoAllocated, setSaAutoAllocated] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
   const [loading, setLoading] = useState(true)
@@ -386,6 +389,7 @@ export default function ReceptionPage() {
   const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
   // Ref for accessing latest revisit state inside async callbacks (avoids stale closure)
   const revisitContextRef = useRef<ReceptionRevisitContext | null>(null)
+  const serviceTypeRef = useRef('')
   const [revisitChecking, setRevisitChecking] = useState(false)
   const [updationContext, setUpdationContext] = useState<ReceptionUpdationContext | null>(null)
   const [updationChecking, setUpdationChecking] = useState(false)
@@ -616,6 +620,31 @@ export default function ReceptionPage() {
     if (hasSelectedSaInOptions) return
     setForm((prev) => ({ ...prev, sa_employee_code: '' }))
   }, [editingId, form.sa_employee_code, hasSelectedSaInOptions, revisitContext?.is_revisit])
+
+  // Running Repairs: pre-select the next advisor in the FIFO round-robin (location + EV/PV).
+  const rrLocation = receptionScope && !receptionScope.isAdmin ? receptionScope.location : null
+  const rrFuel = (form.fuel_type || vehicleInfo?.vehicle_type || (form.model ? inferRequiredFuelTypeFromModel(form.model) : '')) as 'EV' | 'PV' | ''
+  const isRunningRepair = normalizeServiceType(form.service_type) === 'Running Repairs'
+  serviceTypeRef.current = normalizeServiceType(form.service_type)
+  const canAutoAllocate = editingId === null && isRunningRepair && !!rrLocation && !!rrFuel
+  const hasManualSa = !!form.sa_employee_code && !saAutoAllocated
+
+  useEffect(() => {
+    if (!canAutoAllocate || hasManualSa || revisitContext?.is_revisit) {
+      // Revisits keep their prior advisor: never let the DB re-allocate them.
+      if (saAutoAllocated && (!canAutoAllocate || revisitContext?.is_revisit)) setSaAutoAllocated(false)
+      return
+    }
+    let cancelled = false
+    void previewNextRunningRepairSa(rrLocation!, rrFuel as 'EV' | 'PV').then((res) => {
+      if (cancelled || res.error || !res.data) return
+      setForm((prev) => ({ ...prev, sa_employee_code: res.data! }))
+      setSaAutoAllocated(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [canAutoAllocate, hasManualSa, rrLocation, rrFuel, revisitContext?.is_revisit, saAutoAllocated])
 
   const serviceTypeFilteredEntries = useMemo(() => {
     if (selectedServiceType === 'all') return saScopedEntries
@@ -901,6 +930,7 @@ export default function ReceptionPage() {
 
   function resetForm() {
     setForm(EMPTY_FORM)
+    setSaAutoAllocated(false)
     setEditingId(null)
     setRevisitContext(null)
     setRevisitChecking(false)
@@ -1047,6 +1077,7 @@ export default function ReceptionPage() {
           // If vehicle had a previous SA, auto-assign same one
           ...(info.sa_employee_code ? { sa_employee_code: info.sa_employee_code } : {}),
         }))
+        if (info.sa_employee_code) setSaAutoAllocated(false)
       } else {
         // Vehicle not found — show clear error
         setVehicleError('Vehicle details not found. Please enter/check Reg. No.')
@@ -1057,7 +1088,9 @@ export default function ReceptionPage() {
       if (info.found && !info.sa_employee_code && info.vehicle_type) {
         // Check if revisit context has already set an SA
         const currentRevisit = revisitContextRef.current
-        if (currentRevisit?.is_revisit && currentRevisit.prior_entry?.sa_employee_code) {
+        if (serviceTypeRef.current === 'Running Repairs' && receptionScope && !receptionScope.isAdmin) {
+          // Running Repairs use the DB-backed round-robin preview instead
+        } else if (currentRevisit?.is_revisit && currentRevisit.prior_entry?.sa_employee_code) {
           // Revisit already handled — don't override with round-robin suggestion
         } else {
           const suggested = await suggestAdvisorForVehicle(
@@ -1122,7 +1155,9 @@ export default function ReceptionPage() {
       km_reading: null,
       model: form.model,
       service_type: form.service_type || null,
-      sa_employee_code: form.sa_employee_code,
+      // Auto-allocated SA is re-picked by the DB at save time so concurrent entries rotate correctly.
+      sa_employee_code: saAutoAllocated && editingId === null && isRunningRepair ? '' : form.sa_employee_code,
+      branch: saAutoAllocated && editingId === null && isRunningRepair ? rrLocation : null,
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
       source: form.source,
@@ -1666,7 +1701,10 @@ export default function ReceptionPage() {
                 <span className="label">SA Name <span className="req">*</span></span>
               <select
                 value={form.sa_employee_code}
-                onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value }))}
+                onChange={(event) => {
+                  setSaAutoAllocated(false)
+                  setForm((prev) => ({ ...prev, sa_employee_code: event.target.value }))
+                }}
                 className="sel"
               >
                 <option value="">- Select SA -</option>
@@ -1684,7 +1722,7 @@ export default function ReceptionPage() {
                 ))}
               </select>
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
-                Showing {sortedEmployeeOptions.length} SA(s) for {(form.fuel_type || vehicleInfo?.vehicle_type || inferRequiredFuelTypeFromModel(form.model)) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
+                {saAutoAllocated && 'Auto-allocated (Running Repairs round-robin) · change to override. '}Showing {sortedEmployeeOptions.length} SA(s) for {(form.fuel_type || vehicleInfo?.vehicle_type || inferRequiredFuelTypeFromModel(form.model)) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
               </span>
             </label>
             </div>

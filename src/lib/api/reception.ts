@@ -1858,6 +1858,24 @@ export async function lookupVehicleByRegNumber(
 }
 
 /**
+ * Preview of the next Running Repairs advisor (FIFO round-robin per location + EV/PV).
+ * The final allocation is made by create_reception_entry at save time.
+ */
+export async function previewNextRunningRepairSa(
+  location: string,
+  portal: 'EV' | 'PV',
+): Promise<ApiResult<string | null>> {
+  const { data, error } = await supabase.rpc('pick_running_repair_sa', {
+    p_location: location,
+    p_portal: portal,
+    p_lock: false,
+  })
+  if (error) return fail(error)
+  const row = (Array.isArray(data) ? data[0] : data) as { employee_code?: string } | undefined
+  return ok(row?.employee_code?.trim().toUpperCase() || null)
+}
+
+/**
  * Suggests an advisor for a new vehicle using TRUE round-robin allocation.
  *
  * Algorithm:
@@ -1876,24 +1894,6 @@ export async function lookupVehicleByRegNumber(
  *     will be picked next since they still have the minimum count)
  *   - State persists across page refreshes (reads from DB entries)
  */
-/**
- * Preview of the next Running Repairs advisor (FIFO round-robin per location + EV/PV).
- * The final allocation is made by create_reception_entry at save time.
- */
-export async function previewNextRunningRepairSa(
-  location: string,
-  portal: 'EV' | 'PV',
-): Promise<ApiResult<string | null>> {
-  const { data, error } = await supabase.rpc('pick_running_repair_sa', {
-    p_location: location,
-    p_portal: portal,
-    p_lock: false,
-  })
-  if (error) return fail(error)
-  const row = (Array.isArray(data) ? data[0] : data) as { employee_code?: string } | undefined
-  return ok(row?.employee_code?.trim().toUpperCase() || null)
-}
-
 export async function suggestAdvisorForVehicle(
   vehicleType: 'EV' | 'PV',
   employeeOptions: ReceptionEmployeeOption[],
