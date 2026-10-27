@@ -390,6 +390,7 @@ export default function ReceptionPage() {
   // Ref for accessing latest revisit state inside async callbacks (avoids stale closure)
   const revisitContextRef = useRef<ReceptionRevisitContext | null>(null)
   const serviceTypeRef = useRef('')
+  const rrLocationRef = useRef<string | null>(null)
   const [revisitChecking, setRevisitChecking] = useState(false)
   const [updationContext, setUpdationContext] = useState<ReceptionUpdationContext | null>(null)
   const [updationChecking, setUpdationChecking] = useState(false)
@@ -622,10 +623,21 @@ export default function ReceptionPage() {
   }, [editingId, form.sa_employee_code, hasSelectedSaInOptions, revisitContext?.is_revisit])
 
   // Running Repairs: pre-select the next advisor in the FIFO round-robin (location + EV/PV).
-  const rrLocation = receptionScope && !receptionScope.isAdmin ? receptionScope.location : null
+  // Admins have no linked location: fall back to the location of their dealer code.
+  const [adminDealerLocation, setAdminDealerLocation] = useState<string | null>(null)
+  useEffect(() => {
+    if (!receptionScope?.isAdmin) return
+    void supabase.rpc('my_dealer_code').then(({ data }) => {
+      const code = String(data ?? '').trim().toUpperCase()
+      if (code === '3000840' || code === '500A840') setAdminDealerLocation('Sitapura')
+      else if (code === '3001440') setAdminDealerLocation('Ajmer Road')
+    })
+  }, [receptionScope])
+  const rrLocation = receptionScope?.isAdmin ? adminDealerLocation : receptionScope?.location ?? null
   const rrFuel = (form.fuel_type || vehicleInfo?.vehicle_type || (form.model ? inferRequiredFuelTypeFromModel(form.model) : '')) as 'EV' | 'PV' | ''
   const isRunningRepair = normalizeServiceType(form.service_type) === 'Running Repairs'
   serviceTypeRef.current = normalizeServiceType(form.service_type)
+  rrLocationRef.current = rrLocation
   const canAutoAllocate = editingId === null && isRunningRepair && !!rrLocation && !!rrFuel
   const hasManualSa = !!form.sa_employee_code && !saAutoAllocated
 
@@ -1088,7 +1100,7 @@ export default function ReceptionPage() {
       if (info.found && !info.sa_employee_code && info.vehicle_type) {
         // Check if revisit context has already set an SA
         const currentRevisit = revisitContextRef.current
-        if (serviceTypeRef.current === 'Running Repairs' && receptionScope && !receptionScope.isAdmin) {
+        if (serviceTypeRef.current === 'Running Repairs' && rrLocationRef.current) {
           // Running Repairs use the DB-backed round-robin preview instead
         } else if (currentRevisit?.is_revisit && currentRevisit.prior_entry?.sa_employee_code) {
           // Revisit already handled — don't override with round-robin suggestion
