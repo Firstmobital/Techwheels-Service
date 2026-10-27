@@ -1,3 +1,4 @@
+import { MAX_NO_ANSWER_ATTEMPTS } from '../lib/insuranceRenewalConstants'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase'
 import { uploadInsuranceRenewalQuote } from '../lib/api/insuranceRenewalTelecalling'
@@ -701,7 +702,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
         renewal_company: (status === 'renewed_via_us' || status === 'quote_sent') && renewalCompany ? renewalCompany : undefined,
       })
       if (result?.retry_queued) {
-        setError('📵 Couldn\'t connect — back to pool tomorrow (attempt ' + (result?.no_answer_count ?? '') + '/3, then marked not reachable)')
+        setError('📵 Couldn\'t connect — back to pool tomorrow (attempt ' + (result?.no_answer_count ?? '') + '/' + MAX_NO_ANSWER_ATTEMPTS + ', then marked not reachable)')
         setTimeout(() => setError(null), 4000)
       }
       if (fromQueue && QUOTE_PIPELINE_STATUSES.includes(status)) {
@@ -1439,7 +1440,7 @@ function CallCard({
       {/* Previous call info */}
       {assignment.call_count > 0 && (
         <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-sm text-amber-700">
-          {assignment.retry_after ? `🔁 Retry attempt ${assignment.no_answer_count}/3 — no answer / not reachable previously` : `⚠️ Called ${assignment.call_count} time(s).`}{assignment.no_answer_count > 0 && !assignment.retry_after ? ` (${assignment.no_answer_count} failed attempts — 3rd marks not reachable)` : ''}
+          {assignment.retry_after ? `🔁 Retry attempt ${assignment.no_answer_count}/${MAX_NO_ANSWER_ATTEMPTS} — no answer / not reachable previously` : `⚠️ Called ${assignment.call_count} time(s).`}{assignment.no_answer_count > 0 && !assignment.retry_after ? ` (${assignment.no_answer_count} failed attempts — attempt ${MAX_NO_ANSWER_ATTEMPTS} marks not reachable)` : ''}
           {assignment.call_notes && <div className="mt-1 text-xs">Last note: {assignment.call_notes}</div>}
           {assignment.whatsapp_sent && <div className="mt-1 text-xs text-green-700">✓ WhatsApp sent ({assignment.whatsapp_status || 'sent'})</div>}
         </div>
@@ -1461,7 +1462,7 @@ function CallCard({
           <button onClick={() => { setShowNotes(true); onUpdateStatus('renewed_elsewhere') }} disabled={busy} className="rounded-xl bg-yellow-500 px-4 py-3 text-sm font-semibold text-white hover:bg-yellow-600 disabled:opacity-50">🔀 Renewed Elsewhere</button>
           <button onClick={() => { setShowCallback(true); setShowNotes(true) }} disabled={busy} className="rounded-xl bg-purple-500 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50">🔁 Callback Later</button>
           <button onClick={() => onUpdateStatus('no_answer')} disabled={busy} className="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">📵 No Answer</button>
-          <button onClick={() => onUpdateStatus('not_reachable')} disabled={busy} className="rounded-xl bg-rose-500 px-4 py-3 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-50" title="Same 3-attempt retry as No Answer; 3rd attempt closes as Not Reachable">🚫 Not Reachable</button>
+          <button onClick={() => onUpdateStatus('not_reachable')} disabled={busy} className="rounded-xl bg-rose-500 px-4 py-3 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-50" title={`Same ${MAX_NO_ANSWER_ATTEMPTS}-attempt retry as No Answer; attempt ${MAX_NO_ANSWER_ATTEMPTS} closes as Not Reachable`}>🚫 Not Reachable</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('wrong_number') }} disabled={busy} className="rounded-xl bg-red-400 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50">⚠️ Wrong Number</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('not_interested') }} disabled={busy} className="rounded-xl bg-gray-400 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-500 disabled:opacity-50">😐 Not Interested</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('policy_done') }} disabled={busy} className="rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-600 disabled:opacity-50">✅ Policy Done</button>

@@ -6,7 +6,7 @@
 // ENHANCEMENTS:
 // 1. Dealer filter (sold_dealer, last_service_dealer) in campaign creation
 // 2. Auto campaign refresh every 2h (cron_auto_refresh) + daily drip/leaderboard (cron_daily_refresh)
-// 3. Multi-attempt WhatsApp drip (3 steps) via Meta Cloud API
+// 3. Multi-attempt WhatsApp drip (2 steps) via Meta Cloud API
 // 4. Priority scoring (urgency, idv_value, loyalty, mixed)
 // 5. Telecaller gamification leaderboard
 // 6. Post-expiry emergency lead alerts
@@ -28,6 +28,17 @@ import {
 } from "./rc_fetch_worker.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 type SupabaseClient = ReturnType<typeof createClient>;
+
+// No Answer / Not Reachable retry ladder: strike N sends drip step N; the last strike closes the lead as not_reachable.
+const MAX_NO_ANSWER_ATTEMPTS = 2;
+
+function dripStep(noAnswerCount: number): number {
+  return Math.min(Math.max(noAnswerCount, 1), MAX_NO_ANSWER_ATTEMPTS);
+}
+
+function dripTemplateName(step: number): string {
+  return `insurance_renewal_${step >= MAX_NO_ANSWER_ATTEMPTS ? "final" : "reminder"}`;
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -790,7 +801,7 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
     updated_at: new Date().toISOString(),
   };
 
-  // No Answer and Not Reachable share the same 3-strike retry ladder (terminal: not_reachable)
+  // No Answer and Not Reachable share the same 2-strike retry ladder (terminal: not_reachable)
   if (status === "no_answer" || status === "not_reachable") {
     const { data: current } = await supabase
       .from("insurance_renewal_assignments")
@@ -801,12 +812,15 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
     const noAnswerCount = (current?.no_answer_count || 0) + 1;
     const callCount = (current?.call_count || 0) + 1;
 
-    if (noAnswerCount >= 3) {
-      // Mark as not_reachable after 3 no-answers (only path to not_reachable for telecallers)
+    if (noAnswerCount >= MAX_NO_ANSWER_ATTEMPTS) {
+      // Mark as not_reachable after MAX_NO_ANSWER_ATTEMPTS no-answers (only path to not_reachable for telecallers)
       updateData.status = "not_reachable";
       updateData.no_answer_count = noAnswerCount;
       updateData.call_count = callCount;
       updateData.retry_after = null;
+
+      // Final WhatsApp drip (with self-renewal link) goes out on the closing strike
+      await triggerWhatsAppDrip(supabase, assignmentId, campaignId, noAnswerCount);
     } else {
       // Re-queue for tomorrow
       updateData.no_answer_count = noAnswerCount;
@@ -831,8 +845,9 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
 
     return json({
       success: true,
-      retry_queued: noAnswerCount < 3,
+      retry_queued: noAnswerCount < MAX_NO_ANSWER_ATTEMPTS,
       no_answer_count: noAnswerCount,
+      max_attempts: MAX_NO_ANSWER_ATTEMPTS,
     });
   }
 
@@ -989,7 +1004,7 @@ async function handleEditAssignment(supabase: SupabaseClient, userId: string, bo
 
   if (body.status === "not_reachable" || body.status === "no_answer") {
     return errorResponse(
-      "Use the call card No Answer / Not Reachable buttons — status uses the 3-attempt retry ladder"
+      "Use the call card No Answer / Not Reachable buttons — status uses the 2-attempt retry ladder"
     );
   }
 
@@ -1910,8 +1925,8 @@ async function handleSendDripMessage(supabase: SupabaseClient, body: Record<stri
   );
 
   // Determine drip step and template
-  const step = Math.min(noAnswerCount, 3);
-  const templateName = campaign.meta_template_name || `insurance_renewal_${step === 1 ? "reminder" : step === 2 ? "urgent" : "final"}`;
+  const step = dripStep(noAnswerCount);
+  const templateName = campaign.meta_template_name || dripTemplateName(step);
   const templateLang = campaign.meta_template_lang || "en_US";
 
   // Template variables: name, model, reg number, expiry date
@@ -1961,7 +1976,7 @@ async function handleSendDripMessage(supabase: SupabaseClient, body: Record<stri
   }
 
   // If step 3 (final), generate self-renewal link if enabled
-  if (step === 3 && campaign.self_renewal_link_enabled !== false) {
+  if (step === MAX_NO_ANSWER_ATTEMPTS && campaign.self_renewal_link_enabled !== false) {
     await generateSelfRenewalLinkInternal(supabase, campaignId, assignmentId, vehicle);
   }
 
@@ -2152,109 +2167,13 @@ async function handleCronAutoRefresh() {
   return json({ success: true, refreshed: campaigns.length, results });
 }
 
-// ─── cron_daily_refresh: WhatsApp drip + leaderboard snapshot (once daily) ──
+// ─── cron_daily_refresh: leaderboard snapshot (once daily; drip is sent inline on no-answer) ──
 async function handleCronDailyRefresh() {
   const supabase = cronServiceClient();
 
-  try { await sendPendingDripMessages(supabase); } catch (e) { console.error("Drip error:", e); }
   try { await snapshotLeaderboard(supabase); } catch (e) { console.error("Leaderboard error:", e); }
 
-  return json({ success: true, message: "Daily drip and leaderboard tasks completed." });
-}
-
-// ─── Send pending drip messages (called by cron) ──────────────────────────
-async function sendPendingDripMessages(supabase: SupabaseClient) {
-  // Find assignments with no_answer that have WhatsApp drip enabled
-  const { rows: assignments, error: dripErr } = await fetchAllRows<Record<string, unknown>>((from, to) =>
-    supabase
-      .from("insurance_renewal_assignments")
-      .select(`
-        id, campaign_id, no_answer_count, whatsapp_sent, whatsapp_status,
-        all_service_data!inner(contact_phones, first_name, last_name, model, vehicle_registration_number, last_insurance_expiry_date, vehicle_sale_date)
-      `)
-      .eq("status", "pending")
-      .not("retry_after", "is", null)
-      .lte("retry_after", new Date().toISOString().split("T")[0])
-      .order("id", { ascending: true })
-      .range(from, to)
-  );
-  if (dripErr || assignments.length === 0) return;
-
-  const metaConfig = await getMetaConfig(supabase);
-  if (!metaConfig) return;
-
-  for (const assignment of assignments) {
-    const campaign = assignment.campaign_id;
-    const { data: campaignData } = await supabase
-      .from("insurance_renewal_campaigns")
-      .select("meta_enabled, meta_template_name, meta_template_lang, drip_enabled")
-      .eq("id", campaign)
-      .single();
-
-    if (!campaignData?.meta_enabled || !campaignData?.drip_enabled) continue;
-
-    const vehicle = assignment.all_service_data as unknown as Record<string, unknown>;
-    const step = Math.min((assignment.no_answer_count || 0) + 1, 3);
-    const lastStep = assignment.whatsapp_status === "drip_step_3";
-
-    if (lastStep) continue; // Already sent final drip
-
-    const templateName = campaignData.meta_template_name || `insurance_renewal_${step === 1 ? "reminder" : step === 2 ? "urgent" : "final"}`;
-    const templateLang = campaignData.meta_template_lang || "en_US";
-    const customerName = `${vehicle.first_name || ""} ${vehicle.last_name || ""}`.trim();
-    const insDate = estimateInsuranceDate(
-      vehicle.last_insurance_expiry_date as string,
-      vehicle.vehicle_sale_date as string
-    );
-
-    const variables = [
-      customerName || "Customer",
-      (vehicle.model as string) || "your vehicle",
-      (vehicle.vehicle_registration_number as string) || "",
-      insDate.date || "soon",
-    ];
-
-    const result = await sendMetaTemplateMessage(
-      vehicle.contact_phones as string,
-      templateName,
-      templateLang,
-      variables,
-      metaConfig.meta_phone_number_id,
-      metaConfig.meta_access_token
-    );
-
-    // Log
-    await supabase.from("insurance_renewal_meta_logs").insert({
-      campaign_id: campaign,
-      assignment_id: assignment.id,
-      phone: vehicle.contact_phones as string,
-      template_name: templateName,
-      template_lang: templateLang,
-      step,
-      status: result.success ? "sent" : "failed",
-      meta_message_id: result.messageId || null,
-      error: result.error || null,
-      sent_at: new Date().toISOString(),
-    });
-
-    // Update assignment
-    await supabase
-      .from("insurance_renewal_assignments")
-      .update({
-        whatsapp_sent: true,
-        whatsapp_status: `drip_step_${step}`,
-        whatsapp_sent_at: new Date().toISOString(),
-      })
-      .eq("id", assignment.id);
-
-    // If step 3, generate self-renewal link
-    if (step === 3) {
-      await generateSelfRenewalLinkInternal(supabase, campaign, assignment.id, vehicle);
-    }
-
-    // Rate limit: wait 500ms between messages
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
+  return json({ success: true, message: "Daily leaderboard tasks completed." });
 }
 
 // ─── Trigger WhatsApp drip on no-answer (inline) ──────────────────────────
@@ -2282,8 +2201,8 @@ async function triggerWhatsAppDrip(supabase: SupabaseClient, assignmentId: numbe
   if (!assignment) return;
 
   const vehicle = assignment.all_service_data as unknown as Record<string, unknown>;
-  const step = Math.min(noAnswerCount, 3);
-  const templateName = campaign.meta_template_name || `insurance_renewal_${step === 1 ? "reminder" : step === 2 ? "urgent" : "final"}`;
+  const step = dripStep(noAnswerCount);
+  const templateName = campaign.meta_template_name || dripTemplateName(step);
   const templateLang = campaign.meta_template_lang || "en_US";
   const customerName = `${vehicle.first_name || ""} ${vehicle.last_name || ""}`.trim();
   const insDate = estimateInsuranceDate(
@@ -2322,7 +2241,7 @@ async function triggerWhatsAppDrip(supabase: SupabaseClient, assignmentId: numbe
   });
 
   // If step 3, generate self-renewal link
-  if (step === 3 && campaign.self_renewal_link_enabled !== false) {
+  if (step === MAX_NO_ANSWER_ATTEMPTS && campaign.self_renewal_link_enabled !== false) {
     await generateSelfRenewalLinkInternal(supabase, campaignId, assignmentId, vehicle);
   }
 }
