@@ -1071,7 +1071,9 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
 
   if (!payload.reg_number) return fail('Registration number is required')
   if (!payload.model) return fail('Model is required')
-  if (!payload.sa_employee_code) return fail('Employee code is required')
+  // Blank SA is allowed only for Running Repairs: the DB allocates the next advisor (round-robin).
+  const autoAllocateSa = !payload.sa_employee_code && payload.service_type === 'Running Repairs'
+  if (!payload.sa_employee_code && !autoAllocateSa) return fail('Employee code is required')
   if (!payload.owner_name) return fail('Owner name is required')
   if (!payload.owner_phone) return fail('Owner phone is required')
   if (!payload.source) return fail('Source is required')
@@ -1080,9 +1082,11 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
     return fail('Owner phone must be exactly 10 digits')
   }
 
-  const employeeNameRes = await getEmployeeNameByCode(payload.sa_employee_code)
-  if (employeeNameRes.error || !employeeNameRes.data) {
-    return fail(employeeNameRes.error ?? `Employee code '${payload.sa_employee_code}' not found`)
+  if (!autoAllocateSa) {
+    const employeeNameRes = await getEmployeeNameByCode(payload.sa_employee_code)
+    if (employeeNameRes.error || !employeeNameRes.data) {
+      return fail(employeeNameRes.error ?? `Employee code '${payload.sa_employee_code}' not found`)
+    }
   }
 
   const { data, error } = await supabase.rpc('create_reception_entry', {
@@ -1872,6 +1876,24 @@ export async function lookupVehicleByRegNumber(
  *     will be picked next since they still have the minimum count)
  *   - State persists across page refreshes (reads from DB entries)
  */
+/**
+ * Preview of the next Running Repairs advisor (FIFO round-robin per location + EV/PV).
+ * The final allocation is made by create_reception_entry at save time.
+ */
+export async function previewNextRunningRepairSa(
+  location: string,
+  portal: 'EV' | 'PV',
+): Promise<ApiResult<string | null>> {
+  const { data, error } = await supabase.rpc('pick_running_repair_sa', {
+    p_location: location,
+    p_portal: portal,
+    p_lock: false,
+  })
+  if (error) return fail(error)
+  const row = (Array.isArray(data) ? data[0] : data) as { employee_code?: string } | undefined
+  return ok(row?.employee_code?.trim().toUpperCase() || null)
+}
+
 export async function suggestAdvisorForVehicle(
   vehicleType: 'EV' | 'PV',
   employeeOptions: ReceptionEmployeeOption[],
