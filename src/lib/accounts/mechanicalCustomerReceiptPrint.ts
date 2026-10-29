@@ -96,13 +96,14 @@ export function generateMechanicalCustomerReceiptHtml(input: MechanicalCustomerR
   <style>
     * { box-sizing: border-box; }
     @page { size: A4 portrait; margin: 7mm; }
+    /* One A4 sheet: upper half = one Mechanical receipt; lower half intentionally blank for a second customer. */
     body {
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       color: #0f172a;
       margin: 0;
       padding: 7mm;
       font-size: 9.5px;
-      line-height: 1.32;
+      line-height: 1.28;
       background: #fff;
     }
     .actions { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -116,19 +117,36 @@ export function generateMechanicalCustomerReceiptHtml(input: MechanicalCustomerR
       cursor: pointer;
       font-size: 12px;
     }
-    .page {
+    .sheet {
       display: flex;
       flex-direction: column;
-      gap: 0;
-      min-height: calc(297mm - 14mm);
+      height: 297mm;
+      max-height: 297mm;
+      overflow: hidden;
+    }
+    .page {
+      flex: 0 0 141.5mm;
+      height: 141.5mm;
+      max-height: 141.5mm;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .page-lower {
+      flex: 0 0 141.5mm;
+      height: 141.5mm;
+      max-height: 141.5mm;
     }
     .receipt-block {
-      flex: 1 1 auto;
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: 100%;
       border: 1px solid #cbd5e1;
       border-radius: 6px;
-      padding: 5mm 6mm 4mm;
+      padding: 3mm 6mm 2.5mm;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     .copy-label {
       font-size: 8px;
@@ -142,15 +160,15 @@ export function generateMechanicalCustomerReceiptHtml(input: MechanicalCustomerR
     .company-meta { font-size: 8.5px; color: #475569; }
     .title {
       text-align: center;
-      font-size: 12px;
-      letter-spacing: 0.2em;
-      margin: 4px 0 6px;
+      font-size: 11.5px;
+      letter-spacing: 0.18em;
+      margin: 2px 0 4px;
       font-weight: 800;
     }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 2px; }
     th, td {
       border: 1px solid #e2e8f0;
-      padding: 2px 5px;
+      padding: 1px 5px;
       vertical-align: top;
       word-break: break-word;
     }
@@ -164,12 +182,12 @@ export function generateMechanicalCustomerReceiptHtml(input: MechanicalCustomerR
       justify-content: space-between;
       align-items: center;
       border: 1px solid #0f172a;
-      padding: 4px 8px;
-      margin: 3px 0 4px;
+      padding: 3px 8px;
+      margin: 2px 0 3px;
       font-size: 10px;
     }
-    .amount-banner strong { font-size: 13px; }
-    .pay-section { margin: 2px 0 4px; }
+    .amount-banner strong { font-size: 12px; }
+    .pay-section { margin: 1px 0 2px; }
     .pay-heading { font-weight: 700; font-size: 9px; margin-bottom: 2px; }
     .pay-table th { font-size: 8.5px; }
     .pay-table td { font-size: 8.5px; }
@@ -186,17 +204,26 @@ export function generateMechanicalCustomerReceiptHtml(input: MechanicalCustomerR
     .voucher { color: #64748b; font-size: 8px; }
     .amount-repeat {
       border-top: 1px dashed #94a3b8;
-      padding-top: 4px;
+      padding-top: 3px;
       margin-top: auto;
       font-size: 9px;
     }
     .amount-repeat strong { font-size: 11px; margin-left: 6px; }
-    .words { margin-top: 2px; font-weight: 600; font-size: 8.5px; }
-    .sign { margin-top: 6px; text-align: right; font-size: 8.5px; }
-    .sign-line { margin-top: 18px; border-top: 1px solid #0f172a; display: inline-block; min-width: 140px; padding-top: 3px; }
+    .words { margin-top: 1px; font-weight: 600; font-size: 8.5px; }
+    .sign { margin-top: 3px; text-align: right; font-size: 8.5px; }
+    .sign-line { margin-top: 10px; border-top: 1px solid #0f172a; display: inline-block; min-width: 140px; padding-top: 2px; }
     @media print {
       .actions { display: none !important; }
       body { padding: 0; }
+      .sheet {
+        height: 283mm;
+        max-height: 283mm;
+      }
+      .page, .page-lower {
+        flex: 0 0 141.5mm;
+        height: 141.5mm;
+        max-height: 141.5mm;
+      }
     }
   </style>
 </head>
@@ -204,8 +231,11 @@ export function generateMechanicalCustomerReceiptHtml(input: MechanicalCustomerR
   <div class="actions">
     <button type="button" onclick="window.print()">Print / Save PDF</button>
   </div>
-  <div class="page">
-    ${receiptBlockHtml(input)}
+  <div class="sheet">
+    <div class="page">
+      ${receiptBlockHtml(input)}
+    </div>
+    <div class="page-lower" aria-hidden="true"></div>
   </div>
 </body>
 </html>`
