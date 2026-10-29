@@ -77,6 +77,13 @@ import {
   resolveBodyshopReceiptBusyPartyName,
 } from '../lib/accounts/bodyshopCustomerReceipt'
 import { openBodyshopCustomerReceiptPrint } from '../lib/accounts/bodyshopCustomerReceiptPrint'
+import {
+  buildMechanicalConsolidatedCustomerReceiptPayload,
+  isMechanicalConsolidatedCustomerReceiptEligible,
+  mechanicalCustomerReceiptLinesForCase,
+  resolveMechanicalReceiptBusyPartyName,
+} from '../lib/accounts/mechanicalCustomerReceipt'
+import { openMechanicalCustomerReceiptPrint } from '../lib/accounts/mechanicalCustomerReceiptPrint'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
 import { supabase } from '../lib/supabase'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
@@ -933,6 +940,34 @@ export default function AccountsPage() {
     setGatepassConfirmTarget({ type: 'bodyshop', bsRow: row })
   }
 
+  async function onMechanicalReceiptClick(row: AccountsMechanicalCase) {
+    const lines = mechanicalCustomerReceiptLinesForCase(mechPayLines, row.reception_entry_id)
+    if (!isMechanicalConsolidatedCustomerReceiptEligible(row, lines)) {
+      if (!isMechanicalPaymentClosed(row)) {
+        flash('Receipt is available after customer payment is fully received', false)
+      } else {
+        flash('No customer payment posted for this case', false)
+      }
+      return
+    }
+    try {
+      const busyPartyName = await resolveMechanicalReceiptBusyPartyName(row)
+      const payload = buildMechanicalConsolidatedCustomerReceiptPayload({
+        caseRow: row,
+        allPaymentLines: mechPayLines,
+        busyPartyName,
+        partyGstin: null,
+      })
+      if (!payload) {
+        flash('No customer payment posted for this case', false)
+        return
+      }
+      openMechanicalCustomerReceiptPrint(payload)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Could not open receipt', false)
+    }
+  }
+
   async function onBodyshopReceiptClick(row: AccountsBodyshopCase) {
     const lines = bodyshopCustomerReceiptLinesForCase(bsPayLines, row.repair_card_id)
     if (!isBodyshopConsolidatedCustomerReceiptEligible(row, lines)) {
@@ -1381,7 +1416,10 @@ export default function AccountsPage() {
                 </tr>
               </thead>
               <tbody>
-                {searchedMech.map((r) => (
+                {searchedMech.map((r) => {
+                  const mechanicalReceiptLines = mechanicalCustomerReceiptLinesForCase(mechPayLines, r.reception_entry_id)
+                  const canPrintMechanicalReceipt = isMechanicalConsolidatedCustomerReceiptEligible(r, mechanicalReceiptLines)
+                  return (
                   <tr key={r.reception_entry_id}>
                     <td>{fmtWhen(r.invoice_done_at)}</td>
                     <td>
@@ -1467,6 +1505,21 @@ export default function AccountsPage() {
                         <button
                           type="button"
                           className="btn btn--sm"
+                          disabled={!canPrintMechanicalReceipt}
+                          title={
+                            canPrintMechanicalReceipt
+                              ? 'Print consolidated customer payment receipt (PDF)'
+                              : isMechanicalPaymentClosed(r)
+                                ? 'No customer payment lines to receipt'
+                                : 'Receipt is available after customer payment is fully received'
+                          }
+                          onClick={() => void onMechanicalReceiptClick(r)}
+                        >
+                          Receipt
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm"
                           disabled={!isMechanicalGatepassEligible(r)}
                           title={
                             isMechanicalGatepassEligible(r)
@@ -1493,7 +1546,7 @@ export default function AccountsPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
             </div>
