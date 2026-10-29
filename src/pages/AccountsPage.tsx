@@ -464,20 +464,31 @@ export default function AccountsPage() {
     )
   }, [saFilteredBsAllDates, dateRange])
 
-  const searchedBs = useMemo(() => {
-    let rows = periodBs
-    if (bsFilter === 'remaining') rows = periodBs.filter((r) => isBodyshopOutstandingOpen(r))
-    else if (bsFilter === 'received') rows = periodBs.filter((r) => isBodyshopOverallReceived(r))
-    else if (bsFilter === 'pending') {
-      rows = periodBs.filter((r) => isAccountsStatusPending(r.derived_payment_status))
-    }
-    return filterBodyshopAccountsTableCases({
-      cases: rows,
-      lines: bsPayLines,
-      range: dateRange,
-      paymentModeFilter: bsPaymentModeFilter,
-    })
-  }, [periodBs, bsFilter, bsPayLines, dateRange, bsPaymentModeFilter])
+  const searchedBs = useMemo(
+    () =>
+      filterBodyshopAccountsTableCases({
+        cases: saFilteredBsAllDates,
+        lines: bsPayLines,
+        range: dateRange,
+        statusFilter: bsFilter,
+        paymentModeFilter: bsPaymentModeFilter,
+      }),
+    [saFilteredBsAllDates, bsFilter, bsPayLines, dateRange, bsPaymentModeFilter],
+  )
+
+  /** BUSY export case scope stays invoice_date Period even when payment-mode drill-down uses receipt txn_date. */
+  const bsBusyExportCases = useMemo(
+    () =>
+      filterBodyshopAccountsTableCases({
+        cases: saFilteredBsAllDates,
+        lines: bsPayLines,
+        range: dateRange,
+        statusFilter: bsFilter,
+        paymentModeFilter: bsPaymentModeFilter,
+        requireInvoiceDateInPeriod: true,
+      }),
+    [saFilteredBsAllDates, bsFilter, bsPayLines, dateRange, bsPaymentModeFilter],
+  )
 
   const mechKpis = useMemo(() => {
     const pending = periodMech.filter((r) => isAccountsStatusPending(r.payment_status)).length
@@ -508,6 +519,7 @@ export default function AccountsPage() {
       cases: saFilteredBsAllDates,
       lines: bsPayLines,
       range: dateRange,
+      statusFilter: bsFilter,
     })
     return {
       remaining,
@@ -517,7 +529,7 @@ export default function AccountsPage() {
       billedCount: periodBs.length,
       ...modes,
     }
-  }, [periodBs, saFilteredBsAllDates, bsPayLines, dateRange])
+  }, [periodBs, saFilteredBsAllDates, bsPayLines, dateRange, bsFilter])
 
   function patchMechRow(saved: AccountsMechanicalCase) {
     setMechRows((prev) => prev.map((r) => (r.reception_entry_id === saved.reception_entry_id ? { ...r, ...saved } : r)))
@@ -1060,7 +1072,7 @@ export default function AccountsPage() {
     const isMech = section === 'mechanical'
     const exportCases = isMech
       ? searchedMech
-      : searchedBs.map((row) => ({
+      : bsBusyExportCases.map((row) => ({
           invoice_number: row.invoice_number,
           jc_number: row.job_card_no,
           reg_number: row.reg_number,
@@ -1088,7 +1100,7 @@ export default function AccountsPage() {
             dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
           })
         : buildBodyshopBusyPaymentExportRows({
-            cases: searchedBs,
+            cases: bsBusyExportCases,
             lines: bsPayLines,
             range: dateRange,
             paymentModeFilter: bsPaymentModeFilter,

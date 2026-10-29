@@ -11,6 +11,7 @@ export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_re
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
 export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
 export type BodyshopPaymentModeFilter = MechanicalPaymentModeFilter
+export type BodyshopAccountsStatusFilter = 'all' | 'remaining' | 'received' | 'pending'
 export type MechanicalStatusFilter = 'all' | 'pending' | 'received'
 export type MechanicalGatepassReason = 'paid' | 'short_payment' | 'keep_on_credit'
 
@@ -849,12 +850,48 @@ export function bodyshopSettlementReceiptDate(
  * NULL / cheque / bank / other / insurance / refund / waiver contribute ₹0.
  * Does not use Mechanical payment lines or settlement status.
  */
-export function sumAccountsBodyshopPaymentModeKpis<T extends { repair_card_id: number }>(input: {
+export function accountsBodyshopOutstandingAmount(
+  row: Pick<AccountsBodyshopCase, 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>,
+): number {
+  if (row.outstanding_amount != null) return Number(row.outstanding_amount)
+  return Number(row.insurance_due_amount ?? 0) + Number(row.customer_remaining_amount ?? 0)
+}
+
+export function isBodyshopAccountsOutstandingOpen(
+  row: Pick<AccountsBodyshopCase, 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>,
+): boolean {
+  return accountsBodyshopOutstandingAmount(row) > 0
+}
+
+export function isBodyshopAccountsOverallReceived(
+  row: Pick<AccountsBodyshopCase, 'derived_payment_status'>,
+): boolean {
+  return String(row.derived_payment_status ?? 'pending').toLowerCase() === 'received'
+}
+
+/** Remaining / Received / Pending / Mark Done (all) — same predicates as Accounts Bodyshop status cards. */
+export function filterBodyshopCasesByAccountsStatusFilter<
+  T extends Pick<AccountsBodyshopCase, 'derived_payment_status' | 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>,
+>(rows: T[], statusFilter: BodyshopAccountsStatusFilter = 'all'): T[] {
+  if (statusFilter === 'remaining') return rows.filter((row) => isBodyshopAccountsOutstandingOpen(row))
+  if (statusFilter === 'received') return rows.filter((row) => isBodyshopAccountsOverallReceived(row))
+  if (statusFilter === 'pending') return rows.filter((row) => isAccountsStatusPending(row.derived_payment_status))
+  return rows
+}
+
+export function sumAccountsBodyshopPaymentModeKpis<
+  T extends Pick<
+    AccountsBodyshopCase,
+    'repair_card_id' | 'derived_payment_status' | 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'
+  >,
+>(input: {
   cases: T[]
   lines: Array<Pick<AccountsBodyshopPaymentLine, 'repair_card_id' | 'party' | 'line_type' | 'component' | 'amount' | 'payment_mode' | 'txn_date' | 'is_reversed'>>
   range: { from: string; to: string }
+  statusFilter?: BodyshopAccountsStatusFilter
 }): { cash: number; upi: number; card: number } {
-  const ids = new Set(input.cases.map((row) => row.repair_card_id))
+  const scoped = filterBodyshopCasesByAccountsStatusFilter(input.cases, input.statusFilter ?? 'all')
+  const ids = new Set(scoped.map((row) => row.repair_card_id))
   return sumAccountsPaymentModeTotals(
     input.lines.filter((line) =>
       ids.has(line.repair_card_id)
@@ -913,20 +950,38 @@ export function filterBodyshopCasesByQualifyingReceiptInRange<T extends { repair
 }
 
 /**
- * Bodyshop table: caller applies Search, invoice_date Period, and status first.
- * Cash/UPI/Card then keeps cases with a qualifying customer receipt in Period.
- * Does not change remaining/received/pending/outstanding predicates.
+ * Bodyshop table date authority:
+ * All (Mark Done) / Pending / Remaining / Received + payment mode All → invoice_date Period.
+ * Cash/UPI/Card → Period on qualifying receipt txn_date; invoice_date may be outside Period.
+ * Search + SA scope is caller-supplied on `cases`. Status filter matches status cards.
+ * `requireInvoiceDateInPeriod: true` keeps invoice_date Period (e.g. BUSY export case list).
  */
-export function filterBodyshopAccountsTableCases<T extends { repair_card_id: number }>(input: {
+export function filterBodyshopAccountsTableCases<
+  T extends Pick<AccountsBodyshopCase, 'repair_card_id' | 'invoice_date' | 'derived_payment_status' | 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>,
+>(input: {
   cases: T[]
   lines: BodyshopPaymentModeKpiLine[]
   range: { from: string; to: string }
+  statusFilter?: BodyshopAccountsStatusFilter
   paymentModeFilter?: BodyshopPaymentModeFilter
+  requireInvoiceDateInPeriod?: boolean
 }): T[] {
   const paymentModeFilter = input.paymentModeFilter ?? 'all'
-  if (paymentModeFilter === 'all') return input.cases
+  const statusFilter = input.statusFilter ?? 'all'
+  const requireInvoiceDateInPeriod = input.requireInvoiceDateInPeriod ?? paymentModeFilter === 'all'
+
+  let rows = input.cases
+  if (requireInvoiceDateInPeriod) {
+    rows = filterAccountsCasesByViewDate(
+      rows,
+      (row) => accountsBodyshopViewDateYmd(row.invoice_date),
+      input.range,
+    )
+  }
+  rows = filterBodyshopCasesByAccountsStatusFilter(rows, statusFilter)
+  if (paymentModeFilter === 'all') return rows
   return filterBodyshopCasesByQualifyingReceiptInRange(
-    input.cases,
+    rows,
     input.lines,
     input.range,
     paymentModeFilter,

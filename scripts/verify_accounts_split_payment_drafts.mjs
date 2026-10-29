@@ -2870,8 +2870,25 @@ function bodyshopSettlementReceiptDate(line) {
   return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null
 }
 
-function sumAccountsBodyshopPaymentModeKpis({ cases, lines, range }) {
-  const ids = new Set(cases.map((row) => row.repair_card_id))
+function isBodyshopAccountsOutstandingOpen(row) {
+  if (row.outstanding_amount != null) return Number(row.outstanding_amount) > 0
+  return Number(row.insurance_due_amount ?? 0) + Number(row.customer_remaining_amount ?? 0) > 0
+}
+
+function isBodyshopAccountsOverallReceived(row) {
+  return String(row.derived_payment_status ?? 'pending').toLowerCase() === 'received'
+}
+
+function filterBodyshopCasesByAccountsStatusFilter(rows, statusFilter = 'all') {
+  if (statusFilter === 'remaining') return rows.filter((row) => isBodyshopAccountsOutstandingOpen(row))
+  if (statusFilter === 'received') return rows.filter((row) => isBodyshopAccountsOverallReceived(row))
+  if (statusFilter === 'pending') return rows.filter((row) => isAccountsStatusPending(row.derived_payment_status))
+  return rows
+}
+
+function sumAccountsBodyshopPaymentModeKpis({ cases, lines, range, statusFilter = 'all' }) {
+  const scoped = filterBodyshopCasesByAccountsStatusFilter(cases, statusFilter)
+  const ids = new Set(scoped.map((row) => row.repair_card_id))
   return sumAccountsPaymentModeTotals(
     lines.filter((line) =>
       ids.has(line.repair_card_id)
@@ -2997,14 +3014,27 @@ function isBodyshopQualifyingReceiptLine(line, range, modeFilter = 'all') {
   return mode === modeFilter
 }
 
-function filterBodyshopAccountsTableCases({ cases, lines, range, paymentModeFilter = 'all' }) {
-  if (paymentModeFilter === 'all') return cases
+function filterBodyshopAccountsTableCases({
+  cases,
+  lines,
+  range,
+  statusFilter = 'all',
+  paymentModeFilter = 'all',
+  requireInvoiceDateInPeriod,
+}) {
+  const gateInvoice = requireInvoiceDateInPeriod ?? paymentModeFilter === 'all'
+  let rows = cases
+  if (gateInvoice) {
+    rows = filterAccountsCasesByViewDate(rows, (row) => accountsBodyshopViewDateYmd(row.invoice_date), range)
+  }
+  rows = filterBodyshopCasesByAccountsStatusFilter(rows, statusFilter)
+  if (paymentModeFilter === 'all') return rows
   const ids = new Set()
   for (const line of lines) {
     if (!isBodyshopQualifyingReceiptLine(line, range, paymentModeFilter)) continue
     ids.add(line.repair_card_id)
   }
-  return cases.filter((row) => ids.has(row.repair_card_id))
+  return rows.filter((row) => ids.has(row.repair_card_id))
 }
 
 function selectBsPaymentMode(prev, mode) {
@@ -3194,7 +3224,7 @@ function buildBodyshopBusyPaymentExportRows({
   const cardOnly = filterBodyshopAccountsTableCases({ cases, lines, range: day, paymentModeFilter: 'card' })
   assert(cardOnly.length === 0, 'Credit Card excludes UPI-only and Cash+UPI')
   const allModes = filterBodyshopAccountsTableCases({ cases, lines, range: day, paymentModeFilter: 'all' })
-  assert(allModes.length === 3, 'All keeps status/period case set')
+  assert(allModes.length === 2, 'All keeps invoice_date Period case set (excludes invoice outside Period)')
   const offDay = filterBodyshopAccountsTableCases({ cases, lines, range: otherDay, paymentModeFilter: 'upi' })
   assert(offDay.length === 0, 'Period excludes out-of-range txn_date from mode cards')
   assert(selectBsPaymentMode('upi', 'upi') === 'all', 'clicking selected UPI clears to All')
@@ -3274,6 +3304,157 @@ function buildBodyshopBusyPaymentExportRows({
   assert(mechSibling.rows.length === 2, 'Mechanical sibling out-of-Period line remains exported (documented TD)')
 
   console.log('verify_accounts_split_payment_drafts: Bodyshop payment-mode filter/export/voucher checks passed')
+}
+
+// ---------------------------------------------------------------------------
+// Bodyshop payment-mode drill-down: receipt txn_date Period when mode selected.
+// Keep aligned with filterBodyshopAccountsTableCases in src/lib/api/accounts.ts.
+// ---------------------------------------------------------------------------
+
+{
+  const day2710 = { from: '2026-10-27', to: '2026-10-27' }
+  const day2810 = { from: '2026-10-28', to: '2026-10-28' }
+  const mkCase = (id, jc, invoiceDate, status = 'received') => ({
+    repair_card_id: id,
+    job_card_no: jc,
+    invoice_number: `INV-${id}`,
+    invoice_date: invoiceDate,
+    reg_number: `RJ${id}`,
+    derived_payment_status: status,
+    outstanding_amount: 0,
+    insurance_due_amount: 0,
+    customer_remaining_amount: 0,
+  })
+  const mkCash = (id, cardId, amount, txnDate) => ({
+    id,
+    repair_card_id: cardId,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount,
+    payment_mode: 'cash',
+    txn_date: txnDate,
+    is_reversed: false,
+  })
+  const prod2710Cases = [
+    mkCase(8888, 'JC-MBTPLT-JP1-2627-008888', '2026-10-26'),
+    mkCase(8401, 'JC-MBTPLT-JP1-2627-008401', '2026-10-24'),
+    mkCase(7558, 'JC-MBTPLT-JP2-2627-007558', '2026-10-27'),
+  ]
+  const prod2710Lines = [
+    mkCash(1, 8888, 1510, '2026-10-27'),
+    mkCash(2, 8401, 2000, '2026-10-27'),
+    mkCash(3, 7558, 2300, '2026-10-27'),
+  ]
+  const normal2710 = filterBodyshopAccountsTableCases({
+    cases: prod2710Cases,
+    lines: prod2710Lines,
+    range: day2710,
+    paymentModeFilter: 'all',
+  })
+  assert(normal2710.length === 1 && normal2710[0].repair_card_id === 7558, 'Normal Mark Done 27-Oct: only invoice on 27-Oct')
+  const cash2710 = filterBodyshopAccountsTableCases({
+    cases: prod2710Cases,
+    lines: prod2710Lines,
+    range: day2710,
+    paymentModeFilter: 'cash',
+  })
+  assert(cash2710.length === 3, `Cash drill-down 27-Oct: all three receipt cases, got ${cash2710.length}`)
+  const cashKpi2710 = sumAccountsBodyshopPaymentModeKpis({ cases: prod2710Cases, lines: prod2710Lines, range: day2710 })
+  assert(cashKpi2710.cash === 5810, `Cash KPI 27-Oct = 5810, got ${cashKpi2710.cash}`)
+  const cashSum2710 = prod2710Lines
+    .filter((line) => isBodyshopQualifyingReceiptLine(line, day2710, 'cash'))
+    .reduce((s, line) => s + line.amount, 0)
+  assert(cashSum2710 === 5810, `Qualifying cash lines sum 5810, got ${cashSum2710}`)
+
+  const offPeriodReceipt = mkCash(99, 8401, 500, '2026-10-26')
+  assert(
+    filterBodyshopAccountsTableCases({
+      cases: prod2710Cases,
+      lines: [...prod2710Lines, offPeriodReceipt],
+      range: day2710,
+      paymentModeFilter: 'cash',
+    }).length === 3,
+    'Receipt outside Period excluded from cash drill-down',
+  )
+
+  const reversed = { ...prod2710Lines[0], id: 100, is_reversed: true }
+  assert(!isBodyshopQualifyingReceiptLine(reversed, day2710, 'cash'), 'Reversed receipt excluded')
+  const wrongMode = { ...prod2710Lines[0], id: 101, payment_mode: 'upi' }
+  assert(
+    !filterBodyshopAccountsTableCases({
+      cases: prod2710Cases,
+      lines: [wrongMode],
+      range: day2710,
+      paymentModeFilter: 'cash',
+    }).some((r) => r.repair_card_id === 8888),
+    'Wrong payment mode excluded from Cash drill-down',
+  )
+  const insuranceLine = {
+    id: 102,
+    repair_card_id: 8888,
+    party: 'insurance',
+    line_type: 'do_component',
+    component: 'MAIN',
+    amount: 9999,
+    payment_mode: 'cash',
+    txn_date: '2026-10-27',
+    is_reversed: false,
+  }
+  assert(!isBodyshopAccountsCustomerReceiptLine(insuranceLine), 'Non-customer receipt line excluded')
+
+  const pendingCase = { ...prod2710Cases[0], derived_payment_status: 'pending', outstanding_amount: 100 }
+  const pendingScoped = filterBodyshopAccountsTableCases({
+    cases: [pendingCase, prod2710Cases[1], prod2710Cases[2]],
+    lines: prod2710Lines,
+    range: day2710,
+    statusFilter: 'pending',
+    paymentModeFilter: 'cash',
+  })
+  assert(pendingScoped.length === 1 && pendingScoped[0].repair_card_id === 8888, 'Pending + Cash scopes KPI and table consistently')
+  const pendingKpi = sumAccountsBodyshopPaymentModeKpis({
+    cases: [pendingCase, prod2710Cases[1], prod2710Cases[2]],
+    lines: prod2710Lines,
+    range: day2710,
+    statusFilter: 'pending',
+  })
+  assert(pendingKpi.cash === 1510, `Pending Cash KPI only pending case receipt, got ${pendingKpi.cash}`)
+
+  const busy2710Cash = filterBodyshopAccountsTableCases({
+    cases: prod2710Cases,
+    lines: prod2710Lines,
+    range: day2710,
+    paymentModeFilter: 'cash',
+    requireInvoiceDateInPeriod: true,
+  })
+  assert(busy2710Cash.length === 1 && busy2710Cash[0].repair_card_id === 7558, 'BUSY export case list stays invoice_date Period')
+
+  const prod2810Cases = [
+    mkCase(9001, 'JC-2810-A', '2026-10-28'),
+    mkCase(9002, 'JC-2810-B', '2026-10-25'),
+    mkCase(9003, 'JC-2810-C', '2026-10-28'),
+  ]
+  const prod2810Lines = [
+    { ...mkCash(10, 9001, 8000, '2026-10-28'), payment_mode: 'cash' },
+    { ...mkCash(11, 9002, 7610, '2026-10-28'), payment_mode: 'cash' },
+    { ...mkCash(12, 9001, 4634, '2026-10-28'), payment_mode: 'upi' },
+    { ...mkCash(13, 9003, 10192, '2026-10-28'), payment_mode: 'card' },
+  ]
+  const kpi2810 = sumAccountsBodyshopPaymentModeKpis({ cases: prod2810Cases, lines: prod2810Lines, range: day2810 })
+  assert(kpi2810.cash === 15610 && kpi2810.upi === 4634 && kpi2810.card === 10192, `28-Oct KPI reconciliation, got ${JSON.stringify(kpi2810)}`)
+  const cash2810 = filterBodyshopAccountsTableCases({
+    cases: prod2810Cases,
+    lines: prod2810Lines,
+    range: day2810,
+    paymentModeFilter: 'cash',
+  })
+  assert(cash2810.length === 2, '28-Oct Cash drill-down includes invoice-outside-period case with in-period cash')
+  const cash2810Sum = prod2810Lines
+    .filter((line) => cash2810.some((c) => c.repair_card_id === line.repair_card_id) && isBodyshopQualifyingReceiptLine(line, day2810, 'cash'))
+    .reduce((s, line) => s + line.amount, 0)
+  assert(cash2810Sum === 15610, `28-Oct visible cash receipts reconcile to KPI, got ${cash2810Sum}`)
+
+  console.log('verify_accounts_split_payment_drafts: Bodyshop payment-mode drill-down Period authority checks passed')
 }
 
 
