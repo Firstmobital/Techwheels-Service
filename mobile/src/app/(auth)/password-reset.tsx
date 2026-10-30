@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { getStaffAuthRedirectUrl } from '../../lib/authRedirect'
+import { getStaffPasswordResetRedirectUrl } from '../../lib/authRedirect'
 import { supabase } from '../../lib/supabase'
 
 export default function PasswordResetScreen() {
@@ -29,7 +29,7 @@ export default function PasswordResetScreen() {
     setLoading(true)
     try {
       const { data, error } = await supabase.functions.invoke('deliver-password-reset-email', {
-        body: { email: email.trim(), redirectTo: getStaffAuthRedirectUrl() },
+        body: { email: email.trim(), redirectTo: getStaffPasswordResetRedirectUrl() },
       })
 
       if (error) {

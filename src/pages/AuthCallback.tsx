@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { readAuthCallbackParams } from '../lib/authCallbackSession'
 import { supabase } from '../lib/supabase'
 
 export default function AuthCallback() {
@@ -7,39 +8,42 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Supabase puts the tokens in the URL hash (#access_token=...&type=signup)
-    // or as query params (?code=... for PKCE). Handle both.
-    const hash = window.location.hash
-    const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
-    const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
-    const flowType = hashParams.get('type') ?? params.get('type')
+    const { code, accessToken, refreshToken, type, errorDescription } = readAuthCallbackParams()
 
     const handle = async () => {
+      if (errorDescription) {
+        setError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')))
+        return
+      }
+
+      // Admin generate_link emails redirect with hash tokens (implicit).
+      // The web client uses PKCE, which ignores that hash, so set the session here.
       if (code) {
-        // PKCE flow
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (error) { setError(error.message); return }
-      } else if (hash.includes('access_token')) {
-        // Implicit flow — Supabase JS picks this up automatically via onAuthStateChange
-        // Just wait for the session to populate
-        const { data, error } = await supabase.auth.getSession()
-        if (error || !data.session) { setError('Could not verify your email. Link may have expired.'); return }
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (exchangeError) {
+          setError(exchangeError.message)
+          return
+        }
+      } else if (accessToken && refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (sessionError) {
+          setError(sessionError.message)
+          return
+        }
       } else {
         setError('Invalid confirmation link.')
         return
       }
 
-      if (flowType === 'recovery') {
-        navigate('/reset-password', { replace: true })
-        return
-      }
-
-      // Success — go to dashboard
-      navigate('/import', { replace: true })
+      const nextPath = type === 'recovery' ? '/reset-password' : '/home'
+      window.history.replaceState(window.history.state, '', nextPath)
+      navigate({ pathname: nextPath, search: '', hash: '' }, { replace: true })
     }
 
-    handle()
+    void handle()
   }, [navigate])
 
   if (error) {
@@ -51,10 +55,10 @@ export default function AuthCallback() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Confirmation failed</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Link could not be opened</h2>
           <p className="text-sm text-gray-500 mb-6">{error}</p>
-          <Link to="/home" className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition">
-            Back to Sign in
+          <Link to="/forgot-password" className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition">
+            Request a new reset link
           </Link>
         </div>
       </div>
@@ -65,7 +69,7 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         <div className="w-10 h-10 rounded-full border-2 border-blue-600 border-t-transparent animate-spin mx-auto mb-4" />
-        <p className="text-sm text-gray-500">Verifying your email…</p>
+        <p className="text-sm text-gray-500">Opening password reset…</p>
       </div>
     </div>
   )

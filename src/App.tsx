@@ -14,6 +14,7 @@ import SignUpPage from './pages/SignUpPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import AuthCallback from './pages/AuthCallback'
 import PasswordUpdatePage from './pages/PasswordUpdatePage'
+import { locationHasAuthCallbackPayload } from './lib/authCallbackSession'
 import AutoDocPage from './pages/AutoDocPage'
 import JobCardPage from './pages/JobCardPage'
 import ReceptionPage from './pages/ReceptionPage'
@@ -1092,6 +1093,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       const nextUser = session?.user ?? null
       setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser))
       // Keep current module route on tab focus/session refresh.
+      const recovery =
+        event === 'PASSWORD_RECOVERY' ||
+        new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery'
+      if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && nextUser && recovery) {
+        navigate('/reset-password', { replace: true })
+        return
+      }
       if (event === 'SIGNED_IN' && nextUser && isPublicAuthPath(location.pathname)) {
         navigate(HOME_ROUTE, { replace: true })
       }
@@ -1434,7 +1442,15 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
     )
   }
 
-  if (location.pathname === '/auth/callback') return <AuthCallback />
+  if (location.pathname === '/auth/callback' || locationHasAuthCallbackPayload()) return <AuthCallback />
+
+  if (location.pathname === '/reset-password') {
+    return (
+      <AuthGate>
+        <PasswordUpdatePage />
+      </AuthGate>
+    )
+  }
 
   if (location.pathname.startsWith('/c/')) {
     return (

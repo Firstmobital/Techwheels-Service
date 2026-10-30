@@ -1,8 +1,8 @@
 import {
   authEmailHtml,
   copyForLinkType,
-  defaultWebAuthRedirect,
   generateAuthActionLink,
+  sanitizeAuthEmailRedirect,
   sendAuthEmailViaResend,
 } from '../_shared/authEmailDelivery.ts'
 
@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Valid email is required' }), { status: 400, headers: cors })
     }
 
-    const redirectTo = String(body.redirectTo ?? '').trim() || defaultWebAuthRedirect()
+    const redirectTo = sanitizeAuthEmailRedirect(body.redirectTo)
 
     const lookup = await fetch(
       `${SUPABASE_URL.replace(/\/$/, '')}/auth/v1/admin/users?email=${encodeURIComponent(email)}`,

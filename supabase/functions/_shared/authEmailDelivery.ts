@@ -6,6 +6,31 @@ export function defaultWebAuthRedirect(): string {
   return 'https://techwheels-service.vercel.app/auth/callback'
 }
 
+/** Email links must open the web password page. App schemes never show that form. */
+export function sanitizeAuthEmailRedirect(raw: string | null | undefined): string {
+  const fallback = defaultWebAuthRedirect()
+  const value = String(raw ?? '').trim()
+  if (!value) return fallback
+  try {
+    const url = new URL(value)
+    const https = url.protocol === 'https:' || url.protocol === 'http:'
+    const hostOk =
+      url.hostname === 'techwheels-service.vercel.app' ||
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname.endsWith('.vercel.app')
+    if (!https || !hostOk) return fallback
+    if (!url.pathname.startsWith('/auth/callback')) {
+      url.pathname = '/auth/callback'
+      url.search = ''
+      url.hash = ''
+    }
+    return url.toString()
+  } catch {
+    return fallback
+  }
+}
+
 export function authEmailHtml(params: {
   title: string
   intro: string

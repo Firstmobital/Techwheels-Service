@@ -2,8 +2,8 @@ import * as jose from 'jsr:@panva/jose@6'
 import {
   authEmailHtml,
   copyForLinkType,
-  defaultWebAuthRedirect,
   generateAuthActionLink,
+  sanitizeAuthEmailRedirect,
   sendAuthEmailViaResend,
   type AuthLinkType,
 } from '../_shared/authEmailDelivery.ts'
@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Valid email or userId is required' }), { status: 400, headers: cors })
     }
 
-    const redirectTo = String(body.redirectTo ?? '').trim() || defaultWebAuthRedirect()
+    const redirectTo = sanitizeAuthEmailRedirect(body.redirectTo)
     const { actionLink } = await generateAuthActionLink({
       supabaseUrl: SUPABASE_URL,
       serviceKey: SERVICE_KEY,
