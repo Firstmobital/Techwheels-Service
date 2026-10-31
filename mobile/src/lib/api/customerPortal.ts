@@ -6,6 +6,7 @@ import {
   isBodyshopReceptionServiceType,
   resolveCustomerVisitKind,
 } from '../customer/mechanicalServiceType'
+import { isCustomerSessionExpiredMessage } from '../customer/customerSessionGuard'
 import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabase'
 import { logCustomerQuery } from './customerPortalQueryLog'
 
@@ -43,7 +44,7 @@ export function clearCustomerPortalCache() {
 
 function rpcErrorMessage(error: { message?: string } | null, fallback: string): string {
   const raw = error?.message || ''
-  if (raw.includes('Session expired')) return 'Session expired.'
+  if (isCustomerSessionExpiredMessage(raw)) return 'Session expired.'
   if (raw.includes('Vehicle not found')) return 'Vehicle not found for this session.'
   if (raw.includes('forbidden')) return 'Not allowed.'
   return fallback

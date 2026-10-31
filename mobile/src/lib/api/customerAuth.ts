@@ -1,3 +1,4 @@
+import { isCustomerSessionExpiredMessage } from '../customer/customerSessionGuard'
 import { supabase } from '../supabase'
 
 export interface CustomerVehicle {
@@ -98,7 +99,7 @@ function rpcErrorMessage(error: { message?: string } | null, fallback: string): 
   const raw = error?.message || ''
   if (raw.includes('Invalid mobile number')) return 'Invalid mobile number.'
   if (raw.includes('No vehicle found')) return 'No vehicle found for this mobile number.'
-  if (raw.includes('Session expired')) return 'Session expired.'
+  if (isCustomerSessionExpiredMessage(raw)) return 'Session expired.'
   if (raw.includes('Vehicle not found')) return 'Vehicle not found for this session.'
   if (raw.includes('forbidden')) return 'Not allowed.'
   if (raw.includes('terms_acceptance_required')) return 'Please accept Terms & Conditions to continue.'
@@ -165,7 +166,7 @@ export async function customerGetTermsStatus(
   })
   if (error || !data) {
     const raw = error?.message || ''
-    return { terms: null, expired: raw.includes('Session expired') }
+    return { terms: null, expired: isCustomerSessionExpiredMessage(raw) }
   }
   return { terms: mapTermsStatus(data) ?? null, expired: false }
 }
@@ -188,6 +189,24 @@ export async function customerAcceptTerms(
   }
   const terms = mapTermsStatus(data)
   return { success: true, terms: terms ?? undefined }
+}
+
+export async function customerTouchSession(
+  sessionToken: string,
+): Promise<{ ok: boolean; expired: boolean; expires_at?: string }> {
+  const { data, error } = await supabase.rpc('customer_touch_session', {
+    p_session_token: sessionToken,
+  })
+  if (error || !data) {
+    const raw = error?.message || ''
+    return { ok: false, expired: isCustomerSessionExpiredMessage(raw) }
+  }
+  const payload = data as { ok?: boolean; expires_at?: string }
+  return {
+    ok: Boolean(payload.ok),
+    expired: false,
+    expires_at: payload.expires_at,
+  }
 }
 
 export async function customerEndSession(sessionToken: string | null | undefined): Promise<void> {

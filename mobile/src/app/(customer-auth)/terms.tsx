@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,6 +9,7 @@ import {
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { routeCustomerSessionExpired } from '../../lib/customer/customerSessionGuard'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import {
   CUSTOMER_TERMS_ACKNOWLEDGEMENT,
@@ -18,7 +20,7 @@ import {
 
 export default function CustomerTermsScreen() {
   const router = useRouter()
-  const { acceptTerms, signOut, termsNeedsAcceptance, token } = useCustomerSession()
+  const { acceptTerms, signOut, termsNeedsAcceptance, token, ensureActiveSession } = useCustomerSession()
   const [checked, setChecked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -32,6 +34,21 @@ export default function CustomerTermsScreen() {
       router.replace('/(customer)')
     }
   }, [token, termsNeedsAcceptance, router])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return
+      let cancelled = false
+      void (async () => {
+        const ok = await ensureActiveSession()
+        if (cancelled || ok) return
+        await routeCustomerSessionExpired(router, signOut, 'terms')
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [token, ensureActiveSession, router, signOut]),
+  )
 
   if (!token || !termsNeedsAcceptance) {
     return (
@@ -52,8 +69,7 @@ export default function CustomerTermsScreen() {
     setLoading(false)
     if (result.error) {
       if (result.error.includes('Session expired')) {
-        await signOut()
-        router.replace('/(customer-auth)/login?reason=expired')
+        await routeCustomerSessionExpired(router, signOut, 'terms')
         return
       }
       setError(result.error)

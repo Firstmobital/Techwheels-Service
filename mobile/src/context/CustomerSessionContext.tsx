@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { AppState, type AppStateStatus } from 'react-native'
 import { safeStorage } from '../lib/storageHelper'
 import {
   customerAcceptTerms,
@@ -6,6 +7,7 @@ import {
   customerGetTermsStatus,
   customerListMyVehicles,
   customerStartSession,
+  customerTouchSession,
   type CustomerTermsStatus,
   type CustomerVehicle,
 } from '../lib/api/customerAuth'
@@ -16,6 +18,7 @@ import { clearCustomerPortalCache } from '../lib/api/customerPortal'
 const TOKEN_KEY = 'customer_session_token'
 const PHONE_KEY = 'customer_session_phone'
 const AUDIENCE_KEY = 'last_audience'
+const SESSION_TOUCH_DEBOUNCE_MS = 60_000
 
 export type Audience = 'customer' | 'staff'
 
@@ -33,6 +36,8 @@ interface CustomerSessionContextType {
   addVehicle: (vehicle: CustomerVehicle) => void
   acceptTerms: () => Promise<{ error?: string }>
   refreshTermsStatus: () => Promise<void>
+  ensureActiveSession: () => Promise<boolean>
+  touchSession: () => Promise<boolean>
   signOut: () => Promise<void>
 }
 
@@ -50,6 +55,8 @@ const defaultCustomerSession: CustomerSessionContextType = {
   addVehicle: () => {},
   acceptTerms: async () => ({ error: 'Not initialized' }),
   refreshTermsStatus: async () => {},
+  ensureActiveSession: async () => false,
+  touchSession: async () => false,
   signOut: async () => {},
 }
 
@@ -67,10 +74,47 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
   const [selectedReg, setSelectedReg] = useState<string | null>(null)
   const [lastAudience, setLastAudience] = useState<Audience | null>(null)
   const [termsNeedsAcceptance, setTermsNeedsAcceptance] = useState(false)
+  const lastTouchAtRef = useRef(0)
 
   const applyTermsStatus = useCallback((terms: CustomerTermsStatus | null | undefined) => {
     setTermsNeedsAcceptance(resolveNeedsTerms(terms))
   }, [])
+
+  const clearCustomerSessionState = useCallback(async () => {
+    setToken(null)
+    setPhone(null)
+    setVehicles([])
+    setSelectedReg(null)
+    setTermsNeedsAcceptance(false)
+    await safeStorage.deleteItem(TOKEN_KEY)
+    await safeStorage.deleteItem(PHONE_KEY)
+  }, [])
+
+  const touchSession = useCallback(async (): Promise<boolean> => {
+    if (!token) return false
+    const touched = await customerTouchSession(token)
+    if (touched.expired) {
+      await clearCustomerSessionState()
+      return false
+    }
+    return touched.ok
+  }, [token, clearCustomerSessionState])
+
+  const ensureActiveSession = useCallback(async (): Promise<boolean> => {
+    if (!token) return false
+    const looked = await customerGetTermsStatus(token)
+    if (looked.expired) {
+      await clearCustomerSessionState()
+      return false
+    }
+    if (looked.terms) applyTermsStatus(looked.terms)
+    const touched = await customerTouchSession(token)
+    if (touched.expired) {
+      await clearCustomerSessionState()
+      return false
+    }
+    return true
+  }, [token, applyTermsStatus, clearCustomerSessionState])
 
   const refreshTermsStatus = useCallback(async () => {
     if (!token) {
@@ -79,17 +123,11 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     }
     const looked = await customerGetTermsStatus(token)
     if (looked.expired) {
-      setToken(null)
-      setPhone(null)
-      setVehicles([])
-      setSelectedReg(null)
-      setTermsNeedsAcceptance(false)
-      await safeStorage.deleteItem(TOKEN_KEY)
-      await safeStorage.deleteItem(PHONE_KEY)
+      await clearCustomerSessionState()
       return
     }
     if (looked.terms) applyTermsStatus(looked.terms)
-  }, [token, applyTermsStatus])
+  }, [token, applyTermsStatus, clearCustomerSessionState])
 
   useEffect(() => {
     let mounted = true
@@ -111,15 +149,12 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
             const looked = await customerGetTermsStatus(savedToken)
             if (!mounted) return
             if (looked.expired) {
-              setToken(null)
-              setPhone(null)
-              setTermsNeedsAcceptance(false)
-              await safeStorage.deleteItem(TOKEN_KEY)
-              await safeStorage.deleteItem(PHONE_KEY)
+              await clearCustomerSessionState()
               return
             }
             if (!looked.terms) return
             applyTermsStatus(looked.terms)
+            void customerTouchSession(savedToken).catch(() => {})
             if (looked.terms.needs_acceptance) {
               return
             }
@@ -129,11 +164,8 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
               setVehicles(list)
               setSelectedReg(list[0].reg_number)
             }
-            // No vehicles = new user mid-registration; keep the session alive
-            // so they can complete vehicle registration on the register-vehicle screen.
           } catch (error) {
             console.error('Failed to refresh customer vehicles on boot:', error)
-            // Keep saved token so a slow network does not bounce the user to the audience screen.
           }
         }
       } catch (error) {
@@ -146,7 +178,22 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     return () => {
       mounted = false
     }
-  }, [applyTermsStatus])
+  }, [applyTermsStatus, clearCustomerSessionState])
+
+  useEffect(() => {
+    if (!token) return
+
+    const onAppState = (state: AppStateStatus) => {
+      if (state !== 'active') return
+      const now = Date.now()
+      if (now - lastTouchAtRef.current < SESSION_TOUCH_DEBOUNCE_MS) return
+      lastTouchAtRef.current = now
+      void touchSession()
+    }
+
+    const sub = AppState.addEventListener('change', onAppState)
+    return () => sub.remove()
+  }, [token, touchSession])
 
   const rememberAudience = useCallback(async (audience: Audience) => {
     setLastAudience(audience)
@@ -187,6 +234,11 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
 
   const acceptTerms = useCallback(async () => {
     if (!token) return { error: 'Session expired. Please sign in again.' }
+    const touched = await customerTouchSession(token)
+    if (touched.expired) {
+      await clearCustomerSessionState()
+      return { error: 'Session expired.' }
+    }
     const result = await customerAcceptTerms(token, CUSTOMER_TERMS_VERSION)
     if (!result.success) {
       return { error: result.error || 'Unable to save acceptance.' }
@@ -204,7 +256,7 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
       }
     }
     return {}
-  }, [token, vehicles.length, applyTermsStatus])
+  }, [token, vehicles.length, applyTermsStatus, clearCustomerSessionState])
 
   const signOut = useCallback(async () => {
     try {
@@ -212,16 +264,10 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     } catch {
       // ignore
     }
-    await safeStorage.deleteItem(TOKEN_KEY)
-    await safeStorage.deleteItem(PHONE_KEY)
     resetCustomerDocumentsInflight()
     clearCustomerPortalCache()
-    setToken(null)
-    setPhone(null)
-    setVehicles([])
-    setSelectedReg(null)
-    setTermsNeedsAcceptance(false)
-  }, [token])
+    await clearCustomerSessionState()
+  }, [token, clearCustomerSessionState])
 
   return (
     <CustomerSessionContext.Provider
@@ -239,6 +285,8 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
         addVehicle,
         acceptTerms,
         refreshTermsStatus,
+        ensureActiveSession,
+        touchSession,
         signOut,
       }}
     >
@@ -251,5 +299,3 @@ export function useCustomerSession() {
   const context = useContext(CustomerSessionContext)
   return context || defaultCustomerSession
 }
-
-

@@ -7,7 +7,7 @@ import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 export default function CustomerLoginScreen() {
   const router = useRouter()
-  const params = useLocalSearchParams<{ reason?: string }>()
+  const params = useLocalSearchParams<{ reason?: string; returnTo?: string }>()
   const { signIn } = useCustomerSession()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -33,7 +33,7 @@ export default function CustomerLoginScreen() {
       const result = await signIn(username.trim(), password.trim())
       if (result.error) {
         setError(result.error)
-      } else if (result.needsTerms) {
+      } else if (result.needsTerms || params.returnTo === 'terms') {
         router.replace('/(customer-auth)/terms')
       } else if (result.isNewUser) {
         router.replace('/(customer)/register-vehicle')

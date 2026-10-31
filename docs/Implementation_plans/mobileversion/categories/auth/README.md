@@ -19,3 +19,4 @@
 
 **Active plans:**
 - `MOBILE-011` — One Expo app, Login as Customer / Login as Staff
+- `MOBILE-017` — Customer session TTL + terms acceptance loop fix (phone=phone only; **no OTP**)

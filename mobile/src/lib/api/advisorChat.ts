@@ -1,3 +1,4 @@
+import { isCustomerSessionExpiredMessage } from '../customer/customerSessionGuard'
 import { supabase } from '../supabase'
 
 export type AdvisorChatSide = 'customer' | 'staff'
@@ -28,7 +29,7 @@ export interface CustomerAdvisorThread {
 
 function rpcErrorMessage(error: { message?: string } | null, fallback: string): string {
   const raw = error?.message || ''
-  if (raw.includes('Session expired')) return 'Session expired.'
+  if (isCustomerSessionExpiredMessage(raw)) return 'Session expired.'
   if (raw.includes('Vehicle not found')) return 'Vehicle not found for this session.'
   if (raw.includes('too long')) return 'Message is too long.'
   if (raw.includes('at least 1')) return 'Message should be at least 1 character.'

@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, PrimaryButton } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
@@ -15,6 +16,7 @@ import {
   customerRegisterVehicle,
   DEFAULT_BRANCHES,
 } from '../../lib/api/customerPortal'
+import { routeCustomerSessionExpired } from '../../lib/customer/customerSessionGuard'
 
 const TATA_MODELS = [
   'Tiago', 'Tiago EV', 'Tigor', 'Tigor EV',
@@ -25,7 +27,7 @@ const TATA_MODELS = [
 
 export default function RegisterVehicleScreen() {
   const router = useRouter()
-  const { token, phone, vehicles, addVehicle } = useCustomerSession()
+  const { token, phone, vehicles, addVehicle, ensureActiveSession, signOut } = useCustomerSession()
   const isAddingAnother = vehicles.length > 0
 
   const [regNumber, setRegNumber] = useState('')
@@ -43,6 +45,21 @@ export default function RegisterVehicleScreen() {
       .then((list) => { if (list.length > 0) setBranches(list) })
       .catch(() => {})
   }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return
+      let cancelled = false
+      void (async () => {
+        const ok = await ensureActiveSession()
+        if (cancelled || ok) return
+        await routeCustomerSessionExpired(router, signOut)
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [token, ensureActiveSession, router, signOut]),
+  )
 
   const handleRegChange = useCallback((text: string) => {
     setRegNumber(text.toUpperCase().replace(/[^A-Z0-9]/g, ''))
@@ -68,7 +85,12 @@ export default function RegisterVehicleScreen() {
     setToast(null)
     if (!validate()) return
     if (!token) {
-      setToast({ ok: false, msg: 'Session expired. Please sign in again.' })
+      await routeCustomerSessionExpired(router, signOut)
+      return
+    }
+    const sessionOk = await ensureActiveSession()
+    if (!sessionOk) {
+      await routeCustomerSessionExpired(router, signOut)
       return
     }
     setSubmitting(true)

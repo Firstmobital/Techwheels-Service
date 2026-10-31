@@ -14,6 +14,7 @@ Navigation:
 - Shared chat backend: [CHAT-001](../../../webversion/categories/chat/active/CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md)
 - Drive function this plan consumes: [DRIVE-001](../../../webversion/categories/drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md)
 - Customer login shell: [MOBILE-011](../auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md)
+- Session + terms trap fix: [MOBILE-017](../auth/active/MOBILE-017_CUSTOMER_SESSION_TERMS_RESILIENCE_PLAN.md)
 - DB truth: `supabase/backups/full_metadata.sql`
 
 Lifecycle: keep MOBILE-013 in `active/` until a customer document is stored on `bodyshop_repair_card_documents` with `drive_url` set, and the Documents tab plus home card read that server state. Keep MOBILE-014 in `active/` until Home Chat stays in the app and a workshop reply shows on that screen. Keep MOBILE-015 in `active/` until a Floor Incharge customer sees mechanical Home, Documents, Journey, and Payments, and an Accident login still sees the bodyshop screens. Then archive each plan under `docs/Implementation_plans/completed/mobileversion/categories/customer/`.

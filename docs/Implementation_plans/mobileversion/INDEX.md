@@ -1,6 +1,6 @@
 # Mobile Version Plans Index
 
-Last Updated: 2026-09-26
+Last Updated: 2026-10-31
 Scope: Mobile app implementation plans only
 Authority: This index is the routing source for mobileversion plans
 
@@ -52,6 +52,8 @@ Use this file as daily command center:
 | MOBILE-013 | customer | In Progress | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md` |
 | MOBILE-014 | customer | In Progress | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-014_CUSTOMER_ADVISOR_CHAT_PLAN.md` |
 | MOBILE-015 | customer | Not Started | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-015_MECHANICAL_CUSTOMER_SCREENS_PLAN.md` |
+| MOBILE-016 | customer | Done | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-016_CUSTOMER_BOOKING_ENTRY_ONBOARDING_PLAN.md` |
+| MOBILE-017 | auth | In Progress | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-017_CUSTOMER_SESSION_TERMS_RESILIENCE_PLAN.md` |
 
 ---
 
