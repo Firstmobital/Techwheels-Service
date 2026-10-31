@@ -78,7 +78,7 @@ export default function PartsOrderJustificationReport({ branch }: ReportViewProp
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">No parts order data available for justification checks.</div>
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">

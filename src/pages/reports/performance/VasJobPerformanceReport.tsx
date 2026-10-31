@@ -118,7 +118,7 @@ export default function VasJobPerformanceReport({ branch, dateFilter }: ReportVi
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="table-scroll-pane rounded-lg border border-gray-200">
           <table className="min-w-full border-collapse text-xs">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -149,7 +149,7 @@ export default function VasJobPerformanceReport({ branch, dateFilter }: ReportVi
           </table>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="table-scroll-pane rounded-lg border border-gray-200">
           <table className="min-w-full border-collapse text-xs">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">

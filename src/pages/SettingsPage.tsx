@@ -2318,7 +2318,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -2391,7 +2391,7 @@ export default function SettingsPage() {
             {derivedBranches.length === 0 ? (
               <p className="py-4 text-center text-sm text-gray-400">No branch values found in Employee Master location.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <div className="table-scroll-pane rounded-lg border border-gray-200">
                 <table className="min-w-full border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -2586,7 +2586,7 @@ export default function SettingsPage() {
             </div>
             )}
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -2894,7 +2894,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -3037,7 +3037,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -3370,7 +3370,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -3579,8 +3579,8 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="overflow-x-auto p-5">
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <div className="p-5">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -3922,7 +3922,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="table-scroll-pane rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">

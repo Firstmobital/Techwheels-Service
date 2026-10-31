@@ -578,7 +578,7 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">No fast moving parts found for selected filters.</div>
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-100">

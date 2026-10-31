@@ -2422,7 +2422,7 @@ export default function TechnicianPage() {
             ) : finalRows.length === 0 ? (
               <div className="empty-state">{selectedVehicleOnDayKey ? 'No job card rows for this vehicle on this day.' : 'No job card rows for this day.'}</div>
             ) : (
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>

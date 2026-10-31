@@ -550,7 +550,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>

@@ -176,7 +176,7 @@ export default function ServiceDueReport({ branch }: ReportViewProps) {
             </button>
           </div>
 
-          <div className="overflow-x-auto px-5 py-4">
+          <div className="table-scroll-pane px-5 py-4">
             <table className="min-w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">

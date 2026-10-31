@@ -1669,7 +1669,7 @@ export default function FloorInchargePage() {
                   : 'No job cards are visible in your Floor Incharge scope right now.'}
             </div>
           ) : (
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>

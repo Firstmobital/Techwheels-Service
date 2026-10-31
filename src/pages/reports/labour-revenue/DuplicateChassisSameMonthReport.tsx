@@ -133,7 +133,7 @@ export default function DuplicateChassisSameMonthReport({ branch, dateFilter }: 
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h3 className="mb-4 text-sm font-semibold text-gray-900">Duplicate Chassis Details</h3>
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>

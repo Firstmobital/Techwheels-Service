@@ -163,7 +163,7 @@ export default function ServiceInvoiceOrderStatusReport({ branch, dateFilter, mo
       </section>
 
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="table-scroll-pane">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>

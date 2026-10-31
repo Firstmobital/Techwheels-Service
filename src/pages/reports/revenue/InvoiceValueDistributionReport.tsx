@@ -216,7 +216,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
             <div className="border-b border-gray-100 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Invoice Count by Value Band</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="table-scroll-pane">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -265,7 +265,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
             <div className="border-b border-gray-100 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Branch-wise Invoice Spread</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="table-scroll-pane">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">

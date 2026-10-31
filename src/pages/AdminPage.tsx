@@ -1021,7 +1021,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
           )}
 
           <div className="card">
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -1265,7 +1265,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
             </div>
           ) : (
             <div className="card">
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -1340,7 +1340,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
             <span className="badge badge--muted">Inactive: {modules.filter(m => !m.is_active).length}</span>
           </div>
           <div className="card">
-          <div className="tbl-wrap scroll">
+          <div className="tbl-wrap scroll tbl-wrap--pane">
             <table className="tbl">
               <thead>
                 <tr>
@@ -1418,7 +1418,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
           </div>
 
           <div className="card">
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>

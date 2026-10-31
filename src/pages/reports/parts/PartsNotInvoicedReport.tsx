@@ -616,7 +616,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
             1. Advisor-wise Report
             <span className="text-[10px] font-normal text-gray-400 ml-1">(grouped by SR Assigned To)</span>
           </h3>
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left">
@@ -743,7 +743,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
 
           {/* Summary cards */}
           {filterInvoicedStatus === 'all' && (
-            <div className="mb-4 overflow-x-auto">
+            <div className="mb-4 table-scroll-pane">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
@@ -854,7 +854,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
               </select>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
@@ -972,7 +972,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-teal-500" />
             4. Branch-wise Report
           </h3>
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left">
@@ -1078,7 +1078,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <div className="table-scroll-pane rounded-xl border border-gray-200 shadow-sm">
             <table className="min-w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 sticky top-0">

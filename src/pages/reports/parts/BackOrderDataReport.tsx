@@ -235,7 +235,7 @@ export default function BackOrderDataReport() {
               </h4>
             </div>
             {cpRows.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="table-scroll-pane">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50">
@@ -343,7 +343,7 @@ export default function BackOrderDataReport() {
 
           {/* Data table */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="overflow-x-auto" style={{ maxHeight: '600px' }}>
+            <div className="table-scroll-pane">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 z-10">
                   <tr className="border-b border-gray-100 bg-gray-50">

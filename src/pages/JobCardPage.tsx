@@ -491,7 +491,7 @@ export default function JobCardPage() {
       {/* Panel selector strip */}
       <section className="mb-5">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">Panels</p>
-        <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="no-scrollbar flex items-center gap-2 table-scroll-pane pb-1">
           {panels.map(p => {
             const cnt = photos.filter(ph => ph.panel_id === p.id).length
             const sel = selPanel === p.id
@@ -609,7 +609,7 @@ export default function JobCardPage() {
 
                   {/* Thumbnails */}
                   {existing.length > 0 && (
-                    <div className="no-scrollbar flex gap-2 overflow-x-auto p-2">
+                    <div className="no-scrollbar flex gap-2 table-scroll-pane p-2">
                       {existing.map(ph => {
                         const url = photoUrls[ph.storage_path]
                         return (
@@ -697,7 +697,7 @@ export default function JobCardPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm print-table">
+        <div className="table-scroll-pane rounded-xl border border-gray-200 bg-white shadow-sm print-table">
           {estRows.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">No estimate rows yet. Use the button above to add.</div>
           ) : (

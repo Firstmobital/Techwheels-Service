@@ -333,7 +333,7 @@ export default function AvlCpStockReport() {
 
       {/* ── Data Table ──────────────────────────────────────────────────────────── */}
       {!loading && filteredData.length > 0 && (
-        <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="table-scroll-pane bg-white rounded-lg shadow-sm border border-gray-200">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100">

@@ -3399,7 +3399,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       )}
 
       {loading && (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="table-scroll-pane rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-100 text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -3458,7 +3458,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
           </div>
 
           <div className="card__body dense">
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -4097,7 +4097,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
               </div>
             </div>
             <div className="card__body dense">
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>

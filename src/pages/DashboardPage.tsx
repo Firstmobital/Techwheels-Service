@@ -715,7 +715,7 @@ export default function DashboardPage({
             </button>
           </div>
           <div className="card__body card__body--table">
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>

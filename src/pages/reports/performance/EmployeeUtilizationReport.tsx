@@ -164,7 +164,7 @@ export default function EmployeeUtilizationReport({ branch, dateFilter }: Report
         </div>
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">

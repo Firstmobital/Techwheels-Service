@@ -423,7 +423,7 @@ export default function CREIncentivePage() {
           {creCards.length === 0 ? (
             <div className="empty-state">No converted bookings with a CRE assigned in this period.</div>
           ) : (
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -469,7 +469,7 @@ export default function CREIncentivePage() {
           {detailRows.length === 0 ? (
             <div className="empty-state">No bookings to show.</div>
           ) : (
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>

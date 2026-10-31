@@ -2311,7 +2311,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <div style={{ marginTop: 'var(--gap)' }}>
             <Card title="Payment status — all categories" sub="warranty_wc / updation / amc / goodwill / fsb + claim settlement" pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -2393,7 +2393,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </Card>
 
             <Card title="Claim-type performance" sub="settlement % · rejection % · claim_category split (9 types)" pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -2544,7 +2544,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
             <div style={{ marginTop: 'var(--gap)' }}>
               <Card title="WC settled by vehicle model" sub="warranty_wc_data · claim_status=Settled · grouped by parent product line" pad={false}>
-                <div className="tbl-wrap scroll">
+                <div className="tbl-wrap scroll tbl-wrap--pane">
                   <table className="tbl">
                     <thead>
                       <tr>
@@ -2703,7 +2703,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 <span className="badge badge--inactive badge--no">Owner: {alert.owner}</span>
               </div>
 
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -2757,7 +2757,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           ))}
 
           <Card title="Critical alerts summary" sub="Reference-contract view of all five alerts" pad={false}>
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -2800,7 +2800,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             right={<span className="badge badge--inactive badge--no">{WR_HEADER.atRiskL} blocked</span>}
             pad={false}
           >
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -2866,7 +2866,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               ))}
             </div>
 
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -2916,7 +2916,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <div className="grid-2">
             <Card title="AMC settlement stages" sub={`payment gap ${WR_AMC.gap} deducted by TM`} pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -2949,7 +2949,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </Card>
 
             <Card title="Special charges (SPL) — job-code split" sub="980016 Rusting · 980019 Loaner · 980025 Misc · under-claim = leakage" pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -3012,7 +3012,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               }
               pad={false}
             >
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -3074,7 +3074,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           </div>
 
           <Card title="PDI rejection root cause" sub={`${WR_PDI.total} rejections · ${WR_PDI.target}`} pad={false}>
-            <div className="tbl-wrap scroll">
+            <div className="tbl-wrap scroll tbl-wrap--pane">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -3102,7 +3102,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <div className="grid-2">
             <Card title="Top parts by NDP — PV" sub="defect signals → raise with TM quality" pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -3130,7 +3130,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </Card>
 
             <Card title="Top parts by NDP — EV" sub="battery / HV component patterns" pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -3160,7 +3160,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <div className="grid-2">
             <Card title="Back order" sub="ZSSO standard · ZSOR back order · ZPGO accessories" pad={false}>
-              <div className="tbl-wrap scroll">
+              <div className="tbl-wrap scroll tbl-wrap--pane">
                 <table className="tbl">
                   <thead>
                     <tr>

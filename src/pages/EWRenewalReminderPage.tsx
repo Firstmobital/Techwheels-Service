@@ -553,7 +553,7 @@ export default function EWRenewalReminderPage() {
 
       {/* ── Table ── */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="table-scroll-pane">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">

@@ -1090,7 +1090,7 @@ export default function PartsStockDisciplineReport({ branch: branchProp }: Repor
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <div className="table-scroll-pane rounded-xl border border-gray-200 shadow-sm">
             <table className="min-w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50 via-blue-50 to-violet-50">

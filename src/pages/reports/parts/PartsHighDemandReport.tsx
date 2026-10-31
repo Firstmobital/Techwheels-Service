@@ -383,7 +383,7 @@ export default function PartsHighDemandReport({ branch }: ReportViewProps) {
             {Math.min(currentPage * pageSize, filteredRows.length).toLocaleString('en-IN')} of{' '}
             {filteredRows.length.toLocaleString('en-IN')} records
           </div>
-          <div className="overflow-x-auto">
+          <div className="table-scroll-pane">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>

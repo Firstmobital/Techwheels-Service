@@ -416,7 +416,7 @@ export default function PartsGRNDealerReport({ dealerCode, dealerName, accentCol
 
       {/* Table */}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="table-scroll-pane rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
               <tr>

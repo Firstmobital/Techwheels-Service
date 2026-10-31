@@ -173,7 +173,7 @@ export default function PartsInventoryTurnoverReport({ branch }: ReportViewProps
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="table-scroll-pane">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-100">

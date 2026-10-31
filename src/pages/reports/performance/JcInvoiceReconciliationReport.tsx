@@ -108,7 +108,7 @@ export default function JcInvoiceReconciliationReport({ branch, dateFilter }: Re
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="table-scroll-pane">
         <table className="min-w-full border-collapse text-xs">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">

@@ -676,7 +676,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-100 overflow-x-auto pb-1 print:hidden">
+      <div className="flex gap-1 border-b border-gray-100 table-scroll-pane pb-1 print:hidden">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={['whitespace-nowrap rounded-t-lg px-4 py-2 text-sm font-medium transition-colors',
@@ -753,7 +753,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           {/* Order / Labour / Spares EV vs PV summary */}
           <div className="rounded-xl border border-gray-100 bg-white p-4">
             <p className="text-sm font-semibold text-gray-700 mb-3">Order Value / Labour / Spares — EV vs PV</p>
-            <div className="overflow-auto">
+            <div className="table-scroll-pane">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -885,7 +885,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
         <div className="space-y-4">
           {filterBar}
           <ExportBtn onClick={exportAdvisor} />
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -954,7 +954,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
             })
             const pArr = Array.from(pMonthMap.entries()).sort().map(([,v])=>v)
             return (
-              <div key={portal} className="rounded-xl border border-gray-100 bg-white overflow-auto">
+              <div key={portal} className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
                 <div className={`px-4 py-2.5 border-b font-semibold text-sm ${portal==='EV'?'bg-emerald-50 border-emerald-100':'bg-blue-50 border-blue-100'}`}>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white mr-2 ${portal==='EV'?'bg-emerald-600':'bg-blue-600'}`}>{portal}</span>
                   Month-wise Breakdown
@@ -993,7 +993,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
             )
           })}
           {/* Overall monthly (all portals) */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">All Portals — Combined</div>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -1132,7 +1132,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           {/* EV vs PV per status */}
           <div className="rounded-xl border border-gray-100 bg-white p-4">
             <p className="text-sm font-semibold text-gray-700 mb-3">EV vs PV breakdown by Status</p>
-            <div className="overflow-auto">
+            <div className="table-scroll-pane">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1202,7 +1202,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
             }
             const hdColor = statusColorHd[s.status] ?? 'bg-gray-50 border-gray-200'
             return (
-              <div key={s.status} className="rounded-xl border border-gray-100 bg-white overflow-auto">
+              <div key={s.status} className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
                 <div className={`px-4 py-2.5 border-b font-semibold text-sm ${hdColor}`}>
                   {s.status} — Advisor Breakdown ({s.total} JCs · {rs(s.totalValue)})
                 </div>
@@ -1279,7 +1279,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
 
           {/* Monthly Trend table */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">
               Monthly Trend — Order Value / Labour / Spares
             </div>
@@ -1322,7 +1322,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
 
           {/* Advisor breakdown — Order Value */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-indigo-50 border-indigo-100 font-semibold text-sm text-indigo-800">
               Total Order Value — by Advisor
             </div>
@@ -1361,7 +1361,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
 
           {/* Advisor breakdown — Labour Amount */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-amber-50 border-amber-100 font-semibold text-sm text-amber-800">
               Final Labour Amount — by Advisor
             </div>
@@ -1400,7 +1400,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
 
           {/* Advisor breakdown — Spare Amount */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-violet-50 border-violet-100 font-semibold text-sm text-violet-800">
               Final Spare Amount — by Advisor
             </div>
@@ -1569,7 +1569,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
 
           {/* Master summary table */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">
               SR Type — Full Summary (PDI Excluded)
             </div>
@@ -1622,7 +1622,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
 
           {/* EV vs PV comparison per SR Type */}
-          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+          <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
             <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">
               EV vs PV — Comparison by SR Type
             </div>
@@ -1670,7 +1670,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
             if (!s.advisors.length) return null
             const c = getSRColor(s.sr)
             return (
-              <div key={s.sr} className="rounded-xl border border-gray-100 bg-white overflow-auto">
+              <div key={s.sr} className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
                 <div className={`px-4 py-2.5 border-b font-semibold text-sm ${c.hd} ${c.text}`}>
                   {s.sr} — Advisor Breakdown ({s.total} JCs · {rs(s.order)})
                 </div>
@@ -1795,7 +1795,7 @@ function JciTable({ rows }: { rows: JciRow[] }) {
   return (
     <div>
       <p className="text-xs text-gray-400 mb-2">{rows.length.toLocaleString('en-IN')} records</p>
-      <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+      <div className="rounded-xl border border-gray-100 bg-white table-scroll-pane">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>

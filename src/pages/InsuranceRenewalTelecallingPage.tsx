@@ -2474,7 +2474,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               <button onClick={fetchAgentStats} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
             </div>
             {loadingTab ? <div className="p-8 text-center text-sm text-gray-400">Loading…</div> : (
-              <div className="overflow-x-auto">
+              <div className="table-scroll-pane">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -2553,7 +2553,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
             <button onClick={fetchPolicyDone} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
           </div>
           {loadingTab ? <div className="p-8 text-center text-sm text-gray-400">Loading…</div> : (
-            <div className="overflow-x-auto">
+            <div className="table-scroll-pane">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>

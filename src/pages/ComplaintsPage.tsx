@@ -670,7 +670,7 @@ export const ComplaintsPage: React.FC = () => {
 
             {currentTab === 'inbox' && (
               <div className="card">
-                <div className="tbl-wrap">
+                <div className="tbl-wrap tbl-wrap--pane scroll">
                   <table className="tbl">
                     <thead>
                       <tr>
@@ -761,7 +761,7 @@ export const ComplaintsPage: React.FC = () => {
 
             {currentTab === 'sla' && (
               <div className="card">
-                <div className="tbl-wrap">
+                <div className="tbl-wrap tbl-wrap--pane scroll">
                   <table className="tbl">
                     <thead>
                       <tr>

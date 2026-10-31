@@ -603,6 +603,7 @@ export default function DriverManagementPage() {
           
           /* ── TABLE VIEW ── */
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div className="table-scroll-pane">
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', color: '#475569', fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>
@@ -710,6 +711,7 @@ export default function DriverManagementPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
         ) : (

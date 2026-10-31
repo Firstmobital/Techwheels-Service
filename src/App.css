@@ -416,6 +416,45 @@ textarea.inp { height: auto; padding: 11px 13px; resize: vertical; line-height: 
 
 /* Table */
 .tbl-wrap { overflow-x: auto; }
+
+/* Bounded page-flow table pane — opt-in via .tbl-wrap--pane or .table-scroll-pane */
+.tbl-wrap--pane,
+.table-scroll-pane {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(70vh, calc(100dvh - var(--util-h) - var(--nav-h) - 6rem));
+}
+.tbl-wrap--pane table.tbl,
+.table-scroll-pane > table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.tbl-wrap--pane .tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.table-scroll-pane > table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f9fafb;
+  box-shadow: inset 0 -1px 0 #e5e7eb;
+}
+.table-scroll-pane > table thead th[class*="sticky"] {
+  z-index: 4;
+}
+
+@media (max-width: 960px) {
+  .tbl-wrap--pane,
+  .table-scroll-pane {
+    max-height: min(70vh, calc(100dvh - var(--util-h) - var(--nav-h) - 4rem));
+  }
+}
+
 table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tbl thead th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 14px 11px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .tbl thead th.ctr { text-align: center; }
