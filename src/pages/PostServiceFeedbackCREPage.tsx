@@ -257,6 +257,42 @@ function MetricTile({
   )
 }
 
+const METRIC_PANEL_SHELL =
+  'rounded-lg border border-slate-300/95 bg-slate-100/90 shadow-[0_1px_3px_rgba(14,23,38,0.09),0_2px_8px_rgba(14,23,38,0.05)]'
+
+function PsfFollowUpMetricPanels({
+  statusStats,
+  todayProductivity,
+}: {
+  statusStats: StatusStats
+  todayProductivity: TodayProductivity
+}) {
+  return (
+    <div className="shrink-0 flex flex-col gap-2 pb-0.5 lg:flex-row lg:items-stretch">
+      <div className={`min-w-0 flex flex-1 flex-col gap-1 p-1.5 ${METRIC_PANEL_SHELL}`}>
+        <p className="text-[10px] font-semibold leading-none text-slate-700">Follow-up Status</p>
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          <MetricTile label="Total Cases" value={statusStats.total} variant="neutral" />
+          <MetricTile label="Open" value={statusStats.open} variant="negative" />
+          <MetricTile label="In Progress" value={statusStats.in_progress} variant="warn" />
+          <MetricTile label="Resolved" value={statusStats.resolved} variant="positive" />
+        </div>
+      </div>
+      <div className={`min-w-0 flex flex-[1.65] flex-col gap-1 p-1.5 ${METRIC_PANEL_SHELL}`}>
+        <p className="text-[10px] font-semibold leading-none text-slate-700">Today&apos;s Activity</p>
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          <MetricTile label="Today's 4★ & Above" value={todayProductivity.positive} variant="positive" />
+          <MetricTile label="Today's In Progress" value={todayProductivity.inProgress} variant="warn" />
+          <MetricTile label="Today's Call Not Picked" value={todayProductivity.callNotPicked} variant="orange" />
+          <MetricTile label="Today's Resolved" value={todayProductivity.resolved} variant="positive" />
+          <MetricTile label="Today's Total Unique Calls" value={todayProductivity.total} variant="info" />
+          <MetricTile label="Today's WA Sent" value={todayProductivity.waSent} variant="purple" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 async function readCount(
   pending: PromiseLike<{ count: number | null; error: { message: string } | null }>,
 ): Promise<number> {
@@ -836,48 +872,7 @@ export default function PostServiceFeedbackCREPage() {
         </button>
       </div>
 
-      {tier === 'today' ? (
-        <div className="shrink-0 flex flex-col gap-2 pb-0.5 lg:flex-row lg:items-stretch">
-          <div className="min-w-0 flex flex-1 flex-col gap-1 rounded-md border border-slate-200/90 bg-slate-50/40 p-1.5">
-            <p className="text-[10px] font-semibold leading-none text-slate-500">Follow-up Status</p>
-            <div className="flex min-w-0 flex-wrap gap-1.5">
-              <MetricTile label="Total Cases" value={statusStats.total} variant="neutral" />
-              <MetricTile label="Open" value={statusStats.open} variant="negative" />
-              <MetricTile label="In Progress" value={statusStats.in_progress} variant="warn" />
-              <MetricTile label="Resolved" value={statusStats.resolved} variant="positive" />
-            </div>
-          </div>
-          <div className="min-w-0 flex flex-[1.65] flex-col gap-1 rounded-md border border-slate-200/90 bg-slate-50/40 p-1.5">
-            <p className="text-[10px] font-semibold leading-none text-slate-500">Today&apos;s Activity</p>
-            <div className="flex min-w-0 flex-wrap gap-1.5">
-              <MetricTile label="Today's 4★ & Above" value={todayProductivity.positive} variant="positive" />
-              <MetricTile label="Today's In Progress" value={todayProductivity.inProgress} variant="warn" />
-              <MetricTile label="Today's Call Not Picked" value={todayProductivity.callNotPicked} variant="orange" />
-              <MetricTile label="Today's Resolved" value={todayProductivity.resolved} variant="positive" />
-              <MetricTile label="Today's Total Unique Calls" value={todayProductivity.total} variant="info" />
-              <MetricTile label="Today's WA Sent" value={todayProductivity.waSent} variant="purple" />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5">
-          {showStatusFilter && (
-            <>
-              <MetricTile label="Total Cases" value={statusStats.total} variant="neutral" />
-              <MetricTile label="Open" value={statusStats.open} variant="negative" />
-              <MetricTile label="In Progress" value={statusStats.in_progress} variant="warn" />
-              <MetricTile label="Resolved" value={statusStats.resolved} variant="positive" />
-            </>
-          )}
-          <MetricTile label="Today's 4★ & Above" value={todayProductivity.positive} variant="positive" />
-          <MetricTile label="Today's 3★ & Below" value={todayProductivity.needsFollowup} variant="negative" />
-          <MetricTile label="Today's In Progress" value={todayProductivity.inProgress} variant="warn" />
-          <MetricTile label="Today's Call Not Picked" value={todayProductivity.callNotPicked} variant="orange" />
-          <MetricTile label="Today's Resolved" value={todayProductivity.resolved} variant="positive" />
-          <MetricTile label="Today's Total Unique Calls" value={todayProductivity.total} variant="info" />
-          <MetricTile label="Today's WA Sent" value={todayProductivity.waSent} variant="purple" />
-        </div>
-      )}
+      <PsfFollowUpMetricPanels statusStats={statusStats} todayProductivity={todayProductivity} />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(14,23,38,0.05)]">
         <div className="min-h-0 flex-1 overflow-auto">
