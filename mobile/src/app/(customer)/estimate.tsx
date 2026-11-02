@@ -18,9 +18,12 @@ import {
   CustomerToast,
   ModernErrorCard,
   PrimaryButton,
+  asText,
   dash,
   formatInr,
+  getDirectAdvisorOrWorkshopPhone,
 } from '../../components/customer/customerUi'
+import { CustomerApprovalHistorySection } from '../../components/customer/CustomerApprovalHistorySection'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { isEffectiveMechanicalCustomerVisit } from '../../lib/customer/mechanicalServiceType'
@@ -58,6 +61,7 @@ export default function CustomerEstimateScreen() {
   const [openingWorkshopDoc, setOpeningWorkshopDoc] = useState(false)
   const [workshopPreviewUri, setWorkshopPreviewUri] = useState<string | null>(null)
   const lastDecideRef = useRef<{ decision: 'approve' | 'reject'; reasonText: string } | null>(null)
+  const [historyTick, setHistoryTick] = useState(0)
 
   const mechEstimateUrl = mechCase?.estimate_drive_url || selected?.estimate_drive_url
   const mechEstimatePath = mechCase?.estimate_storage_path || selected?.estimate_storage_path
@@ -113,6 +117,28 @@ export default function CustomerEstimateScreen() {
 
   const estimate = rows[selectedIdx]
   const kind = estimate ? estimateStatusKind(estimate.status) : 'pending'
+
+  const advisorName =
+    asText(repairCard?.sa_name)
+    ?? asText(mechCase?.sa_name)
+    ?? asText(selected?.sa_name)
+    ?? asText(selected?.sa_display_name)
+  const advisorPhone = getDirectAdvisorOrWorkshopPhone(
+    {
+      ...(repairCard ?? {}),
+      ...(mechCase ?? {}),
+      ...(selected as unknown as Record<string, unknown>),
+    },
+    advisorName,
+  )
+
+  const callServiceAdvisor = async () => {
+    try {
+      await Linking.openURL(`tel:${advisorPhone}`)
+    } catch {
+      Alert.alert('Call failed', 'Could not open the phone dialer.')
+    }
+  }
 
   const openWorkshopEstimate = async () => {
     if (!token) return
@@ -243,6 +269,7 @@ export default function CustomerEstimateScreen() {
       // Background sync fresh data
       const list = (await customerListEstimates(token, selectedReg)).map(parseEstimate)
       if (list.length > 0) setRows(list)
+      setHistoryTick((t) => t + 1)
     } catch (err) {
       // Rollback to previous state on failure
       setRows(prevRows)
@@ -509,6 +536,33 @@ export default function CustomerEstimateScreen() {
           </CustomerCard>
         </>
       )}
+
+      {token && selectedReg ? (
+        <>
+          <TouchableOpacity
+            onPress={() => void callServiceAdvisor()}
+            style={{
+              marginTop: 8,
+              marginBottom: 4,
+              borderWidth: 1,
+              borderColor: '#2563EB',
+              borderRadius: 10,
+              paddingVertical: 12,
+              alignItems: 'center',
+              backgroundColor: '#EFF6FF',
+            }}
+          >
+            <Text style={{ color: '#2563EB', fontWeight: '800', fontSize: 14 }}>Call Service Advisor</Text>
+          </TouchableOpacity>
+          <CustomerApprovalHistorySection
+            key={`est-hist-${historyTick}`}
+            token={token}
+            regNumber={selectedReg}
+            kind="service_estimate"
+            title="Service estimate history"
+          />
+        </>
+      ) : null}
 
       <Modal visible={showReject} transparent animationType="fade" onRequestClose={() => setShowReject(false)}>
         <View className="flex-1 bg-black/60 items-center justify-center px-4">

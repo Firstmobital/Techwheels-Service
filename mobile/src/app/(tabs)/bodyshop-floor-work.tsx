@@ -75,11 +75,8 @@ import { completeBodyshopFloorWorkRoleOnAssignment } from '../../lib/api/bodysho
 import { humanizeStaffAuthError } from '../../lib/staffAuthErrors'
 import {
   buildAdminFloorWorkerRoster,
-  fetchAdminRosterPeopleAndIncome,
-  fetchAdminRosterIncome,
+  fetchAdminRosterPeople,
   fetchAllActiveBodyshopAssignmentRows,
-  fetchMyBodyshopIncomeForMonth,
-  formatBodyshopIncomeInr,
   type AdminFloorWorkerCard,
   type AdminRosterPerson,
 } from '../../lib/api/bodyshopFloorWorkerHome'
@@ -251,7 +248,6 @@ function AdminFloorTeamRoster({
                   done={person.vehiclesDone}
                   compact
                 />
-                <Text style={S.rosterIncome}>{formatBodyshopIncomeInr(person.bodyshopIncomeMonth)}</Text>
                 <Text style={S.rosterTapHint}>View work →</Text>
               </TouchableOpacity>
             ))}
@@ -314,7 +310,6 @@ export default function BodyshopFloorWorkScreen() {
   const [isAdminOverview, setIsAdminOverview] = useState(false)
   const [selectedAdminEmployee, setSelectedAdminEmployee] = useState<AdminFloorWorkerCard | null>(null)
   const [adminRosterPeople, setAdminRosterPeople] = useState<AdminRosterPerson[]>([])
-  const [adminIncomeByCode, setAdminIncomeByCode] = useState<Map<string, number>>(new Map())
   const [adminRosterLoading, setAdminRosterLoading] = useState(false)
   const [adminRosterError, setAdminRosterError] = useState<string | null>(null)
   const [adminPrimaryRows, setAdminPrimaryRows] = useState<Record<string, unknown>[]>([])
@@ -323,8 +318,6 @@ export default function BodyshopFloorWorkScreen() {
   const [vehicleOutcomeFilter, setVehicleOutcomeFilter] = useState<VehicleOutcomeFilter>('all')
   const [assignmentByJc, setAssignmentByJc] = useState<Record<string, Record<string, unknown>>>({})
   const [workerAssignedSlotCount, setWorkerAssignedSlotCount] = useState(0)
-  const [trackerIncomeMonth, setTrackerIncomeMonth] = useState<number | null>(null)
-  const [incomeLoading, setIncomeLoading] = useState(false)
   const [allVehiclePhotos, setAllVehiclePhotos] = useState<BodyshopFloorRoleDailyLogPhotoRow[]>([])
   const [loadingAllPhotos, setLoadingAllPhotos] = useState(false)
   const [loadingMoreMeta, setLoadingMoreMeta] = useState(false)
@@ -342,14 +335,12 @@ export default function BodyshopFloorWorkScreen() {
       adminRosterPeople,
       adminPrimaryRows,
       adminSupportRows,
-      adminIncomeByCode,
     )
   }, [
     isAdminOverview,
     adminRosterPeople,
     adminPrimaryRows,
     adminSupportRows,
-    adminIncomeByCode,
     assignmentMonthFilter,
   ])
 
@@ -522,27 +513,6 @@ export default function BodyshopFloorWorkScreen() {
     vehicleStepPendingForAdmin,
   ])
 
-  const adminIncomeMonthLoaded = useRef(false)
-
-  useEffect(() => {
-    if (!isAdminOverview || adminRosterPeople.length === 0) return
-    if (!adminIncomeMonthLoaded.current) {
-      adminIncomeMonthLoaded.current = true
-      return
-    }
-    let cancelled = false
-    void fetchAdminRosterIncome(assignmentMonthFilter)
-      .then((incomeByCode) => {
-        if (!cancelled) setAdminIncomeByCode(incomeByCode)
-      })
-      .catch(() => {
-        if (!cancelled) setAdminIncomeByCode(new Map())
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isAdminOverview, assignmentMonthFilter, adminRosterPeople.length])
-
   useEffect(() => {
     if (!adminRoster) return
     setSelectedAdminEmployee((prev) => {
@@ -553,7 +523,6 @@ export default function BodyshopFloorWorkScreen() {
         fresh.vehiclesTotal === prev.vehiclesTotal
         && fresh.vehiclesPending === prev.vehiclesPending
         && fresh.vehiclesDone === prev.vehiclesDone
-        && fresh.bodyshopIncomeMonth === prev.bodyshopIncomeMonth
       ) {
         return prev
       }
@@ -688,44 +657,27 @@ export default function BodyshopFloorWorkScreen() {
         setLogsByKey({})
       }
 
-      if (!adminOverview && myCode) {
-        setIncomeLoading(true)
-        setTrackerIncomeMonth(null)
-        void fetchMyBodyshopIncomeForMonth(myCode, currentIstYearMonth(today))
-          .then((amount) => setTrackerIncomeMonth(amount))
-          .catch(() => setTrackerIncomeMonth(0))
-          .finally(() => setIncomeLoading(false))
-      } else {
-        setTrackerIncomeMonth(null)
-        setIncomeLoading(false)
-      }
-
       if (adminOverview) {
-        adminIncomeMonthLoaded.current = false
         setAdminRosterLoading(true)
         setAdminRosterError(null)
-        void fetchAdminRosterPeopleAndIncome('all')
-          .then(({ people, incomeByCode }) => {
+        void fetchAdminRosterPeople()
+          .then((people) => {
             setAdminRosterPeople(people)
-            setAdminIncomeByCode(incomeByCode)
             setSelectedAdminEmployee((prev) => {
               if (!prev) return null
-              const cards = buildAdminFloorWorkerRoster('all', people, assRows, supportRows, incomeByCode)
+              const cards = buildAdminFloorWorkerRoster('all', people, assRows, supportRows)
               return cards.find((c) => c.employeeCode === prev.employeeCode) ?? null
             })
           })
           .catch((e) => {
             setAdminRosterPeople([])
-            setAdminIncomeByCode(new Map())
             setAdminRosterError(e instanceof Error ? e.message : 'Could not load floor team')
           })
           .finally(() => {
-            adminIncomeMonthLoaded.current = true
             setAdminRosterLoading(false)
           })
       } else {
         setAdminRosterPeople([])
-        setAdminIncomeByCode(new Map())
         setAdminRosterError(null)
         setSelectedAdminEmployee(null)
       }
@@ -1236,32 +1188,19 @@ export default function BodyshopFloorWorkScreen() {
           onDismiss={optimistic.clearFailure}
         />
       ) : null}
-      {!selected && !isAdminOverview ? (
+      {!selected && !isAdminOverview && workerTaskStats ? (
         <View style={S.workerSummaryCard}>
-          <Text style={S.incomeBannerLabel}>Bodyshop income · {currentIstYearMonth(today)}</Text>
-          {incomeLoading ? (
-            <ActivityIndicator color="#065f46" style={{ marginTop: 8, alignSelf: 'flex-start' }} />
-          ) : (
-            <Text style={S.incomeBannerAmount}>
-              {trackerIncomeMonth !== null ? formatBodyshopIncomeInr(trackerIncomeMonth) : '—'}
+          <FloorWorkStatsThree
+            total={workerTaskStats.total}
+            pending={workerTaskStats.pending}
+            done={workerTaskStats.done}
+            activeFilter={vehicleOutcomeFilter}
+            onFilterPress={setVehicleOutcomeFilter}
+          />
+          {vehicleOutcomeFilter !== 'all' ? (
+            <Text style={S.statsFilterHint}>
+              Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap again to show all
             </Text>
-          )}
-          <Text style={S.incomeBannerHint}>Tracker / payroll calculation (closed accident jobs)</Text>
-          {workerTaskStats ? (
-            <>
-              <FloorWorkStatsThree
-                total={workerTaskStats.total}
-                pending={workerTaskStats.pending}
-                done={workerTaskStats.done}
-                activeFilter={vehicleOutcomeFilter}
-                onFilterPress={setVehicleOutcomeFilter}
-              />
-              {vehicleOutcomeFilter !== 'all' ? (
-                <Text style={S.statsFilterHint}>
-                  Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap again to show all
-                </Text>
-              ) : null}
-            </>
           ) : null}
         </View>
       ) : null}
@@ -1540,9 +1479,6 @@ export default function BodyshopFloorWorkScreen() {
                     Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap again to show all
                   </Text>
                 ) : null}
-                <Text style={S.adminStatsIncome}>
-                  Bodyshop income · {formatBodyshopIncomeInr(selectedAdminEmployee.bodyshopIncomeMonth)}
-                </Text>
               </View>
             </>
           ) : null}
@@ -1713,19 +1649,6 @@ const S = StyleSheet.create({
   screenSubtitle: { fontSize: 12, color: '#82858f', marginTop: 3 },
   refreshBtn: { padding: 8 },
   refreshBtnText: { fontSize: 22, color: '#2a4cd0', fontWeight: '700' },
-  incomeBanner: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-  },
-  incomeBannerLabel: { fontSize: 11, fontWeight: '700', color: '#047857', textTransform: 'uppercase' },
-  incomeBannerAmount: { fontSize: 22, fontWeight: '800', color: '#065f46', marginTop: 4 },
-  incomeBannerHint: { fontSize: 11, color: '#047857', marginTop: 6, opacity: 0.85 },
   rosterScroll: { paddingHorizontal: 16, paddingBottom: 24, paddingTop: 8 },
   rosterIntro: { fontSize: 12, color: '#82858f', lineHeight: 18, marginBottom: 12 },
   rosterError: { color: '#DC2626', fontSize: 13, fontWeight: '600', marginBottom: 12 },
@@ -1771,11 +1694,10 @@ const S = StyleSheet.create({
     marginBottom: 4,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: '#e7e3d9',
   },
-  rosterIncome: { fontSize: 14, fontWeight: '800', color: '#065f46', marginTop: 4 },
   adminStatsCard: {
     marginHorizontal: 16,
     marginTop: 4,
@@ -1788,7 +1710,6 @@ const S = StyleSheet.create({
   },
   adminStatsTitle: { fontSize: 17, fontWeight: '800', color: '#1a1b21' },
   adminStatsSub: { fontSize: 12, color: '#82858f', marginTop: 2, marginBottom: 4 },
-  adminStatsIncome: { fontSize: 12, fontWeight: '700', color: '#065f46', marginTop: 8 },
   rosterTapHint: { fontSize: 11, color: '#2a4cd0', fontWeight: '700', marginTop: 6 },
   summaryRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   summaryPill: {

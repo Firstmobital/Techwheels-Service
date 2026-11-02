@@ -8,8 +8,6 @@ import { listWorkTasksForEmployee } from '../bodyshopFloorWork/roles'
 import { buildAssignmentRowByJobCard, isFloorWorkTaskStepCompleted } from '../bodyshopFloorWork/pipeline'
 import { istYearMonthFromIso, formatFloorWorkMonthLabel, type FloorWorkVehicleMeta } from '../bodyshopFloorWork/display'
 import { isFloorWorkJobCardEligible } from '../bodyshopFloorWork/eligibility'
-import { fetchMonthlyBodyshopEarningsByCode } from '../bodyshopMonthlyEarnings'
-import { normalizeEmployeeCode } from '../payroll/earningsFormulas'
 import type { BodyshopSupportRow } from '../bodyshopEarnings'
 import { hasBusinessRole } from '../businessRoles'
 import { fetchActiveTableRowsLegacyFull } from '../staff/staffListLoadLegacy'
@@ -27,7 +25,6 @@ export type BodyshopFloorWorkerHomeMetrics = {
   vehiclesTotal: number
   vehiclesDone: number
   vehiclesPending: number
-  bodyshopIncomeMonth: number
   monthLabel: string
   monthKey: string
 }
@@ -50,21 +47,6 @@ function taskMonthKey(
     ?? istYearMonthFromIso(String(assignmentByJc[task.jobCardNumber]?.created_at ?? ''))
     ?? istYearMonthFromIso(task.assignedAt)
   )
-}
-
-/** Bodyshop variable income — same map as payroll `bodyshopMonthlyEarnings` (never throws). */
-export async function fetchMyBodyshopIncomeForMonth(
-  employeeCode: string,
-  monthKey: string,
-): Promise<number> {
-  const code = normalizeEmployeeCode(employeeCode)
-  if (!code) return 0
-  try {
-    const earningsByCode = await fetchMonthlyBodyshopEarningsByCode(monthKey)
-    return earningsByCode.get(code) ?? 0
-  } catch {
-    return 0
-  }
 }
 
 export async function fetchBodyshopFloorWorkerHomeMetrics(
@@ -108,7 +90,6 @@ export async function fetchBodyshopFloorWorkerHomeMetrics(
       vehiclesTotal: monthTasks.length,
       vehiclesDone,
       vehiclesPending,
-      bodyshopIncomeMonth: 0,
       monthLabel: monthKey === 'all' ? 'All months' : formatFloorWorkMonthLabel(monthKey),
       monthKey,
     })
@@ -159,7 +140,6 @@ function metricsForEmployee(
   supportRows: Record<string, unknown>[],
   assignmentByJc: Record<string, Record<string, unknown>>,
   floorSinceByJc: Record<string, string | null>,
-  incomeByCode: Map<string, number>,
 ): BodyshopFloorWorkerHomeMetrics {
   const floorMeta = floorSinceMetaFromByJc(floorSinceByJc)
   const tasks = listWorkTasksForEmployee(employeeCode, primaryRows, supportRows as BodyshopSupportRow[]).filter((t) =>
@@ -180,7 +160,6 @@ function metricsForEmployee(
     vehiclesTotal: monthTasks.length,
     vehiclesDone,
     vehiclesPending,
-    bodyshopIncomeMonth: incomeByCode.get(normalizeEmployeeCode(employeeCode)) ?? 0,
     monthLabel: monthKey === 'all' ? 'All months' : formatFloorWorkMonthLabel(monthKey),
     monthKey,
   }
@@ -200,26 +179,8 @@ export async function fetchAllActiveBodyshopAssignmentRows(): Promise<{
   return { primaryRows, supportRows }
 }
 
-function rosterIncomeMonthKey(taskMonthKey: string): string {
-  if (taskMonthKey !== 'all') return taskMonthKey
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7)
-}
-
-export async function fetchAdminRosterPeopleAndIncome(taskMonthKey: string): Promise<{
-  people: AdminRosterPerson[]
-  incomeByCode: Map<string, number>
-}> {
-  const [people, incomeByCode] = await Promise.all([
-    fetchActiveEmployees(),
-    fetchAdminRosterIncome(taskMonthKey),
-  ])
-  return { people, incomeByCode }
-}
-
-export async function fetchAdminRosterIncome(taskMonthKey: string): Promise<Map<string, number>> {
-  return fetchMonthlyBodyshopEarningsByCode(rosterIncomeMonthKey(taskMonthKey)).catch(
-    () => new Map<string, number>(),
-  )
+export async function fetchAdminRosterPeople(): Promise<AdminRosterPerson[]> {
+  return fetchActiveEmployees()
 }
 
 export function buildAdminFloorWorkerRoster(
@@ -227,7 +188,6 @@ export function buildAdminFloorWorkerRoster(
   people: AdminRosterPerson[],
   primaryRows: Record<string, unknown>[],
   supportRows: Record<string, unknown>[],
-  incomeByCode: Map<string, number>,
 ): AdminFloorWorkerCard[] {
   const assignmentByJc = buildAssignmentRowByJobCard(primaryRows)
   const floorSinceByJc: Record<string, string | null> = {}
@@ -245,7 +205,7 @@ export function buildAdminFloorWorkerRoster(
     const employeeCode = String(person.employee_code ?? '').trim().toUpperCase()
     if (!employeeCode) continue
     cards.push({
-      ...metricsForEmployee(employeeCode, monthKey, primaryRows, supportRows, assignmentByJc, floorSinceByJc, incomeByCode),
+      ...metricsForEmployee(employeeCode, monthKey, primaryRows, supportRows, assignmentByJc, floorSinceByJc),
       employeeCode,
       employeeName: String(person.employee_name ?? '').trim() || employeeCode,
       roleLabel: match.roleLabel,
@@ -259,17 +219,9 @@ export function buildAdminFloorWorkerRoster(
 
 /** Loads assignments from DB — prefer `fetchAllActiveBodyshopAssignmentRows` + `buildAdminFloorWorkerRoster` on Floor Work screen. */
 export async function fetchAdminFloorWorkerRoster(monthKey: string): Promise<AdminFloorWorkerCard[]> {
-  const [{ primaryRows, supportRows }, { people, incomeByCode }] = await Promise.all([
+  const [{ primaryRows, supportRows }, people] = await Promise.all([
     fetchAllActiveBodyshopAssignmentRows(),
-    fetchAdminRosterPeopleAndIncome(monthKey),
+    fetchAdminRosterPeople(),
   ])
-  return buildAdminFloorWorkerRoster(monthKey, people, primaryRows, supportRows, incomeByCode)
-}
-
-export function formatBodyshopIncomeInr(value: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value)
+  return buildAdminFloorWorkerRoster(monthKey, people, primaryRows, supportRows)
 }

@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { ActivityIndicator, Alert, Image, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Linking, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { pickSurveyorPhone } from '../../lib/customer/contactPhones'
+import { CustomerApprovalHistorySection } from './CustomerApprovalHistorySection'
 import {
   customerOpenBodyshopSurveyApprovalDocument,
   customerSetSurveyApprovalDecision,
@@ -29,17 +31,61 @@ export function CustomerSurveyApprovalCard({ token, regNumber, repairCard, onDec
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [historyTick, setHistoryTick] = useState(0)
+
+  const surveyorPhone = pickSurveyorPhone(repairCard ?? undefined)
+
+  const callSurveyor = async () => {
+    if (!surveyorPhone) {
+      Alert.alert('No surveyor number', 'Surveyor contact is not on your repair card yet. Please call your Service Advisor.')
+      return
+    }
+    try {
+      await Linking.openURL(`tel:${surveyorPhone}`)
+    } catch {
+      Alert.alert('Call failed', 'Could not open the phone dialer.')
+    }
+  }
+
+  const callSurveyorButton = (
+    <TouchableOpacity
+      onPress={() => void callSurveyor()}
+      style={{
+        marginTop: 14,
+        borderWidth: 1,
+        borderColor: CustomerTheme.primary,
+        borderRadius: 10,
+        paddingVertical: 12,
+        alignItems: 'center',
+        backgroundColor: '#EFF6FF',
+      }}
+    >
+      <Text style={{ color: CustomerTheme.primary, fontWeight: '800', fontSize: 14 }}>
+        {surveyorPhone ? 'Call surveyor' : 'Call surveyor (number pending)'}
+      </Text>
+    </TouchableOpacity>
+  )
 
   if (!doc) {
     if (!moduleScreen) return null
     return (
-      <CustomerCard>
-        <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900' }}>Survey Approval</Text>
-        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12.5, marginTop: 8, lineHeight: 18 }}>
-          Your Service Advisor has not uploaded the survey approval document yet. When it is uploaded here, you can view it
-          and approve or reject with a remark.
-        </Text>
-      </CustomerCard>
+      <>
+        <CustomerCard>
+          <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900' }}>Survey Approval</Text>
+          <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12.5, marginTop: 8, lineHeight: 18 }}>
+            Your Service Advisor has not uploaded the survey approval document yet. When it is uploaded here, you can view it
+            and approve or reject with a remark.
+          </Text>
+          {callSurveyorButton}
+        </CustomerCard>
+        <CustomerApprovalHistorySection
+          key={`survey-hist-empty-${historyTick}`}
+          token={token}
+          regNumber={regNumber}
+          kind="survey"
+          title="Survey approval history"
+        />
+      </>
     )
   }
 
@@ -77,6 +123,7 @@ export function CustomerSurveyApprovalCard({ token, regNumber, repairCard, onDec
           : 'Survey approval rejected. Your advisor will see your remark and may upload a revised document.',
       })
       onDecided()
+      setHistoryTick((t) => t + 1)
     } catch (e) {
       Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again')
     } finally {
@@ -140,6 +187,16 @@ export function CustomerSurveyApprovalCard({ token, regNumber, repairCard, onDec
           </TouchableOpacity>
         </View>
       ) : null}
+
+      {callSurveyorButton}
+
+      <CustomerApprovalHistorySection
+        key={`survey-hist-${historyTick}`}
+        token={token}
+        regNumber={regNumber}
+        kind="survey"
+        title="Survey approval history"
+      />
 
       <Modal visible={showReject} transparent animationType="fade" onRequestClose={() => setShowReject(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 }}>

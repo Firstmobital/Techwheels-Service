@@ -9,22 +9,71 @@ import {
   registerStaffPush,
 } from './pushRegistration'
 
-function openFromNotificationData(data: Record<string, unknown> | undefined) {
-  if (!data?.chat_id) return
+type CustomerPushRoute =
+  | 'survey-approval'
+  | 'estimate'
+  | 'gatepass'
+  | 'invoices'
+  | 'tracker'
+  | 'chat'
+
+function navigateCustomerRoute(route: CustomerPushRoute) {
+  switch (route) {
+    case 'survey-approval':
+      router.push('/(customer)/survey-approval')
+      return
+    case 'estimate':
+      router.push('/(customer)/estimate')
+      return
+    case 'gatepass':
+      router.push('/(customer)/gatepass')
+      return
+    case 'invoices':
+      router.push('/(customer)/invoices')
+      return
+    case 'tracker':
+      router.push('/(customer)/tracker')
+      return
+    case 'chat':
+      router.push('/(customer)/chat')
+      return
+    default:
+      router.push('/(customer)')
+  }
+}
+
+export function openFromNotificationData(
+  data: Record<string, unknown> | undefined,
+  setSelectedReg?: (reg: string) => void
+) {
+  if (!data) return
+
   const audience = String(data.audience || '')
   const reg = typeof data.reg_number === 'string' ? data.reg_number : ''
-  const contact = typeof data.contact_key === 'string' ? data.contact_key : ''
+
   if (audience === 'customer') {
-    if (reg) {
-      router.push({
-        pathname: '/(customer)/chat',
-        params: contact && contact !== 'advisor' ? { reg, contact } : { reg },
-      })
+    if (reg && setSelectedReg) setSelectedReg(reg)
+    const route = String(data.route || '').trim() as CustomerPushRoute
+    if (route) {
+      navigateCustomerRoute(route)
       return
     }
-    router.push('/(customer)/chat')
+    if (data.chat_id) {
+      const contact = typeof data.contact_key === 'string' ? data.contact_key : ''
+      router.push({
+        pathname: '/(customer)/chat',
+        params:
+          reg && contact && contact !== 'advisor'
+            ? { reg, contact }
+            : reg
+              ? { reg }
+              : {},
+      })
+    }
     return
   }
+
+  if (!data.chat_id) return
   const chatId = String(data.chat_id)
   router.push({ pathname: '/(tabs)/chat', params: { chat: chatId } })
 }
@@ -32,13 +81,19 @@ function openFromNotificationData(data: Record<string, unknown> | undefined) {
 export function useChatPush() {
   const { user } = useAuth()
   const { token, setSelectedReg } = useCustomerSession()
+
+  useEffect(() => {
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) return
+      const data = response.notification.request.content.data as Record<string, unknown> | undefined
+      openFromNotificationData(data, setSelectedReg)
+    })
+  }, [setSelectedReg])
+
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as Record<string, unknown> | undefined
-      if (typeof data?.reg_number === 'string' && data.reg_number && String(data.audience) === 'customer') {
-        setSelectedReg(data.reg_number)
-      }
-      openFromNotificationData(data)
+      openFromNotificationData(data, setSelectedReg)
     })
     return () => sub.remove()
   }, [setSelectedReg])

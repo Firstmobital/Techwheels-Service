@@ -27,6 +27,7 @@ import {
   type RepairCard, type CustomerType,
 } from '../lib/api/bodyshopRepair'
 import { bodyshopFloorAgeSummary, isBodyshopFloorAssigned } from '../lib/bodyshopFloorAge'
+import { formatBodyshopDocumentUploadSource } from '../lib/bodyshopDocumentUploadSource'
 import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/settings'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
@@ -6498,6 +6499,7 @@ export default function BodyshopRepairPage() {
                               <div className="brx-docs-grid brx-docs-grid--mb">
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const attachedDoc = bodyshopDocsByKey[k]
+                                  const uploadSourceLabel = formatBodyshopDocumentUploadSource(attachedDoc)
                                   const checked = advisorVerifiedDoc(selected, k)
                                   const rejected = !checked && rejectedDocKeys(selected).includes(k)
                                   const busy = uploadingDocKey === k
@@ -6517,6 +6519,11 @@ export default function BodyshopRepairPage() {
                                         <div className={`brx-doc-state ${checked ? 'is-checked' : 'is-required'}`}>
                                           {checked ? '✅ Approved' : rejected ? '✕ Rejected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
                                         </div>
+                                        {uploadSourceLabel ? (
+                                          <div className="brx-doc-sub" title="Upload channel">
+                                            Source: {uploadSourceLabel}
+                                          </div>
+                                        ) : null}
                                       </div>
                                        <div className="brx-doc-actions">
                                         {checked ? (

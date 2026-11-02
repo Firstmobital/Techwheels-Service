@@ -8,8 +8,6 @@ import { Icon } from '../../components/ui/Icon'
 import { getHomeDashboardMetrics, type HomeDashboardMetrics } from '../../lib/api/homeDashboard'
 import {
   fetchBodyshopFloorWorkerHomeMetrics,
-  fetchMyBodyshopIncomeForMonth,
-  formatBodyshopIncomeInr,
   isBodyshopFloorWorkerBusinessRole,
   type BodyshopFloorWorkerHomeMetrics,
 } from '../../lib/api/bodyshopFloorWorkerHome'
@@ -62,7 +60,6 @@ export default function PlatformHomeScreen() {
   const [metrics, setMetrics] = useState<HomeDashboardMetrics>(DEFAULT_METRICS)
   const [floorWorkerHome, setFloorWorkerHome] = useState<BodyshopFloorWorkerHomeMetrics | null>(null)
   const [showFloorWorkerHome, setShowFloorWorkerHome] = useState(false)
-  const [homeIncomeLoading, setHomeIncomeLoading] = useState(false)
   const [chatUnread, setChatUnread] = useState(0)
 
   const userInitials = useMemo(() => {
@@ -88,27 +85,19 @@ export default function PlatformHomeScreen() {
     const role = scope?.role ?? null
     if (empCode && isBodyshopFloorWorkerBusinessRole(role)) {
       setShowFloorWorkerHome(true)
-      setHomeIncomeLoading(true)
       const workerRes = await fetchBodyshopFloorWorkerHomeMetrics(empCode, monthIst)
-      const base =
+      setFloorWorkerHome(
         workerRes.data ?? {
           vehiclesTotal: 0,
           vehiclesDone: 0,
           vehiclesPending: 0,
-          bodyshopIncomeMonth: 0,
           monthLabel: monthIst,
           monthKey: monthIst,
-        }
-      setFloorWorkerHome(base)
-      void fetchMyBodyshopIncomeForMonth(empCode, monthIst)
-        .then((amount) => {
-          setFloorWorkerHome((prev) => (prev ? { ...prev, bodyshopIncomeMonth: amount } : prev))
-        })
-        .finally(() => setHomeIncomeLoading(false))
+        },
+      )
     } else {
       setShowFloorWorkerHome(false)
       setFloorWorkerHome(null)
-      setHomeIncomeLoading(false)
     }
   }, [])
 
@@ -258,19 +247,6 @@ export default function PlatformHomeScreen() {
                   <Text className="text-slate-900 text-lg font-bold">{floorWorkerHome.vehiclesPending}</Text>
                   <Text className="text-slate-500 text-xs mt-1">your step</Text>
                 </View>
-              </View>
-              <View className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
-                <Text className="text-emerald-800 text-xs font-semibold uppercase tracking-wide">Bodyshop income</Text>
-                {homeIncomeLoading ? (
-                  <Text className="text-emerald-700 text-lg font-bold mt-2">Loading…</Text>
-                ) : (
-                  <Text className="text-emerald-900 text-2xl font-bold mt-1">
-                    {formatBodyshopIncomeInr(floorWorkerHome.bodyshopIncomeMonth)}
-                  </Text>
-                )}
-                <Text className="text-emerald-800/70 text-xs mt-2">
-                  Closed accident jobs · same as Tracker & payroll
-                </Text>
               </View>
             </>
           ) : (

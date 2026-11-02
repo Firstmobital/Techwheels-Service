@@ -28,6 +28,7 @@ import {
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
+import { formatBodyshopDocumentUploadSource } from '../../lib/bodyshopDocumentUploadSource'
 import {
   humanizeBodyshopRepairSaveError,
   isBodyshopFloorAssigned,
@@ -342,7 +343,9 @@ export default function BodyshopRepairScreen() {
     setTimeout(() => setToast(null), 3500)
   }
 
-  const [uploadedDocsByKey, setUploadedDocsByKey] = useState<Record<string, { id: number; file_name: string; storage_path: string; drive_url?: string | null }>>({})
+  const [uploadedDocsByKey, setUploadedDocsByKey] = useState<
+    Record<string, { id: number; file_name: string; storage_path: string; drive_url?: string | null; uploaded_by?: string | null }>
+  >({})
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [uploadingDocKey, setUploadingDocKey] = useState<string | null>(null)
   const [surveyDocFeedback, setSurveyDocFeedback] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null)
@@ -352,7 +355,7 @@ export default function BodyshopRepairScreen() {
     try {
       const { data, error } = await supabase
         .from('bodyshop_repair_card_documents')
-        .select('id, doc_key, file_name, storage_path, drive_url, created_at')
+        .select('id, doc_key, file_name, storage_path, drive_url, uploaded_by, created_at')
         .eq('repair_card_id', cardId)
       if (!error && data) {
         const map: Record<string, any> = {}
@@ -1114,6 +1117,7 @@ export default function BodyshopRepairScreen() {
                       const rejectedKeys = Array.isArray(card.doc_rejected_keys) ? card.doc_rejected_keys.map(String) : []
                       const rejected = !approved && rejectedKeys.includes(String(doc.key))
                       const uploaded = uploadedDocsByKey[String(doc.key)]
+                      const uploadSourceLabel = formatBodyshopDocumentUploadSource(uploaded)
                       return (
                         <View key={doc.key} style={[S.docRow, i < mandatoryDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
                           <View style={{ flex: 1, marginRight: 8 }}>
@@ -1140,6 +1144,11 @@ export default function BodyshopRepairScreen() {
                             {uploaded?.file_name ? (
                               <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
                                 📎 {uploaded.file_name}
+                              </Text>
+                            ) : null}
+                            {uploadSourceLabel ? (
+                              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }} numberOfLines={2}>
+                                Source: {uploadSourceLabel}
                               </Text>
                             ) : null}
                           </View>

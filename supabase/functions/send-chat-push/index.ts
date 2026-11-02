@@ -54,10 +54,21 @@ type OutboxRow = {
   token_id: string
   title: string
   body: string
-  chat_id: string
+  chat_id?: string
   data: Record<string, unknown> | null
   device_token: string
   token_provider: string
+}
+
+function stringifyPushData(data: Record<string, unknown>, row: OutboxRow): Record<string, string> {
+  const merged: Record<string, unknown> = { ...data }
+  if (row.chat_id) merged.chat_id = row.chat_id
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(merged)) {
+    if (value === undefined || value === null) continue
+    out[key] = typeof value === 'string' ? value : String(value)
+  }
+  return out
 }
 
 async function sendExpoPush(row: OutboxRow) {
@@ -72,11 +83,7 @@ async function sendExpoPush(row: OutboxRow) {
       to: row.device_token,
       title: row.title || 'Techwheels',
       body: row.body || '',
-      data: {
-        chat_id: String(data.chat_id || row.chat_id || ''),
-        reg_number: String(data.reg_number || ''),
-        audience: String(data.audience || ''),
-      },
+      data: stringifyPushData(data, row),
       sound: 'default',
       priority: 'high',
       channelId: 'default',
@@ -148,11 +155,7 @@ async function sendFcmPush(row: OutboxRow, projectId: string, accessToken: strin
           title: row.title || 'Techwheels',
           body: row.body || '',
         },
-        data: {
-          chat_id: String(data.chat_id || row.chat_id || ''),
-          reg_number: String(data.reg_number || ''),
-          audience: String(data.audience || ''),
-        },
+        data: stringifyPushData(data, row),
         android: {
           priority: 'HIGH',
           notification: {
@@ -186,12 +189,35 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { data: claimed, error: claimError } = await supabase.rpc('claim_chat_push_outbox', { p_limit: 40 })
-  if (claimError) {
-    return new Response(JSON.stringify({ error: claimError.message }), { status: 500 })
+
+  type WorkItem = OutboxRow & { completeRpc: 'complete_chat_push_outbox' | 'complete_customer_push_outbox' }
+
+  const { data: chatClaimed, error: chatClaimError } = await supabase.rpc('claim_chat_push_outbox', {
+    p_limit: 40,
+  })
+  if (chatClaimError) {
+    return new Response(JSON.stringify({ error: chatClaimError.message }), { status: 500 })
   }
 
-  const rows = (claimed || []) as OutboxRow[]
+  const { data: customerClaimed, error: customerClaimError } = await supabase.rpc(
+    'claim_customer_push_outbox',
+    { p_limit: 40 },
+  )
+  if (customerClaimError) {
+    return new Response(JSON.stringify({ error: customerClaimError.message }), { status: 500 })
+  }
+
+  const rows: WorkItem[] = [
+    ...((chatClaimed || []) as OutboxRow[]).map((row) => ({
+      ...row,
+      completeRpc: 'complete_chat_push_outbox' as const,
+    })),
+    ...((customerClaimed || []) as OutboxRow[]).map((row) => ({
+      ...row,
+      completeRpc: 'complete_customer_push_outbox' as const,
+    })),
+  ]
+
   if (rows.length === 0) {
     return new Response(JSON.stringify({ message: 'No pending notifications' }), { status: 200 })
   }
@@ -226,7 +252,7 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Unsupported token provider: ${provider}`)
       }
 
-      await supabase.rpc('complete_chat_push_outbox', {
+      await supabase.rpc(row.completeRpc, {
         p_id: row.id,
         p_status: 'sent',
         p_error_text: null,
@@ -236,7 +262,7 @@ Deno.serve(async (req: Request) => {
     } catch (error) {
       failed += 1
       const message = getErrorMessage(error)
-      await supabase.rpc('complete_chat_push_outbox', {
+      await supabase.rpc(row.completeRpc, {
         p_id: row.id,
         p_status: 'failed',
         p_error_text: message,

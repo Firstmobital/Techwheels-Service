@@ -1724,6 +1724,34 @@ export function parseBodyshopSurveyApprovalDocument(
   return null
 }
 
+export type CustomerApprovalHistoryItem = {
+  id: string
+  event_type: 'document_replaced' | 'customer_approved' | 'customer_rejected' | string
+  approval_kind: 'survey' | 'service_estimate' | string
+  file_name?: string | null
+  drive_url?: string | null
+  document_uploaded_at?: string | null
+  customer_decision?: string | null
+  customer_reason?: string | null
+  estimate_id?: string | null
+  created_at?: string | null
+}
+
+export async function customerListApprovalHistory(
+  sessionToken: string,
+  regNumber: string,
+  kind: 'survey' | 'service_estimate',
+): Promise<CustomerApprovalHistoryItem[]> {
+  const { data, error } = await cpRpc('customer_list_approval_history', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber,
+    p_kind: kind,
+  })
+  if (error) throw new Error(error.message)
+  if (!Array.isArray(data)) return []
+  return data as CustomerApprovalHistoryItem[]
+}
+
 export async function customerSetSurveyApprovalDecision(
   sessionToken: string,
   regNumber: string,
