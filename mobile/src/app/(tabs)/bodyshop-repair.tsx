@@ -681,50 +681,6 @@ export default function BodyshopRepairScreen() {
     })
   }
 
-  async function advanceStage(card: RepairCard) {
-    if (card.overall_status !== 'active') return
-    if (card.current_stage === 9) {
-      Alert.alert(
-        'Survey stage',
-        'Complete Survey (Hold or Approved + date), upload survey approval, get customer approval, then use Floor tab → Send to Floor 2 or Floor 3. That moves the vehicle to Stage 10.',
-      )
-      return
-    }
-    const nextStage = card.current_stage + 1
-    if (nextStage > 18) return
-    Alert.alert(
-      'Advance Stage',
-      `Move from Stage ${card.current_stage} (${STAGE_LABELS[card.current_stage] ?? ''}) → Stage ${nextStage} (${STAGE_LABELS[nextStage] ?? ''})?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Confirm', style: 'default', onPress: () => {
-          void (async () => {
-            const update = { current_stage: nextStage, current_stage_name: STAGE_LABELS[nextStage] ?? null }
-            const merged: RepairCard = { ...card, ...update }
-            const prevSelected = selectedCard
-            const prevCards = cards
-            await optimistic.run(`stage-${card.id}`, {
-              apply: () => {
-                setSelectedCard(merged)
-                setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
-                setPatch({})
-              },
-              rollback: () => {
-                setSelectedCard(prevSelected)
-                setCards(prevCards)
-              },
-              execute: async () => {
-                const { error } = await supabase.from('bodyshop_repair_cards').update(update).eq('id', card.id)
-                if (error) throw error
-              },
-              onSuccess: () => showToast(`Advanced to Stage ${nextStage}`, 'success'),
-            })
-          })()
-        }},
-      ]
-    )
-  }
-
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const branches = useMemo(
@@ -1025,12 +981,6 @@ export default function BodyshopRepairScreen() {
                   </View>
                 ))}
               </View>
-
-              {card.overall_status === 'active' && card.current_stage < 18 && (
-                <TouchableOpacity style={[S.advanceBtn, saving && { opacity: 0.5 }]} disabled={saving} onPress={() => advanceStage(card)}>
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Advance → Stage {card.current_stage + 1}: {STAGE_LABELS[card.current_stage + 1] ?? ''}</Text>
-                </TouchableOpacity>
-              )}
 
               <Text style={S.sectionTitle}>Stage Pipeline</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -1858,7 +1808,6 @@ const S = StyleSheet.create({
   kvRow:            { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
   kvLabel:          { fontSize: 12, color: '#82858f', fontWeight: '600', flex: 1 },
   kvValue:          { fontSize: 12, color: '#1a1b21', fontWeight: '600', flex: 2, textAlign: 'right' },
-  advanceBtn:       { backgroundColor: '#2a4cd0', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 16 },
   stageChip:        { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: '#f6f4ee', borderWidth: 1, borderColor: '#e7e3d9' },
   docRow:           { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f6f4ee' },
   checkbox:         { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#d9d4c7', backgroundColor: '#f6f4ee', alignItems: 'center', justifyContent: 'center' },

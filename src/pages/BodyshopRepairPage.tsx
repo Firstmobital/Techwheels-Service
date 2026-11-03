@@ -2285,77 +2285,6 @@ export default function BodyshopRepairPage() {
     setSaving(false)
   }
 
-  async function handleAdvance() {
-    if (!selected) return
-    setSaving(true)
-    try {
-      const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-      const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-      const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
-
-      if (flow.effectiveCurrentStage === 4 && !flow.milestones.stage4Done) {
-        toast_('Use Send WA to complete Customer Group stage', false)
-        return
-      }
-
-      if (flow.effectiveCurrentStage === 6) {
-        const estimateAmount = Number(selected.estimated_amount ?? 0)
-        const hasEstimateDoc = Boolean(bodyshopDocsByKey.doc_estimate)
-        if (!(estimateAmount > 0) || !hasEstimateDoc) {
-          toast_('Enter Estimate Amount and upload Estimate document to complete Stage 6', false)
-          return
-        }
-      }
-
-      if (flow.effectiveCurrentStage === 11 && !floorStageCompleted) {
-        toast_('Mark BS Floor Completed on Bodyshop Floor before advancing from Stage 11', false)
-        return
-      }
-
-      if (flow.effectiveCurrentStage === 13 && !isQcPassed(selected)) {
-        toast_('Complete QC Pass on Bodyshop Floor before leaving Quality Check', false)
-        return
-      }
-
-      if (flow.effectiveCurrentStage === 14 && !isRiCompleted(selected)) {
-        toast_('Set RI Status to Completed and Save RI on Bodyshop Floor before advancing to Billing', false)
-        return
-      }
-
-      let updated: RepairCard
-      if (flow.effectiveCurrentStage <= 4) {
-        updated = await updateRepairCard(selected.id, {
-          current_stage: flow.effectiveNextStage,
-          current_stage_name: STAGE_LABELS[flow.effectiveNextStage] ?? '',
-        })
-      } else if (selected.current_stage === 11) {
-        const stage12Done = (
-          (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
-          || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
-          || selected.current_stage > 12
-        )
-        const targetStage = (!additionalApprovalRequested || stage12Done) ? 13 : 12
-        updated = await updateRepairCard(selected.id, {
-          current_stage: targetStage,
-          current_stage_name: STAGE_LABELS[targetStage] ?? '',
-        })
-      } else if (flow.effectiveCurrentStage === 14) {
-        updated = await updateRepairCard(selected.id, {
-          current_stage: 15,
-          current_stage_name: STAGE_LABELS[15] ?? 'Billing',
-        })
-      } else {
-        updated = await advanceStage(selected.id, selected)
-      }
-
-      setSelected(updated)
-      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
-      toast_(`Advanced to Stage ${updated.current_stage}`)
-      void reloadVisibleList()
-    } catch (e) { toast_(e.message, false) }
-    setSaving(false)
-  }
-
   async function handleSendWaForCustomerGroup() {
     if (!selected) return
     setSaving(true)
@@ -5792,37 +5721,6 @@ export default function BodyshopRepairPage() {
                   return rows
                 })}
               </div>
-              {/* Advance button at bottom of stage panel */}
-              {selected.overall_status === 'active' && selected.current_stage < 18 && (
-                <div className="brx-stp-foot">
-                  {(() => {
-                    const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                    const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-                    const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
-                    const stage12Done = (
-                      (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
-                      || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
-                      || flow.effectiveCurrentStage > 12
-                    )
-                    const stage11AdvanceTarget = flow.effectiveCurrentStage === 11
-                      ? (floorStageCompleted
-                          ? ((!additionalApprovalRequested || stage12Done) ? 13 : 12)
-                          : 11)
-                      : flow.effectiveNextStage
-                    return (
-                  <button className="btn btn--primary brx-stp-advance" onClick={() => void handleAdvance()} disabled={saving}>
-                      {saving
-                        ? 'Saving…'
-                        : flow.effectiveCurrentStage === 11 && !floorStageCompleted
-                          ? '✓ Mark BS Floor Completed first'
-                        : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
-                          ? '✓ Mark Stage 10 Done (Floor already active)'
-                          : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${stage11AdvanceTarget}`}
-                  </button>
-                    )
-                  })()}
-                </div>
-              )}
             </div>
 
             {/* ── Right: Tab content ── */}
@@ -6040,36 +5938,6 @@ export default function BodyshopRepairPage() {
                       )
                     })}
                   </div>
-
-                  {/* advance button */}
-                  {selected.overall_status === 'active' && selected.current_stage < 18 && (
-                    (() => {
-                      const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                      const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-                      const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
-                      const stage12Done = (
-                        (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
-                        || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
-                        || flow.effectiveCurrentStage > 12
-                      )
-                      const stage11AdvanceTarget = flow.effectiveCurrentStage === 11
-                        ? (floorStageCompleted
-                            ? ((!additionalApprovalRequested || stage12Done) ? 13 : 12)
-                            : 11)
-                        : flow.effectiveNextStage
-                      return (
-                    <button className="btn btn--primary brx-overview-advance" onClick={() => void handleAdvance()} disabled={saving}>
-                      {saving
-                        ? 'Saving…'
-                        : flow.effectiveCurrentStage === 11 && !floorStageCompleted
-                          ? '✓ Mark BS Floor Completed first'
-                        : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
-                          ? '✓ Mark Stage 10 Done (Floor already active)'
-                            : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${stage11AdvanceTarget}`}
-                    </button>
-                      )
-                    })()
-                  )}
                 </div>
               )}
 

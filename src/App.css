@@ -6537,16 +6537,6 @@ tr.brx-recov-row--mismatch td:first-child {
   color: var(--ss-tone, #64748b);
 }
 
-.brx-stp-foot {
-  padding: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.brx-stp-advance {
-  width: 100%;
-  font-size: 13px;
-}
-
 .brx-dmain {
   flex: 1;
   display: flex;
@@ -6712,11 +6702,6 @@ tr.brx-recov-row--mismatch td:first-child {
 
 .brx-overview-step-tail.is-done {
   color: #16a34a;
-}
-
-.brx-overview-advance {
-  margin-top: 16px;
-  width: 100%;
 }
 
 @media (max-width: 1180px) {
