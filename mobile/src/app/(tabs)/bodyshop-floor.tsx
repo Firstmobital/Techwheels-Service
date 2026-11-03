@@ -33,6 +33,10 @@ import {
 } from '../../lib/bodyshopFloorMobileLimits'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
+  BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER,
+  isEmployeeEligibleForBodyshopFloorRole,
+} from '../../lib/bodyshopFloorEmployeePicker'
+import {
   BODYSHOP_FLOOR_LIVE_LIST_LABEL,
   isLiveOnFloorRepairCard,
   type BodyshopFloorVehicleListMode,
@@ -803,7 +807,7 @@ function BodyshopFloorScreenInner() {
           .from('employee_master')
           .select('employee_code, employee_name, department, role, fuel_type, location')
           .eq('is_active', true)
-          .or('department.ilike.%body%,role.ilike.%floor%incharge%')
+          .or(BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER)
           .order('employee_name')
           .limit(400),
       ])
@@ -838,7 +842,7 @@ function BodyshopFloorScreenInner() {
       const roles = parseBodyshopFloorRoles(e.role)
       if (roles.length === 0) return
       for (const r of roles) {
-        if (!isBodyshopDepartment(e.department)) continue
+        if (!isEmployeeEligibleForBodyshopFloorRole(r, e)) continue
         if (!m[r]) continue
         m[r].push(e)
       }

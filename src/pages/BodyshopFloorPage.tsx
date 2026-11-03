@@ -13,6 +13,10 @@ import {
   type BodyshopFloorVehicleListMode,
 } from '../lib/bodyshopFloorLive'
 import { parseBodyshopFloorRoles } from '../lib/businessRoles'
+import {
+  BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER,
+  isEmployeeEligibleForBodyshopFloorRole,
+} from '../lib/bodyshopFloorEmployeePicker'
 import { arePipelineWorkStepsFinished } from '../lib/bodyshopFloorWork/pipeline'
 import {
   classifyFloorWorkPipelineStage,
@@ -735,12 +739,6 @@ function deriveDealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | unde
   return candidate || null
 }
 
-function isEmployeeEligibleForRole(role: BSRole, department: string | null): boolean {
-  // All roles on this page are BODY SHOP department
-  void role
-  return isBodyshopDepartment(department)
-}
-
 function emptyRoleMap() {
   return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined, PARTS_INCHARGE: undefined } as Record<BSRole, BSAssignment | undefined>
 }
@@ -1101,7 +1099,7 @@ export default function BodyshopFloorPage() {
             .from('employee_master')
             .select('employee_code, employee_name, department, role, fuel_type, location')
             .eq('is_active', true)
-            .or('department.ilike.%body%,role.ilike.%floor%incharge%')
+            .or(BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER)
             .order('employee_name')
             .limit(1000),
           fetchActiveBodyshopAssignmentsAllPages<DBPrimaryAssignmentRow>(),
@@ -1190,7 +1188,7 @@ export default function BodyshopFloorPage() {
       const roles = parseBodyshopFloorRoles(e.role)
       if (roles.length === 0) return
       for (const r of roles) {
-        if (!isEmployeeEligibleForRole(r, e.department)) continue
+        if (!isEmployeeEligibleForBodyshopFloorRole(r, e)) continue
         m[r].push(e)
       }
     })
@@ -1208,7 +1206,7 @@ export default function BodyshopFloorPage() {
       const roles = parseBodyshopFloorRoles(e.role)
       if (roles.length === 0) return
       for (const r of roles) {
-        if (!isEmployeeEligibleForRole(r, e.department)) continue
+        if (!isEmployeeEligibleForBodyshopFloorRole(r, e)) continue
         m[r].push(e)
       }
     })
