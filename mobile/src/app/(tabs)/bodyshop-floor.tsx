@@ -2215,7 +2215,8 @@ function BodyshopFloorScreenInner() {
 
             const role = stepId as BSRole
             const assignment = roleMap?.[role]
-            const stepLocked = stepId === 'EDP' && step?.state === 'locked'
+            const stepLocked =
+              step?.state === 'locked' && Boolean(step?.lockReason)
             const draft = stageDrafts[k]?.[role] ?? { work_status: assignment?.work_status ?? 'work_inprocess', remark: assignment?.remark ?? '' }
             const support = supportAssignments[k]?.[role] ?? []
             const isExpanded = expandedRole === role

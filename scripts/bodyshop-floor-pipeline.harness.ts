@@ -236,6 +236,19 @@ check('floor flow — QC active then RI after pass then EDP after RI', () => {
   assert.equal(afterRi.find((s) => s.id === 'EDP')?.state, 'active')
 })
 
+check('floor flow — EDP active after RI even when EDP not assigned yet', () => {
+  const steps = computeBodyshopFloorFlowSteps({
+    assignRow: baseRow({ rubbing_work_status: 'completed' }),
+    roleAt: (role) =>
+      role === 'RUBBING'
+        ? { employee_code: 'R1', work_status: 'completed' }
+        : null,
+    qcStatus: 'pass',
+    riStatus: 'completed',
+  })
+  assert.equal(steps.find((s) => s.id === 'EDP')?.state, 'active')
+})
+
 check('painter not active until dentor Done (Floor Work order)', () => {
   const row = baseRow({ dentor_work_status: 'work_inprocess', painter_work_status: 'work_inprocess' })
   const dentorTask = task('JC-TEST-001', 'DENTOR', 'E001')

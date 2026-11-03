@@ -155,10 +155,7 @@ export function computeBodyshopFloorFlowSteps(input: {
         out.push({ id, state: 'done' })
         continue
       }
-      if (!isFloorFlowRoleAssigned(ass)) {
-        out.push({ id, state: 'locked' })
-        continue
-      }
+      // RI done — floor incharge may assign EDP and mark work (unassigned is active, not locked).
       out.push({ id, state: 'active' })
     }
   }
