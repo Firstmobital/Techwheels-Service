@@ -954,7 +954,7 @@ export function filterBodyshopCasesByQualifyingReceiptInRange<T extends { repair
  * All (Mark Done) / Pending / Remaining / Received + payment mode All → invoice_date Period.
  * Cash/UPI/Card → Period on qualifying receipt txn_date; invoice_date may be outside Period.
  * Search + SA scope is caller-supplied on `cases`. Status filter matches status cards.
- * `requireInvoiceDateInPeriod: true` keeps invoice_date Period (e.g. BUSY export case list).
+ * `requireInvoiceDateInPeriod: false` for BUSY payment export (receipt txn_date Period).
  */
 export function filterBodyshopAccountsTableCases<
   T extends Pick<AccountsBodyshopCase, 'repair_card_id' | 'invoice_date' | 'derived_payment_status' | 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>,

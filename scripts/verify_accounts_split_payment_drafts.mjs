@@ -3425,9 +3425,50 @@ function buildBodyshopBusyPaymentExportRows({
     lines: prod2710Lines,
     range: day2710,
     paymentModeFilter: 'cash',
-    requireInvoiceDateInPeriod: true,
+    requireInvoiceDateInPeriod: false,
   })
-  assert(busy2710Cash.length === 1 && busy2710Cash[0].repair_card_id === 7558, 'BUSY export case list stays invoice_date Period')
+  assert(busy2710Cash.length === 3 && cash2710.length === busy2710Cash.length, 'BUSY export case list matches Cash drill-down receipt Period')
+
+  const day2910 = { from: '2026-10-29', to: '2026-10-29' }
+  const inv25 = mkCase(7001, 'JC-INV-25', '2026-10-25')
+  const inv27 = mkCase(7002, 'JC-INV-27', '2026-10-27')
+  const rcpt29Lines = [
+    { ...mkCash(701, 7001, 1438, '2026-10-29'), voucher_no: 'RApp/26-27/0901', reference: 'CASH-A' },
+    { ...mkCash(702, 7002, 1204, '2026-10-29'), voucher_no: 'RApp/26-27/0902', reference: 'CASH-B' },
+  ]
+  const busy2910Cases = filterBodyshopAccountsTableCases({
+    cases: [inv25, inv27],
+    lines: rcpt29Lines,
+    range: day2910,
+    paymentModeFilter: 'cash',
+    requireInvoiceDateInPeriod: false,
+  })
+  assert(busy2910Cases.length === 2, '29-Oct Period: invoice 25/27 with receipt 29 included for BUSY case scope')
+  const busy2910Export = buildBodyshopBusyPaymentExportRows({
+    cases: busy2910Cases,
+    lines: rcpt29Lines,
+    range: day2910,
+    paymentModeFilter: 'cash',
+  })
+  assert(
+    busy2910Export.rows.length === 2
+      && busy2910Export.rows.reduce((s, r) => s + r['Amount DR'], 0) === 2642,
+    '29-Oct BUSY export: both cash receipts exported with correct amounts',
+  )
+  const offPeriod2910 = buildBodyshopBusyPaymentExportRows({
+    cases: busy2910Cases,
+    lines: [{ ...rcpt29Lines[0], txn_date: '2026-10-28' }],
+    range: day2910,
+    paymentModeFilter: 'cash',
+  })
+  assert(offPeriod2910.rows.length === 0, 'Receipt outside selected Period excluded from BUSY export')
+  const reversed2910 = buildBodyshopBusyPaymentExportRows({
+    cases: [inv25],
+    lines: [{ ...rcpt29Lines[0], is_reversed: true }],
+    range: day2910,
+    paymentModeFilter: 'cash',
+  })
+  assert(reversed2910.rows.length === 0, 'Reversed receipt excluded from BUSY export')
 
   const prod2810Cases = [
     mkCase(9001, 'JC-2810-A', '2026-10-28'),

@@ -483,7 +483,7 @@ export default function AccountsPage() {
     [saFilteredBsAllDates, bsFilter, bsPayLines, dateRange, bsPaymentModeFilter],
   )
 
-  /** BUSY export case scope stays invoice_date Period even when payment-mode drill-down uses receipt txn_date. */
+  /** Bodyshop BUSY export: receipt txn_date Period (same case scope as Cash/UPI/Card drill-down). */
   const bsBusyExportCases = useMemo(
     () =>
       filterBodyshopAccountsTableCases({
@@ -492,7 +492,7 @@ export default function AccountsPage() {
         range: dateRange,
         statusFilter: bsFilter,
         paymentModeFilter: bsPaymentModeFilter,
-        requireInvoiceDateInPeriod: true,
+        requireInvoiceDateInPeriod: false,
       }),
     [saFilteredBsAllDates, bsFilter, bsPayLines, dateRange, bsPaymentModeFilter],
   )
