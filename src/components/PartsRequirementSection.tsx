@@ -119,6 +119,26 @@ function StatusBadge({ status, qty = null }: { status: PartsRequestRow['parts_st
 
 const LOW_STOCK_THRESHOLD = 5
 
+type PartsOrderListSortKey = 'parts_order_date' | 'entry_date' | 'order_no' | 'created_at'
+type SortDirection = 'asc' | 'desc'
+
+function compareIsoDates(a: string | null | undefined, b: string | null | undefined, dir: SortDirection): number {
+  const ta = a ? Date.parse(a.slice(0, 10)) : Number.NaN
+  const tb = b ? Date.parse(b.slice(0, 10)) : Number.NaN
+  const aEmpty = Number.isNaN(ta)
+  const bEmpty = Number.isNaN(tb)
+  if (aEmpty && bEmpty) return 0
+  if (aEmpty) return 1
+  if (bEmpty) return -1
+  const cmp = ta - tb
+  return dir === 'asc' ? cmp : -cmp
+}
+
+function compareStrings(a: string, b: string, dir: SortDirection): number {
+  const cmp = a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  return dir === 'asc' ? cmp : -cmp
+}
+
 // ── Stock status enum for the 3-badge system ──────────────────────────────
 type StockStatus = 'available' | 'low' | 'pending'
 
@@ -249,6 +269,8 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [stockStatusFilter, setStockStatusFilter] = useState('all')
   const [orderStatusFilter, setOrderStatusFilter] = useState('all')
   const [orderNoFilter, setOrderNoFilter] = useState('all')
+  const [orderListSortKey, setOrderListSortKey] = useState<PartsOrderListSortKey>('created_at')
+  const [orderListSortDir, setOrderListSortDir] = useState<SortDirection>('desc')
 
   // ── Reg No auto-fetch state ─────────────────────────────────────────────────
   const [regFetchStatus, setRegFetchStatus] = useState<'idle' | 'loading' | 'found' | 'notfound' | 'error'>('idle')
@@ -554,8 +576,36 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
           .some((v) => (v ?? '').toLowerCase().includes(q))
       )
     }
-    return list
-  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderNoFilter])
+
+    const sorted = [...list]
+    sorted.sort((a, b) => {
+      let cmp = 0
+      if (orderListSortKey === 'parts_order_date') {
+        cmp = compareIsoDates(a.parts_order_date, b.parts_order_date, orderListSortDir)
+      } else if (orderListSortKey === 'entry_date') {
+        cmp = compareIsoDates(a.entry_date, b.entry_date, orderListSortDir)
+      } else if (orderListSortKey === 'order_no') {
+        cmp = compareStrings(orderNoOf(a), orderNoOf(b), orderListSortDir)
+      } else {
+        cmp = compareIsoDates(a.created_at, b.created_at, orderListSortDir)
+      }
+      if (cmp !== 0) return cmp
+      return b.id - a.id
+    })
+    return sorted
+  }, [
+    visibleRows,
+    quickFilter,
+    search,
+    isAdmin,
+    advisorFilter,
+    vehicleNoFilter,
+    stockStatusFilter,
+    orderStatusFilter,
+    orderNoFilter,
+    orderListSortKey,
+    orderListSortDir,
+  ])
 
   const showMarkReceived = (row: PartsRequestRow): boolean => {
     if (['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)) return false
@@ -1003,9 +1053,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
         />
       </div>
 
-      {/* ── Order No. + Order Status filters (visible to all users) ── */}
-      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-4">
-        <label className="text-xs font-semibold text-gray-600 sm:w-64">
+      {/* ── Order No. + Order Status + sort (visible to all users) ── */}
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm lg:flex-row lg:flex-wrap lg:items-end lg:gap-4">
+        <label className="text-xs font-semibold text-gray-600 sm:min-w-[12rem] sm:flex-1">
           Order No.
           <select
             value={orderNoFilter}
@@ -1017,7 +1067,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             <option value="other">Other (Has Order No.)</option>
           </select>
         </label>
-        <label className="text-xs font-semibold text-gray-600 sm:w-56">
+        <label className="text-xs font-semibold text-gray-600 sm:min-w-[12rem] sm:flex-1">
           Order Status
           <select
             value={orderStatusFilter}
@@ -1032,6 +1082,30 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             <option value="dispatched">Dispatched</option>
             <option value="blank">Blank (No Status)</option>
             <option value="other">Other</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-gray-600 sm:min-w-[12rem] sm:flex-1">
+          Sort list by
+          <select
+            value={orderListSortKey}
+            onChange={(e) => setOrderListSortKey(e.target.value as PartsOrderListSortKey)}
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="parts_order_date">Parts order date</option>
+            <option value="entry_date">Requirement (entry) date</option>
+            <option value="order_no">Order number</option>
+            <option value="created_at">Date added</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-gray-600 sm:min-w-[10rem] sm:flex-1">
+          Order
+          <select
+            value={orderListSortDir}
+            onChange={(e) => setOrderListSortDir(e.target.value as SortDirection)}
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="asc">Ascending (oldest / A → Z)</option>
+            <option value="desc">Descending (newest / Z → A)</option>
           </select>
         </label>
       </div>
