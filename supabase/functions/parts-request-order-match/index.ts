@@ -12,8 +12,8 @@ import { corsHeaders } from '../_shared/cors.ts'
 // positives) — service_parts_order_data / service_parts_stock_snapshot_data have no
 // per-vehicle/registration linkage, so a text fallback is the only option there.
 //
-// Status/order-date/tracking updates never touch a request SPM already marked 'Cancelled'
-// or 'Delivered to Workshop' (terminal, human-controlled states) and are idempotent
+// Status/order-date/tracking updates never touch terminal / closed rows (Cancelled,
+// Delivered to Workshop, advisor Done, advisor Ready) and are idempotent
 // (checked via matched_order_row_id) so the advisor's notification badge only flips when
 // something genuinely changed.
 //
@@ -36,7 +36,12 @@ import { corsHeaders } from '../_shared/cors.ts'
 // never flips the advisor "unseen" notification badge on its own — that's reserved for
 // status changes so the advisor isn't alerted just because a stock count moved.
 
-const TERMINAL_STATUSES = new Set(['Cancelled', 'Delivered to Workshop'])
+const TERMINAL_STATUSES = new Set([
+  'Cancelled',
+  'Delivered to Workshop',
+  'Done',
+  'Ready',
+])
 
 interface OrderRow {
   id: number

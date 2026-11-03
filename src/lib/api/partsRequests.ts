@@ -241,6 +241,13 @@ export async function markPartsRequestDone(id: number): Promise<ApiResult<void>>
   return ok(undefined)
 }
 
+/** Wrong line / no longer needed — closes the row; order-sheet auto-match will not revive it. */
+export async function cancelPartsRequestNotRequired(id: number): Promise<ApiResult<void>> {
+  const { error } = await supabase.rpc('parts_request_advisor_cancel_not_required', { p_id: id })
+  if (error) return fail(error)
+  return ok(undefined)
+}
+
 // Dedicated single-field inline-save for the Customer Update column — same
 // ownership/Done-lock rules as updateMyPartsRequestFields, kept separate so a quick
 // blur-save doesn't need to resend every other field.

@@ -22,6 +22,7 @@ import {
   markPartsRequestReceived,
   markPartsRequestReady,
   markPartsRequestDone,
+  cancelPartsRequestNotRequired,
   updateMyPartsRequestFields,
   updatePartsRequestCustomerUpdate,
   computedStatusBadge,
@@ -206,7 +207,7 @@ function MiniTimeline({ status }: { status: PartsStatus }) {
 const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
 const labelCls = 'text-xs font-semibold text-gray-600'
 
-type ConfirmAction = { row: PartsRequestRow; kind: 'received' | 'ready' | 'done' } | null
+type ConfirmAction = { row: PartsRequestRow; kind: 'received' | 'ready' | 'done' | 'not_required' } | null
 
 interface Props {
   isAdmin?: boolean
@@ -452,7 +453,10 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   }, [toast])
 
   const unseenCount = useMemo(() => rows.filter((r) => !r.advisor_seen).length, [rows])
-  const visibleRows = useMemo(() => rows.filter((r) => r.parts_status !== 'Done'), [rows])
+  const visibleRows = useMemo(
+    () => rows.filter((r) => r.parts_status !== 'Done' && r.parts_status !== 'Cancelled'),
+    [rows],
+  )
 
   const advisorList = useMemo(
     () => Array.from(new Set(rows.map((r) => r.advisor_name).filter(Boolean))).sort(),
@@ -561,6 +565,24 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     return stock === 'available' || stock === 'low' || isCoDealer
   }
 
+  const canMarkNotRequired = (row: PartsRequestRow): boolean =>
+    !['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)
+
+  const NotRequiredButton = ({ row }: { row: PartsRequestRow }) => {
+    if (!canMarkNotRequired(row)) return null
+    const busy = actionBusyId === row.id
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'not_required' }) }}
+        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+      >
+        Not required
+      </button>
+    )
+  }
+
   const ActionButton = ({ row }: { row: PartsRequestRow }) => {
     const busy = actionBusyId === row.id
     const TERMINAL_STATUSES = ['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled']
@@ -571,17 +593,25 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     if (!TERMINAL_STATUSES.includes(row.parts_status)) {
       if (showMarkReceived(row)) {
         return (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'received' }) }}
-            className="rounded-md bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-          >
-            Mark Received
-          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'received' }) }}
+              className="rounded-md bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              Mark Received
+            </button>
+            <NotRequiredButton row={row} />
+          </div>
         )
       }
-      return <span className="text-xs text-gray-400">Waiting for Parts Stock Update</span>
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <span className="text-xs text-gray-400">Waiting for Parts Stock Update</span>
+          <NotRequiredButton row={row} />
+        </div>
+      )
     }
     if (row.parts_status === 'Received') {
       return (
@@ -807,11 +837,17 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     const res =
       kind === 'received' ? await markPartsRequestReceived(row.id)
       : kind === 'ready' ? await markPartsRequestReady(row.id)
+      : kind === 'not_required' ? await cancelPartsRequestNotRequired(row.id)
       : await markPartsRequestDone(row.id)
     setActionBusyId(null)
     setConfirmAction(null)
     if (res.error) { setError(res.error); return }
-    setToast(kind === 'received' ? 'Marked Received' : kind === 'ready' ? 'Marked Ready' : 'Marked Done')
+    setToast(
+      kind === 'received' ? 'Marked Received'
+      : kind === 'ready' ? 'Marked Ready'
+      : kind === 'not_required' ? 'Part marked not required'
+      : 'Marked Done',
+    )
     void load()
   }
 
@@ -1267,11 +1303,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               {confirmAction.kind === 'received' && 'Mark parts as Received?'}
               {confirmAction.kind === 'ready' && 'Mark vehicle as Ready?'}
               {confirmAction.kind === 'done' && 'Mark vehicle as Done?'}
+              {confirmAction.kind === 'not_required' && 'Mark part as not required?'}
             </h4>
             <p className="mt-2 text-xs text-gray-600">
               {confirmAction.kind === 'received' && 'Are you sure the parts have been received? This records the received date/time and your name.'}
               {confirmAction.kind === 'ready' && 'Are you sure the vehicle is ready? This moves the job to the Ready stage.'}
               {confirmAction.kind === 'done' && 'Are you sure this vehicle is completed? It will be removed from the Service Advisor dashboard.'}
+              {confirmAction.kind === 'not_required' && 'This removes the line from your dashboard. Parts order imports will not bring it back. Use this when the part was added by mistake or is no longer needed.'}
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setConfirmAction(null)}
@@ -1282,10 +1320,12 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${
                   confirmAction.kind === 'received' ? 'bg-green-600 hover:bg-green-700'
                   : confirmAction.kind === 'ready' ? 'bg-purple-600 hover:bg-purple-700'
+                  : confirmAction.kind === 'not_required' ? 'bg-gray-600 hover:bg-gray-700'
                   : 'bg-gray-800 hover:bg-black'
                 }`}>
                 {confirmAction.kind === 'received' ? 'Yes, Mark Received'
                   : confirmAction.kind === 'ready' ? 'Yes, Mark Ready'
+                  : confirmAction.kind === 'not_required' ? 'Yes, Not required'
                   : 'Yes, Mark Done'}
               </button>
             </div>
