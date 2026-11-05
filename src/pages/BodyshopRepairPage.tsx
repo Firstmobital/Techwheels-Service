@@ -986,6 +986,72 @@ const VERIFY_PIPELINE_DOCS: { k: BodyshopDocKey; label: string }[] = [
   { k: 'doc_survey_approval', label: 'Survey approval (customer sign-off)' },
 ]
 
+const VERIFY_PREVIEW_PRIORITY: BodyshopDocKey[] = [
+  'doc_survey_approval',
+  'doc_estimate',
+  'doc_insurance',
+  'doc_claim_form',
+  'doc_rc',
+  'doc_rc_back',
+]
+
+function getAttachedBodyshopDoc(
+  key: BodyshopDocKey,
+  map: Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>,
+): BodyshopRepairCardDocumentRow | undefined {
+  return map[key]
+    ?? (key === 'doc_job_card' ? map.job_card : undefined)
+    ?? (key === 'job_card' ? map.doc_job_card : undefined)
+}
+
+function buildVerifyDocumentRows(
+  selected: RepairCard,
+  bodyshopDocsByKey: Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>,
+): { key: BodyshopDocKey; label: string; tag?: string; attached?: BodyshopRepairCardDocumentRow }[] {
+  const ct = String(selected.customer_type ?? '').trim().toLowerCase()
+  const noDocsRequired = ct === 'cash' || ct === 'foc'
+  const rows: { key: BodyshopDocKey; label: string; tag?: string; attached?: BodyshopRepairCardDocumentRow }[] = []
+
+  if (!noDocsRequired && isValidCustomerType(ct)) {
+    for (const doc of BODYSHOP_DOCS) {
+      const mandatory = doc.mandatoryFor.includes(ct as CustomerType)
+      const attached = getAttachedBodyshopDoc(doc.k, bodyshopDocsByKey)
+      if (mandatory || attached || doc.optionalHint) {
+        rows.push({
+          key: doc.k,
+          label: doc.label,
+          tag: mandatory ? 'Mandatory' : doc.optionalHint ? 'Optional' : 'Extra',
+          attached,
+        })
+      }
+    }
+  }
+
+  for (const extra of VERIFY_PIPELINE_DOCS) {
+    rows.push({
+      key: extra.k,
+      label: extra.label,
+      tag: 'Pipeline',
+      attached: getAttachedBodyshopDoc(extra.k, bodyshopDocsByKey),
+    })
+  }
+
+  return rows
+}
+
+type VerifyDocPreviewEntry = {
+  key: BodyshopDocKey
+  label: string
+  tag?: string
+  loading: boolean
+  error: string | null
+  displayUrl: string | null
+  embedUrl: string | null
+  isPdf: boolean
+  fileName: string
+  source: string | null
+}
+
 function bodyshopDocOverviewStatus(
   card: RepairCard,
   docKey: BodyshopDocKey,
@@ -1138,6 +1204,8 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopManagerAccess, setHasBodyshopManagerAccess] = useState(false)
   const [hasBodyshopSurveyVerifyModuleAccess, setHasBodyshopSurveyVerifyModuleAccess] = useState(false)
   const [managerVerifyRemarkDraft, setManagerVerifyRemarkDraft] = useState('')
+  const [verifyDocPreviews, setVerifyDocPreviews] = useState<VerifyDocPreviewEntry[]>([])
+  const [verifyDocPreviewsLoading, setVerifyDocPreviewsLoading] = useState(false)
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
   const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
   const [bodyshopSurveyBranchesForUser, setBodyshopSurveyBranchesForUser] = useState<string[]>([])
@@ -2824,8 +2892,9 @@ export default function BodyshopRepairPage() {
   async function handleSaveClaimIntimationStage() {
     if (!selected) return
 
-    if (selected.current_stage < 8) {
-      toast_('Complete Estimation Approval stage first before saving Claim Intimation', false)
+    const estimationApproved = Boolean(String(selected.estimation_approved_by ?? '').trim())
+    if (selected.current_stage < 8 && !estimationApproved) {
+      toast_('Estimation must be approved on the Approval tab before saving Claim Intimation', false)
       return
     }
 
@@ -2847,7 +2916,7 @@ export default function BodyshopRepairPage() {
         claim_intimation_no: claimNo,
       }
 
-      if (selected.current_stage === 8) {
+      if (selected.current_stage <= 8) {
         patch.current_stage = 9
         patch.current_stage_name = STAGE_LABELS[9] ?? 'Survey'
       }
@@ -2856,7 +2925,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
 
-      const stageTo = selected.current_stage === 8 ? 9 : updated.current_stage
+      const stageTo = selected.current_stage <= 8 ? 9 : updated.current_stage
       await supabase.from('audit_logs').insert({
         actor_id: actorId,
         action: 'bodyshop_claim_intimation_saved',
@@ -2875,7 +2944,7 @@ export default function BodyshopRepairPage() {
         return next
       })
 
-      toast_(selected.current_stage === 8 ? 'Claim Intimation saved. Stage moved to Survey ✅' : 'Claim Intimation saved ✅')
+      toast_(selected.current_stage <= 8 ? 'Claim Intimation saved. Stage moved to Survey ✅' : 'Claim Intimation saved ✅')
     } catch (e) {
       toast_(e.message ?? 'Unable to save claim intimation', false)
     } finally {
@@ -3808,6 +3877,96 @@ export default function BodyshopRepairPage() {
 
     return { displayUrl: '', driveUrl: null, isPdf, fileName }
   }
+
+  function bodyshopDocEmbedPreviewUrl(info: {
+    displayUrl: string
+    driveUrl: string | null
+    isPdf: boolean
+  }, row: BodyshopRepairCardDocumentRow): string {
+    if (info.isPdf) {
+      const fileId = extractDriveFileId(row.drive_file_id || info.driveUrl || info.displayUrl)
+      if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`
+      if (info.displayUrl) return info.displayUrl
+    }
+    return info.displayUrl
+  }
+
+  useEffect(() => {
+    if (detailTab !== 'verify' || !selected?.id) {
+      setVerifyDocPreviews([])
+      setVerifyDocPreviewsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    const docRows = buildVerifyDocumentRows(selected, bodyshopDocsByKey)
+    const uploaded = docRows.filter((row) => Boolean(row.attached))
+
+    const priorityIndex = (key: BodyshopDocKey) => {
+      const idx = VERIFY_PREVIEW_PRIORITY.indexOf(key)
+      return idx === -1 ? 999 : idx
+    }
+    uploaded.sort((a, b) => priorityIndex(a.key) - priorityIndex(b.key) || a.label.localeCompare(b.label))
+
+    const initial: VerifyDocPreviewEntry[] = uploaded.map((row) => ({
+      key: row.key,
+      label: row.label,
+      tag: row.tag,
+      loading: true,
+      error: null,
+      displayUrl: null,
+      embedUrl: null,
+      isPdf: false,
+      fileName: row.attached?.file_name || 'document',
+      source: formatBodyshopDocumentUploadSource(row.attached),
+    }))
+    setVerifyDocPreviews(initial)
+    setVerifyDocPreviewsLoading(initial.length > 0)
+
+    ;(async () => {
+      for (const row of uploaded) {
+        if (cancelled) return
+        const attached = row.attached!
+        const docKey = row.key
+        try {
+          const info = await getDirectDocViewInfo(attached)
+          if (cancelled) return
+          if (!info.displayUrl) {
+            setVerifyDocPreviews((prev) => prev.map((p) => p.key === docKey
+              ? { ...p, loading: false, error: 'Preview unavailable — use Open full view' }
+              : p))
+            continue
+          }
+          const embedUrl = bodyshopDocEmbedPreviewUrl(info, attached)
+          setVerifyDocPreviews((prev) => prev.map((p) => p.key === docKey
+            ? {
+              ...p,
+              loading: false,
+              error: null,
+              displayUrl: info.displayUrl,
+              embedUrl,
+              isPdf: info.isPdf,
+              fileName: info.fileName,
+            }
+            : p))
+        } catch (e) {
+          if (cancelled) return
+          setVerifyDocPreviews((prev) => prev.map((p) => p.key === docKey
+            ? {
+              ...p,
+              loading: false,
+              error: e instanceof Error ? e.message : 'Preview failed',
+            }
+            : p))
+        }
+      }
+      if (!cancelled) setVerifyDocPreviewsLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [detailTab, selected?.id, selected?.customer_type, bodyshopDocsByKey])
 
   async function handleViewBodyshopDoc(docKey: BodyshopDocKey) {
     const pair = PAIR_DOC_NAMES[docKey]
@@ -6828,7 +6987,10 @@ export default function BodyshopRepairPage() {
                         </div>
                         <div className="brx-claim-grid">
                           {(() => {
-                            const isClaimLocked = effectiveCurrentStage < 8
+                            const estimationApproved = Boolean(String(selected.estimation_approved_by ?? '').trim())
+                            const claimNoDraft = String(selected.claim_intimation_no ?? '').trim()
+                            const isClaimInputLocked = effectiveCurrentStage < 7
+                            const isClaimSaveLocked = !estimationApproved || effectiveCurrentStage < 7
                             return (
                               <>
                           <label className="brx-docs-field">
@@ -6838,23 +7000,30 @@ export default function BodyshopRepairPage() {
                               value={selected.claim_intimation_no ?? ''}
                               onChange={(e) => patch('claim_intimation_no', e.target.value)}
                               placeholder="Enter claim intimation no"
-                              disabled={isClaimLocked}
+                              disabled={isClaimInputLocked}
                             />
                           </label>
+                          {effectiveCurrentStage === 7 && !estimationApproved ? (
+                            <p className="brx-survey-approval-sub" style={{ margin: '0 0 8px', color: '#b45309' }}>
+                              You can enter the claim number now. Save unlocks after EDP approves the estimate on the <strong>Approval</strong> tab (Stage 7).
+                            </p>
+                          ) : null}
                           <button
                             type="button"
                             className="btn btn--primary brx-claim-save"
                             onClick={() => void handleSaveClaimIntimationStage()}
-                            disabled={saving || isClaimLocked || !String(selected.claim_intimation_no ?? '').trim()}
+                            disabled={saving || isClaimSaveLocked || !claimNoDraft}
                             title={
-                              isClaimLocked
-                                ? 'Complete Estimation Approval stage first'
-                                : !String(selected.claim_intimation_no ?? '').trim()
-                                  ? 'Claim Intimation No is required'
-                                  : undefined
+                              isClaimInputLocked
+                                ? 'Complete the Estimate stage first'
+                                : isClaimSaveLocked
+                                  ? 'Waiting for estimation approval on the Approval tab'
+                                  : !claimNoDraft
+                                    ? 'Claim Intimation No is required'
+                                    : undefined
                             }
                           >
-                            {saving ? 'Saving…' : effectiveCurrentStage === 8 ? 'Save Claim Intimation & Complete Stage 8' : 'Update Claim Intimation'}
+                            {saving ? 'Saving…' : effectiveCurrentStage <= 8 ? 'Save Claim Intimation & Complete Stage 8' : 'Update Claim Intimation'}
                           </button>
                               </>
                             )
@@ -7468,26 +7637,7 @@ export default function BodyshopRepairPage() {
                         ? 'Pending in customer app'
                         : 'Not sent / no status'
                 const surveyStatusLabel = String(selected.survey_status ?? '').trim() || '—'
-                const docRowsForVerify = (() => {
-                  const rows: { key: BodyshopDocKey; label: string; tag?: string }[] = []
-                  if (!noDocsRequired && isValidCustomerType(ct)) {
-                    for (const doc of BODYSHOP_DOCS) {
-                      const mandatory = doc.mandatoryFor.includes(ct as CustomerType)
-                      const attached = bodyshopDocsByKey[doc.k]
-                      if (mandatory || attached || doc.optionalHint) {
-                        rows.push({
-                          key: doc.k,
-                          label: doc.label,
-                          tag: mandatory ? 'Mandatory' : doc.optionalHint ? 'Optional' : 'Extra',
-                        })
-                      }
-                    }
-                  }
-                  for (const extra of VERIFY_PIPELINE_DOCS) {
-                    rows.push({ key: extra.k, label: extra.label, tag: 'Pipeline' })
-                  }
-                  return rows
-                })()
+                const docRowsForVerify = buildVerifyDocumentRows(selected, bodyshopDocsByKey)
 
                 return (
                   <div className="brx-survey-wrap">
@@ -7552,12 +7702,10 @@ export default function BodyshopRepairPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {docRowsForVerify.map(({ key, label, tag }) => {
-                              const attached = bodyshopDocsByKey[key]
-                                ?? (key === 'doc_job_card' ? bodyshopDocsByKey.job_card : undefined)
-                                ?? (key === 'job_card' ? bodyshopDocsByKey.doc_job_card : undefined)
-                              const status = bodyshopDocOverviewStatus(selected, key, attached)
-                              const source = formatBodyshopDocumentUploadSource(attached)
+                            {docRowsForVerify.map(({ key, label, tag, attached }) => {
+                              const attachedDoc = attached ?? getAttachedBodyshopDoc(key, bodyshopDocsByKey)
+                              const status = bodyshopDocOverviewStatus(selected, key, attachedDoc)
+                              const source = formatBodyshopDocumentUploadSource(attachedDoc)
                               const toneColor = status.tone === 'ok'
                                 ? '#166534'
                                 : status.tone === 'warn'
@@ -7575,9 +7723,9 @@ export default function BodyshopRepairPage() {
                                   </td>
                                   <td style={{ color: toneColor, fontWeight: 600, fontSize: 12 }}>{status.label}</td>
                                   <td style={{ fontSize: 12 }}>{source ?? (attached ? '—' : '—')}</td>
-                                  <td style={{ fontSize: 12 }}>{attached?.uploaded_at ? fmt(attached.uploaded_at) : '—'}</td>
+                                  <td style={{ fontSize: 12 }}>{attachedDoc?.uploaded_at ? fmt(attachedDoc.uploaded_at) : '—'}</td>
                                   <td>
-                                    {attached ? (
+                                    {attachedDoc ? (
                                       <button
                                         type="button"
                                         className="btn btn--ghost btn--xs"
@@ -7596,6 +7744,101 @@ export default function BodyshopRepairPage() {
                       <p className="brx-survey-approval-sub" style={{ margin: '10px 0 0' }}>
                         <strong>Customer app</strong> uploads show as “Customer app · phone”. <strong>Workshop</strong> uploads show advisor email or workshop upload.
                       </p>
+                    </div>
+
+                    <div className="brx-panel" style={{ marginBottom: 14 }}>
+                      <div className="brx-panel-h">Document previews (review here before verify)</div>
+                      {verifyDocPreviewsLoading && verifyDocPreviews.length === 0 ? (
+                        <p className="brx-survey-approval-sub" style={{ margin: 0 }}>Loading previews…</p>
+                      ) : verifyDocPreviews.length === 0 ? (
+                        <p className="brx-survey-approval-sub" style={{ margin: 0 }}>No uploaded files to preview yet.</p>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 420px), 1fr))',
+                            gap: 14,
+                            marginTop: 10,
+                          }}
+                        >
+                          {verifyDocPreviews.map((preview) => {
+                            const isKeySurvey = preview.key === 'doc_survey_approval'
+                            return (
+                              <div
+                                key={preview.key}
+                                style={{
+                                  border: isKeySurvey ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                                  borderRadius: 10,
+                                  padding: 12,
+                                  background: isKeySurvey ? '#faf5ff' : '#fff',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+                                  <div>
+                                    <div style={{ fontWeight: 700, fontSize: 14 }}>{preview.label}</div>
+                                    {preview.tag ? (
+                                      <div className="brx-survey-approval-sub" style={{ margin: 0, fontSize: 11 }}>{preview.tag}</div>
+                                    ) : null}
+                                    {preview.source ? (
+                                      <div className="brx-survey-approval-sub" style={{ margin: '4px 0 0' }}>{preview.source}</div>
+                                    ) : null}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost btn--xs"
+                                    onClick={() => void handleViewBodyshopDoc(preview.key)}
+                                  >
+                                    Open full
+                                  </button>
+                                </div>
+                                {preview.loading ? (
+                                  <div className="brx-survey-approval-sub" style={{ margin: 0, padding: '24px 0', textAlign: 'center' }}>
+                                    Loading preview…
+                                  </div>
+                                ) : preview.error ? (
+                                  <div className="brx-survey-feedback is-error" style={{ margin: 0, fontSize: 12 }}>
+                                    {preview.error}
+                                  </div>
+                                ) : preview.embedUrl ? (
+                                  preview.isPdf ? (
+                                    <iframe
+                                      title={preview.fileName}
+                                      src={preview.embedUrl}
+                                      style={{
+                                        width: '100%',
+                                        height: 420,
+                                        border: '1px solid #cbd5e1',
+                                        borderRadius: 6,
+                                        background: '#f8fafc',
+                                      }}
+                                    />
+                                  ) : (
+                                    <a
+                                      href={preview.embedUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ display: 'block' }}
+                                    >
+                                      <img
+                                        src={preview.embedUrl}
+                                        alt={preview.fileName}
+                                        style={{
+                                          width: '100%',
+                                          maxHeight: 420,
+                                          objectFit: 'contain',
+                                          border: '1px solid #cbd5e1',
+                                          borderRadius: 6,
+                                          background: '#f8fafc',
+                                        }}
+                                      />
+                                    </a>
+                                  )
+                                ) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {selectedApprovedParts.parts.length > 0 ? (
