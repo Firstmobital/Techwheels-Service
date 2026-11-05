@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -46,6 +46,7 @@ import {
   isBodyshopSurveyManagerVerified,
   isBodyshopSurveyManagerVerifyPending,
   surveyManagerVerifyChecklist,
+  surveyManagerVerifyCheckItems,
 } from '../lib/bodyshopSurveyManagerVerify'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -986,15 +987,6 @@ const VERIFY_PIPELINE_DOCS: { k: BodyshopDocKey; label: string }[] = [
   { k: 'doc_survey_approval', label: 'Survey approval (customer sign-off)' },
 ]
 
-const VERIFY_PREVIEW_PRIORITY: BodyshopDocKey[] = [
-  'doc_survey_approval',
-  'doc_estimate',
-  'doc_insurance',
-  'doc_claim_form',
-  'doc_rc',
-  'doc_rc_back',
-]
-
 function getAttachedBodyshopDoc(
   key: BodyshopDocKey,
   map: Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>,
@@ -1204,8 +1196,8 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopManagerAccess, setHasBodyshopManagerAccess] = useState(false)
   const [hasBodyshopSurveyVerifyModuleAccess, setHasBodyshopSurveyVerifyModuleAccess] = useState(false)
   const [managerVerifyRemarkDraft, setManagerVerifyRemarkDraft] = useState('')
-  const [verifyDocPreviews, setVerifyDocPreviews] = useState<VerifyDocPreviewEntry[]>([])
-  const [verifyDocPreviewsLoading, setVerifyDocPreviewsLoading] = useState(false)
+  const [verifyDocPreviewByKey, setVerifyDocPreviewByKey] = useState<Partial<Record<BodyshopDocKey, VerifyDocPreviewEntry>>>({})
+  const [expandedVerifyPreviewKey, setExpandedVerifyPreviewKey] = useState<BodyshopDocKey | null>(null)
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
   const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
   const [bodyshopSurveyBranchesForUser, setBodyshopSurveyBranchesForUser] = useState<string[]>([])
@@ -3892,81 +3884,89 @@ export default function BodyshopRepairPage() {
   }
 
   useEffect(() => {
-    if (detailTab !== 'verify' || !selected?.id) {
-      setVerifyDocPreviews([])
-      setVerifyDocPreviewsLoading(false)
+    setVerifyDocPreviewByKey({})
+    setExpandedVerifyPreviewKey(null)
+  }, [selected?.id])
+
+  async function toggleVerifyDocPreview(docKey: BodyshopDocKey) {
+    if (expandedVerifyPreviewKey === docKey) {
+      setExpandedVerifyPreviewKey(null)
       return
     }
 
-    let cancelled = false
-    const docRows = buildVerifyDocumentRows(selected, bodyshopDocsByKey)
-    const uploaded = docRows.filter((row) => Boolean(row.attached))
+    setExpandedVerifyPreviewKey(docKey)
 
-    const priorityIndex = (key: BodyshopDocKey) => {
-      const idx = VERIFY_PREVIEW_PRIORITY.indexOf(key)
-      return idx === -1 ? 999 : idx
-    }
-    uploaded.sort((a, b) => priorityIndex(a.key) - priorityIndex(b.key) || a.label.localeCompare(b.label))
+    const cached = verifyDocPreviewByKey[docKey]
+    if (cached?.embedUrl || cached?.loading) return
 
-    const initial: VerifyDocPreviewEntry[] = uploaded.map((row) => ({
-      key: row.key,
-      label: row.label,
-      tag: row.tag,
-      loading: true,
-      error: null,
-      displayUrl: null,
-      embedUrl: null,
-      isPdf: false,
-      fileName: row.attached?.file_name || 'document',
-      source: formatBodyshopDocumentUploadSource(row.attached),
+    setVerifyDocPreviewByKey((prev) => ({
+      ...prev,
+      [docKey]: {
+        key: docKey,
+        label: '',
+        loading: true,
+        error: null,
+        displayUrl: null,
+        embedUrl: null,
+        isPdf: false,
+        fileName: 'document',
+        source: null,
+      },
     }))
-    setVerifyDocPreviews(initial)
-    setVerifyDocPreviewsLoading(initial.length > 0)
 
-    ;(async () => {
-      for (const row of uploaded) {
-        if (cancelled) return
-        const attached = row.attached!
-        const docKey = row.key
-        try {
-          const info = await getDirectDocViewInfo(attached)
-          if (cancelled) return
-          if (!info.displayUrl) {
-            setVerifyDocPreviews((prev) => prev.map((p) => p.key === docKey
-              ? { ...p, loading: false, error: 'Preview unavailable — use Open full view' }
-              : p))
-            continue
-          }
-          const embedUrl = bodyshopDocEmbedPreviewUrl(info, attached)
-          setVerifyDocPreviews((prev) => prev.map((p) => p.key === docKey
-            ? {
-              ...p,
-              loading: false,
-              error: null,
-              displayUrl: info.displayUrl,
-              embedUrl,
-              isPdf: info.isPdf,
-              fileName: info.fileName,
-            }
-            : p))
-        } catch (e) {
-          if (cancelled) return
-          setVerifyDocPreviews((prev) => prev.map((p) => p.key === docKey
-            ? {
-              ...p,
-              loading: false,
-              error: e instanceof Error ? e.message : 'Preview failed',
-            }
-            : p))
-        }
-      }
-      if (!cancelled) setVerifyDocPreviewsLoading(false)
-    })()
-
-    return () => {
-      cancelled = true
+    const attached = getAttachedBodyshopDoc(docKey, bodyshopDocsByKey)
+    if (!attached) {
+      setVerifyDocPreviewByKey((prev) => ({
+        ...prev,
+        [docKey]: {
+          ...(prev[docKey] ?? { key: docKey, label: '', displayUrl: null, embedUrl: null, isPdf: false, fileName: 'document', source: null }),
+          loading: false,
+          error: 'No uploaded file',
+        },
+      }))
+      return
     }
-  }, [detailTab, selected?.id, selected?.customer_type, bodyshopDocsByKey])
+
+    try {
+      const info = await getDirectDocViewInfo(attached)
+      if (!info.displayUrl) {
+        setVerifyDocPreviewByKey((prev) => ({
+          ...prev,
+          [docKey]: {
+            ...(prev[docKey] ?? { key: docKey, label: '', displayUrl: null, embedUrl: null, isPdf: false, fileName: info.fileName, source: null }),
+            loading: false,
+            error: 'Use View for full file',
+            source: formatBodyshopDocumentUploadSource(attached),
+          },
+        }))
+        return
+      }
+      const embedUrl = bodyshopDocEmbedPreviewUrl(info, attached)
+      setVerifyDocPreviewByKey((prev) => ({
+        ...prev,
+        [docKey]: {
+          key: docKey,
+          label: '',
+          loading: false,
+          error: null,
+          displayUrl: info.displayUrl,
+          embedUrl,
+          isPdf: info.isPdf,
+          fileName: info.fileName,
+          source: formatBodyshopDocumentUploadSource(attached),
+        },
+      }))
+    } catch (e) {
+      setVerifyDocPreviewByKey((prev) => ({
+        ...prev,
+        [docKey]: {
+          ...(prev[docKey] ?? { key: docKey, label: '', displayUrl: null, embedUrl: null, isPdf: false, fileName: 'document', source: null }),
+          loading: false,
+          error: e instanceof Error ? e.message : 'Preview failed',
+        },
+      }))
+    }
+  }
 
   async function handleViewBodyshopDoc(docKey: BodyshopDocKey) {
     const pair = PAIR_DOC_NAMES[docKey]
@@ -7618,8 +7618,9 @@ export default function BodyshopRepairPage() {
 
               {/* ── Manager Verify (Survey → Floor gate) ── */}
               {detailTab === 'verify' && selected && (() => {
+                const hasSurveyDocUploaded = Boolean(getAttachedBodyshopDoc('doc_survey_approval', bodyshopDocsByKey))
                 const checklist = surveyManagerVerifyChecklist(selected, {
-                  hasSurveyApprovalDoc: Boolean(bodyshopDocsByKey.doc_survey_approval),
+                  hasSurveyApprovalDoc: hasSurveyDocUploaded,
                 })
                 const verified = isBodyshopSurveyManagerVerified(selected)
                 const verifyStatus = String(selected.bodyshop_survey_manager_verify_status ?? '').trim().toLowerCase()
@@ -7638,6 +7639,7 @@ export default function BodyshopRepairPage() {
                         : 'Not sent / no status'
                 const surveyStatusLabel = String(selected.survey_status ?? '').trim() || '—'
                 const docRowsForVerify = buildVerifyDocumentRows(selected, bodyshopDocsByKey)
+                const verifyCheckItems = surveyManagerVerifyCheckItems(selected, { hasSurveyApprovalDoc: hasSurveyDocUploaded })
 
                 return (
                   <div className="brx-survey-wrap">
@@ -7713,29 +7715,82 @@ export default function BodyshopRepairPage() {
                                   : status.tone === 'err'
                                     ? '#b91c1c'
                                     : '#64748b'
+                              const previewOpen = expandedVerifyPreviewKey === key
+                              const preview = verifyDocPreviewByKey[key]
                               return (
-                                <tr key={key}>
-                                  <td>
-                                    <div style={{ fontWeight: 600 }}>{label}</div>
-                                    {tag ? (
-                                      <div className="brx-survey-approval-sub" style={{ margin: 0, fontSize: 11 }}>{tag}</div>
-                                    ) : null}
-                                  </td>
-                                  <td style={{ color: toneColor, fontWeight: 600, fontSize: 12 }}>{status.label}</td>
-                                  <td style={{ fontSize: 12 }}>{source ?? (attached ? '—' : '—')}</td>
-                                  <td style={{ fontSize: 12 }}>{attachedDoc?.uploaded_at ? fmt(attachedDoc.uploaded_at) : '—'}</td>
-                                  <td>
-                                    {attachedDoc ? (
-                                      <button
-                                        type="button"
-                                        className="btn btn--ghost btn--xs"
-                                        onClick={() => void handleViewBodyshopDoc(key)}
-                                      >
-                                        View
-                                      </button>
-                                    ) : null}
-                                  </td>
-                                </tr>
+                                <Fragment key={key}>
+                                  <tr>
+                                    <td>
+                                      <div style={{ fontWeight: 600 }}>{label}</div>
+                                      {tag ? (
+                                        <div className="brx-survey-approval-sub" style={{ margin: 0, fontSize: 11 }}>{tag}</div>
+                                      ) : null}
+                                    </td>
+                                    <td style={{ color: toneColor, fontWeight: 600, fontSize: 12 }}>{status.label}</td>
+                                    <td style={{ fontSize: 12 }}>{source ?? '—'}</td>
+                                    <td style={{ fontSize: 12 }}>{attachedDoc?.uploaded_at ? fmt(attachedDoc.uploaded_at) : '—'}</td>
+                                    <td>
+                                      {attachedDoc ? (
+                                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                          <button
+                                            type="button"
+                                            className="btn btn--ghost btn--xs"
+                                            onClick={() => void handleViewBodyshopDoc(key)}
+                                          >
+                                            View
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={`btn btn--xs ${previewOpen ? 'btn--primary' : ''}`}
+                                            onClick={() => void toggleVerifyDocPreview(key)}
+                                          >
+                                            {previewOpen ? 'Hide' : 'Preview'}
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                  {previewOpen ? (
+                                    <tr>
+                                      <td colSpan={5} style={{ background: '#f8fafc', padding: '8px 10px' }}>
+                                        {preview?.loading ? (
+                                          <span className="brx-survey-approval-sub" style={{ margin: 0 }}>Loading preview…</span>
+                                        ) : preview?.error ? (
+                                          <span className="brx-survey-feedback is-error" style={{ margin: 0, display: 'inline-block', fontSize: 12 }}>
+                                            {preview.error}
+                                          </span>
+                                        ) : preview?.embedUrl ? (
+                                          preview.isPdf ? (
+                                            <iframe
+                                              title={preview.fileName}
+                                              src={preview.embedUrl}
+                                              style={{
+                                                width: 'min(100%, 320px)',
+                                                height: 160,
+                                                border: '1px solid #cbd5e1',
+                                                borderRadius: 6,
+                                                background: '#fff',
+                                              }}
+                                            />
+                                          ) : (
+                                            <img
+                                              src={preview.embedUrl}
+                                              alt={preview.fileName}
+                                              style={{
+                                                maxWidth: 220,
+                                                maxHeight: 140,
+                                                objectFit: 'contain',
+                                                border: '1px solid #cbd5e1',
+                                                borderRadius: 6,
+                                                background: '#fff',
+                                              }}
+                                            />
+                                          )
+                                        ) : null}
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                </Fragment>
                               )
                             })}
                           </tbody>
@@ -7744,101 +7799,6 @@ export default function BodyshopRepairPage() {
                       <p className="brx-survey-approval-sub" style={{ margin: '10px 0 0' }}>
                         <strong>Customer app</strong> uploads show as “Customer app · phone”. <strong>Workshop</strong> uploads show advisor email or workshop upload.
                       </p>
-                    </div>
-
-                    <div className="brx-panel" style={{ marginBottom: 14 }}>
-                      <div className="brx-panel-h">Document previews (review here before verify)</div>
-                      {verifyDocPreviewsLoading && verifyDocPreviews.length === 0 ? (
-                        <p className="brx-survey-approval-sub" style={{ margin: 0 }}>Loading previews…</p>
-                      ) : verifyDocPreviews.length === 0 ? (
-                        <p className="brx-survey-approval-sub" style={{ margin: 0 }}>No uploaded files to preview yet.</p>
-                      ) : (
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 420px), 1fr))',
-                            gap: 14,
-                            marginTop: 10,
-                          }}
-                        >
-                          {verifyDocPreviews.map((preview) => {
-                            const isKeySurvey = preview.key === 'doc_survey_approval'
-                            return (
-                              <div
-                                key={preview.key}
-                                style={{
-                                  border: isKeySurvey ? '2px solid #7c3aed' : '1px solid #e2e8f0',
-                                  borderRadius: 10,
-                                  padding: 12,
-                                  background: isKeySurvey ? '#faf5ff' : '#fff',
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
-                                  <div>
-                                    <div style={{ fontWeight: 700, fontSize: 14 }}>{preview.label}</div>
-                                    {preview.tag ? (
-                                      <div className="brx-survey-approval-sub" style={{ margin: 0, fontSize: 11 }}>{preview.tag}</div>
-                                    ) : null}
-                                    {preview.source ? (
-                                      <div className="brx-survey-approval-sub" style={{ margin: '4px 0 0' }}>{preview.source}</div>
-                                    ) : null}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="btn btn--ghost btn--xs"
-                                    onClick={() => void handleViewBodyshopDoc(preview.key)}
-                                  >
-                                    Open full
-                                  </button>
-                                </div>
-                                {preview.loading ? (
-                                  <div className="brx-survey-approval-sub" style={{ margin: 0, padding: '24px 0', textAlign: 'center' }}>
-                                    Loading preview…
-                                  </div>
-                                ) : preview.error ? (
-                                  <div className="brx-survey-feedback is-error" style={{ margin: 0, fontSize: 12 }}>
-                                    {preview.error}
-                                  </div>
-                                ) : preview.embedUrl ? (
-                                  preview.isPdf ? (
-                                    <iframe
-                                      title={preview.fileName}
-                                      src={preview.embedUrl}
-                                      style={{
-                                        width: '100%',
-                                        height: 420,
-                                        border: '1px solid #cbd5e1',
-                                        borderRadius: 6,
-                                        background: '#f8fafc',
-                                      }}
-                                    />
-                                  ) : (
-                                    <a
-                                      href={preview.embedUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      style={{ display: 'block' }}
-                                    >
-                                      <img
-                                        src={preview.embedUrl}
-                                        alt={preview.fileName}
-                                        style={{
-                                          width: '100%',
-                                          maxHeight: 420,
-                                          objectFit: 'contain',
-                                          border: '1px solid #cbd5e1',
-                                          borderRadius: 6,
-                                          background: '#f8fafc',
-                                        }}
-                                      />
-                                    </a>
-                                  )
-                                ) : null}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
                     </div>
 
                     {selectedApprovedParts.parts.length > 0 ? (
@@ -7873,46 +7833,84 @@ export default function BodyshopRepairPage() {
                       </div>
                     ) : null}
 
-                    <div className="brx-panel">
+                    <div className="brx-panel brx-verify-action-panel">
                       <div className="brx-panel-h">Manager verify action</div>
-                      <ul style={{ margin: '0 0 14px', paddingLeft: 18, fontSize: 13 }}>
-                        {[
-                          {
-                            label: 'Survey approval document uploaded',
-                            ok: Boolean(bodyshopDocsByKey.doc_survey_approval),
-                          },
-                          {
-                            label: 'Customer approved in mobile app',
-                            ok: customerSurveyRaw === 'approved',
-                          },
-                          {
-                            label: 'Survey date and status saved',
-                            ok: Boolean(String(selected.survey_date ?? '').trim())
-                              && ['hold', 'approved'].includes(String(selected.survey_status ?? '').trim().toLowerCase()),
-                          },
-                        ].map(({ label, ok }) => (
-                          <li key={label} style={{ marginBottom: 4, color: ok ? '#166534' : '#64748b' }}>
-                            {ok ? '✓ ' : '○ '}{label}
-                          </li>
+                      <p className="brx-survey-approval-sub" style={{ margin: '0 0 10px' }}>
+                        Green ticks update from Survey tab data (document upload, customer app, survey fields).
+                      </p>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                          gap: 8,
+                          marginBottom: 12,
+                        }}
+                      >
+                        {verifyCheckItems.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 8,
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              border: `1px solid ${item.ok ? '#86efac' : '#e2e8f0'}`,
+                              background: item.ok ? '#f0fdf4' : '#fff',
+                              fontSize: 12,
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            <span
+                              aria-hidden
+                              style={{
+                                flexShrink: 0,
+                                width: 20,
+                                height: 20,
+                                borderRadius: '50%',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: 11,
+                                background: item.ok ? '#16a34a' : '#f1f5f9',
+                                color: item.ok ? '#fff' : '#94a3b8',
+                              }}
+                            >
+                              {item.ok ? '✓' : '○'}
+                            </span>
+                            <span style={{ color: item.ok ? '#166534' : '#475569', fontWeight: item.ok ? 600 : 500 }}>
+                              {item.label}
+                            </span>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
 
-                      {!checklist.ready && checklist.missing.length > 0 ? (
-                        <div className="brx-survey-feedback is-error" style={{ marginBottom: 12 }}>
-                          Complete on Survey tab first: {checklist.missing.join(' · ')}
+                      {!checklist.ready ? (
+                        <div className="brx-survey-feedback is-error" style={{ marginBottom: 12, fontSize: 13 }}>
+                          <strong>Still pending:</strong> {checklist.missing.join(' · ')}
                         </div>
-                      ) : null}
+                      ) : (
+                        <div className="brx-survey-feedback is-ok" style={{ marginBottom: 12, fontSize: 13 }}>
+                          All survey gates complete — you can verify and release to floor.
+                        </div>
+                      )}
 
-                      <div className="brx-approval-box brx-approval-box--row" style={{ marginBottom: 12 }}>
-                        <div>
+                      <div
+                        className="brx-approval-box brx-approval-box--row"
+                        style={{ marginBottom: 12, alignItems: 'center', flexWrap: 'wrap', gap: 10 }}
+                      >
+                        <div style={{ flex: 1, minWidth: 200 }}>
                           <div className="brx-approval-k">Verify status</div>
                           <div className="brx-approval-v">
                             {verified ? (
                               <span className="brx-survey-approval-status is-approved">Verified — floor release allowed</span>
                             ) : pending || verifyStatus === 'pending' ? (
-                              <span className="brx-survey-approval-status is-pending">Pending manager verify</span>
+                              <span className="brx-survey-approval-status is-pending">Ready for manager verify</span>
+                            ) : checklist.ready ? (
+                              <span className="brx-survey-approval-status is-pending">Ready for manager verify</span>
                             ) : (
-                              <span className="brx-survey-approval-status is-pending">Not ready yet</span>
+                              <span className="brx-survey-approval-status is-pending">Waiting on Survey tab</span>
                             )}
                           </div>
                           {selected.bodyshop_survey_manager_verified_at ? (
@@ -7937,7 +7935,7 @@ export default function BodyshopRepairPage() {
                         <span className="brx-survey-label">Manager remark (optional)</span>
                         <textarea
                           className="inp"
-                          rows={3}
+                          rows={2}
                           value={managerVerifyRemarkDraft}
                           onChange={(e) => setManagerVerifyRemarkDraft(e.target.value)}
                           placeholder="Internal note for this verification"
@@ -7951,7 +7949,7 @@ export default function BodyshopRepairPage() {
                         </p>
                       ) : null}
 
-                      <div className="brx-survey-actions" style={{ marginTop: 14 }}>
+                      <div className="brx-survey-actions" style={{ marginTop: 12 }}>
                         <button
                           type="button"
                           className="btn btn--primary"

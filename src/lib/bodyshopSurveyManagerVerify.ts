@@ -64,3 +64,35 @@ export function surveyManagerVerifyChecklist(
 
   return { ready: missing.length === 0, missing }
 }
+
+export function surveyManagerVerifyCheckItems(
+  card: Pick<
+    RepairCard,
+    | 'survey_date'
+    | 'survey_status'
+    | 'survey_hold_reason'
+    | 'customer_survey_approval_status'
+    | 'doc_survey_approval'
+    | 'current_stage'
+  >,
+  options?: { hasSurveyApprovalDoc?: boolean },
+): { id: string; label: string; ok: boolean }[] {
+  const hasUploadedDoc = Boolean(options?.hasSurveyApprovalDoc)
+  const hasDoc = hasUploadedDoc || isBodyshopSurveyApprovalEvidenceSatisfied(card, hasUploadedDoc)
+
+  const customer = String(card.customer_survey_approval_status ?? '').trim().toLowerCase()
+  const surveyDate = String(card.survey_date ?? '').trim()
+  const surveyStatus = String(card.survey_status ?? '').trim().toLowerCase()
+  const holdOk = surveyStatus !== 'hold' || Boolean(String(card.survey_hold_reason ?? '').trim())
+
+  return [
+    { id: 'doc', label: 'Survey approval document uploaded', ok: hasDoc },
+    { id: 'customer', label: 'Customer approved in mobile app', ok: customer === 'approved' },
+    { id: 'date', label: 'Survey date saved', ok: Boolean(surveyDate) },
+    {
+      id: 'status',
+      label: surveyStatus === 'hold' ? 'Survey on Hold + remark' : 'Survey status Hold or Approved',
+      ok: (surveyStatus === 'hold' || surveyStatus === 'approved') && holdOk,
+    },
+  ]
+}
