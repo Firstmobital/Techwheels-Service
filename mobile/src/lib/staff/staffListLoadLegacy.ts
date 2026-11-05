@@ -1,5 +1,4 @@
 import { supabase } from '../supabase'
-import { isLiveOnFloorRepairCard } from '../bodyshopFloorLive'
 import { normalizeBodyshopPhysicalFloor } from '../bodyshopFloorInchargeScope'
 import { fetchBodyshopRepairCardsPage, type BodyshopRepairCardListRow } from '../api/bodyshopFloorList'
 import type { IdCreatedAtCursor } from '../pagination/listPage'
@@ -55,7 +54,7 @@ export async function fetchBodyshopRepairCardsLegacyFull(options: {
     const page = await fetchBodyshopRepairCardsPage({
       cursor,
       pageSize: 100,
-      searchQuery: null,
+      searchQuery: search || null,
       bodyshopFloor: floorFilter,
       liveOnFloor,
     })
@@ -74,7 +73,7 @@ export async function fetchBodyshopRepairCardsLegacyFull(options: {
 
   return all.filter((row) => {
     if (!String(row.job_card_no ?? '').trim()) return false
-    if (liveOnFloor && !isLiveOnFloorRepairCard(row)) return false
+    // Live filter is applied server-side (bodyshop_repair_card_is_live_on_floor).
     if (!matchesBodyshopFloorFilter(row.bodyshop_floor, floorFilter)) return false
     if (!matchesSearch(row, search)) return false
     return true

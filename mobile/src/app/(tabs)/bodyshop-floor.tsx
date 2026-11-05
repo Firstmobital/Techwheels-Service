@@ -753,7 +753,7 @@ function BodyshopFloorScreenInner() {
 
   // ── Load ─────────────────────────────────────────────────────────────────
 
-  const loadAll = useCallback(async (isRefresh = false) => {
+  const loadAll = useCallback(async (isRefresh = false, searchOverride?: string | null) => {
     const seq = ++loadSeq.current
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
@@ -777,7 +777,7 @@ function BodyshopFloorScreenInner() {
         ? BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_LIVE
         : BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL
       const mergedRows = await fetchBodyshopRepairCardsLegacyFull({
-        searchQuery: null,
+        searchQuery: searchOverride ?? appliedSearch,
         bodyshopFloor: rpcFloor,
         liveOnFloor,
         maxPages,
@@ -828,7 +828,7 @@ function BodyshopFloorScreenInner() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [vehicleListMode])
+  }, [vehicleListMode, appliedSearch])
 
   useEffect(() => {
     void loadAll()
@@ -908,11 +908,28 @@ function BodyshopFloorScreenInner() {
     return 'unassigned'
   }
 
+  const openAssignmentJcs = useMemo(() => {
+    const out = new Set<string>()
+    for (const [jc, roleMap] of Object.entries(assignments)) {
+      if (BODYSHOP_FLOOR_PIPELINE_ROLES.some((r) => Boolean(roleMap?.[r]))) out.add(jc)
+      if (bsFloorStatus[jc]?.completedAt) out.delete(jc)
+    }
+    return out
+  }, [assignments, bsFloorStatus])
+
   const scopeCars = useMemo(() => (
     vehicleListMode === 'live_on_floor'
-      ? cars.filter(c => isLiveOnFloorRepairCard(c))
+      ? cars.filter((c) => {
+          const k = jcKey(c.job_card_no)
+          return isLiveOnFloorRepairCard({
+            current_stage: c.current_stage,
+            overall_status: c.overall_status,
+            bodyshop_floor: c.bodyshop_floor,
+            hasOpenFloorAssignment: openAssignmentJcs.has(k),
+          })
+        })
       : cars
-  ), [cars, vehicleListMode])
+  ), [cars, vehicleListMode, openAssignmentJcs])
 
   const baseScopedCars = useMemo(() => {
     let list = [...scopeCars]
@@ -938,8 +955,10 @@ function BodyshopFloorScreenInner() {
   }, [scopeCars, branchFilter, appliedSearch, inchargeScope, assignments])
 
   const applyListSearch = useCallback(() => {
-    setAppliedSearch(searchDraft.trim())
-  }, [searchDraft])
+    const q = searchDraft.trim()
+    setAppliedSearch(q)
+    void loadAll(false, q)
+  }, [searchDraft, loadAll])
 
   const clearListSearch = useCallback(() => {
     setSearchDraft('')

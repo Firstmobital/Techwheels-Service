@@ -21,7 +21,11 @@ import { MechanicalJourneyContent } from '../../components/customer/MechanicalJo
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { Icon } from '../../components/ui/Icon'
 import { getBodyshopStageDetailRows, getBodyshopStageTimelineDate } from '../../lib/customer/bodyshopStageDetails'
-import { resolveBodyshopEffectiveStage, resolveBodyshopStageLabel } from '../../lib/customer/bodyshopEffectiveStage'
+import {
+  countBodyshopCompletedStages,
+  resolveBodyshopEffectiveStage,
+  resolveBodyshopStageLabel,
+} from '../../lib/customer/bodyshopEffectiveStage'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
@@ -252,10 +256,10 @@ export default function CustomerTrackerScreen() {
     `Stage ${currentBodyshopStage}`
 
   // 18 Bodyshop Stages State
-  const completedBodyshopCount = BODYSHOP_18_STAGES.filter((s) => {
-    if (invoiced || card?.overall_status === 'delivered') return true
-    return s.stage < currentBodyshopStage
-  }).length
+  const completedBodyshopCount =
+    invoiced || card?.overall_status === 'delivered'
+      ? 18
+      : countBodyshopCompletedStages(card, currentBodyshopStage)
 
   const bodyshopProgressPercent = Math.round((completedBodyshopCount / 18) * 100)
 

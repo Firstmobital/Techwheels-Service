@@ -267,7 +267,7 @@ check('missing painter assign blocks pipeline complete (incharge must assign)', 
   assert.equal(arePipelineWorkStepsFinished(row), false)
 })
 
-check('floor flow — unassigned roles locked in step tracker', () => {
+check('floor flow — unassigned parallel roles active for assign-anytime UI', () => {
   const steps = computeBodyshopFloorFlowSteps({
     assignRow: undefined,
     roleAt: (role) =>
@@ -278,8 +278,8 @@ check('floor flow — unassigned roles locked in step tracker', () => {
     riStatus: 'pending',
   })
   assert.equal(steps.find((s) => s.id === 'FLOOR_INCHARGE')?.state, 'active')
-  assert.equal(steps.find((s) => s.id === 'DENTOR')?.state, 'locked')
-  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'locked')
+  assert.equal(steps.find((s) => s.id === 'DENTOR')?.state, 'active')
+  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'active')
 })
 
 check('floor flow — completed role shows done (blue) in step tracker', () => {
@@ -293,7 +293,7 @@ check('floor flow — completed role shows done (blue) in step tracker', () => {
     riStatus: 'pending',
   })
   assert.equal(steps.find((s) => s.id === 'DENTOR')?.state, 'done')
-  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'locked')
+  assert.equal(steps.find((s) => s.id === 'PAINTER')?.state, 'active')
 })
 
 check('parallel floor steps — dentor and painter both active for assignment UI', () => {

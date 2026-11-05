@@ -40,6 +40,7 @@ import {
   isStage18PaymentDone,
   settlementStatusLabel,
 } from '../lib/api/bodyshopSettlement'
+import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(v: string | null | undefined) {
@@ -1116,6 +1117,7 @@ export default function BodyshopRepairPage() {
     pipelineFilter: 'all',
   })
   const autoAdvanceDocsLockRef = useRef(false)
+  const autoAdvanceSurveyCustomerLockRef = useRef(false)
   const autoAdvanceStage11LockRef = useRef<Record<number, boolean>>({})
   const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
     FLOOR_INCHARGE: null,
@@ -1574,6 +1576,51 @@ export default function BodyshopRepairPage() {
         autoAdvanceDocsLockRef.current = false
       })
   }, [bodyshopDocsByKey, selected])
+
+  useEffect(() => {
+    if (!selected?.id || autoAdvanceSurveyCustomerLockRef.current) return
+    if (Number(selected.current_stage ?? 0) > 9) return
+
+    const customerSurvey = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+    if (customerSurvey !== 'approved') return
+
+    const floorAssigned = ['floor 2', 'floor 3'].includes(String(selected.bodyshop_floor ?? '').trim().toLowerCase())
+    if (!floorAssigned) return
+
+    const surveyDate = String(selected.survey_date ?? '').trim()
+    if (!surveyDate) return
+
+    const surveyStatus = String(selected.survey_status ?? '').trim().toLowerCase()
+    if (surveyStatus !== 'hold' && surveyStatus !== 'approved') return
+
+    const holdReason = String(selected.survey_hold_reason ?? '').trim()
+    if (surveyStatus === 'hold' && !holdReason) return
+
+    autoAdvanceSurveyCustomerLockRef.current = true
+
+    void updateRepairCard(selected.id, {
+      current_stage: 10,
+      current_stage_name: STAGE_LABELS[10] ?? 'Parts Status',
+    })
+      .then((updated) => {
+        setSelected(updated)
+        setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      })
+      .catch(() => {
+        // DB trigger/RPC may already have advanced the pointer after customer approval.
+      })
+      .finally(() => {
+        autoAdvanceSurveyCustomerLockRef.current = false
+      })
+  }, [
+    selected?.id,
+    selected?.current_stage,
+    selected?.customer_survey_approval_status,
+    selected?.bodyshop_floor,
+    selected?.survey_date,
+    selected?.survey_status,
+    selected?.survey_hold_reason,
+  ])
 
   useEffect(() => {
     if (!selected) {
@@ -4531,8 +4578,7 @@ export default function BodyshopRepairPage() {
     
     // Stage 10: Initial Approved Parts must be submitted when survey is approved + approval photo uploaded
     const surveyApproved = surveyStatus === 'approved'
-    const surveyApprovalDoc = Boolean(card.doc_survey_approval ?? null)
-      // Some list payloads don't hydrate doc_survey_approval; reaching stage 10 implies survey approval evidence exists.
+    const surveyApprovalDoc = isBodyshopSurveyApprovalEvidenceSatisfied(card)
       || effectiveCurrentStage >= 10
     const approvedPartsState = parseApprovedPartsState(card.approved_parts)
     const approvedPartsFinalized = approvedPartsState.finalized
@@ -5533,9 +5579,10 @@ export default function BodyshopRepairPage() {
                   const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
                   const floorAssigned = ['floor 2', 'floor 3'].includes(String(selected.bodyshop_floor ?? '').trim().toLowerCase())
                   const surveyApproved = surveyStatusNormalized === 'approved'
-                  const surveyApprovalDoc = Boolean(selected.doc_survey_approval ?? null)
-                    || Boolean(bodyshopDocsByKey.doc_survey_approval?.id)
-                    || effectiveCurrentStage >= 10
+                  const surveyApprovalDoc = isBodyshopSurveyApprovalEvidenceSatisfied(
+                    selected,
+                    Boolean(bodyshopDocsByKey.doc_survey_approval?.id),
+                  ) || effectiveCurrentStage >= 10
                   const approvedPartsFinalized = parseApprovedPartsState(selected.approved_parts).finalized
                   const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
                   const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
@@ -5806,9 +5853,10 @@ export default function BodyshopRepairPage() {
                       const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
                       const floorAssigned = ['floor 2', 'floor 3'].includes(String(selected.bodyshop_floor ?? '').trim().toLowerCase())
                       const surveyApproved = surveyStatusNormalized === 'approved'
-                      const surveyApprovalDoc = Boolean(selected.doc_survey_approval ?? null)
-                        || Boolean(bodyshopDocsByKey.doc_survey_approval?.id)
-                        || effectiveCurrentStage >= 10
+                      const surveyApprovalDoc = isBodyshopSurveyApprovalEvidenceSatisfied(
+                        selected,
+                        Boolean(bodyshopDocsByKey.doc_survey_approval?.id),
+                      ) || effectiveCurrentStage >= 10
                       const approvedPartsFinalized = parseApprovedPartsState(selected.approved_parts).finalized
                       const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
                       const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
