@@ -27,6 +27,7 @@ export const KNOWN_BUSINESS_ROLES = new Set([
   'ELECTRICIAN',
   'ALIGNMENT',
   'DET',
+  'BODYSHOP_MANAGER',
 ])
 
 const ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -61,6 +62,10 @@ const ALIAS_TO_CANONICAL: Record<string, string> = {
   ELECTRICIAN: 'ELECTRICIAN',
   ALIGNMENT: 'ALIGNMENT',
   DET: 'DET',
+  BODYSHOP_MANAGER: 'BODYSHOP_MANAGER',
+  'BODY SHOP MANAGER': 'BODYSHOP_MANAGER',
+  BODY_SHOP_MANAGER: 'BODYSHOP_MANAGER',
+  'BODYSHOP MANAGER': 'BODYSHOP_MANAGER',
 }
 
 function normalizeLookupKey(token: string): string {
@@ -192,6 +197,10 @@ export function isBodyshopSurveyRole(value: string | null | undefined): boolean 
 
 export function isBodyshopFloorInchargeRole(value: string | null | undefined): boolean {
   return hasBusinessRole(value, 'FLOOR_INCHARGE')
+}
+
+export function isBodyshopManagerRole(value: string | null | undefined): boolean {
+  return hasBusinessRole(value, 'BODYSHOP_MANAGER')
 }
 
 export function isServiceAdvisorRole(value: string | null | undefined): boolean {

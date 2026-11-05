@@ -177,7 +177,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-recovery': ['bodyshop_recovery'],
   '/ew-reminder': ['ew_reminder'],
   '/service-booking': ['service_booking'],
-  '/driver-management': ['service_booking', 'driver_management', 'admin', 'reception'],
+  '/driver-management': ['driver_management', 'admin'],
   '/wa-agent': ['wa_agent'],
   '/telecalling': ['telecalling'],
   '/insurance-renewal-telecalling': ['insurance_renewal_telecalling'],
@@ -1372,10 +1372,6 @@ function AppInner() {
             nextModules.add(moduleRow.name)
           }
         })
-      }
-
-      if (nextModules.has('admin') || nextModules.has('service_booking')) {
-        nextModules.add('driver_management')
       }
 
       if (mounted) {

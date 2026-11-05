@@ -12,6 +12,7 @@ import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
 import {
   isBodyshopFloorInchargeRole,
+  isBodyshopManagerRole,
   isBodyshopSaRole,
   isBodyshopSsaRole,
   isBodyshopSurveyRole,
@@ -41,6 +42,11 @@ import {
   settlementStatusLabel,
 } from '../lib/api/bodyshopSettlement'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
+import {
+  isBodyshopSurveyManagerVerified,
+  isBodyshopSurveyManagerVerifyPending,
+  surveyManagerVerifyChecklist,
+} from '../lib/bodyshopSurveyManagerVerify'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(v: string | null | undefined) {
@@ -203,6 +209,9 @@ function rtoInsuranceRowFromSource(
 }
 
 const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
+
+/** Set true to allow Employee Master role BODYSHOP_MANAGER on the Verify tab (in addition to Admin). */
+const BODYSHOP_SURVEY_VERIFY_ALLOW_MANAGER_ROLE = false
 
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading
@@ -540,7 +549,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
   return 'Unknown advisor'
 }
 
-type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
+type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'verify' | 'floor' | 'qc' | 'billing'
 type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining'
 
 type BrowseFilterSnapshot = {
@@ -971,6 +980,32 @@ function rejectedDocKeys(card: { doc_rejected_keys?: string[] | null } | null | 
   return Array.isArray(card?.doc_rejected_keys) ? card.doc_rejected_keys : []
 }
 
+const VERIFY_PIPELINE_DOCS: { k: BodyshopDocKey; label: string }[] = [
+  { k: 'doc_job_card', label: 'Job Card scan' },
+  { k: 'doc_estimate', label: 'Estimate document' },
+  { k: 'doc_survey_approval', label: 'Survey approval (customer sign-off)' },
+]
+
+function bodyshopDocOverviewStatus(
+  card: RepairCard,
+  docKey: BodyshopDocKey,
+  attached: BodyshopRepairCardDocumentRow | undefined,
+): { label: string; tone: 'ok' | 'warn' | 'err' | 'muted' } {
+  const isFileOnly = docKey === 'doc_estimate'
+    || docKey === 'doc_survey_approval'
+    || docKey === 'doc_job_card'
+    || docKey === 'job_card'
+  if (isFileOnly) {
+    return attached
+      ? { label: 'Uploaded', tone: 'ok' }
+      : { label: 'Not uploaded', tone: 'err' }
+  }
+  if (advisorVerifiedDoc(card, docKey)) return { label: 'Approved by advisor', tone: 'ok' }
+  if (attached && rejectedDocKeys(card).includes(docKey)) return { label: 'Rejected', tone: 'err' }
+  if (attached) return { label: 'Uploaded · pending advisor verify', tone: 'warn' }
+  return { label: 'Missing', tone: 'err' }
+}
+
 type DriveUploadResponse = {
   error?: string
   ok?: boolean
@@ -1100,6 +1135,9 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopSurveyAccess, setHasBodyshopSurveyAccess] = useState(false)
   const [hasBodyshopRepairModuleAccess, setHasBodyshopRepairModuleAccess] = useState(false)
   const [hasBodyshopFloorAccess, setHasBodyshopFloorAccess] = useState(false)
+  const [hasBodyshopManagerAccess, setHasBodyshopManagerAccess] = useState(false)
+  const [hasBodyshopSurveyVerifyModuleAccess, setHasBodyshopSurveyVerifyModuleAccess] = useState(false)
+  const [managerVerifyRemarkDraft, setManagerVerifyRemarkDraft] = useState('')
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
   const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
   const [bodyshopSurveyBranchesForUser, setBodyshopSurveyBranchesForUser] = useState<string[]>([])
@@ -1282,6 +1320,8 @@ export default function BodyshopRepairPage() {
           setHasBodyshopSurveyAccess(false)
           setHasBodyshopRepairModuleAccess(false)
           setHasBodyshopFloorAccess(false)
+          setHasBodyshopManagerAccess(false)
+          setHasBodyshopSurveyVerifyModuleAccess(false)
           setBodyshopSaCodesForUser([])
           setBodyshopSsaBranchesForUser([])
           setBodyshopSurveyBranchesForUser([])
@@ -1290,7 +1330,7 @@ export default function BodyshopRepairPage() {
           return
         }
 
-        const [profileRes, scopeRes, repairViewRes, repairModifyRes] = await Promise.all([
+        const [profileRes, scopeRes, repairViewRes, repairModifyRes, surveyVerifyModifyRes] = await Promise.all([
           supabase
             .from('users')
             .select('role, is_active, full_name')
@@ -1299,6 +1339,7 @@ export default function BodyshopRepairPage() {
           supabase.rpc('get_my_bodyshop_employee_scope'),
           supabase.rpc('has_module_view', { p_module: 'bodyshop_repair' }),
           supabase.rpc('has_module_modify', { p_module: 'bodyshop_repair' }),
+          supabase.rpc('has_module_modify', { p_module: 'bodyshop_survey_verify' }),
         ])
 
         const profile = profileRes.data
@@ -1325,6 +1366,7 @@ export default function BodyshopRepairPage() {
         const hasSsaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSsaRole(row.role))
         const hasSurveyRoleFromMaster = bodyshopRows.some((row) => isBodyshopSurveyRole(row.role))
         const hasFloorRoleFromMaster = bodyshopRows.some((row) => isBodyshopFloorInchargeRole(row.role))
+        const hasManagerRoleFromMaster = bodyshopRows.some((row) => isBodyshopManagerRole(row.role))
 
         // For SSA, extract assigned branches from location field
         const ssaBranches = Array.from(
@@ -1350,6 +1392,7 @@ export default function BodyshopRepairPage() {
         const hasFloorRole = hasFloorRoleFromMaster
         const hasRepairModuleAccess =
           repairViewRes.data === true || repairModifyRes.data === true
+        const hasSurveyVerifyModuleAccess = surveyVerifyModifyRes.data === true
 
         if (cancelled) return
         setIsAdminLikeUser(nextIsAdminLike)
@@ -1358,6 +1401,8 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSurveyAccess(hasSurveyRole)
         setHasBodyshopRepairModuleAccess(hasRepairModuleAccess)
         setHasBodyshopFloorAccess(hasFloorRole)
+        setHasBodyshopManagerAccess(hasManagerRoleFromMaster)
+        setHasBodyshopSurveyVerifyModuleAccess(hasSurveyVerifyModuleAccess)
         setBodyshopSaCodesForUser(saCodes)
         setBodyshopSsaBranchesForUser(ssaBranches)
         setBodyshopSurveyBranchesForUser(surveyBranches)
@@ -1371,6 +1416,8 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSurveyAccess(false)
         setHasBodyshopRepairModuleAccess(false)
         setHasBodyshopFloorAccess(false)
+        setHasBodyshopManagerAccess(false)
+        setHasBodyshopSurveyVerifyModuleAccess(false)
         setBodyshopSaCodesForUser([])
         setBodyshopSsaBranchesForUser([])
         setBodyshopSurveyBranchesForUser([])
@@ -1383,6 +1430,10 @@ export default function BodyshopRepairPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    setManagerVerifyRemarkDraft(String(selected?.bodyshop_survey_manager_verify_remark ?? ''))
+  }, [selected?.id, selected?.bodyshop_survey_manager_verify_remark])
 
   useEffect(() => {
     if (!userScopeResolved) return
@@ -1489,7 +1540,7 @@ export default function BodyshopRepairPage() {
   }, [selected?.id, selected?.reception_entry_id, selected?.reg_number])
 
   useEffect(() => {
-    if (detailTab !== 'survey' || !selected?.id) return
+    if ((detailTab !== 'survey' && detailTab !== 'verify') || !selected?.id) return
 
     const cardId = selected.id
     let cancelled = false
@@ -2528,6 +2579,10 @@ export default function BodyshopRepairPage() {
         customer_survey_rejection_reason: null,
         customer_survey_decided_at: null,
         doc_survey_approval: false,
+        bodyshop_survey_manager_verify_status: null,
+        bodyshop_survey_manager_verified_by: null,
+        bodyshop_survey_manager_verified_at: null,
+        bodyshop_survey_manager_verify_remark: null,
       })
       setSelected(updated)
       setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
@@ -2583,6 +2638,11 @@ export default function BodyshopRepairPage() {
       return
     }
 
+    if (!isBodyshopSurveyManagerVerified(selected)) {
+      toast_('Bodyshop manager must verify survey on the Verify tab before sending to floor', false)
+      return
+    }
+
     setSaving(true)
     try {
       const authRes = await supabase.auth.getUser()
@@ -2631,6 +2691,49 @@ export default function BodyshopRepairPage() {
         : `Sent to ${floorValue} ✅`)
     } catch (e) {
       toast_(e.message ?? 'Unable to send to floor', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleBodyshopSurveyManagerVerify() {
+    if (!selected) return
+    if (!canBodyshopSurveyVerify) {
+      toast_('You do not have Survey Verify permission. Ask Admin to grant module Bodyshop Survey Verify.', false)
+      return
+    }
+
+    const checklist = surveyManagerVerifyChecklist(selected, {
+      hasSurveyApprovalDoc: Boolean(bodyshopDocsByKey.doc_survey_approval),
+    })
+    if (!checklist.ready) {
+      toast_(checklist.missing[0] ?? 'Complete survey requirements first', false)
+      return
+    }
+
+    if (isBodyshopSurveyManagerVerified(selected)) {
+      toast_('Survey already verified for floor release')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || null
+      const now = new Date().toISOString()
+      const remark = String(managerVerifyRemarkDraft ?? '').trim() || null
+
+      const updated = await updateRepairCard(selected.id, {
+        bodyshop_survey_manager_verify_status: 'verified',
+        bodyshop_survey_manager_verified_by: actor,
+        bodyshop_survey_manager_verified_at: now,
+        bodyshop_survey_manager_verify_remark: remark,
+      })
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      toast_('Survey verified. Floor 2 / Floor 3 can now be assigned ✅')
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Verify failed', false)
     } finally {
       setSaving(false)
     }
@@ -4570,9 +4673,11 @@ export default function BodyshopRepairPage() {
     const surveyStatus = String(card.survey_status ?? '').trim().toLowerCase()
     const surveyHoldReason = String(card.survey_hold_reason ?? '').trim()
     const floorAssigned = ['floor 2', 'floor 3'].includes(String(card.bodyshop_floor ?? '').trim().toLowerCase())
+    const managerVerified = isBodyshopSurveyManagerVerified(card)
     const stage9Done = (Boolean(surveyDate)
       && (surveyStatus === 'hold' || surveyStatus === 'approved')
       && (surveyStatus !== 'hold' || Boolean(surveyHoldReason))
+      && managerVerified
       && floorAssigned)
       || effectiveCurrentStage > 9
     
@@ -5162,6 +5267,10 @@ export default function BodyshopRepairPage() {
 
   const pipelineSelected = pipelineFilter !== 'all'
 
+  const canBodyshopSurveyVerify = isAdminLikeUser
+    || hasBodyshopSurveyVerifyModuleAccess
+    || (BODYSHOP_SURVEY_VERIFY_ALLOW_MANAGER_ROLE && hasBodyshopManagerAccess)
+
   const tabs = useMemo<DetailTab[]>(() => {
     const isSurveyOnlyRole = !isAdminLikeUser
       && hasBodyshopSurveyAccess
@@ -5184,6 +5293,9 @@ export default function BodyshopRepairPage() {
     if (isAdminLikeUser || hasBodyshopSurveyAccess || hasBodyshopRepairModuleAccess) {
       nextTabs.push('survey')
     }
+    if (canBodyshopSurveyVerify) {
+      nextTabs.push('verify')
+    }
     if (isAdminLikeUser || hasBodyshopFloorAccess) {
       nextTabs.push('floor')
     }
@@ -5195,7 +5307,7 @@ export default function BodyshopRepairPage() {
     }
 
     return nextTabs
-  }, [isAdminLikeUser, hasBodyshopSaAccess, hasBodyshopSsaAccess, hasBodyshopSurveyAccess, hasBodyshopRepairModuleAccess, hasBodyshopFloorAccess])
+  }, [isAdminLikeUser, canBodyshopSurveyVerify, hasBodyshopSaAccess, hasBodyshopSsaAccess, hasBodyshopSurveyAccess, hasBodyshopRepairModuleAccess, hasBodyshopFloorAccess])
 
   useEffect(() => {
     if (!tabs.includes(detailTab)) {
@@ -5592,9 +5704,12 @@ export default function BodyshopRepairPage() {
                   const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
                   const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
                   const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
+                  const managerVerified = isBodyshopSurveyManagerVerified(selected)
+                  const managerVerifyPending = isBodyshopSurveyManagerVerifyPending(selected)
                   const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
                     && (surveyStatusNormalized === 'hold' || surveyStatusNormalized === 'approved')
                     && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason))
+                    && managerVerified
                     && floorAssigned)
                     || effectiveCurrentStage > 9
                   const stage12Done = (
@@ -5695,6 +5810,37 @@ export default function BodyshopRepairPage() {
                     </div>
                   ]
 
+                  if (num === 9) {
+                    const verifyDone = managerVerified
+                    const verifyPending = managerVerifyPending
+                    const verifyBorder = verifyDone ? '#86efac' : verifyPending ? '#fcd34d' : '#cbd5e1'
+                    const verifyBg = verifyDone ? '#f0fdf4' : verifyPending ? '#fffbeb' : '#f8fafc'
+                    const verifyFg = verifyDone ? '#166534' : verifyPending ? '#92400e' : '#475569'
+
+                    rows.push(
+                      <button
+                        key="stage-9-sub-manager-verify"
+                        type="button"
+                        onClick={() => {
+                          if (canBodyshopSurveyVerify) setDetailTab('verify')
+                        }}
+                        className="brx-substp"
+                        style={{
+                          '--ss-border': verifyBorder,
+                          '--ss-bg': verifyBg,
+                          '--ss-tone': verifyFg,
+                          '--ss-dot': verifyFg,
+                        } as React.CSSProperties}
+                      >
+                        <span className="brx-substp-dot" />
+                        <span className="brx-substp-lab">Manager Verify</span>
+                        <span className="brx-substp-stat">
+                          {verifyDone ? 'Verified' : verifyPending ? 'Pending' : 'Waiting'}
+                        </span>
+                      </button>,
+                    )
+                  }
+
                   if (num === 11) {
                     if (loadingFloorPrimary) {
                       rows.push(
@@ -5777,7 +5923,7 @@ export default function BodyshopRepairPage() {
               <div className="brx-tabbar">
                 {tabs.map((t) => (
                   <button key={t} onClick={() => setDetailTab(t)} className={`brx-tab ${detailTab === t ? 'is-active' : ''}`}>
-                    {t === 'sa' ? 'SA' : t === 'qc' ? 'QC/RI' : t.charAt(0).toUpperCase() + t.slice(1)}
+                    {t === 'sa' ? 'SA' : t === 'qc' ? 'QC/RI' : t === 'verify' ? 'Verify' : t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
@@ -6992,7 +7138,9 @@ export default function BodyshopRepairPage() {
                                 ) : null}
                                 {customerSurveyStatus === 'approved' ? (
                                   <p className="brx-survey-approval-sub" style={{ margin: '8px 0 0', color: '#047857' }}>
-                                    You can send this vehicle to Floor 2 or Floor 3 from the Floor tab.
+                                    {isBodyshopSurveyManagerVerified(selected)
+                                      ? 'Manager verified — assign Floor 2 or Floor 3 on the Floor tab.'
+                                      : 'Admin / bodyshop manager must verify on the Verify tab before floor assignment.'}
                                   </p>
                                 ) : null}
                                 {customerSurveyStatus === 'rejected' ? (
@@ -7299,6 +7447,282 @@ export default function BodyshopRepairPage() {
                 )
               })()}
 
+              {/* ── Manager Verify (Survey → Floor gate) ── */}
+              {detailTab === 'verify' && selected && (() => {
+                const checklist = surveyManagerVerifyChecklist(selected, {
+                  hasSurveyApprovalDoc: Boolean(bodyshopDocsByKey.doc_survey_approval),
+                })
+                const verified = isBodyshopSurveyManagerVerified(selected)
+                const verifyStatus = String(selected.bodyshop_survey_manager_verify_status ?? '').trim().toLowerCase()
+                const pending = isBodyshopSurveyManagerVerifyPending(selected)
+                const ct = String(selected.customer_type ?? '').trim().toLowerCase()
+                const noDocsRequired = ct === 'cash' || ct === 'foc'
+                const customerTypeLabel = CT_LABELS[ct] ?? (ct || '—')
+                const customerSurveyRaw = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
+                const customerSurveyLabel =
+                  customerSurveyRaw === 'approved'
+                    ? 'Approved in customer app'
+                    : customerSurveyRaw === 'rejected'
+                      ? 'Rejected in customer app'
+                      : customerSurveyRaw === 'pending'
+                        ? 'Pending in customer app'
+                        : 'Not sent / no status'
+                const surveyStatusLabel = String(selected.survey_status ?? '').trim() || '—'
+                const docRowsForVerify = (() => {
+                  const rows: { key: BodyshopDocKey; label: string; tag?: string }[] = []
+                  if (!noDocsRequired && isValidCustomerType(ct)) {
+                    for (const doc of BODYSHOP_DOCS) {
+                      const mandatory = doc.mandatoryFor.includes(ct as CustomerType)
+                      const attached = bodyshopDocsByKey[doc.k]
+                      if (mandatory || attached || doc.optionalHint) {
+                        rows.push({
+                          key: doc.k,
+                          label: doc.label,
+                          tag: mandatory ? 'Mandatory' : doc.optionalHint ? 'Optional' : 'Extra',
+                        })
+                      }
+                    }
+                  }
+                  for (const extra of VERIFY_PIPELINE_DOCS) {
+                    rows.push({ key: extra.k, label: extra.label, tag: 'Pipeline' })
+                  }
+                  return rows
+                })()
+
+                return (
+                  <div className="brx-survey-wrap">
+                    <div className="brx-panel" style={{ marginBottom: 14 }}>
+                      <div className="brx-panel-h">Verify overview</div>
+                      <p className="brx-survey-approval-sub" style={{ margin: '0 0 12px' }}>
+                        Review customer / advisor uploads and survey pipeline details before releasing this vehicle to the floor.
+                      </p>
+                      <div className="brx-overview-kv" style={{ marginBottom: 0 }}>
+                        {[
+                          ['Job card', selected.job_card_no || '—'],
+                          ['Reg / customer', `${selected.reg_number ?? '—'} · ${selected.customer_name ?? '—'}`],
+                          ['Customer type', customerTypeLabel],
+                          ['Branch / SA', `${selected.branch ?? '—'} · ${selected.sa_name ?? '—'}`],
+                          ['Insurance', `${selected.insurance_company ?? '—'} · ${selected.insurance_policy_no ?? '—'}`],
+                          ['Estimate', inr(selected.estimated_amount)],
+                          ['Estimation approved by', selected.estimation_approved_by ?? '—'],
+                          ['Claim intimation', selected.claim_intimation_no ?? '—'],
+                          ['Survey', `${selected.survey_date ?? '—'} · ${surveyStatusLabel}${selected.survey_hold_reason ? ` (${selected.survey_hold_reason})` : ''}`],
+                          ['Surveyor', `${selected.surveyor_name ?? '—'} · ${selected.surveyor_contact ?? '—'}`],
+                          ['Customer survey doc', customerSurveyLabel],
+                          ['Approved parts', selectedApprovedParts.finalized
+                            ? `${selectedApprovedParts.parts.length} part(s) finalized`
+                            : selectedApprovedParts.parts.length > 0
+                              ? `${selectedApprovedParts.parts.length} part(s) draft`
+                              : 'None recorded'],
+                        ].map(([k, v]) => (
+                          <div key={k} className="brx-overview-kv-item">
+                            <div className="brx-overview-k">{k}</div>
+                            <div className="brx-overview-v">{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {customerSurveyRaw === 'rejected' && String(selected.customer_survey_rejection_reason ?? '').trim() ? (
+                        <div className="brx-survey-feedback is-error" style={{ marginTop: 10 }}>
+                          <strong>Customer remark:</strong> {selected.customer_survey_rejection_reason}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="brx-panel" style={{ marginBottom: 14 }}>
+                      <div className="brx-panel-h">Documents (customer app vs workshop)</div>
+                      {bodyshopDocsLoadError ? (
+                        <div className="brx-survey-feedback is-error" style={{ marginBottom: 10 }}>
+                          Cannot load document list: {bodyshopDocsLoadError}
+                        </div>
+                      ) : null}
+                      {noDocsRequired ? (
+                        <p className="brx-survey-approval-sub" style={{ margin: 0 }}>
+                          {ct === 'cash' ? 'Cash' : 'FOC'} customer — KYC documents not required. Pipeline files (estimate, survey approval) still listed below.
+                        </p>
+                      ) : null}
+                      <div className="tbl-wrap scroll" style={{ marginTop: 10 }}>
+                        <table className="tbl">
+                          <thead>
+                            <tr>
+                              <th>Document</th>
+                              <th>Status</th>
+                              <th>Uploaded by</th>
+                              <th>When</th>
+                              <th />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {docRowsForVerify.map(({ key, label, tag }) => {
+                              const attached = bodyshopDocsByKey[key]
+                                ?? (key === 'doc_job_card' ? bodyshopDocsByKey.job_card : undefined)
+                                ?? (key === 'job_card' ? bodyshopDocsByKey.doc_job_card : undefined)
+                              const status = bodyshopDocOverviewStatus(selected, key, attached)
+                              const source = formatBodyshopDocumentUploadSource(attached)
+                              const toneColor = status.tone === 'ok'
+                                ? '#166534'
+                                : status.tone === 'warn'
+                                  ? '#92400e'
+                                  : status.tone === 'err'
+                                    ? '#b91c1c'
+                                    : '#64748b'
+                              return (
+                                <tr key={key}>
+                                  <td>
+                                    <div style={{ fontWeight: 600 }}>{label}</div>
+                                    {tag ? (
+                                      <div className="brx-survey-approval-sub" style={{ margin: 0, fontSize: 11 }}>{tag}</div>
+                                    ) : null}
+                                  </td>
+                                  <td style={{ color: toneColor, fontWeight: 600, fontSize: 12 }}>{status.label}</td>
+                                  <td style={{ fontSize: 12 }}>{source ?? (attached ? '—' : '—')}</td>
+                                  <td style={{ fontSize: 12 }}>{attached?.uploaded_at ? fmt(attached.uploaded_at) : '—'}</td>
+                                  <td>
+                                    {attached ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn--ghost btn--xs"
+                                        onClick={() => void handleViewBodyshopDoc(key)}
+                                      >
+                                        View
+                                      </button>
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="brx-survey-approval-sub" style={{ margin: '10px 0 0' }}>
+                        <strong>Customer app</strong> uploads show as “Customer app · phone”. <strong>Workshop</strong> uploads show advisor email or workshop upload.
+                      </p>
+                    </div>
+
+                    {selectedApprovedParts.parts.length > 0 ? (
+                      <div className="brx-panel" style={{ marginBottom: 14 }}>
+                        <div className="brx-panel-h">Initial approved parts</div>
+                        <div className="tbl-wrap scroll">
+                          <table className="tbl">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Part no.</th>
+                                <th>Description</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedApprovedParts.parts.map((part, idx) => (
+                                <tr key={`${part.part_no}-${idx}`}>
+                                  <td>{idx + 1}</td>
+                                  <td>{part.part_no || '—'}</td>
+                                  <td>{part.part_description || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {selectedApprovedParts.finalizedAt ? (
+                          <p className="brx-survey-approval-sub" style={{ marginTop: 8 }}>
+                            Finalized {fmt(selectedApprovedParts.finalizedAt)}
+                            {selectedApprovedParts.finalizedBy ? ` · ${selectedApprovedParts.finalizedBy}` : ''}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="brx-panel">
+                      <div className="brx-panel-h">Manager verify action</div>
+                      <ul style={{ margin: '0 0 14px', paddingLeft: 18, fontSize: 13 }}>
+                        {[
+                          {
+                            label: 'Survey approval document uploaded',
+                            ok: Boolean(bodyshopDocsByKey.doc_survey_approval),
+                          },
+                          {
+                            label: 'Customer approved in mobile app',
+                            ok: customerSurveyRaw === 'approved',
+                          },
+                          {
+                            label: 'Survey date and status saved',
+                            ok: Boolean(String(selected.survey_date ?? '').trim())
+                              && ['hold', 'approved'].includes(String(selected.survey_status ?? '').trim().toLowerCase()),
+                          },
+                        ].map(({ label, ok }) => (
+                          <li key={label} style={{ marginBottom: 4, color: ok ? '#166534' : '#64748b' }}>
+                            {ok ? '✓ ' : '○ '}{label}
+                          </li>
+                        ))}
+                      </ul>
+
+                      {!checklist.ready && checklist.missing.length > 0 ? (
+                        <div className="brx-survey-feedback is-error" style={{ marginBottom: 12 }}>
+                          Complete on Survey tab first: {checklist.missing.join(' · ')}
+                        </div>
+                      ) : null}
+
+                      <div className="brx-approval-box brx-approval-box--row" style={{ marginBottom: 12 }}>
+                        <div>
+                          <div className="brx-approval-k">Verify status</div>
+                          <div className="brx-approval-v">
+                            {verified ? (
+                              <span className="brx-survey-approval-status is-approved">Verified — floor release allowed</span>
+                            ) : pending || verifyStatus === 'pending' ? (
+                              <span className="brx-survey-approval-status is-pending">Pending manager verify</span>
+                            ) : (
+                              <span className="brx-survey-approval-status is-pending">Not ready yet</span>
+                            )}
+                          </div>
+                          {selected.bodyshop_survey_manager_verified_at ? (
+                            <div className="brx-survey-approval-sub" style={{ marginTop: 6 }}>
+                              {fmt(selected.bodyshop_survey_manager_verified_at)}
+                              {selected.bodyshop_survey_manager_verified_by
+                                ? ` · ${selected.bodyshop_survey_manager_verified_by}`
+                                : ''}
+                            </div>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--xs"
+                          onClick={() => void refreshSelectedSurveyCustomerStatus({ silent: false })}
+                        >
+                          Refresh customer status
+                        </button>
+                      </div>
+
+                      <label className="brx-survey-field brx-grid-full">
+                        <span className="brx-survey-label">Manager remark (optional)</span>
+                        <textarea
+                          className="inp"
+                          rows={3}
+                          value={managerVerifyRemarkDraft}
+                          onChange={(e) => setManagerVerifyRemarkDraft(e.target.value)}
+                          placeholder="Internal note for this verification"
+                          disabled={verified || saving}
+                        />
+                      </label>
+
+                      {selected.bodyshop_survey_manager_verify_remark && verified ? (
+                        <p className="brx-survey-approval-sub" style={{ marginTop: 8 }}>
+                          <strong>Remark:</strong> {selected.bodyshop_survey_manager_verify_remark}
+                        </p>
+                      ) : null}
+
+                      <div className="brx-survey-actions" style={{ marginTop: 14 }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          disabled={saving || verified || !checklist.ready}
+                          onClick={() => void handleBodyshopSurveyManagerVerify()}
+                        >
+                          {saving ? 'Saving…' : verified ? 'Verified' : 'Verify & release to floor'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
               {/* ── Floor ── */}
               {detailTab === 'floor' && (
                 <div className="brx-floor-wrap">
@@ -7306,6 +7730,7 @@ export default function BodyshopRepairPage() {
                     const surveyApprovalDoc = bodyshopDocsByKey.doc_survey_approval
                     const customerSurvey = String(selected.customer_survey_approval_status ?? '').trim().toLowerCase()
                     const customerOk = customerSurvey === 'approved'
+                    const managerOk = isBodyshopSurveyManagerVerified(selected)
                     const customerRemark = String(selected.customer_survey_rejection_reason ?? '').trim()
                     const currentFloor = String(selected.bodyshop_floor ?? '').trim()
                     const hasFloorSelection = currentFloor === 'Floor 2' || currentFloor === 'Floor 3'
@@ -7319,13 +7744,16 @@ export default function BodyshopRepairPage() {
                       ? 'Upload the survey approval document on the Survey tab and wait for the customer to approve it. This vehicle cannot go to the floor before that.'
                       : customerSurvey === 'rejected'
                         ? 'Customer rejected the survey document. The vehicle stays off the floor until they approve a revised upload.'
+                        : customerSurvey === 'approved' && !managerOk
+                          ? 'Bodyshop manager must verify on the Verify tab before this vehicle can go to the floor.'
                         : customerSurvey === 'approved'
                           ? ''
                           : 'Waiting for customer approval in the app. Floor 2 and Floor 3 stay locked until the customer approves.'
+                    const floorActionsUnlocked = customerOk && managerOk
                     return (
                       <div className="brx-survey-approval brx-grid-full" style={{ marginBottom: 14 }}>
                         <div className="brx-survey-approval-title">Physical floor</div>
-                        {!customerOk ? (
+                        {!floorActionsUnlocked ? (
                           <div className="brx-survey-feedback is-error" style={{ marginTop: 8 }}>
                             {lockMessage}
                             {customerSurvey === 'rejected' && customerRemark ? (
@@ -7337,7 +7765,7 @@ export default function BodyshopRepairPage() {
                             <button
                               type="button"
                               className={`btn brx-floor-send-btn ${currentFloor === 'Floor 2' ? 'is-selected' : ''}`}
-                              disabled={saving || floorChangeLocked}
+                              disabled={saving || floorChangeLocked || !managerOk}
                               onClick={() => void handleSendToBodyshopFloor('Floor 2')}
                             >
                               {currentFloor === 'Floor 2' ? 'Selected: Floor 2' : 'Send To Floor 2'}
@@ -7345,7 +7773,7 @@ export default function BodyshopRepairPage() {
                             <button
                               type="button"
                               className={`btn brx-floor-send-btn ${currentFloor === 'Floor 3' ? 'is-selected' : ''}`}
-                              disabled={saving || floorChangeLocked}
+                              disabled={saving || floorChangeLocked || !managerOk}
                               onClick={() => void handleSendToBodyshopFloor('Floor 3')}
                             >
                               {currentFloor === 'Floor 3' ? 'Selected: Floor 3' : 'Send To Floor 3'}

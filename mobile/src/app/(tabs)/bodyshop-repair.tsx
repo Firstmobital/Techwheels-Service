@@ -37,6 +37,7 @@ import {
   validateSurveyFieldsForStage9,
   type BodyshopSurveyStatusDb,
 } from '../../lib/bodyshopSurveyStatus'
+import { isBodyshopSurveyManagerVerified } from '../../lib/bodyshopSurveyManagerVerify'
 import { pickBodyshopRepairDocument } from '../../lib/bodyshopRepairDocPicker'
 import {
   resendSurveyApprovalToCustomer,
@@ -93,6 +94,10 @@ interface RepairCard {
   customer_survey_approval_status?: string | null
   customer_survey_rejection_reason?: string | null
   customer_survey_decided_at?: string | null
+  bodyshop_survey_manager_verify_status?: string | null
+  bodyshop_survey_manager_verified_by?: string | null
+  bodyshop_survey_manager_verified_at?: string | null
+  bodyshop_survey_manager_verify_remark?: string | null
   bodyshop_floor_since_at?: string | null
   claim_intimation_no: string | null
   surveyor_name: string | null
@@ -623,6 +628,10 @@ export default function BodyshopRepairScreen() {
           : 'Waiting for customer to approve the survey document in the customer app.',
         'error',
       )
+      return
+    }
+    if (!isBodyshopSurveyManagerVerified(card)) {
+      showToast('Bodyshop manager must verify survey on web (Verify tab) before sending to floor.', 'error')
       return
     }
     const surveyCheck = validateSurveyFieldsForStage9({
@@ -1406,10 +1415,13 @@ export default function BodyshopRepairScreen() {
                   const customerSurvey = String(card.customer_survey_approval_status ?? '').trim().toLowerCase()
                   const surveyDoc = Boolean(uploadedDocsByKey.doc_survey_approval)
                   const customerOk = customerSurvey === 'approved'
+                  const managerOk = isBodyshopSurveyManagerVerified(card)
                   const lockMsg = !surveyDoc
                     ? 'Upload Survey Approval on SA & Docs, then wait for customer approval in the app.'
                     : customerSurvey === 'rejected'
                       ? `Customer rejected survey${card.customer_survey_rejection_reason ? `: ${card.customer_survey_rejection_reason}` : ''}`
+                      : customerOk && !managerOk
+                        ? 'Waiting for bodyshop manager verify on web (Verify tab) before floor assignment.'
                       : !customerOk
                         ? 'Waiting for customer approval in the customer app.'
                         : null

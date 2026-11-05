@@ -55,15 +55,8 @@ export function useStaffAllowedModules(user: User | null) {
           ].forEach((m) => mods.add(m))
         }
 
-        if (
-          userRole === 'driver' ||
-          mods.has('driver_management') ||
-          mods.has('driver_tasks') ||
-          mods.has('driver') ||
-          mods.has('service_booking')
-        ) {
+        if (userRole === 'driver' || mods.has('driver_tasks') || mods.has('driver')) {
           mods.add('driver_tasks')
-          mods.add('driver_management')
         }
 
         if (mounted) setAllowedModules(mods)

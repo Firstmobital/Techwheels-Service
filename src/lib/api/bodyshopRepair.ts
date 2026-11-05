@@ -96,6 +96,10 @@ export interface RepairCard {
   customer_survey_approval_status: 'pending' | 'approved' | 'rejected' | null
   customer_survey_rejection_reason: string | null
   customer_survey_decided_at: string | null
+  bodyshop_survey_manager_verify_status: 'pending' | 'verified' | 'rejected' | null
+  bodyshop_survey_manager_verified_by: string | null
+  bodyshop_survey_manager_verified_at: string | null
+  bodyshop_survey_manager_verify_remark: string | null
   survay_info_by: string | null
   survay_info_at: string | null
   survay_info_updated_by: string | null
