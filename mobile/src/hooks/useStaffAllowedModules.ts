@@ -40,6 +40,8 @@ export function useStaffAllowedModules(user: User | null) {
             'reception',
             'floor_incharge',
             'service_advisor',
+            'technician',
+            'sa_tracker',
             'reports',
             'import',
             'admin',

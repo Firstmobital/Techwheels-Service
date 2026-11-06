@@ -40,6 +40,7 @@ type PartLine = {
   parts_number: string
   parts_description: string
   advisor_remarks: string
+  qty_required: string
 }
 
 type DraftHeader = {
@@ -60,6 +61,19 @@ type Draft = {
   parts_number: string
   customer_mobile: string
   customer_update: string
+  qty_required: string
+}
+
+type VehiclePartsGroup = {
+  key: string
+  registration_number: string
+  vehicle_model: string | null
+  job_card_number: string | null
+  customer_name: string | null
+  customer_mobile: string | null
+  entry_date: string
+  rows: PartsRequestRow[]
+  hasUnseen: boolean
 }
 
 type QuickFilter = 'all' | 'Pending' | 'Ordered' | 'Received' | 'Ready' | 'mine'
@@ -94,6 +108,7 @@ const EMPTY_LINE: PartLine = {
   parts_number: '',
   parts_description: '',
   advisor_remarks: '',
+  qty_required: '1',
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -105,6 +120,88 @@ const EMPTY_DRAFT: Draft = {
   parts_number: '',
   customer_mobile: '',
   customer_update: '',
+  qty_required: '1',
+}
+
+function normalizeVehicleReg(reg: string): string {
+  return reg.trim().toUpperCase()
+}
+
+function parseQtyRequiredInput(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.min(9999, Math.round(parsed))
+}
+
+function formatQtyRequired(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(Number(value))) return '—'
+  return String(value)
+}
+
+const PARTS_STATUS_GROUP_PRIORITY: PartsStatus[] = [
+  'Pending',
+  'Ordered',
+  'Back Order',
+  'In Transit',
+  'Partially Received',
+  'Received',
+  'Delivered to Workshop',
+  'Ready',
+  'Done',
+  'Cancelled',
+]
+
+function groupRepresentativeStatus(rows: PartsRequestRow[]): PartsStatus {
+  let best = rows[0]?.parts_status ?? 'Pending'
+  let bestIdx = PARTS_STATUS_GROUP_PRIORITY.indexOf(best)
+  for (const row of rows) {
+    const idx = PARTS_STATUS_GROUP_PRIORITY.indexOf(row.parts_status)
+    if (idx >= 0 && (bestIdx < 0 || idx < bestIdx)) {
+      bestIdx = idx
+      best = row.parts_status
+    }
+  }
+  return best
+}
+
+function buildVehiclePartsGroups(rows: PartsRequestRow[]): VehiclePartsGroup[] {
+  const map = new Map<string, VehiclePartsGroup>()
+  for (const row of rows) {
+    const key = normalizeVehicleReg(row.registration_number)
+    const existing = map.get(key)
+    if (!existing) {
+      map.set(key, {
+        key,
+        registration_number: row.registration_number,
+        vehicle_model: row.vehicle_model,
+        job_card_number: row.job_card_number,
+        customer_name: row.customer_name,
+        customer_mobile: row.customer_mobile,
+        entry_date: row.entry_date,
+        rows: [row],
+        hasUnseen: !row.advisor_seen,
+      })
+      continue
+    }
+    existing.rows.push(row)
+    if (!row.advisor_seen) existing.hasUnseen = true
+    if (row.created_at > (existing.rows[0]?.created_at ?? '')) {
+      existing.entry_date = row.entry_date
+    }
+  }
+
+  return Array.from(map.values())
+    .map((group) => ({
+      ...group,
+      rows: [...group.rows].sort((a, b) => b.id - a.id),
+    }))
+    .sort((a, b) => {
+      const aTs = Date.parse(a.rows[0]?.created_at ?? '')
+      const bTs = Date.parse(b.rows[0]?.created_at ?? '')
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0)
+    })
 }
 
 function StatusBadge({ status, qty = null }: { status: PartsRequestRow['parts_status']; qty?: number | null }) {
@@ -248,7 +345,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [saving, setSaving] = useState(false)
 
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedVehicleKey, setExpandedVehicleKey] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [descriptions, setDescriptions] = useState<Record<string, string>>({})
   // ── Back Order + Jaipur Co-Dealer stock data (Status 1 column) ──────────────
@@ -607,6 +704,11 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     orderListSortDir,
   ])
 
+  const advisorVehicleGroups = useMemo(
+    () => (isAdmin ? [] : buildVehiclePartsGroups(filteredRows)),
+    [filteredRows, isAdmin],
+  )
+
   const showMarkReceived = (row: PartsRequestRow): boolean => {
     if (['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)) return false
     const stock = getStockStatus(row.parts_qty)
@@ -704,6 +806,23 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     setShowForm(true)
   }
 
+  const openCreateFormForVehicle = (group: VehiclePartsGroup) => {
+    setFormMode('create')
+    setEditingId(null)
+    setDraftHeader({
+      registration_number: group.registration_number,
+      job_card_number: group.job_card_number ?? '',
+      customer_name: group.customer_name ?? '',
+      customer_mobile: group.customer_mobile ?? '',
+      vehicle_model: group.vehicle_model ?? '',
+      entry_date: group.entry_date || todayIST(),
+    })
+    setPartLines([{ ...EMPTY_LINE }])
+    setRegFetchStatus('found')
+    setAutoFilledFields(new Set())
+    setShowForm(true)
+  }
+
   const openEditForm = (row: PartsRequestRow) => {
     setFormMode('edit')
     setEditingId(row.id)
@@ -716,6 +835,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       parts_number: row.parts_number ?? '',
       customer_mobile: row.customer_mobile ?? '',
       customer_update: row.customer_update ?? '',
+      qty_required: row.parts_qty_required != null ? String(row.parts_qty_required) : '1',
     })
     setShowForm(true)
   }
@@ -751,6 +871,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
         customerName: draftHeader.customer_name.trim() || null,
         vehicleModel: draftHeader.vehicle_model.trim() || null,
         customerMobile: draftHeader.customer_mobile.trim() || null,
+        partsQtyRequired: parseQtyRequiredInput(line.qty_required) ?? 1,
       })
       if (res.error) { anyError = res.error; break }
     }
@@ -781,6 +902,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       entryDate: draft.entry_date || null,
       partsNumber: draft.parts_number.trim() || null,
       customerMobile: draft.customer_mobile.trim() || null,
+      partsQtyRequired: parseQtyRequiredInput(draft.qty_required) ?? 1,
     })
     if (res.error) { setSaving(false); setError(res.error); return }
     // Save customer_update separately via dedicated RPC
@@ -866,11 +988,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     else void load()
   }
 
-  const handleExpand = async (row: PartsRequestRow) => {
-    const next = expandedId === row.id ? null : row.id
-    setExpandedId(next)
-    if (next && !row.advisor_seen) {
-      await markPartsRequestSeen(row.id)
+  const handleExpandGroup = async (group: VehiclePartsGroup) => {
+    const next = expandedVehicleKey === group.key ? null : group.key
+    setExpandedVehicleKey(next)
+    if (next && group.hasUnseen) {
+      await Promise.all(
+        group.rows.filter((row) => !row.advisor_seen).map((row) => markPartsRequestSeen(row.id)),
+      )
       void load()
     }
   }
@@ -1235,8 +1359,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             {isDesktop && (
               <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold uppercase tracking-wide text-gray-400">
                 <span className="col-span-3">Part Name *</span>
+                <span className="col-span-1">Qty *</span>
                 <span className="col-span-2">Part No.</span>
-                <span className="col-span-3">Description</span>
+                <span className="col-span-2">Description</span>
                 <span className="col-span-3">Remarks</span>
                 <span className="col-span-1"></span>
               </div>
@@ -1251,6 +1376,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     placeholder="e.g. Front Bumper"
                     className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
+                <div className={isDesktop ? 'col-span-1' : ''}>
+                  {!isDesktop && <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Qty *</p>}
+                  <input type="number" min={1} step={1} value={line.qty_required}
+                    onChange={(e) => updateLine(i, 'qty_required', e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                    placeholder="1"
+                    className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                </div>
                 <div className={isDesktop ? 'col-span-2' : ''}>
                   {!isDesktop && <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Part No.</p>}
                   <input type="text" value={line.parts_number}
@@ -1258,7 +1390,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     placeholder="Optional"
                     className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                 </div>
-                <div className={isDesktop ? 'col-span-3' : ''}>
+                <div className={isDesktop ? 'col-span-2' : ''}>
                   {!isDesktop && <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Description</p>}
                   <input type="text" value={line.parts_description}
                     onChange={(e) => updateLine(i, 'parts_description', e.target.value)}
@@ -1288,7 +1420,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
           </div>
 
           <p className="mb-4 text-xs text-gray-400">
-            Parts Qty is calculated automatically from current stock. Enter Part No. for faster matching.
+            Qty = kitne parts chahiye (aap bharte ho). Stock column import se auto aata hai — Part No. daalne se matching tez hoti hai.
           </p>
 
           <div className="flex gap-2">
@@ -1319,6 +1451,12 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               <input type="text" value={draft.parts_required}
                 onChange={(e) => setDraft((d) => ({ ...d, parts_required: e.target.value }))}
                 placeholder="e.g. Front Bumper" className={inputCls} />
+            </label>
+            <label className={labelCls}>
+              Qty Required *
+              <input type="number" min={1} step={1} value={draft.qty_required}
+                onChange={(e) => setDraft((d) => ({ ...d, qty_required: e.target.value.replace(/[^\d]/g, '').slice(0, 4) }))}
+                placeholder="1" className={inputCls} />
             </label>
             <label className={labelCls}>
               Parts No <span className="font-normal normal-case text-gray-400">(optional)</span>
@@ -1560,11 +1698,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
         </div>
       ) : isDesktop ? (
         <div className="space-y-4">
-          {filteredRows.map((row) => {
-            const desc = descOf(row)
-            const orderStatus = orderStatusOf(row)
-            const s1 = getStatus1(row.parts_number)
-            const vor = isVOR(row)
+          {advisorVehicleGroups.map((group) => {
+            const repStatus = groupRepresentativeStatus(group.rows)
+            const anyVor = group.rows.some((r) => isVOR(r))
 
             // Status-based accent colors for left border
             const accentMap: Record<string, string> = {
@@ -1579,7 +1715,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               'Ready': 'border-l-violet-500',
               'Done': 'border-l-slate-400',
             }
-            const accent = accentMap[row.parts_status] || 'border-l-gray-300'
+            const accent = accentMap[repStatus] || 'border-l-gray-300'
             const headerBgMap: Record<string, string> = {
               'Pending': 'from-amber-50 to-white',
               'Ordered': 'from-blue-50 to-white',
@@ -1592,10 +1728,10 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               'Ready': 'from-violet-50 to-white',
               'Done': 'from-slate-50 to-white',
             }
-            const headerBg = headerBgMap[row.parts_status] || 'from-gray-50 to-white'
+            const headerBg = headerBgMap[repStatus] || 'from-gray-50 to-white'
             return (
-              <div key={row.id} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-white shadow-sm overflow-hidden ${vor ? 'ring-2 ring-yellow-300' : ''} ${!row.advisor_seen ? 'ring-2 ring-blue-200' : ''}`}>
-                {/* ── Card Header: Reg No + Model + Date + Status ── */}
+              <div key={group.key} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-white shadow-sm overflow-hidden ${anyVor ? 'ring-2 ring-yellow-300' : ''} ${group.hasUnseen ? 'ring-2 ring-blue-200' : ''}`}>
+                {/* ── Card Header: one vehicle, all part lines inside ── */}
                 <div className={`bg-gradient-to-r ${headerBg} px-5 py-3 border-b border-gray-100`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -1603,21 +1739,31 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" className="text-gray-600"><path d="M5 17H3v-6l2-5h12l2 5v6h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>
                       </div>
                       <div>
-                        <p className="text-base font-bold text-gray-900 leading-tight">{row.registration_number}</p>
+                        <p className="text-base font-bold text-gray-900 leading-tight">{group.registration_number}</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {row.vehicle_model || '—'} &middot; JC: {row.job_card_number ? row.job_card_number.slice(-6) : '—'} &middot; {fmtDateDMY(row.entry_date)}
+                          {group.vehicle_model || '—'} &middot; JC: {group.job_card_number ? group.job_card_number.slice(-6) : '—'} &middot; {fmtDateDMY(group.entry_date)}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {vor && <span className="inline-flex items-center rounded-full bg-yellow-200 px-2.5 py-1 text-[11px] font-bold text-yellow-900 shadow-sm">VOR</span>}
-                      <StatusBadge status={row.parts_status} qty={row.parts_qty} />
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">
+                        {group.rows.length} part{group.rows.length !== 1 ? 's' : ''}
+                      </span>
+                      {anyVor && <span className="inline-flex items-center rounded-full bg-yellow-200 px-2.5 py-1 text-[11px] font-bold text-yellow-900 shadow-sm">VOR</span>}
+                      <StatusBadge status={repStatus} qty={group.rows[0]?.parts_qty ?? null} />
                     </div>
                   </div>
                 </div>
 
-                {/* ── Card Body: Parts + Status badges + Details ── */}
-                <div className="px-5 py-4">
+                {/* ── Card Body: each part line for this vehicle ── */}
+                <div className="px-5 py-4 space-y-5">
+                  {group.rows.map((row) => {
+                    const desc = descOf(row)
+                    const orderStatus = orderStatusOf(row)
+                    const s1 = getStatus1(row.parts_number)
+                    const vor = isVOR(row)
+                    return (
+                  <div key={row.id} className="rounded-lg border border-gray-100 bg-white/80 p-4 shadow-xs">
                   {/* Parts Required Section — colorful sub-blocks */}
                   <div className="mb-4 rounded-lg bg-gradient-to-br from-gray-50 to-blue-50/30 p-4 border border-gray-100">
                     <div className="flex items-start gap-2 mb-3">
@@ -1625,11 +1771,16 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <div className="flex-1">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 mb-1">Parts Required</p>
                         <p className="text-sm font-semibold text-gray-900">{row.parts_required}</p>
+                        <p className="mt-1 text-xs font-semibold text-indigo-700">Qty needed: {formatQtyRequired(row.parts_qty_required)}</p>
                         {desc && desc !== 'Description Not Available' && <p className="mt-1 text-xs text-gray-500">{desc}</p>}
                       </div>
                     </div>
                     {/* Nested fields in colorful sub-cards */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="rounded-lg bg-white border border-indigo-100 px-3 py-2 shadow-xs">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-indigo-600 mb-0.5">Qty Needed</p>
+                        <p className="text-xs font-semibold text-gray-700">{formatQtyRequired(row.parts_qty_required)}</p>
+                      </div>
                       <div className="rounded-lg bg-white border border-blue-100 px-3 py-2 shadow-xs">
                         <p className="text-[9px] font-bold uppercase tracking-wide text-blue-500 mb-0.5">Parts No.</p>
                         <input type="text" defaultValue={row.parts_number ?? ''} onBlur={(e) => void handleInlinePartNoBlur(row, e.target.value)} placeholder="Enter Part No." className="w-full rounded border border-gray-200 px-2 py-1 text-xs font-mono text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50/50" />
@@ -1716,131 +1867,108 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     </button>
                     <ActionButton row={row} />
                   </div>
+                  </div>
+                    )
+                  })}
+                  <div className="flex justify-end border-t border-gray-100 pt-3">
+                    <button type="button" onClick={() => openCreateFormForVehicle(group)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                      <Icon name="plus" size={13} strokeWidth={2.2} />
+                      Add more parts for this vehicle
+                    </button>
+                  </div>
                 </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : !isAdmin ? (
+        <div className="space-y-3">
+          {advisorVehicleGroups.map((group) => {
+            const repStatus = groupRepresentativeStatus(group.rows)
+            const isExpanded = expandedVehicleKey === group.key
+            const headerBgMap: Record<string, string> = {
+              'Pending': 'from-amber-50 to-white', 'Ordered': 'from-blue-50 to-white', 'Back Order': 'from-orange-50 to-white',
+              'In Transit': 'from-purple-50 to-white', 'Received': 'from-green-50 to-white', 'Partially Received': 'from-teal-50 to-white',
+              'Cancelled': 'from-gray-50 to-white', 'Delivered to Workshop': 'from-emerald-50 to-white', 'Ready': 'from-violet-50 to-white', 'Done': 'from-slate-50 to-white',
+            }
+            const accentMap: Record<string, string> = {
+              'Pending': 'border-l-amber-400', 'Ordered': 'border-l-blue-500', 'Back Order': 'border-l-orange-500',
+              'In Transit': 'border-l-purple-500', 'Received': 'border-l-green-500', 'Partially Received': 'border-l-teal-500',
+              'Cancelled': 'border-l-gray-400', 'Delivered to Workshop': 'border-l-emerald-600', 'Ready': 'border-l-violet-500', 'Done': 'border-l-slate-400',
+            }
+            const headerBg = headerBgMap[repStatus] || 'from-gray-50 to-white'
+            const accent = accentMap[repStatus] || 'border-l-gray-300'
+            const anyVor = group.rows.some((r) => isVOR(r))
+            return (
+              <div key={group.key} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-white shadow-sm overflow-hidden ${anyVor ? 'ring-2 ring-yellow-300' : ''} ${group.hasUnseen ? 'ring-2 ring-blue-200' : ''}`}>
+                <div className={`cursor-pointer bg-gradient-to-r ${headerBg} px-4 py-3 border-b border-gray-100`} onClick={() => void handleExpandGroup(group)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-gray-900">{group.registration_number}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">{group.vehicle_model || '—'} &middot; {group.rows.length} part line{group.rows.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <StatusBadge status={repStatus} qty={group.rows[0]?.parts_qty ?? null} />
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {group.rows.slice(0, isExpanded ? group.rows.length : 3).map((row) => (
+                      <li key={row.id} className="text-xs text-gray-800">
+                        <span className="font-semibold">{row.parts_required}</span>
+                        <span className="text-gray-500"> · Qty {formatQtyRequired(row.parts_qty_required)}</span>
+                      </li>
+                    ))}
+                    {!isExpanded && group.rows.length > 3 && (
+                      <li className="text-[11px] text-blue-600">+{group.rows.length - 3} more — tap to expand</li>
+                    )}
+                  </ul>
+                </div>
+                {isExpanded && (
+                  <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-3">
+                    {group.rows.map((row) => {
+                      const desc = descOf(row)
+                      const orderStatus = orderStatusOf(row)
+                      return (
+                        <div key={row.id} className="rounded-lg border border-gray-100 p-3 space-y-2 text-xs">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-bold text-gray-900">{row.parts_required}</p>
+                              <p className="text-[11px] text-indigo-700">Qty needed: {formatQtyRequired(row.parts_qty_required)}</p>
+                            </div>
+                            <StatusBadge status={row.parts_status} qty={row.parts_qty} />
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <StockStatusBadge qty={row.parts_qty} />
+                            <GgnStockBadge status={row.ggn_stock_status} />
+                            <OrderStatusBadge label={orderStatus} />
+                          </div>
+                          <p className="text-gray-600">{desc || row.parts_description || '—'}</p>
+                          <MiniTimeline status={row.parts_status} />
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <ActionButton row={row} />
+                          </div>
+                          <button type="button" onClick={() => openEditForm(row)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Edit line</button>
+                        </div>
+                      )
+                    })}
+                    <button type="button" onClick={() => openCreateFormForVehicle(group)}
+                      className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                      + Add more parts for this vehicle
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredRows.map((row) => {
-            const desc = descOf(row)
-            const orderStatus = orderStatusOf(row)
-            const isExpanded = expandedId === row.id
-            const s1 = getStatus1(row.parts_number)
-            const vor = isVOR(row)
-            const accentMap: Record<string, string> = {
-              'Pending': 'border-l-amber-400', 'Ordered': 'border-l-blue-500', 'Back Order': 'border-l-orange-500',
-              'In Transit': 'border-l-purple-500', 'Received': 'border-l-green-500', 'Partially Received': 'border-l-teal-500',
-              'Cancelled': 'border-l-gray-400', 'Delivered to Workshop': 'border-l-emerald-600', 'Ready': 'border-l-violet-500', 'Done': 'border-l-slate-400',
-            }
-            const accent = accentMap[row.parts_status] || 'border-l-gray-300'
-            const headerBgMap: Record<string, string> = {
-              'Pending': 'from-amber-50 to-white', 'Ordered': 'from-blue-50 to-white', 'Back Order': 'from-orange-50 to-white',
-              'In Transit': 'from-purple-50 to-white', 'Received': 'from-green-50 to-white', 'Partially Received': 'from-teal-50 to-white',
-              'Cancelled': 'from-gray-50 to-white', 'Delivered to Workshop': 'from-emerald-50 to-white', 'Ready': 'from-violet-50 to-white', 'Done': 'from-slate-50 to-white',
-            }
-            const headerBg = headerBgMap[row.parts_status] || 'from-gray-50 to-white'
-            return (
-              <div key={row.id} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-white shadow-sm overflow-hidden ${vor ? 'ring-2 ring-yellow-300' : ''} ${!row.advisor_seen && !isAdmin ? 'ring-2 ring-blue-200' : ''}`}>
-                <div className={`cursor-pointer bg-gradient-to-r ${headerBg} px-4 py-3 border-b border-gray-100`} onClick={() => void handleExpand(row)}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-gray-900">{row.registration_number}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">{row.vehicle_model || '—'} &middot; {fmtDateDMY(row.entry_date)}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      {vor && <span className="inline-flex items-center rounded-full bg-yellow-200 px-2 py-0.5 text-[10px] font-bold text-yellow-900">VOR</span>}
-                      <StatusBadge status={row.parts_status} qty={row.parts_qty} />
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-xs font-semibold text-gray-800">{row.parts_required}</p>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <StockStatusBadge qty={row.parts_qty} />
-                    <GgnStockBadge status={row.ggn_stock_status} />
-                    <OrderStatusBadge label={orderStatus} />
-                  </div>
-                  {s1.isBackOrder && (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
-                      {s1.jaipurDealers > 0 ? (
-                        <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}</span>
-                      ) : (
-                        <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">AVL: Jaipur – Not Available</span>
-                      )}
-                    </div>
-                  )}
-                  {!isAdmin && (
-                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                      <ActionButton row={row} />
-                    </div>
-                  )}
-                </div>
-                {isExpanded && (
-                  <div className="border-t border-gray-100 px-4 pb-4 pt-3">
-                    <div className="space-y-3 text-xs">
-                      {/* Colorful nested fields */}
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="rounded-lg bg-blue-50 border border-blue-100 px-2.5 py-1.5">
-                          <p className="text-[9px] font-bold uppercase text-blue-500">Parts No.</p>
-                          <p className="font-mono text-gray-700">{row.parts_number || '—'}</p>
-                        </div>
-                        <div className="rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1.5">
-                          <p className="text-[9px] font-bold uppercase text-amber-600">Order No.</p>
-                          <p className="text-gray-700">{orderNoOf(row) || '—'}</p>
-                        </div>
-                        <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
-                          <p className="text-[9px] font-bold uppercase text-emerald-600">Order Date</p>
-                          <p className="text-gray-700">{fmtDateDMY(row.parts_order_date)}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="font-bold text-gray-500">Job Card</p>
-                          <p className="text-gray-800">{row.job_card_number ? row.job_card_number.slice(-6) : '—'}</p>
-                        </div>
-                        <div>
-                          <p className="font-bold text-gray-500">Mobile</p>
-                          <p className="text-gray-800">{row.customer_mobile || '—'}</p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-500">Description</p>
-                        <p className="text-gray-700">{desc || 'Description Not Available'}</p>
-                      </div>
-                      <div>
-                        <p className="mb-0.5 font-bold text-gray-500">Progress</p>
-                        <MiniTimeline status={row.parts_status} />
-                      </div>
-                      {row.spm_remarks && (
-                        <div>
-                          <p className="font-bold text-gray-500">SPM Remarks</p>
-                          <p className="text-gray-700">{row.spm_remarks}</p>
-                        </div>
-                      )}
-                      <div>
-                        <p className="mb-0.5 font-bold text-gray-500">Advisor Remarks</p>
-                        {row.parts_status !== 'Done' ? (
-                          <textarea defaultValue={row.advisor_remarks ?? ''} onBlur={(e) => void handleRemarksBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none" placeholder="Add remarks..." />
-                        ) : (<p className="text-gray-700">{row.advisor_remarks || '—'}</p>)}
-                      </div>
-                      <div>
-                        <p className="mb-0.5 font-bold text-gray-500">Customer Update</p>
-                        {row.parts_status !== 'Done' ? (
-                          <textarea defaultValue={row.customer_update ?? ''} onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none" placeholder="Latest update shared with customer..." />
-                        ) : (<p className="text-gray-700">{row.customer_update || '—'}</p>)}
-                      </div>
-                      {!isAdmin && (
-                        <button type="button" onClick={() => openEditForm(row)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Edit</button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {filteredRows.map((row) => (
+            <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-3 text-xs shadow-sm">
+              <p className="font-bold text-gray-900">{row.registration_number} · {row.parts_required}</p>
+              <p className="text-gray-500">Qty needed: {formatQtyRequired(row.parts_qty_required)} · {row.advisor_name}</p>
+              <StatusBadge status={row.parts_status} qty={row.parts_qty} />
+            </div>
+          ))}
         </div>
       )}
     </div>

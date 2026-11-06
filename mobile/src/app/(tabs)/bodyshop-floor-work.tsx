@@ -113,6 +113,18 @@ function employeeTasksOnJobCard(
     (t) => t.jobCardNumber === jobCardNumber && normFloorEmployeeCode(t.assignedEmployeeCode) === code,
   )
 }
+
+/** Worker finished all their slots on this job card (Dentor / Painter lane Done). */
+function isWorkerVehicleStepDone(
+  jobCardNumber: string,
+  workerTasks: BodyshopFloorWorkTask[],
+  assignmentByJc: Record<string, Record<string, unknown>>,
+): boolean {
+  const row = assignmentByJc[jobCardNumber]
+  const onJc = workerTasks.filter((t) => t.jobCardNumber === jobCardNumber)
+  if (onJc.length === 0) return false
+  return onJc.every((t) => isFloorWorkTaskStepCompleted(t, row))
+}
 import {
   bodyshopFloorWorkTodayIstDate,
   workLogMapKey,
@@ -402,18 +414,32 @@ export default function BodyshopFloorWorkScreen() {
   const repairCardQcForJc = useCallback((jc: string) => vehicleByJc[jc]?.qcStatus, [vehicleByJc])
 
   const visibleTasks = useMemo(() => {
-    if (isAdminOverview) return sortedMonthTasks
-    return sortedMonthTasks.filter((t) =>
-      isFloorWorkTaskVisible(
-        t,
-        assignmentByJc[t.jobCardNumber],
-        roleQcForJc(t.jobCardNumber),
-        repairCardQcForJc(t.jobCardNumber),
-      ),
-    )
-  }, [sortedMonthTasks, isAdminOverview, assignmentByJc, roleQcForJc, repairCardQcForJc])
+    // Workers need full assignment history for Done / Pending counts and filters.
+    if (!isAdminOverview) return sortedMonthTasks
+    return sortedMonthTasks
+  }, [sortedMonthTasks, isAdminOverview])
 
   const visibleListTasks = useMemo(() => {
+    if (!isAdminOverview) {
+      const ordered: BodyshopFloorWorkTask[] = []
+      const seen = new Set<string>()
+      for (const t of visibleTasks) {
+        if (seen.has(t.jobCardNumber)) continue
+        seen.add(t.jobCardNumber)
+        const onJc = tasks.filter((x) => x.jobCardNumber === t.jobCardNumber)
+        const row = assignmentByJc[t.jobCardNumber]
+        const pick =
+          onJc.find((x) =>
+            isWorkerQcTurn(x, row, roleQcForJc(x.jobCardNumber), repairCardQcForJc(x.jobCardNumber)),
+          )
+          ?? onJc.find((x) => isFloorWorkTaskAtActivePipelineStep(x, row))
+          ?? onJc.find((x) => !isFloorWorkTaskStepCompleted(x, row))
+          ?? onJc.find((x) => isFloorWorkTaskStepCompleted(x, row))
+          ?? onJc[0]
+        if (pick) ordered.push(pick)
+      }
+      return ordered
+    }
     if (!isAdminOverview || !selectedAdminEmployee) return visibleTasks
     const code = selectedAdminEmployee.employeeCode
     const ordered: BodyshopFloorWorkTask[] = []
@@ -442,23 +468,24 @@ export default function BodyshopFloorWorkScreen() {
     assignmentByJc,
     roleQcForJc,
     repairCardQcForJc,
+    tasks,
+    visibleTasks,
   ])
 
   useEffect(() => {
     setVehicleOutcomeFilter('all')
-  }, [selectedAdminEmployee?.employeeCode, assignmentMonthFilter, isAdminOverview])
+  }, [selectedAdminEmployee?.employeeCode, assignmentMonthFilter, isAdminOverview, employeeCode])
 
   const workerTaskStats = useMemo(() => {
     if (isAdminOverview) return null
     let pending = 0
     let done = 0
     for (const t of visibleListTasks) {
-      const row = assignmentByJc[t.jobCardNumber]
-      if (isFloorWorkTaskStepCompleted(t, row)) done += 1
+      if (isWorkerVehicleStepDone(t.jobCardNumber, tasks, assignmentByJc)) done += 1
       else pending += 1
     }
     return { total: visibleListTasks.length, pending, done }
-  }, [isAdminOverview, visibleListTasks, assignmentByJc])
+  }, [isAdminOverview, visibleListTasks, tasks, assignmentByJc])
 
   const listTasksForFlatList = useMemo(() => {
     if (vehicleOutcomeFilter === 'all') return visibleListTasks
@@ -471,8 +498,7 @@ export default function BodyshopFloorWorkScreen() {
     }
     if (!isAdminOverview) {
       return visibleListTasks.filter((t) => {
-        const row = assignmentByJc[t.jobCardNumber]
-        const isPending = !isFloorWorkTaskStepCompleted(t, row)
+        const isPending = !isWorkerVehicleStepDone(t.jobCardNumber, tasks, assignmentByJc)
         return vehicleOutcomeFilter === 'pending' ? isPending : !isPending
       })
     }
@@ -485,6 +511,7 @@ export default function BodyshopFloorWorkScreen() {
     vehicleStepPendingForAdmin,
     isAdminOverview,
     assignmentByJc,
+    tasks,
   ])
 
   const pagedTasks = listTasksForFlatList
@@ -616,17 +643,6 @@ export default function BodyshopFloorWorkScreen() {
         qcByJc = {}
       }
       setRoleQcByJc(qcByJc)
-      if (!adminOverview) {
-        taskList = taskList.filter((t) => {
-          const meta = minimal[t.jobCardNumber]
-          return isFloorWorkTaskVisible(
-            t,
-            assignmentMap[t.jobCardNumber],
-            qcByJc[t.jobCardNumber] ?? {},
-            meta?.qcStatus,
-          )
-        })
-      }
       taskList = filterTasksByFloorWorkGoLive(taskList, minimal, assignmentMap)
       if (adminOverview && inchargeScope.lockedBodyshopFloor && !inchargeScope.isAdmin) {
         taskList = filterFloorWorkTasksForInchargeFloor(
@@ -1190,6 +1206,11 @@ export default function BodyshopFloorWorkScreen() {
       ) : null}
       {!selected && !isAdminOverview && workerTaskStats ? (
         <View style={S.workerSummaryCard}>
+          <Text style={S.workerSummaryTitle}>My vehicles on floor</Text>
+          <Text style={S.workerSummarySub}>
+            {employeeName ? `${employeeName} · ` : ''}
+            Tap Pending or Done to see which cars are still open or already completed by you.
+          </Text>
           <FloorWorkStatsThree
             total={workerTaskStats.total}
             pending={workerTaskStats.pending}
@@ -1199,7 +1220,7 @@ export default function BodyshopFloorWorkScreen() {
           />
           {vehicleOutcomeFilter !== 'all' ? (
             <Text style={S.statsFilterHint}>
-              Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap again to show all
+              Showing {vehicleOutcomeFilter === 'pending' ? 'pending' : 'done'} only · tap Total to show all
             </Text>
           ) : null}
         </View>
@@ -1520,7 +1541,7 @@ export default function BodyshopFloorWorkScreen() {
           <FlatList
             data={pagedTasks}
             keyExtractor={(item) =>
-              adminEmployeeWorkView
+              adminEmployeeWorkView || !isAdminOverview
                 ? item.jobCardNumber
                 : `${item.jobCardNumber}-${item.floorRole}-${item.isSupport}`
             }
@@ -1559,7 +1580,11 @@ export default function BodyshopFloorWorkScreen() {
               const stepDone = isFloorWorkTaskStepCompleted(item, assignRow)
               const done = adminEmployeeWorkView && selectedAdminEmployee
                 ? !vehicleStepPendingForAdmin(item.jobCardNumber, selectedAdminEmployee.employeeCode)
-                : qcTurn ? false : stepDone
+                : qcTurn
+                  ? false
+                  : isAdminOverview
+                    ? stepDone
+                    : isWorkerVehicleStepDone(item.jobCardNumber, tasks, assignmentByJc)
               const pillLabel = qcTurn ? 'QC due' : yourTurn ? 'Your turn' : done ? 'Done' : 'Waiting'
               const assigneeLine = formatJobCardAssignments(tasksByJobCard.get(item.jobCardNumber), item.jobCardNumber)
               const employeeSlots = selectedAdminEmployee
@@ -1698,6 +1723,8 @@ const S = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e7e3d9',
   },
+  workerSummaryTitle: { fontSize: 15, fontWeight: '800', color: '#1a1b21' },
+  workerSummarySub: { fontSize: 11, color: '#82858f', marginTop: 4, marginBottom: 8, lineHeight: 16 },
   adminStatsCard: {
     marginHorizontal: 16,
     marginTop: 4,

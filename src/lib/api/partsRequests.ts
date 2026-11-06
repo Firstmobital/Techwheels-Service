@@ -32,6 +32,7 @@ export interface PartsRequestRow {
   parts_description: string | null
   advisor_remarks: string | null
   parts_qty: number | null
+  parts_qty_required: number | null
   parts_number: string | null
   parts_order_date: string | null
   parts_order_number: string | null
@@ -136,6 +137,7 @@ export async function createPartsRequest(input: {
   customerName?: string | null
   vehicleModel?: string | null
   customerMobile?: string | null
+  partsQtyRequired?: number | null
 }): Promise<ApiResult<number>> {
   const { data, error } = await supabase.rpc('parts_request_create', {
     p_registration_number: input.registrationNumber,
@@ -148,6 +150,7 @@ export async function createPartsRequest(input: {
     p_customer_name: input.customerName ?? null,
     p_vehicle_model: input.vehicleModel ?? null,
     p_customer_mobile: input.customerMobile ?? null,
+    p_parts_qty_required: input.partsQtyRequired ?? null,
   })
 
   if (error) return fail(error)
@@ -165,6 +168,7 @@ export async function updateMyPartsRequestFields(input: {
   /** Optional — only overwrites the existing Parts Number when a non-empty value is sent. */
   partsNumber?: string | null
   customerMobile?: string | null
+  partsQtyRequired?: number | null
 }): Promise<ApiResult<void>> {
   const { error } = await supabase.rpc('parts_request_update_advisor_fields', {
     p_id: input.id,
@@ -175,6 +179,7 @@ export async function updateMyPartsRequestFields(input: {
     p_entry_date: input.entryDate ?? null,
     p_parts_number: input.partsNumber ?? null,
     p_customer_mobile: input.customerMobile ?? null,
+    p_parts_qty_required: input.partsQtyRequired ?? null,
   })
 
   if (error) return fail(error)

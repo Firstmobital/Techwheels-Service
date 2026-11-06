@@ -21,6 +21,9 @@ export type StaffModuleRoute =
   | '/(tabs)/driver-tasks'
   | '/(tabs)/alerts'
   | '/(tabs)/chat'
+  | '/(tabs)/service-advisor'
+  | '/(tabs)/technician'
+  | '/(tabs)/sa-tracker'
 
 export type StaffHomeModule = {
   key: string
@@ -39,6 +42,9 @@ export const STAFF_HOME_MODULES: StaffHomeModule[] = [
   { key: 'admin', label: 'Admin', icon: 'users', iconBg: 'bg-slate-100', description: 'Users, roles & branches', route: '/(tabs)/admin' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconBg: 'bg-amber-100', description: 'Preferences & device', route: '/(tabs)/settings' },
   { key: 'reception', label: 'Reception', icon: 'check-circle', iconBg: 'bg-green-100', description: 'Vehicle intake & entries', route: '/(tabs)/reception' },
+  { key: 'service-advisor', label: 'Service Advisor', icon: 'user', iconBg: 'bg-sky-100', description: 'Mechanical JC · estimate · invoice', route: '/(tabs)/service-advisor' },
+  { key: 'technician', label: 'Technician', icon: 'sliders', iconBg: 'bg-teal-100', description: 'Day-wise earnings & income reports', route: '/(tabs)/technician' },
+  { key: 'sa-tracker', label: 'SA Tracker', icon: 'presentation', iconBg: 'bg-lime-100', description: 'SA labour earnings & payouts', route: '/(tabs)/sa-tracker' },
   { key: 'floor-incharge', label: 'Floor Incharge', icon: 'grid', iconBg: 'bg-indigo-100', description: 'Technician assignments · bay · status', route: '/(tabs)/floor-incharge' },
   { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
   { key: 'bodyshop-repair', label: 'Bodyshop Repair', icon: 'package', iconBg: 'bg-violet-100', description: '18-stage accident repair pipeline', route: '/(tabs)/bodyshop-repair' },
@@ -73,6 +79,9 @@ export const STAFF_MODULE_KEY_TO_DB: Record<string, string[]> = {
   admin: ['admin'],
   settings: ['settings'],
   reception: ['reception'],
+  'service-advisor': ['service_advisor'],
+  technician: ['technician'],
+  'sa-tracker': ['sa_tracker'],
   'floor-incharge': ['floor_incharge'],
   telecalling: ['telecalling'],
   'bodyshop-repair': ['bodyshop_repair'],

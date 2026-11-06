@@ -327,6 +327,30 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="service-advisor"
+        options={{
+          title: 'Service Advisor',
+          headerShown: false,
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="technician"
+        options={{
+          title: 'Technician',
+          headerShown: false,
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sa-tracker"
+        options={{
+          title: 'SA Tracker',
+          headerShown: false,
+          href: null,
+        }}
+      />
     </Tabs>
   )
 }

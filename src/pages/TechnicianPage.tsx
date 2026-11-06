@@ -13,6 +13,7 @@ import RevisitBadge from '../components/RevisitBadge'
 import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 import { isTechnicianBusinessRole } from '../lib/businessRoles'
+import { normalizeEmployeeCode } from '../lib/employeeMatcher'
 import { getBlockedDisbursementCodesForRange } from '../lib/payroll/disbursementGuard'
 import * as XLSX from 'xlsx'
 
@@ -181,6 +182,41 @@ function isPlatformAdminRole(role: string): boolean {
   return normalized === 'admin' || normalized === 'super_admin' || normalized === 'super admin'
 }
 
+function normalizeTechnicianCode(value: string | null | undefined): string {
+  return normalizeEmployeeCode(String(value ?? ''))
+}
+
+function linkedEmployeeCodesFromRows(
+  rows: { employee_code?: string | null }[] | null | undefined,
+): string[] {
+  return Array.from(new Set(
+    (rows ?? [])
+      .map((row) => normalizeTechnicianCode(row.employee_code))
+      .filter(Boolean),
+  ))
+}
+
+function buildTechnicianRowAllowSet(
+  scope: TechnicianLoadScope,
+  incomeEligibleTechnicianCodes: Set<string>,
+): Set<string> {
+  if (scope.broadAccess || scope.jobCardNumbers !== null) {
+    return incomeEligibleTechnicianCodes
+  }
+  if (scope.technicianCodes.length > 0) {
+    return new Set(scope.technicianCodes.map((code) => normalizeTechnicianCode(code)).filter(Boolean))
+  }
+  return incomeEligibleTechnicianCodes
+}
+
+function assignmentRowMatchesTechnicianAllowSet(
+  row: TechnicianAssignmentRow,
+  allowSet: Set<string>,
+): boolean {
+  const code = normalizeTechnicianCode(row.technician_code)
+  return Boolean(code && allowSet.has(code))
+}
+
 async function resolveTechnicianLoadScope(
   userId: string,
   role: string,
@@ -216,17 +252,13 @@ async function resolveTechnicianLoadScope(
     throw new Error(`Failed to load employee links: ${linksRes.error.message}`)
   }
 
-  const technicianCodes = Array.from(new Set(
-    (linksRes.data ?? [])
-      .map((row) => String((row as { employee_code?: string | null }).employee_code ?? '').trim())
-      .filter((code) => {
-        const normalized = normalizeJobCardNumber(code)
-        return Boolean(normalized && technicianCodeSet.has(normalized))
-      }),
-  ))
+  const linkedCodes = linkedEmployeeCodesFromRows(
+    (linksRes.data ?? []) as { employee_code?: string | null }[],
+  )
 
-  if (technicianCodes.length > 0) {
-    return { broadAccess: false, technicianCodes, jobCardNumbers: null }
+  const rosterMatchedCodes = linkedCodes.filter((code) => technicianCodeSet.has(code))
+  if (rosterMatchedCodes.length > 0) {
+    return { broadAccess: false, technicianCodes: rosterMatchedCodes, jobCardNumbers: null }
   }
 
   if (moduleNames.has('service_advisor')) {
@@ -238,6 +270,10 @@ async function resolveTechnicianLoadScope(
 
     const jobCardNumbers = await fetchSaOwnedJobCardNumbers(saEmployeeCode)
     return { broadAccess: false, technicianCodes: [], jobCardNumbers }
+  }
+
+  if (moduleNames.has('technician') && linkedCodes.length > 0) {
+    return { broadAccess: false, technicianCodes: linkedCodes, jobCardNumbers: null }
   }
 
   return { broadAccess: false, technicianCodes: [], jobCardNumbers: [] }
@@ -462,7 +498,7 @@ async function fetchTechnicianCodeSet(): Promise<Set<string>> {
   const set = new Set<string>()
   ;(techRes.data ?? []).forEach((row) => {
     if (!isTechnicianBusinessRole(row.role)) return
-    const code = normalizeJobCardNumber(row.employee_code)
+    const code = normalizeTechnicianCode(row.employee_code)
     if (!code) return
     set.add(code)
   })
@@ -484,11 +520,11 @@ function buildSupportTechnicianMap(rows: SupportAssignmentRow[]): Map<string, Su
     const jc = normalizeJobCardNumber(row.job_card_number)
     if (!jc) return
 
-    const code = normalizeJobCardNumber(row.employee_code)
+    const code = normalizeTechnicianCode(row.employee_code)
     if (!code) return
 
     const existing = supportByJc.get(jc) ?? []
-    const alreadyExists = existing.some((item) => normalizeJobCardNumber(item.employee_code) === code)
+    const alreadyExists = existing.some((item) => normalizeTechnicianCode(item.employee_code) === code)
     if (!alreadyExists) {
       existing.push(row)
       supportByJc.set(jc, existing)
@@ -509,12 +545,12 @@ function buildSplitCountByJobCard(
     if (!jc) return
 
     const participants = new Set<string>()
-    const primaryCode = normalizeJobCardNumber(row.technician_code)
+    const primaryCode = normalizeTechnicianCode(row.technician_code)
     if (primaryCode) participants.add(primaryCode)
 
     const supportRows = supportByJc.get(jc) ?? []
     supportRows.forEach((supportRow) => {
-      const supportCode = normalizeJobCardNumber(supportRow.employee_code)
+      const supportCode = normalizeTechnicianCode(supportRow.employee_code)
       if (supportCode) participants.add(supportCode)
     })
 
@@ -541,11 +577,11 @@ function expandAssignmentsWithSupportTechnicians(
     if (supportRows.length === 0) return
 
     const seenCodes = new Set<string>()
-    const primaryCode = normalizeJobCardNumber(row.technician_code)
+    const primaryCode = normalizeTechnicianCode(row.technician_code)
     if (primaryCode) seenCodes.add(primaryCode)
 
     supportRows.forEach((supportRow) => {
-      const supportCode = normalizeJobCardNumber(supportRow.employee_code)
+      const supportCode = normalizeTechnicianCode(supportRow.employee_code)
       if (!supportCode || seenCodes.has(supportCode)) return
       seenCodes.add(supportCode)
 
@@ -765,7 +801,7 @@ async function fetchYesterdayReportData(
 
   const assignmentRows = dedupeLatestAssignments(
     ((await fetchIncomeAssignments({ scope, assignedFrom: fromTs, assignedTo: toTs }))
-      .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.technician_code)))),
+      .filter((row) => technicianCodeSet.has(normalizeTechnicianCode(row.technician_code)))),
   )
 
   const completedJcs = Array.from(new Set(
@@ -789,7 +825,7 @@ async function fetchYesterdayReportData(
     if (!supportRes.error && supportRes.data) {
       supportRows.push(
         ...(supportRes.data as SupportAssignmentRow[])
-          .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.employee_code))),
+          .filter((row) => technicianCodeSet.has(normalizeTechnicianCode(row.employee_code))),
       )
     }
   }
@@ -966,6 +1002,7 @@ export default function TechnicianPage() {
 
       const technicianCodeSet = await fetchTechnicianCodeSet()
       const loadScope = await resolveTechnicianLoadScope(userId, role, technicianCodeSet)
+      const technicianRowAllowSet = buildTechnicianRowAllowSet(loadScope, technicianCodeSet)
       const assignedAtWindow = buildAssignedAtWindow(dateRange)
 
       const assignmentRowsRaw = await fetchIncomeAssignments({
@@ -1010,7 +1047,7 @@ export default function TechnicianPage() {
       // Map invoice_date to assignments and filter by date range
       const primaryAssignmentRows = dedupeLatestAssignments(
         assignmentRowsRaw
-          .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.technician_code)))
+          .filter((row) => assignmentRowMatchesTechnicianAllowSet(row, technicianRowAllowSet))
           .map((row) => ({
             ...row,
             invoice_date: invoiceDateMap.get(normalizeJobCardNumber(row.job_card_number)) ?? null,
@@ -1043,7 +1080,10 @@ export default function TechnicianPage() {
         if (!supportRes.error && supportRes.data) {
           supportRows.push(
             ...(supportRes.data as SupportAssignmentRow[])
-              .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.employee_code))),
+              .filter((row) => {
+                const code = normalizeTechnicianCode(row.employee_code)
+                return Boolean(code && technicianRowAllowSet.has(code))
+              }),
           )
         }
       }
@@ -2326,6 +2366,16 @@ export default function TechnicianPage() {
                   <div className="tech-drill-btn__meta">{card.dayCount} days • {card.rowCount} rows</div>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && selectedTechnicianCode && dayCards.length === 0 && (
+        <div className="card mb-gap">
+          <div className="card__body dense">
+            <div className="sub">
+              No day-wise earnings for this technician in the selected period. Day drill-down needs invoiced (closed) jobs with invoice dates in the current filter.
             </div>
           </div>
         </div>
