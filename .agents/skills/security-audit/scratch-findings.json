@@ -1,0 +1,374 @@
+[
+  {
+    "verdict": "confirmed",
+    "fingerprint": "rls.service_bookings.authenticated-open-policy",
+    "title": "Any authenticated staff can read and write all service bookings via PostgREST",
+    "description": "The application treats `driver_management` and `service_booking` as separate modules, but Row Level Security on `service_bookings` grants every authenticated user unrestricted SELECT, INSERT, UPDATE, and DELETE. A staff member without module permission can still query customer PII and mutate bookings using only the published anon key and their own JWT.",
+    "root_cause": "Policy `service_bookings_all_auth` uses `USING (true) WITH CHECK (true)` for the `authenticated` role.",
+    "intended_behavior": "Staff without `driver_management` or related module grants should not access `service_bookings` rows through the Supabase API.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/App.tsx",
+        "line": 983,
+        "scope": "Route guard",
+        "description": "`/driver-management` requires `driver_management` or `admin` in client `allowedModules`."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/pages/DriverManagementPage.tsx",
+        "line": 137,
+        "scope": "Data fetch",
+        "description": "Page loads rows with `supabase.from('service_bookings').select(...)` under the staff JWT."
+      },
+      {
+        "kind": "sink",
+        "file": "supabase/migrations/20260929152000_production_schema_baseline.sql",
+        "line": 39294,
+        "scope": "RLS policy",
+        "description": "`service_bookings_all_auth` permits any authenticated principal all operations on the table."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/migrations/20260929152000_production_schema_baseline.sql",
+        "line": 39294,
+        "description": "CREATE POLICY service_bookings_all_auth ON public.service_bookings TO authenticated USING (true) WITH CHECK (true);"
+      },
+      {
+        "file": "src/App.tsx",
+        "line": 1355,
+        "description": "Staff modules come from `get_all_my_permissions()` but are not enforced at the table layer for bookings."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "Attacker holds any valid staff Supabase Auth session (not admin-only)."
+      },
+      {
+        "kind": "system_configuration",
+        "description": "Publishable anon key and project URL are available to clients (standard SPA/mobile deployment)."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Authenticated staff user who was not granted `driver_management`.",
+      "payloads": [
+        "GET /rest/v1/service_bookings?select=id,customer_name,customer_phone,reg_number&limit=5"
+      ],
+      "instructions": [
+        "In a local Supabase stack seeded with two staff users, grant `service_advisor` permissions only to user A (no driver_management).",
+        "Sign in as user A and call the REST path above with the Authorization header set to user A's access JWT and apikey set to the anon key.",
+        "Compare result row count with user B who has explicit driver_management; user A should still receive rows if this policy is unchanged."
+      ],
+      "observed_result": "PostgREST returns booking rows for user A despite missing module permission in `user_module_permissions`."
+    },
+    "remediation": {
+      "strategy": "Replace the blanket authenticated policy with module- or role-aware RLS (e.g. `has_module_view('driver_management')` OR admin), or route all booking access through SECURITY DEFINER RPCs that enforce the same checks used in the UI.",
+      "code_changes": [
+        {
+          "file_name": "supabase/migrations/<new>_service_bookings_module_rls.sql",
+          "fixed_code": "DROP POLICY IF EXISTS service_bookings_all_auth ON public.service_bookings;\nCREATE POLICY service_bookings_module_read ON public.service_bookings FOR SELECT TO authenticated\n  USING (public.is_admin() OR public.has_module_view('driver_management') OR public.has_module_modify('driver_management'));\nCREATE POLICY service_bookings_module_write ON public.service_bookings FOR ALL TO authenticated\n  USING (public.is_admin() OR public.has_module_modify('driver_management'))\n  WITH CHECK (public.is_admin() OR public.has_module_modify('driver_management'));"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Any active staff account can use browser devtools or a REST client; no module gap required beyond valid login."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "Exposure and tampering of customer contact data, addresses, pickup/drop details, and booking workflow for the entire dealership."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "Policy text and grants are explicit in the baseline migration; no later migration tightens `service_bookings` RLS."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "rpc.get_permissions_for_user.missing-admin-gate",
+    "title": "SECURITY DEFINER get_permissions_for_user lacks caller authorization",
+    "description": "The function comment states only admins may call it, but the SQL body selects permissions for arbitrary `target_user_id` with no `auth.uid()` or `is_admin()` guard. It is granted to `anon` and `authenticated`, so unauthenticated or non-admin callers can enumerate another user's effective modules.",
+    "root_cause": "SECURITY DEFINER function omits an admin check while ACLs expose it to `anon`.",
+    "intended_behavior": "Only active admin users may read another user's module permission rows (used for impersonation/admin tooling).",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/App.tsx",
+        "line": 1388,
+        "scope": "Impersonation",
+        "description": "Admin impersonation calls `supabase.rpc('get_permissions_for_user', { target_user_id })`."
+      },
+      {
+        "kind": "sink",
+        "file": "supabase/migrations/20260929152000_production_schema_baseline.sql",
+        "line": 7353,
+        "scope": "RPC definition",
+        "description": "Function selects from `user_module_permissions` for supplied UUID with no caller check."
+      },
+      {
+        "kind": "sink",
+        "file": "supabase/migrations/20260929152000_production_schema_baseline.sql",
+        "line": 41499,
+        "scope": "ACL",
+        "description": "GRANT ALL ON FUNCTION get_permissions_for_user TO anon, authenticated."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/migrations/20260929152000_production_schema_baseline.sql",
+        "line": 7357,
+        "description": "Comment '-- Only admin users may call this' is not enforced in SQL."
+      },
+      {
+        "file": "supabase/migrations/20260929152000_production_schema_baseline.sql",
+        "line": 7361,
+        "description": "WHERE clause filters on `p.user_id = target_user_id` only."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "Caller may be anonymous (anon key) or any authenticated staff user."
+      },
+      {
+        "kind": "data_state",
+        "description": "Attacker knows or guesses a target user's UUID (visible in many staff-facing tables)."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Non-admin staff or anonymous API client with the publishable key.",
+      "payloads": [
+        "{\"target_user_id\":\"00000000-0000-0000-0000-000000000001\"}"
+      ],
+      "instructions": [
+        "POST to `/rest/v1/rpc/get_permissions_for_user` with apikey set to the project anon key and Authorization set to Bearer <anon key> or a non-admin staff JWT.",
+        "Supply a known staff user UUID in the JSON body.",
+        "Inspect JSON response for module names and capability flags."
+      ],
+      "observed_result": "Permission rows for the target user are returned without verifying the caller is admin."
+    },
+    "remediation": {
+      "strategy": "Add `IF NOT public.is_admin() THEN RAISE EXCEPTION ...` (or equivalent) at the start of the function; revoke EXECUTE from `anon`; keep authenticated only if needed.",
+      "code_changes": [
+        {
+          "file_name": "supabase/migrations/<new>_get_permissions_for_user_admin_only.sql",
+          "fixed_code": "CREATE OR REPLACE FUNCTION public.get_permissions_for_user(target_user_id uuid) ... AS $$\nBEGIN\n  IF NOT public.is_admin() THEN\n    RAISE EXCEPTION 'admin only' USING ERRCODE = '42501';\n  END IF;\n  RETURN QUERY SELECT ...;\nEND;\n$$ LANGUAGE plpgsql SECURITY DEFINER;\nREVOKE ALL ON FUNCTION public.get_permissions_for_user(uuid) FROM PUBLIC;\nGRANT EXECUTE ON FUNCTION public.get_permissions_for_user(uuid) TO authenticated;"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "medium",
+        "reason": "Requires anon or staff API access and a target UUID, both commonly available in this app model."
+      },
+      "impact": {
+        "score": "medium",
+        "reason": "Discloses internal authorization layout and aids targeted abuse of other gaps; does not directly exfiltrate customer job data by itself."
+      },
+      "overall_severity": "medium"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "Function body and grants are unambiguous in source; no corrective migration found."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "edge.booking-source-sync.no-auth-verify-jwt-false",
+    "title": "booking-source-sync Edge Function has no request authentication",
+    "description": "`supabase/config.toml` sets `verify_jwt = false` for `booking-source-sync`, and the handler performs no shared-secret or admin check before using service-role clients to read a source database and write into `all_service_data` on the target project.",
+    "root_cause": "Publicly invokable Edge entrypoint with service-role credentials and no caller authentication.",
+    "intended_behavior": "Only scheduled cron or trusted operators should trigger cross-database booking sync.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "supabase/config.toml",
+        "line": 28,
+        "scope": "Edge config",
+        "description": "`[functions.booking-source-sync] verify_jwt = false`"
+      },
+      {
+        "kind": "propagation",
+        "file": "supabase/functions/booking-source-sync/index.ts",
+        "line": 30,
+        "scope": "HTTP handler",
+        "description": "POST handler proceeds without Authorization validation."
+      },
+      {
+        "kind": "sink",
+        "file": "supabase/functions/booking-source-sync/index.ts",
+        "line": 67,
+        "scope": "Service role clients",
+        "description": "Creates Supabase clients with `SUPABASE_SERVICE_ROLE_KEY` and optional source service key, then mutates target data."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/functions/booking-source-sync/index.ts",
+        "line": 35,
+        "description": "Only method check; no auth helper such as `validateRequest`."
+      },
+      {
+        "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md",
+        "line": 550,
+        "description": "Documents intentional `verify_jwt = false` for cron—does not add an alternative shared-secret gate in code."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "network_routing",
+        "description": "Deployed function URL is reachable with the publishable anon key (default Supabase Edge deployment)."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Internet client with the project anon key only.",
+      "payloads": [
+        "{\"dry_run\":true,\"batch_size\":1}"
+      ],
+      "instructions": [
+        "POST to the deployed `booking-source-sync` function URL with headers `apikey: <anon>` and `Authorization: Bearer <anon>`.",
+        "Send a small batch dry-run body and observe JSON sync statistics in the response."
+      ],
+      "observed_result": "Function executes sync logic using service-role credentials without rejecting the caller."
+    },
+    "remediation": {
+      "strategy": "Require a high-entropy cron secret header, enable JWT verification with a dedicated service user, or restrict invocation to Supabase scheduled triggers only; never run service-role sync on an unauthenticated HTTP surface.",
+      "code_changes": [
+        {
+          "file_name": "supabase/functions/booking-source-sync/index.ts",
+          "fixed_code": "const cronSecret = Deno.env.get('BOOKING_SYNC_CRON_SECRET');\nif (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {\n  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });\n}"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "medium",
+        "reason": "Requires knowledge of the function URL and anon key, both embedded in client apps or infra configs."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "Unauthorized sync or resync can corrupt or flood `all_service_data`, affecting customer comms, reminders, and downstream workflows."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "Config and handler lack auth in source; pattern matches other hardening notes in repo docs for different functions."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "customer.auth.phone-only-knowledge-factor",
+    "title": "Customer portal authenticates with phone number as both identifier and password",
+    "description": " `customer_start_session` accepts the same last-10-digit value for username and password, granting a 12-hour session token. Rate limiting (10 attempts per 15 minutes per phone key) reduces brute force but does not add a second factor.",
+    "claimed_root_cause": "Password check `v_user <> v_pass` is skipped in favor of equality of two phone-derived fields.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "supabase/migrations/20261008170000_customer_terms_acceptance.sql",
+        "line": 175,
+        "scope": "customer_start_session",
+        "description": "Login compares last-10-digit username and password."
+      },
+      {
+        "kind": "sink",
+        "file": "supabase/migrations/20261008170000_customer_terms_acceptance.sql",
+        "line": 219,
+        "scope": "Session issuance",
+        "description": "Issues 64-byte random session token on success."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/migrations/20261008170000_customer_terms_acceptance.sql",
+        "line": 203,
+        "description": "IF v_user IS NULL OR v_pass IS NULL OR v_user <> v_pass THEN RAISE EXCEPTION."
+      },
+      {
+        "file": "supabase/migrations/20261008170000_customer_terms_acceptance.sql",
+        "line": 199,
+        "description": "Brute-force cap: 10 attempts per 15 minutes per phone_key."
+      }
+    ],
+    "blockers": [
+      "Business acceptance of phone-only customer login and monitoring for abuse is a deployment/operations decision not visible in code."
+    ],
+    "validation_plan": {
+      "local": "Model account takeover attempts under the rate limit in a local stack; measure whether operators accept residual risk for vehicle owners.",
+      "deployment": "Review customer fraud incidents and optional OTP step without probing production accounts."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "edge.cron-reports.verify-jwt-false-batch",
+    "title": "Several report/sync Edge Functions disable JWT verification",
+    "description": "Besides `booking-source-sync`, `config.toml` sets `verify_jwt = false` on earnings reports, insurance telecalling, and similar jobs. Some handlers use `_shared/auth.ts`; others may rely solely on network obscurity.",
+    "claimed_root_cause": "Cron-oriented functions disable platform JWT verification without a uniform in-code secret or service-role caller check.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "supabase/config.toml",
+        "line": 19,
+        "scope": "Functions block",
+        "description": "Multiple `verify_jwt = false` entries for report and sync functions."
+      },
+      {
+        "kind": "propagation",
+        "file": "supabase/functions/technician-daily-earnings-report/index.ts",
+        "line": 3,
+        "scope": "Auth import",
+        "description": "Imports `validateRequest`—auth strength depends on implementation not fully traced for every sibling function in this pass."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/config.toml",
+        "line": 34,
+        "description": "insurance-renewal-telecalling verify_jwt = false"
+      }
+    ],
+    "blockers": [
+      "Per-function handler review and deployed Supabase invocation policies were not exhaustively verified in this run."
+    ],
+    "validation_plan": {
+      "local": "For each `verify_jwt = false` function, confirm either validateRequest/admin gate or cron secret before service-role work.",
+      "deployment": "Inventory scheduled triggers vs public HTTP routes in Supabase dashboard."
+    }
+  },
+  {
+    "verdict": "rejected",
+    "fingerprint": "client.driver-management-implicit-module-grant",
+    "title": "Claimed universal Driver Management access via service_booking module",
+    "description": "Prior builds allegedly auto-added `driver_management` when staff had `service_booking`. Current `src/App.tsx` maps `/driver-management` to `['driver_management','admin']` only and does not add `driver_management` in `loadAccess` for non-admins.",
+    "claimed_root_cause": "Implicit module expansion in `loadAccess` for service_booking users.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/App.tsx",
+        "line": 180,
+        "scope": "ROUTE_MODULE_MAP",
+        "description": "Driver route requires explicit module or admin."
+      },
+      {
+        "kind": "sink",
+        "file": "src/App.tsx",
+        "line": 1355,
+        "scope": "loadAccess",
+        "description": "Non-admin modules come only from `get_all_my_permissions()`."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/App.tsx",
+        "line": 180,
+        "description": "No service_booking alias on driver-management route."
+      }
+    ],
+    "reason": "Issue is remediated at the reviewed commit. Residual impact for bookings is superseded by confirmed RLS gap on `service_bookings` (any authenticated staff already has API access)."
+  }
+]

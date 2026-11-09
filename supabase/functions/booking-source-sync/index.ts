@@ -1,5 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type': 'application/json',
+}
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = { from: (table: string) => any }
 
@@ -35,6 +41,15 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
+      headers: corsHeaders,
+    })
+  }
+
+  const expectedCronSecret = Deno.env.get('BOOKING_SOURCE_SYNC_CRON_SECRET') ?? ''
+  const providedCronSecret = req.headers.get('x-cron-secret') ?? ''
+  if (!expectedCronSecret || providedCronSecret !== expectedCronSecret) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
       headers: corsHeaders,
     })
   }

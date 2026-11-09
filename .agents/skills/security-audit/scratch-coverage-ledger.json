@@ -1,0 +1,203 @@
+[
+  {
+    "coverage_id": "supabase%2Fmigrations%23service_bookings%20RLS::service_bookings_all_auth::supabase%2Frls::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "supabase/migrations#service_bookings RLS",
+      "boundary": "service_bookings_all_auth",
+      "subsystem": "supabase/rls",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "supabase/migrations#service_bookings RLS",
+    "boundary": "service_bookings_all_auth",
+    "subsystem": "supabase/rls",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": ["supabase/migrations/20260929152000_production_schema_baseline.sql", "src/pages/DriverManagementPage.tsx"],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-rls",
+    "reviewed_paths": ["supabase/migrations/20260929152000_production_schema_baseline.sql", "src/App.tsx"],
+    "local_checks": [
+      {
+        "agent_id": "hunter-rls",
+        "reviewed_paths": ["supabase/migrations/20260929152000_production_schema_baseline.sql"],
+        "invariant": "Module-scoped staff cannot access service_bookings via API without grants.",
+        "method": "source",
+        "result": "Policy service_bookings_all_auth allows all authenticated users.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": ["rls.service_bookings.authenticated-open-policy"],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "supabase%2Fmigrations%23get_permissions_for_user::SECURITY%20DEFINER%20ACL::supabase%2Frpc::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "supabase/migrations#get_permissions_for_user",
+      "boundary": "SECURITY DEFINER ACL",
+      "subsystem": "supabase/rpc",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "supabase/migrations#get_permissions_for_user",
+    "boundary": "SECURITY DEFINER ACL",
+    "subsystem": "supabase/rpc",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": ["supabase/migrations/20260929152000_production_schema_baseline.sql", "src/App.tsx"],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-rpc",
+    "reviewed_paths": ["supabase/migrations/20260929152000_production_schema_baseline.sql"],
+    "local_checks": [
+      {
+        "agent_id": "hunter-rpc",
+        "reviewed_paths": ["supabase/migrations/20260929152000_production_schema_baseline.sql"],
+        "invariant": "Only admins enumerate another user's module permissions.",
+        "method": "source",
+        "result": "No admin guard; GRANT to anon.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": ["rpc.get_permissions_for_user.missing-admin-gate"],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "supabase%2Ffunctions%2Fbooking-source-sync::verify_jwt%20false::supabase%2Fedge::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "supabase/functions/booking-source-sync",
+      "boundary": "verify_jwt false",
+      "subsystem": "supabase/edge",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "supabase/functions/booking-source-sync",
+    "boundary": "verify_jwt false",
+    "subsystem": "supabase/edge",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": ["supabase/functions/booking-source-sync/index.ts", "supabase/config.toml"],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-edge",
+    "reviewed_paths": ["supabase/functions/booking-source-sync/index.ts", "supabase/config.toml"],
+    "local_checks": [
+      {
+        "agent_id": "hunter-edge",
+        "reviewed_paths": ["supabase/functions/booking-source-sync/index.ts"],
+        "invariant": "Unauthenticated clients cannot trigger service-role sync.",
+        "method": "source",
+        "result": "No auth check in handler.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": ["edge.booking-source-sync.no-auth-verify-jwt-false"],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "supabase%2Fmigrations%23customer_start_session::customer%20session%20token::supabase%2Fcustomer::ATTACK-CLASSES.md%23Authentication",
+    "canonical_refs": {
+      "surface": "supabase/migrations#customer_start_session",
+      "boundary": "customer session token",
+      "subsystem": "supabase/customer",
+      "attack_class": "ATTACK-CLASSES.md#Authentication"
+    },
+    "surface": "supabase/migrations#customer_start_session",
+    "boundary": "customer session token",
+    "subsystem": "supabase/customer",
+    "attack_class": "ATTACK-CLASSES.md#Authentication",
+    "starting_paths": ["supabase/migrations/20261008170000_customer_terms_acceptance.sql"],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "hunter-customer",
+    "reviewed_paths": ["supabase/migrations/20261008170000_customer_terms_acceptance.sql"],
+    "local_checks": [
+      {
+        "agent_id": "hunter-customer",
+        "reviewed_paths": ["supabase/migrations/20261008170000_customer_terms_acceptance.sql"],
+        "invariant": "Customer login requires a second factor beyond known phone number.",
+        "method": "source",
+        "result": "Phone duplicated as password; rate limit only.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": ["customer.auth.phone-only-knowledge-factor"],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2FApp.tsx%23module%20routing::allowedModules::src%2Fspa::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/App.tsx#module routing",
+      "boundary": "allowedModules",
+      "subsystem": "src/spa",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/App.tsx#module routing",
+    "boundary": "allowedModules",
+    "subsystem": "src/spa",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": ["src/App.tsx"],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-spa",
+    "reviewed_paths": ["src/App.tsx"],
+    "local_checks": [
+      {
+        "agent_id": "hunter-spa",
+        "reviewed_paths": ["src/App.tsx"],
+        "invariant": "Implicit driver_management grant via service_booking.",
+        "method": "source",
+        "result": "Not present at reviewed commit; rejected fingerprint recorded.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "mobile%2F::useStaffAllowedModules::mobile%2Fstaff::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "mobile/#staff modules",
+      "boundary": "useStaffAllowedModules",
+      "subsystem": "mobile/staff",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "mobile/#staff modules",
+    "boundary": "useStaffAllowedModules",
+    "subsystem": "mobile/staff",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": ["mobile/src/hooks/useStaffAllowedModules.ts"],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "deferred",
+    "agent_id": "coverage-critic",
+    "reviewed_paths": ["mobile/src/hooks/useStaffAllowedModules.ts"],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": ["budget_deferred_mobile_deep_pass"]
+  }
+]
