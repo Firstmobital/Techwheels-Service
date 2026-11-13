@@ -958,8 +958,6 @@ export default function BodyshopFloorWorkPage() {
                 ))}
               </div>
               <span className="bsf-sep" style={{ flexBasis: '100%', height: 0, margin: '4px 0' }} />
-            </>
-          ) : null}
               <div className="bsf-group">
                 <span className="bsf-label">Bodyshop floor</span>
                 {(['all', 'Floor 2', 'Floor 3', 'unknown'] as const).map((key) => (
