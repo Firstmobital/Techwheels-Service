@@ -210,6 +210,16 @@ export function CustomerScreen({
           ? 'View digital estimate and tax invoice from your advisor'
           : 'Upload DL, RC, policy, signed claim form & T/P affidavit',
       },
+      ...(isAccident
+        ? [
+            {
+              label: 'Repair Work Photos',
+              icon: 'camera' as IconName,
+              route: '/(customer)/floor-work-gallery',
+              desc: 'Floor team progress photos with technician name (denting, paint, rubbing)',
+            },
+          ]
+        : []),
       {
         label: 'Workshop Estimate Approval',
         icon: 'check',

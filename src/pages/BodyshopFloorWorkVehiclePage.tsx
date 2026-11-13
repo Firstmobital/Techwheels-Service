@@ -165,15 +165,27 @@ export default function BodyshopFloorWorkVehiclePage() {
 
   if (loading) {
     return (
-      <div className="page-pad">
-        <p>Loading vehicle…</p>
+      <div>
+        <div className="pagehead">
+          <div>
+            <div className="greet">Bodyshop · Floor Work</div>
+            <h1>Vehicle detail</h1>
+          </div>
+        </div>
+        <div className="empty-state">Loading vehicle…</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="page-pad">
+      <div>
+        <div className="pagehead">
+          <div>
+            <div className="greet">Bodyshop · Floor Work</div>
+            <h1>Vehicle detail</h1>
+          </div>
+        </div>
         <p className="alert alert--err">{error}</p>
         <Link to="/bodyshop-floor-work" className="btn btn--ghost">
           Back to Floor Work list
@@ -183,22 +195,28 @@ export default function BodyshopFloorWorkVehiclePage() {
   }
 
   return (
-    <div className="page-pad bfw-vehicle-page">
-      <div className="bfw-vehicle-page__toolbar">
-        <Link to="/bodyshop-floor-work" className="btn btn--ghost btn--sm">
-          ← Floor Work list
-        </Link>
-        <a
-          href={floorWorkVehicleDetailPath(jobCardNumber)}
-          className="btn btn--ghost btn--sm"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Open in new tab
-        </a>
+    <div>
+      <div className="pagehead">
+        <div>
+          <div className="greet">Bodyshop · Floor Work</div>
+          <h1>{title}</h1>
+          <p className="bsf-subline">Pipeline, worker updates, and photos for this vehicle.</p>
+        </div>
+        <div className="bsf-top-actions">
+          <Link to="/bodyshop-floor-work" className="btn btn--ghost btn--sm">
+            ← Floor Work list
+          </Link>
+          <a
+            href={floorWorkVehicleDetailPath(jobCardNumber)}
+            className="btn btn--ghost btn--sm"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open in new tab
+          </a>
+        </div>
       </div>
-      <h1 className="bfw-vehicle-page__title">{title}</h1>
-      <div className="card bfw-vehicle-page__panel">
+      <div className="bsf-vcard bfw-vehicle-page__panel">
         <BodyshopFloorWorkVehicleDetailPanel
           jobCardNumber={jobCardNumber}
           vehicleMeta={vehicleMeta}

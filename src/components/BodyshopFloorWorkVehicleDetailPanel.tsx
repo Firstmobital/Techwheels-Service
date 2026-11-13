@@ -213,14 +213,15 @@ export function BodyshopFloorWorkVehicleDetailPanel({
 
   return (
     <div className="bfw-detail">
-      <header className="bfw-detail__hero">
-        <div>
-          <h2 className="bfw-detail__title">{floorWorkVehicleTitle(vehicleMeta, jobCardNumber)}</h2>
-          <p className="bfw-detail__sub">{floorWorkVehicleSubtitle(vehicleMeta, jobCardNumber)}</p>
-          <p className="bfw-detail__meta">
+      <header className="bfw-detail__hero bsf-vcard__top">
+        <div className="bsf-ident">
+          <h2 className="bsf-reg" style={{ margin: 0 }}>{floorWorkVehicleTitle(vehicleMeta, jobCardNumber)}</h2>
+          <p className="bsf-model" style={{ margin: 0 }}>{vehicleMeta?.model?.trim() || '—'}</p>
+          <code className="bsf-jc-code">{vehicleMeta?.systemJobCardNo?.trim() || jobCardNumber}</code>
+          <p className="bsf-meta" style={{ margin: 0 }}>
+            {floorWorkVehicleSubtitle(vehicleMeta, jobCardNumber)}
+            <br />
             {floorWorkStandingLine(vehicleMeta) ?? 'Time on floor —'}
-            {' · '}
-            JC {jobCardNumber}
           </p>
         </div>
         <div className="bfw-detail__status-card">

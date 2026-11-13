@@ -824,15 +824,30 @@ export default function BodyshopFloorWorkPage() {
   }
 
   if (loading) {
-    return <div className="page-pad"><p>Loading…</p></div>
+    return (
+      <div>
+        <div className="pagehead">
+          <div>
+            <div className="greet">Bodyshop · Floor Work</div>
+            <h1>Floor Work</h1>
+          </div>
+        </div>
+        <div className="empty-state">Loading floor work…</div>
+      </div>
+    )
   }
 
   if (error) {
     return (
-      <div className="page-pad">
-        <h1>Bodyshop Floor Work</h1>
+      <div>
+        <div className="pagehead">
+          <div>
+            <div className="greet">Bodyshop · Floor Work</div>
+            <h1>Floor Work</h1>
+          </div>
+        </div>
         <p className="alert alert--err">{error}</p>
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+        <p className="bsf-subline">
           Ask admin: link your login to employee code in Admin → Mappings, set Employee Master role (DENTOR/PAINTER/…),
           and grant module <b>bodyshop_floor_work</b>.
         </p>
@@ -841,278 +856,297 @@ export default function BodyshopFloorWorkPage() {
   }
 
   return (
-    <div className="page-pad">
-      <h1>Bodyshop Floor Work</h1>
-      <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
-        {(employeeName ?? employeeCode) || 'Admin'}
-        {isAdminOverview ? ` · Admin — ${BODYSHOP_FLOOR_LIVE_LIST_LABEL} (same as Bodyshop Floor)` : ''}
-        {' · IST date '}{today}
-      </p>
+    <div>
+      <div className="pagehead">
+        <div>
+          <div className="greet">Bodyshop · Floor Work</div>
+          <h1>Floor Work</h1>
+          <p className="bsf-subline">
+            {(employeeName ?? employeeCode) || 'Admin'}
+            {isAdminOverview ? ` · Admin — ${BODYSHOP_FLOOR_LIVE_LIST_LABEL} (same vehicles as Bodyshop Floor)` : ' · Your pipeline step (Dentor → Painter → Technician → Rubbing)'}
+            {' · IST '}{today}
+            {' · '}{vehicleRows.length} showing / {floorWorkListCatalog.length} in catalog
+            {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
+          </p>
+        </div>
+        <div className="bsf-top-actions">
+          {!isAdminOverview ? (
+            <label className="bsf-list-mode">
+              <span className="bsf-label">Month on floor</span>
+              <select
+                className="sel sel--advisor-filter"
+                value={floorMonthFilter}
+                onChange={(e) => setFloorMonthFilter(e.target.value)}
+                aria-label="Month on floor"
+              >
+                {monthFilterOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void load()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
 
-      <>
-          {(vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0) ? (
-            <div className="card bfw-toolbar">
-              <div className="bfw-filters bfw-filters--toolbar">
-                <div className="bfw-filters__main">
-                  {isAdminOverview ? (
-                    <div className="bsf-search bfw-filters__search">
-                      <Icon name="search" size={16} />
-                      <input
-                        className="bsf-search__input"
-                        type="search"
-                        placeholder="Search reg / customer / JC…"
-                        value={vehicleSearch}
-                        onChange={(e) => setVehicleSearch(e.target.value)}
-                      />
-                    </div>
-                  ) : null}
-                  <div className="bsf-group">
-                    <span className="bsf-label">Month on floor</span>
-                    <select
-                      className="sel sel--advisor-filter"
-                      value={floorMonthFilter}
-                      onChange={(e) => setFloorMonthFilter(e.target.value)}
-                      aria-label="Month on floor"
-                    >
-                      {monthFilterOptions.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {isAdminOverview ? (
-                    <>
-                      <div className="bsf-group bfw-filters__chip-group bfw-filters__chip-group--wide">
-                        <span className="bsf-label">Work lane</span>
-                        <div className="bfw-filters__chips">
-                          <button
-                            type="button"
-                            className={`bsf-chip ${pipelineStageFilter === 'all' ? 'is-active' : ''}`}
-                            onClick={() => setPipelineStageFilter('all')}
-                          >
-                            All lanes
-                            <span className="bsf-chip__n">{filterCounts.pipelineStage.all}</span>
-                          </button>
-                          {PIPELINE_STAGE_FILTER_BUCKETS.map((key) => (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`bsf-chip ${pipelineStageFilter === key ? 'is-active' : ''}`}
-                              onClick={() => setPipelineStageFilter(key)}
-                            >
-                              {PIPELINE_STAGE_FILTER_LABELS[key]}
-                              <span className="bsf-chip__n">{filterCounts.pipelineStage[key]}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="bsf-group bfw-filters__chip-group">
-                        <span className="bsf-label">Bodyshop floor</span>
-                        <div className="bfw-filters__chips">
-                          {(['all', 'Floor 2', 'Floor 3', 'unknown'] as const).map((key) => (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`bsf-chip ${physicalFloorFilter === key ? 'is-active' : ''}`}
-                              onClick={() => setPhysicalFloorFilter(key)}
-                            >
-                              {key === 'all' ? 'All floors' : key === 'unknown' ? 'No floor' : key}
-                              <span className="bsf-chip__n">{filterCounts.physicalFloor[key]}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="bsf-group bfw-filters__chip-group">
-                        <span className="bsf-label">On floor (IST)</span>
-                        <div className="bfw-filters__chips">
-                          {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
-                              onClick={() => setFloorDayFilter(key)}
-                            >
-                              {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}
-                              <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="bsf-group bfw-filters__chip-group">
-                        <span className="bsf-label">Pipeline step</span>
-                        <div className="bfw-filters__chips">
-                          {(['all', 'pending', 'done'] as const).map((key) => (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
-                              onClick={() => setUpdateFilter(key)}
-                            >
-                              {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}
-                              <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-              <p className="bfw-toolbar__meta">
-                Total showing: <strong>{vehicleRows.length}</strong>
-                {' / '}
-                {floorWorkListCatalog.length} in catalog
-                {' · '}Chip counts use the same rules as this list
-                {' · '}Sorted: on floor today → yesterday → longer wait
-                {loadingPhotoCounts ? ' · Photo counts loading…' : ''}
-              </p>
+      {isAdminOverview ? (
+        <div className="bsf-kpis">
+          <button
+            type="button"
+            className={`bsf-kpi bsf-kpi--all ${pipelineStageFilter === 'all' ? 'is-active' : ''}`}
+            onClick={() => setPipelineStageFilter('all')}
+          >
+            <div className="bsf-kpi__count">{filterCounts.pipelineStage.all}</div>
+            <div className="bsf-kpi__label">All lanes</div>
+          </button>
+          {PIPELINE_STAGE_FILTER_BUCKETS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`bsf-kpi bsf-kpi--work_inprocess ${pipelineStageFilter === key ? 'is-active' : ''}`}
+              onClick={() => setPipelineStageFilter(key)}
+              disabled={(filterCounts.pipelineStage[key] ?? 0) === 0}
+            >
+              <div className="bsf-kpi__count">{filterCounts.pipelineStage[key]}</div>
+              <div className="bsf-kpi__label">{PIPELINE_STAGE_FILTER_LABELS[key]}</div>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {(vehicleRows.length > 0 || isAdminOverview || baseJobCards.length > 0) ? (
+        <div className="bsf-filterbar">
+          {isAdminOverview ? (
+            <div className="bsf-search">
+              <Icon name="search" size={16} />
+              <input
+                className="bsf-search__input"
+                type="search"
+                placeholder="Search reg / customer / JC…"
+                value={vehicleSearch}
+                onChange={(e) => setVehicleSearch(e.target.value)}
+              />
             </div>
           ) : null}
-
-          <div className="bfw-stack">
-          <section className="card bfw-stack__list">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>
-              {isAdminOverview ? 'On Floor (Live) — same vehicles as Bodyshop Floor' : 'My vehicles — your pipeline step'}
-            </h2>
-            {!isAdminOverview ? (
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 10 }}>
-                Your assigned vehicles this month, only when it is your turn in the pipeline
-                (Dentor → Painter → Technician → Rubbing). Submit to complete your step.
-              </p>
-            ) : null}
-            {vehicleRows.length === 0 ? (
-              <p style={{ color: 'var(--muted)' }}>
-                {isAdminOverview
-                  ? baseJobCards.length === 0
-                    ? 'No vehicles on floor or active assignments yet.'
-                    : 'No vehicles match the current filters (only cars with registration are listed). Try All for On floor, clear search, or add reg on Bodyshop Repair.'
-                  : workerAssignedSlotCount === 0
-                    ? 'No vehicle is assigned to you on Bodyshop Floor yet. Ask Floor Incharge to assign your name (Dentor / Painter / etc.) on the Bodyshop Floor screen for that job card.'
-                    : tasks.length === 0
-                      ? 'You have floor assignments, but none are at your pipeline step right now (an earlier role must finish first). Try another month above if the car arrived earlier.'
-                      : 'No vehicles match this month or search. Try “All months” in the month filter.'}
-              </p>
-            ) : (
-              <div className="bfw-vehicle-grid">
-                {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
-                  const card = cardByJc[jobCardNumber]
-                  const assignRow = assignmentRowForDisplayJc(jobCardNumber)
-                  const stepPending = vehicleHasPendingPipelineSteps(jobCardNumber, rowTasks)
-                  const photoCount = photoCountByJc[jobCardNumber] ?? 0
-                  const active = selectedJc === jobCardNumber
-                  const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)
-                  const statusLine = floorWorkVehicleStatusHeadline(assignRow, card?.qcStatus, card)
-                  const cardBody = (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                        <strong style={{ fontSize: 16 }}>{floorWorkVehicleTitle(card, jobCardNumber)}</strong>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: 999,
-                            background: stepPending ? 'var(--surface-3, #fef3c7)' : 'var(--surface-2, #e0f2fe)',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {rowTasks.length === 0
-                            ? '—'
-                            : isAdminOverview
-                              ? (stepPending ? 'Pending' : 'Done')
-                              : (stepPending ? 'Your turn' : 'Done')}
-                        </span>
-                      </div>
-                      <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
-                        {floorWorkVehicleSubtitle(card, jobCardNumber) || 'Customer —'}
-                      </p>
-                      <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--muted)' }}>
-                        {floorWorkStandingLine(card) ?? 'Time on floor —'}
-                        {' · '}{floorWorkFloorDayLabel(floorDay)}
-                      </p>
-                      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: 'var(--primary, #0d9488)' }}>
-                        {statusLine}
-                      </p>
-                      {rowTasks.length > 0 ? (
-                        <p style={{ margin: '0 0 8px', fontSize: 12, lineHeight: 1.4 }}>
-                          {isAdminOverview ? 'Roles: ' : 'Role: '}
-                          {rowTasks.map((t) => BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]).join(', ')}
-                        </p>
-                      ) : null}
-                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600 }}>
-                        Photos: {photoCount}
-                      </p>
-                      {isAdminOverview ? (
-                        <p className="bfw-vehicle-card__hint">Opens in new tab</p>
-                      ) : null}
-                    </>
-                  )
-                  if (isAdminOverview) {
-                    return (
-                      <a
-                        key={jobCardNumber}
-                        href={floorWorkVehicleDetailPath(jobCardNumber)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="card bfw-vehicle-card"
-                      >
-                        {cardBody}
-                      </a>
-                    )
-                  }
-                  return (
-                    <button
-                      key={jobCardNumber}
-                      type="button"
-                      onClick={() => {
-                        setSelectedJc(jobCardNumber)
-                        requestAnimationFrame(() => {
-                          detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                        })
-                      }}
-                      className={`card bfw-vehicle-card${active ? ' bfw-vehicle-card--active' : ''}`}
-                    >
-                      {cardBody}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-            {vehicleRows.length > 0 ? (
-              <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
-                  Showing {Math.min(listVisibleCount, vehicleRows.length)} of {vehicleRows.length} vehicles
-                  {loadingMoreMeta ? ' · Loading details…' : ''}
-                </p>
-                {listVisibleCount < vehicleRows.length ? (
+          {isAdminOverview ? (
+            <>
+              <span className="bsf-sep" />
+              <div className="bsf-group bsf-group--wrap" style={{ flex: '1 1 100%', marginBottom: 4 }}>
+                <span className="bsf-label">Work lane</span>
+                <button
+                  type="button"
+                  className={`bsf-chip ${pipelineStageFilter === 'all' ? 'is-active' : ''}`}
+                  onClick={() => setPipelineStageFilter('all')}
+                >
+                  All lanes <span className="bsf-chip__n">{filterCounts.pipelineStage.all}</span>
+                </button>
+                {PIPELINE_STAGE_FILTER_BUCKETS.map((key) => (
                   <button
+                    key={key}
                     type="button"
-                    className="btn btn--sm btn--primary"
-                    disabled={loadingMoreMeta}
-                    onClick={() => loadMoreVehicles()}
+                    className={`bsf-chip ${pipelineStageFilter === key ? 'is-active' : ''}`}
+                    onClick={() => setPipelineStageFilter(key)}
                   >
-                    {loadingMoreMeta ? 'Loading…' : `Load more (${FLOOR_WORK_LIST_PAGE_SIZE})`}
+                    {PIPELINE_STAGE_FILTER_LABELS[key]}{' '}
+                    <span className="bsf-chip__n">{filterCounts.pipelineStage[key]}</span>
                   </button>
-                ) : null}
+                ))}
               </div>
-            ) : null}
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, marginBottom: 0 }}>
-              {isAdminOverview
-                ? 'Click a vehicle to open pipeline, worker notes, and photos in a new tab.'
-                : 'Click a vehicle — full pipeline, worker notes and photos appear below.'}
-            </p>
-          </section>
+              <span className="bsf-sep" style={{ flexBasis: '100%', height: 0, margin: '4px 0' }} />
+            </>
+          ) : null}
+              <div className="bsf-group">
+                <span className="bsf-label">Bodyshop floor</span>
+                {(['all', 'Floor 2', 'Floor 3', 'unknown'] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`bsf-chip ${physicalFloorFilter === key ? 'is-active' : ''}`}
+                    onClick={() => setPhysicalFloorFilter(key)}
+                  >
+                    {key === 'all' ? 'All' : key === 'unknown' ? 'No floor' : key}{' '}
+                    <span className="bsf-chip__n">{filterCounts.physicalFloor[key]}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="bsf-sep" />
+              <div className="bsf-group">
+                <span className="bsf-label">On floor (IST)</span>
+                {(['all', 'today', 'yesterday', 'older', 'unknown'] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`bsf-chip ${floorDayFilter === key ? 'is-active' : ''}`}
+                    onClick={() => setFloorDayFilter(key)}
+                  >
+                    {key === 'all' ? 'All' : floorWorkFloorDayLabel(key)}{' '}
+                    <span className="bsf-chip__n">{filterCounts.floorDay[key]}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="bsf-sep" />
+              <div className="bsf-group">
+                <span className="bsf-label">Pipeline step</span>
+                {(['all', 'pending', 'done'] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`bsf-chip ${updateFilter === key ? 'is-active' : ''}`}
+                    onClick={() => setUpdateFilter(key)}
+                  >
+                    {key === 'all' ? 'All' : key === 'pending' ? 'Pending' : 'Updated'}{' '}
+                    <span className="bsf-chip__n">{filterCounts.updates[key]}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="bsf-sep" />
+              <div className="bsf-group">
+                <span className="bsf-label">Month on floor</span>
+                <select
+                  className="sel sel--advisor-filter"
+                  value={floorMonthFilter}
+                  onChange={(e) => setFloorMonthFilter(e.target.value)}
+                  aria-label="Month on floor"
+                >
+                  {monthFilterOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
-          <section ref={detailSectionRef} className="card bfw-stack__detail">
-            {isAdminOverview ? (
-              <div className="bfw-stack__placeholder">
-                <h2 style={{ fontSize: 16, marginTop: 0 }}>Vehicle details</h2>
-                <p style={{ color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
-                  Select a vehicle from the list above — it opens in a new browser tab with pipeline status,
-                  worker work, and all photos.
-                </p>
-              </div>
+      <div className="bsf-roster-shell">
+        <div className="bsf-roster__title">
+          {isAdminOverview ? 'On floor (live)' : 'My vehicles'}
+        </div>
+        {vehicleRows.length === 0 ? (
+          <div className="empty-state">
+            {isAdminOverview
+              ? baseJobCards.length === 0
+                ? 'No vehicles on floor or active assignments yet.'
+                : 'No vehicles match the current filters (only cars with registration are listed). Try All for On floor, clear search, or add reg on Bodyshop Repair.'
+              : workerAssignedSlotCount === 0
+                ? 'No vehicle is assigned to you on Bodyshop Floor yet. Ask Floor Incharge to assign your name on the Bodyshop Floor screen.'
+                : tasks.length === 0
+                  ? 'You have floor assignments, but none are at your pipeline step right now.'
+                  : 'No vehicles match this month. Try “All months” in the month filter.'}
+          </div>
+        ) : (
+          <div className="bsf-roster-list">
+            {displayedVehicleRows.map(({ jobCardNumber, tasks: rowTasks }) => {
+              const card = cardByJc[jobCardNumber]
+              const stepPending = vehicleHasPendingPipelineSteps(jobCardNumber, rowTasks)
+              const photoCount = photoCountByJc[jobCardNumber] ?? 0
+              const active = selectedJc === jobCardNumber
+              const floorDay = floorWorkFloorDayBucket(card?.floorSinceAt, today)
+              const statusLine = floorWorkVehicleStatusHeadline(
+                assignmentRowForDisplayJc(jobCardNumber),
+                card?.qcStatus,
+                card,
+              )
+              const regTitle = floorWorkVehicleTitle(card, jobCardNumber)
+              const stepLabel =
+                rowTasks.length === 0
+                  ? '—'
+                  : isAdminOverview
+                    ? (stepPending ? 'Pending' : 'Done')
+                    : (stepPending ? 'Your turn' : 'Done')
+              const cardInner = (
+                <div className="bsf-vcard__top">
+                  <div className="bsf-ident">
+                    <div className="bsf-reg">{regTitle}</div>
+                    <div className="bsf-model">{card?.model?.trim() || '—'}</div>
+                    <code className="bsf-jc-code">{card?.systemJobCardNo?.trim() || jobCardNumber}</code>
+                    <div className="bsf-meta">
+                      {floorWorkVehicleSubtitle(card, jobCardNumber) || 'Customer —'}
+                      <br />
+                      {floorWorkStandingLine(card) ?? 'Time on floor —'}
+                      {' · '}
+                      {floorWorkFloorDayLabel(floorDay)}
+                    </div>
+                  </div>
+                  <div className="bsf-vcard__work-summary">
+                    <span className={`badge badge--no ${stepPending ? 'badge--open' : 'badge--closed'}`}>
+                      {stepLabel}
+                    </span>
+                    <p className="bsf-stage-hint">{statusLine}</p>
+                    {rowTasks.length > 0 ? (
+                      <p className="bsf-owner-name">
+                        {isAdminOverview ? 'Roles: ' : 'Role: '}
+                        {rowTasks.map((t) => BODYSHOP_FLOOR_WORK_ROLE_LABELS[t.floorRole]).join(', ')}
+                      </p>
+                    ) : null}
+                    <p className="bsf-owner-phone">Photos: {photoCount}</p>
+                    {isAdminOverview ? <p className="bfw-vehicle-card__hint">Opens in new tab</p> : null}
+                  </div>
+                </div>
+              )
+              if (isAdminOverview) {
+                return (
+                  <a
+                    key={jobCardNumber}
+                    href={floorWorkVehicleDetailPath(jobCardNumber)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bsf-vcard bsf-vcard--link"
+                  >
+                    {cardInner}
+                  </a>
+                )
+              }
+              return (
+                <button
+                  key={jobCardNumber}
+                  type="button"
+                  onClick={() => {
+                    setSelectedJc(jobCardNumber)
+                    requestAnimationFrame(() => {
+                      detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    })
+                  }}
+                  className={`bsf-vcard bsf-vcard--pick${active ? ' is-selected' : ''}`}
+                >
+                  {cardInner}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {vehicleRows.length > 0 ? (
+          <div className="bfw-list-footer">
+            <p className="bsf-subline" style={{ margin: 0 }}>
+              Showing {Math.min(listVisibleCount, vehicleRows.length)} of {vehicleRows.length} vehicles
+              {loadingMoreMeta ? ' · Loading details…' : ''}
+            </p>
+            {listVisibleCount < vehicleRows.length ? (
+              <button
+                type="button"
+                className="btn btn--sm btn--primary"
+                disabled={loadingMoreMeta}
+                onClick={() => loadMoreVehicles()}
+              >
+                {loadingMoreMeta ? 'Loading…' : `Load more (${FLOOR_WORK_LIST_PAGE_SIZE})`}
+              </button>
             ) : null}
-            {!isAdminOverview && selectedJc ? (
+          </div>
+        ) : null}
+        <p className="bsf-subline">
+          {isAdminOverview
+            ? 'Click a vehicle to open pipeline, worker notes, and photos in a new tab.'
+            : 'Select a vehicle — pipeline, worker notes, and photos appear below.'}
+        </p>
+
+        {!isAdminOverview ? (
+          <section ref={detailSectionRef} className="bsf-vcard bfw-stack__detail">
+            {selectedJc ? (
               <div className="bfw-stack__detail-inner">
                 <BodyshopFloorWorkVehicleDetailPanel
                   jobCardNumber={selectedJc}
@@ -1219,18 +1253,18 @@ export default function BodyshopFloorWorkPage() {
                   ) : null}
                 </BodyshopFloorWorkVehicleDetailPanel>
               </div>
-            ) : !isAdminOverview ? (
+            ) : (
               <div className="bfw-stack__placeholder">
-                <h2 style={{ fontSize: 16, marginTop: 0 }}>Vehicle details</h2>
-                <p style={{ color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
+                <h3 className="bsf-roster__title">Vehicle details</h3>
+                <p className="bsf-subline" style={{ margin: 0 }}>
                   Select a vehicle from the list above to see pipeline status (Denting / Painting / …), who is working,
                   worker notes, and all photos.
                 </p>
               </div>
-            ) : null}
+            )}
           </section>
-          </div>
-        </>
+        ) : null}
+      </div>
     </div>
   )
 }

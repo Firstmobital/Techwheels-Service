@@ -1887,3 +1887,112 @@ export async function customerSetCustomerType(
   return { ok: !error, customer_type: normType }
 }
 
+export type CustomerFloorWorkGalleryPhoto = {
+  photo_id: number
+  storage_bucket?: string | null
+  storage_path?: string | null
+  drive_url?: string | null
+  drive_file_id?: string | null
+  file_name?: string | null
+  content_type?: string | null
+  sort_order?: number | null
+  created_at?: string | null
+}
+
+export type CustomerFloorWorkGalleryEntry = {
+  log_id: number
+  update_date?: string | null
+  floor_role?: string | null
+  employee_code?: string | null
+  employee_name?: string | null
+  note_text?: string | null
+  is_support?: boolean | null
+  updated_at?: string | null
+  photos: CustomerFloorWorkGalleryPhoto[]
+}
+
+export type CustomerFloorWorkGalleryPayload = {
+  repair_card_id?: number | null
+  job_card_no?: string | null
+  reg_number?: string | null
+  entries: CustomerFloorWorkGalleryEntry[]
+}
+
+export async function customerListFloorWorkGallery(
+  sessionToken: string,
+  regNumber: string,
+): Promise<CustomerFloorWorkGalleryPayload> {
+  const { data, error } = await cpRpc('customer_list_floor_work_gallery', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load workshop photos.'))
+  const row = (data ?? {}) as Record<string, unknown>
+  const entries = Array.isArray(row.entries) ? (row.entries as CustomerFloorWorkGalleryEntry[]) : []
+  return {
+    repair_card_id: typeof row.repair_card_id === 'number' ? row.repair_card_id : null,
+    job_card_no: row.job_card_no != null ? String(row.job_card_no) : null,
+    reg_number: row.reg_number != null ? String(row.reg_number) : null,
+    entries: entries.map((e) => ({
+      ...e,
+      photos: Array.isArray(e.photos) ? e.photos : [],
+    })),
+  }
+}
+
+async function fetchCustomerFloorWorkPhotoViewUrl(
+  sessionToken: string,
+  reg: string,
+  photoId: number,
+): Promise<string> {
+  const invokeBody = {
+    session_token: sessionToken,
+    reg_number: reg,
+    photo_id: photoId,
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('customer-portal-floor-photo-view', {
+      body: invokeBody,
+    })
+    if (!error && data && typeof data === 'object') {
+      const row = data as { view_url?: string; error?: string }
+      const viewUrl = String(row.view_url ?? '').trim()
+      if (viewUrl) return viewUrl
+      if (row.error) throw new Error(String(row.error))
+    }
+  } catch (invokeErr) {
+    console.warn('customer-portal-floor-photo-view invoke failed, trying HTTP fallback:', invokeErr)
+  }
+
+  const supabaseUrl = (getSupabaseBaseUrl() || SUPABASE_URL).replace(/\/$/, '')
+  const res = await fetch(`${supabaseUrl}/functions/v1/customer-portal-floor-photo-view`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify(invokeBody),
+  })
+
+  const payload = (await res.json().catch(() => ({}))) as { view_url?: string; error?: string }
+  const viewUrl = String(payload.view_url ?? '').trim()
+  if (!res.ok || !viewUrl) {
+    throw new Error(payload.error || 'Unable to open workshop photo.')
+  }
+  return viewUrl
+}
+
+export async function customerOpenFloorWorkPhoto(
+  sessionToken: string,
+  regNumber: string,
+  photo: CustomerFloorWorkGalleryPhoto,
+): Promise<string> {
+  const reg = (regNumber || '').trim()
+  if (!sessionToken || !reg) throw new Error('Session or vehicle not available.')
+  const photoId = Number(photo.photo_id)
+  if (!Number.isFinite(photoId) || photoId <= 0) throw new Error('Invalid photo.')
+  return fetchCustomerFloorWorkPhotoViewUrl(sessionToken, reg, photoId)
+}
+

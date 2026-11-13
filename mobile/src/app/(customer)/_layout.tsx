@@ -147,6 +147,7 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
       <Tabs.Screen name="register-vehicle" options={{ href: null, title: 'Register Vehicle' }} />
+      <Tabs.Screen name="floor-work-gallery" options={{ href: null, title: 'Repair Work Photos' }} />
     </Tabs>
     </CustomerVisitProvider>
   )

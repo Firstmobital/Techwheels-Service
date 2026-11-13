@@ -37,6 +37,9 @@ verify_jwt = false
 [functions.customer-portal-doc-view]
 verify_jwt = false
 
+[functions.customer-portal-floor-photo-view]
+verify_jwt = false
+
 [functions.customer-portal-upload]
 verify_jwt = false
 
