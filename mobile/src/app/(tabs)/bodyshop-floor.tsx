@@ -2068,7 +2068,7 @@ function BodyshopFloorScreenInner() {
           {/* Role Assignment + QC + RI in pipeline order (Rubbing → QC → RI → EDP) */}
           <Text style={S.sectionTitle}>Floor pipeline steps</Text>
           <Text style={{ fontSize: 11, color: '#82858f', marginBottom: 10, lineHeight: 16 }}>
-            Assign all roles here anytime. Workers advance only from Floor Work (photo + Done). Then QC → RI → EDP.
+            Assign a person, then tap Complete next to In Process. Floor Incharge can be completed even if workers are still in process. QC and RI stay after the floor steps.
           </Text>
           {BODYSHOP_FLOOR_DETAIL_STEP_ORDER.map((stepId) => {
             const step = flowStepById[stepId]
@@ -2217,7 +2217,8 @@ function BodyshopFloorScreenInner() {
 
             return (
               <View key={role} style={[S.roleCard, notRequired && S.roleCardNotRequired, stepLocked && { opacity: 0.9 }]}>
-                <TouchableOpacity style={S.roleCardHeader} onPress={() => setExpandedRole(isExpanded ? null : role)} activeOpacity={0.8}>
+                <View style={S.roleCardHeader}>
+                  <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }} onPress={() => setExpandedRole(isExpanded ? null : role)} activeOpacity={0.8}>
                   <View style={[S.roleInitial, { backgroundColor: notRequired ? '#e4f4ec' : ROLE_META[role].bg }]}>
                     <Text style={{ fontSize: 12, fontWeight: '800', color: notRequired ? '#1c8f63' : ROLE_META[role].color }}>{ROLE_META[role].initial}</Text>
                   </View>
@@ -2231,14 +2232,34 @@ function BodyshopFloorScreenInner() {
                           : (assignment?.employee_name ?? 'Tap to assign')}
                     </Text>
                   </View>
-                  <View style={[S.statusPill, { backgroundColor: stepLocked ? '#f6f4ee' : assignment ? sd.bg : '#f6f4ee', borderColor: stepLocked ? '#d9d4c7' : assignment ? sd.color : '#d9d4c7' }]}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: stepLocked ? '#82858f' : assignment ? sd.color : '#82858f' }}>
-                      {stepLabel ??
-                        (notRequired ? 'Not Required' : assignment ? (STATUS_OPTIONS.find(o => o.value === assignment.work_status)?.label ?? assignment.work_status) : 'Unassigned')}
-                    </Text>
-                  </View>
                   <Text style={{ color: '#82858f', marginLeft: 6 }}>{isExpanded ? '▲' : '▼'}</Text>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <View style={[S.statusPill, { backgroundColor: stepLocked ? '#f6f4ee' : assignment ? sd.bg : '#f6f4ee', borderColor: stepLocked ? '#d9d4c7' : assignment ? sd.color : '#d9d4c7' }]}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: stepLocked ? '#82858f' : assignment ? sd.color : '#82858f' }}>
+                        {stepLabel ??
+                          (notRequired ? 'Not Required' : assignment ? (STATUS_OPTIONS.find(o => o.value === assignment.work_status)?.label ?? assignment.work_status) : 'Unassigned')}
+                      </Text>
+                    </View>
+                    {assignment && !notRequired && !stepLocked && assignment.work_status !== 'completed' && canEditFloor && !bsComp ? (
+                      <TouchableOpacity
+                        onPress={() => { void saveStage(car, role, { statusOverride: 'completed' }) }}
+                        disabled={Boolean(saving)}
+                        style={{
+                          backgroundColor: '#1c8f63',
+                          borderRadius: 8,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          opacity: saving ? 0.5 : 1,
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+                          {isSaving ? 'Saving…' : 'Complete'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
 
                 {isExpanded && (
                   <View style={S.roleCardBody}>
