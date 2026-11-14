@@ -1568,7 +1568,20 @@ export default function BodyshopFloorPage() {
     try {
       const roleMap = assignments[k]
       const existingRoleAssignment = roleMap?.[role]
-      const existingRowId = getRoleMapRowId(roleMap)
+      // An empty floor shell still has a row. Role map only stores ids after someone
+      // is assigned, so without the raw row we INSERT and hit the active-job unique index.
+      let existingRowId = assignmentRawByJc[k]?.id ?? getRoleMapRowId(roleMap)
+      if (!existingRowId) {
+        const { data: found } = await supabase
+          .from('bodyshop_assignments')
+          .select('id')
+          .eq('is_active', true)
+          .ilike('job_card_number', k)
+          .order('id', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        existingRowId = found?.id ?? null
+      }
       const cols = ROLE_COLUMNS[role]
       const { data: { user } } = await supabase.auth.getUser()
       const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
@@ -1685,7 +1698,10 @@ export default function BodyshopFloorPage() {
       }))
       showToast(`${ROLE_META[role].label} assigned: ${emp?.employee_name ?? 'Not Required'}`, 'success')
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
+      const message = err && typeof err === 'object' && 'message' in err
+        ? String((err as { message?: unknown }).message ?? '')
+        : ''
+      showToast(message.trim() || 'Failed to assign', 'error')
     } finally {
       setSaving(null)
     }
@@ -1756,7 +1772,7 @@ export default function BodyshopFloorPage() {
 
   // ── Save stage (status + remark) ─────────────────────────────────────────
 
-  async function saveStage(car: AccidentCar, role: BSRole) {
+  async function saveStage(car: AccidentCar, role: BSRole, statusOverride?: string) {
     if (!canEditBodyshopFloorAssignments(inchargeScope)) {
       showToast('Only Floor Incharge or Admin can save stage changes', 'error')
       return
@@ -1769,19 +1785,9 @@ export default function BodyshopFloorPage() {
       return
     }
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
+    const workStatus = statusOverride ?? draft.work_status
     const trimmedRemark = draft.remark.trim()
-    if (isBodyshopWorkerPipelineAssignRole(role) && draft.work_status === 'completed') {
-      showToast('Dentor / Painter / Rubbing step completes only from Floor Work (photo + Done).', 'error')
-      return
-    }
-    if (role === 'FLOOR_INCHARGE' && draft.work_status === 'completed') {
-      const row = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
-      if (!arePipelineWorkStepsFinished(row)) {
-        showToast('All workers must finish Floor Work (Done) before Floor Incharge can be marked Completed.', 'error')
-        return
-      }
-    }
-    if (draft.work_status === 'hold' && !trimmedRemark) {
+    if (workStatus === 'hold' && !trimmedRemark) {
       showToast('Hold reason is required when role status is Hold', 'error')
       return
     }
@@ -1790,13 +1796,13 @@ export default function BodyshopFloorPage() {
       const cols = ROLE_COLUMNS[role]
       const { data: { user } } = await supabase.auth.getUser()
       const update: Record<string, unknown> = {
-        [cols.workStatus]: draft.work_status,
+        [cols.workStatus]: workStatus,
         [cols.remark]: trimmedRemark || null,
       }
-      if (draft.work_status === 'completed' && !assignment.out_ts) {
+      if (workStatus === 'completed' && !assignment.out_ts) {
         update[cols.outTs] = new Date().toISOString()
       }
-      if (draft.work_status === 'completed') {
+      if (workStatus === 'completed') {
         update[cols.completedBy] = user?.email ?? null
       }
       const result = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id).select().single()
@@ -1806,6 +1812,14 @@ export default function BodyshopFloorPage() {
       const updatedRole = updatedRoleMap[role]
       if (!updatedRole) throw new Error('Failed to map saved stage data')
       const updatedRow = result.data as DBPrimaryAssignmentRow
+      setAssignmentRawByJc((prev) => ({ ...prev, [k]: updatedRow }))
+      setStageDrafts((prev) => ({
+        ...prev,
+        [k]: {
+          ...(prev[k] ?? {}),
+          [role]: { work_status: workStatus, remark: trimmedRemark },
+        },
+      }))
 
       setAssignments((prev) => ({
         ...prev,
@@ -3141,22 +3155,26 @@ export default function BodyshopFloorPage() {
                                   <div className="bsf-lane-empty" style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Required</div>
                                 ) : (
                                 <div className={`bsf-stage-editor ${statusTone}`}>
-                                  <span className={`bsf-statpill ${statusTone}`}>{draft.work_status === 'work_inprocess' ? 'In Process' : draft.work_status === 'hold' ? 'Hold' : 'Completed'}</span>
+                                  <div className="bsf-stage-status-row">
+                                    <span className={`bsf-statpill ${statusTone}`}>{draft.work_status === 'work_inprocess' ? 'In Process' : draft.work_status === 'hold' ? 'Hold' : 'Completed'}</span>
+                                    {draft.work_status !== 'completed' && (
+                                      <button
+                                        type="button"
+                                        className={`btn btn--xs bsf-complete-btn ${!canEditFloor || isFloorCompleted || isSavingThis ? 'btn--dim' : ''}`}
+                                        disabled={!canEditFloor || isFloorCompleted || isSavingThis}
+                                        onClick={() => void saveStage(car, role, 'completed')}
+                                      >
+                                        {isSavingThis ? 'Saving…' : 'Complete'}
+                                      </button>
+                                    )}
+                                  </div>
                                   <select
                                     className={`sel sel-sm bsf-stage-status ${statusTone}`}
                                     value={draft.work_status}
                                     disabled={!canEditFloor || isFloorCompleted}
                                     onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
                                   >
-                                    {STATUS_OPTIONS.filter((s) => {
-                                      if (isBodyshopWorkerPipelineAssignRole(role) && s.value === 'completed') return false
-                                      if (
-                                        role === 'FLOOR_INCHARGE'
-                                        && s.value === 'completed'
-                                        && !pipelineWorkDone
-                                      ) return false
-                                      return true
-                                    }).map((s) => (
+                                    {STATUS_OPTIONS.map((s) => (
                                       <option key={s.value} value={s.value}>{s.label}</option>
                                     ))}
                                   </select>

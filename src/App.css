@@ -4406,6 +4406,18 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   background: var(--canvas);
 }
 
+.bsf-stage-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bsf-complete-btn {
+  min-height: 26px;
+  padding: 2px 10px;
+}
+
 .bsf-statpill {
   font-size: 10px;
   font-weight: 800;

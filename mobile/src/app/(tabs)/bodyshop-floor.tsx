@@ -1031,7 +1031,18 @@ function BodyshopFloorScreenInner() {
     }
     const roleMap = assignments[k]
     const existingRoleAssignment = roleMap?.[role]
-    const existingRowId = getRowId(roleMap)
+    let existingRowId = assignmentRawByJc[k]?.id ?? getRowId(roleMap)
+    if (!existingRowId) {
+      const { data: found } = await supabase
+        .from('bodyshop_assignments')
+        .select('id')
+        .eq('is_active', true)
+        .ilike('job_card_number', k)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      existingRowId = found?.id ?? null
+    }
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
 
     if (isNotRequired && !existingRowId) {
@@ -1288,7 +1299,7 @@ function BodyshopFloorScreenInner() {
     }
   }
 
-  async function saveStage(car: FloorCar, role: BSRole, opts?: { silent?: boolean }) {
+  async function saveStage(car: FloorCar, role: BSRole, opts?: { silent?: boolean; statusOverride?: string }) {
     if (!canEditBodyshopFloorAssignments(inchargeScope)) {
       if (!opts?.silent) showToast('Only Floor Incharge or Admin can save stage changes', 'error')
       return
@@ -1301,18 +1312,8 @@ function BodyshopFloorScreenInner() {
     }
     if (isNotRequiredAssignment(assignment)) return
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
-    if (isBodyshopWorkerPipelineAssignRole(role) && draft.work_status === 'completed') {
-      if (!opts?.silent) showToast('Dentor / Painter / Rubbing step completes only from Floor Work (photo + Done).', 'error')
-      return
-    }
-    if (role === 'FLOOR_INCHARGE' && draft.work_status === 'completed') {
-      const row = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
-      if (!arePipelineWorkStepsFinished(row)) {
-        if (!opts?.silent) showToast('All workers must finish Floor Work (Done) before Floor Incharge can be marked Completed.', 'error')
-        return
-      }
-    }
-    if (draft.work_status === 'hold' && !draft.remark.trim()) {
+    const workStatus = opts?.statusOverride ?? draft.work_status
+    if (workStatus === 'hold' && !draft.remark.trim()) {
       if (!opts?.silent) showToast('Hold reason is required when status is Hold', 'error')
       return
     }
@@ -1320,10 +1321,10 @@ function BodyshopFloorScreenInner() {
     const prevRaw = assignmentRawByJc[k]
     const prevBsFloor = bsFloorStatus[k]
     const completedOutTs =
-      draft.work_status === 'completed' && !assignment.out_ts ? new Date().toISOString() : assignment.out_ts
+      workStatus === 'completed' && !assignment.out_ts ? new Date().toISOString() : assignment.out_ts
     const optimisticAssignment: BSAssignment = {
       ...assignment,
-      work_status: draft.work_status,
+      work_status: workStatus,
       remark: draft.remark.trim() || null,
       out_ts: completedOutTs ?? null,
     }
@@ -1348,10 +1349,10 @@ function BodyshopFloorScreenInner() {
         const cols = ROLE_COLUMNS[role]
         const { data: { user } } = await supabase.auth.getUser()
         const update: Record<string, unknown> = {
-          [cols.status]: draft.work_status,
+          [cols.status]: workStatus,
           [cols.remark]: draft.remark.trim() || null,
         }
-        if (draft.work_status === 'completed' && !assignment.out_ts) {
+        if (workStatus === 'completed' && !assignment.out_ts) {
           update[cols.outTs] = completedOutTs
           update[cols.completedBy] = user?.email ?? null
         }
@@ -1371,6 +1372,13 @@ function BodyshopFloorScreenInner() {
         }))
       },
       onSuccess: () => {
+        setStageDrafts(prev => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? {}),
+            [role]: { work_status: workStatus, remark: draft.remark.trim() },
+          },
+        }))
         if (!opts?.silent) showToast('Stage saved', 'success')
         setSaving(null)
       },
@@ -2256,25 +2264,23 @@ function BodyshopFloorScreenInner() {
                     ) : (
                     <>
                     {/* Work Status */}
-                    {isBodyshopWorkerPipelineAssignRole(role) ? (
-                      <Text style={{ fontSize: 11, color: '#82858f', marginTop: 10, lineHeight: 16 }}>
-                        Pipeline step advances when this person uses Floor Work (photo + Done). You can assign or set Hold here — not Completed.
-                      </Text>
-                    ) : null}
                     <Text style={[S.fieldLabel, { marginTop: 12 }]}>Work Status</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
-                      {STATUS_OPTIONS.filter((opt) => {
-                        if (isBodyshopWorkerPipelineAssignRole(role) && opt.value === 'completed') return false
-                        if (
-                          role === 'FLOOR_INCHARGE'
-                          && opt.value === 'completed'
-                          && !pipelineWorkDone
-                        ) return false
-                        return true
-                      }).map(opt => {
+                      {STATUS_OPTIONS.map(opt => {
                         const active = draft.work_status === opt.value
                         return (
-                          <TouchableOpacity key={opt.value} style={{ flex: 1 }} disabled={!canEditFloor || !assignment} onPress={() => patchDraft(k, role, { work_status: opt.value })}>
+                          <TouchableOpacity
+                            key={opt.value}
+                            style={{ flex: 1 }}
+                            disabled={!canEditFloor || !assignment || Boolean(saving)}
+                            onPress={() => {
+                              if (opt.value === 'completed') {
+                                void saveStage(car, role, { statusOverride: 'completed' })
+                                return
+                              }
+                              patchDraft(k, role, { work_status: opt.value })
+                            }}
+                          >
                             <View style={[S.statusChip, active && { backgroundColor: opt.bg, borderColor: opt.color }]}>
                               <Text style={{ fontSize: 11, fontWeight: active ? '700' : '500', color: active ? opt.color : '#82858f' }}>{opt.label}</Text>
                             </View>
