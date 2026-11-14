@@ -482,3 +482,22 @@ export async function advanceStage(id: number, card: RepairCard): Promise<Repair
 export async function cancelRepairCard(id: number): Promise<RepairCard> {
   return updateRepairCard(id, { overall_status: 'cancelled' })
 }
+
+export async function reconcileBodyshopRepairCardStage(repairCardId: number): Promise<{
+  ok: boolean
+  previous_stage: number | null
+  current_stage: number | null
+  advanced: boolean
+}> {
+  const { data, error } = await supabase.rpc('bodyshop_reconcile_repair_card_current_stage', {
+    p_repair_card_id: repairCardId,
+  })
+  if (error) throw error
+  const row = (data ?? {}) as Record<string, unknown>
+  return {
+    ok: row.ok !== false,
+    previous_stage: typeof row.previous_stage === 'number' ? row.previous_stage : null,
+    current_stage: typeof row.current_stage === 'number' ? row.current_stage : null,
+    advanced: row.advanced === true,
+  }
+}

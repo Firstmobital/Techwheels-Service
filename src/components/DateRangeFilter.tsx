@@ -78,6 +78,8 @@ interface Props {
   disabled?: boolean
   /** When Custom is active, show date inputs on a row below the preset dropdown (e.g. BUSY top bar). */
   stackCustomDates?: boolean
+  /** When Custom is active, also show YYYY-MM-DD text fields (paste / keyboard edit). */
+  customTextEdit?: boolean
 }
 
 export default function DateRangeFilter({
@@ -90,17 +92,49 @@ export default function DateRangeFilter({
   allLabel,
   disabled = false,
   stackCustomDates = false,
+  customTextEdit = false,
 }: Props) {
   const [preset, setPreset] = useState<DateRangePreset | 'all'>(() => inferPresetFromRange(range))
   const [custom, setCustom] = useState<DateRange>(range)
+  const [customFromText, setCustomFromText] = useState(range.from)
+  const [customToText, setCustomToText] = useState(range.to)
   const disabledSet = new Set(disabledPresets ?? [])
 
   useEffect(() => {
     setPreset(inferPresetFromRange(range))
     if (inferPresetFromRange(range) === 'custom') {
       setCustom(range)
+      setCustomFromText(range.from)
+      setCustomToText(range.to)
     }
   }, [range.from, range.to])
+
+  function commitCustomText(which: 'from' | 'to', raw: string) {
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      const next = which === 'from' ? { ...custom, from: '' } : { ...custom, to: '' }
+      setCustom(next)
+      apply('custom', next)
+      return
+    }
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+      ? trimmed
+      : (() => {
+          const d = new Date(trimmed)
+          if (Number.isNaN(d.getTime())) return null
+          return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        })()
+    if (!iso) return
+    const next = which === 'from' ? { ...custom, from: iso } : { ...custom, to: iso }
+    if (next.from && next.to && next.from > next.to) {
+      if (which === 'from') next.to = iso
+      else next.from = iso
+    }
+    setCustom(next)
+    setCustomFromText(next.from)
+    setCustomToText(next.to)
+    apply('custom', next)
+  }
 
   function apply(p: DateRangePreset, c?: DateRange) {
     const resolved = c ?? custom
@@ -145,6 +179,35 @@ export default function DateRangeFilter({
 
   const customDateInputs = preset === 'custom' && (
     <>
+      {customTextEdit ? (
+        <>
+          <input
+            type="text"
+            className="cft__sel"
+            value={customFromText}
+            style={{ width: 108 }}
+            disabled={disabled}
+            placeholder="YYYY-MM-DD"
+            aria-label="From date (text)"
+            onChange={(e) => setCustomFromText(e.target.value)}
+            onBlur={() => commitCustomText('from', customFromText)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitCustomText('from', customFromText) }}
+          />
+          <span className="cft__label">→</span>
+          <input
+            type="text"
+            className="cft__sel"
+            value={customToText}
+            style={{ width: 108 }}
+            disabled={disabled}
+            placeholder="YYYY-MM-DD"
+            aria-label="To date (text)"
+            onChange={(e) => setCustomToText(e.target.value)}
+            onBlur={() => commitCustomText('to', customToText)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitCustomText('to', customToText) }}
+          />
+        </>
+      ) : null}
       <input
         type="date"
         className="cft__sel"
@@ -155,10 +218,11 @@ export default function DateRangeFilter({
         onChange={(e) => {
           const next = { ...custom, from: e.target.value }
           setCustom(next)
+          setCustomFromText(next.from)
           apply('custom', next)
         }}
       />
-      <span className="cft__label">→</span>
+      {!customTextEdit ? <span className="cft__label">→</span> : null}
       <input
         type="date"
         className="cft__sel"
@@ -169,6 +233,7 @@ export default function DateRangeFilter({
         onChange={(e) => {
           const next = { ...custom, to: e.target.value }
           setCustom(next)
+          setCustomToText(next.to)
           apply('custom', next)
         }}
       />

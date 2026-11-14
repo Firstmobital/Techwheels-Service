@@ -25,22 +25,15 @@ import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoa
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { StaffRenderErrorBoundary } from '../../components/staff/StaffRenderErrorBoundary'
 import {
-  BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE,
   BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
   BODYSHOP_FLOOR_MOBILE_MAX_RECEPTION_ENRICH,
   BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
-  BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_LIVE,
 } from '../../lib/bodyshopFloorMobileLimits'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
   BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER,
   isEmployeeEligibleForBodyshopFloorRole,
 } from '../../lib/bodyshopFloorEmployeePicker'
-import {
-  BODYSHOP_FLOOR_LIVE_LIST_LABEL,
-  isLiveOnFloorRepairCard,
-  type BodyshopFloorVehicleListMode,
-} from '../../lib/bodyshopFloorLive'
 import { bodyshopBranchLabel, matchesBodyshopBranchFilter } from '../../lib/bodyshopBranchLabel'
 import { BodyshopFloorStepTracker } from '../../components/bodyshop/BodyshopFloorStepTracker'
 import {
@@ -710,7 +703,6 @@ function BodyshopFloorScreenInner() {
 
   // List filters
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
-  const [vehicleListMode, setVehicleListMode] = useState<BodyshopFloorVehicleListMode>('live_on_floor')
   const [branchFilter,   setBranchFilter]   = useState('all')
   const [floorFilter,    setFloorFilter]    = useState('all')
   const loadSeq = useRef(0)
@@ -763,27 +755,20 @@ function BodyshopFloorScreenInner() {
       const scope = await loadBodyshopFloorInchargeScope()
       if (seq !== loadSeq.current) return
       setInchargeScope(scope)
-      const liveOnFloor = vehicleListMode === 'live_on_floor'
       const rpcFloor =
         shouldRestrictBodyshopFloorList(scope) && scope.lockedBodyshopFloor
           ? scope.lockedBodyshopFloor
           : null
 
       // One full fetch — search / floor chips filter client-side (no re-query per keystroke).
-      const maxRows = liveOnFloor
-        ? BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE
-        : BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE
-      const maxPages = liveOnFloor
-        ? BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_LIVE
-        : BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL
       const mergedRows = await fetchBodyshopRepairCardsLegacyFull({
         searchQuery: searchOverride ?? appliedSearch,
         bodyshopFloor: rpcFloor,
-        liveOnFloor,
-        maxPages,
-        maxRows,
+        liveOnFloor: false,
+        maxPages: BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
+        maxRows: BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
       })
-      if (mergedRows.length >= maxRows) setListTruncated(true)
+      if (mergedRows.length >= BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE) setListTruncated(true)
       if (seq !== loadSeq.current) return
       const carList = await buildFloorCarsFromRaw(
         mergedRows,
@@ -828,7 +813,7 @@ function BodyshopFloorScreenInner() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [vehicleListMode, appliedSearch])
+  }, [appliedSearch])
 
   useEffect(() => {
     void loadAll()
@@ -908,31 +893,8 @@ function BodyshopFloorScreenInner() {
     return 'unassigned'
   }
 
-  const openAssignmentJcs = useMemo(() => {
-    const out = new Set<string>()
-    for (const [jc, roleMap] of Object.entries(assignments)) {
-      if (BODYSHOP_FLOOR_PIPELINE_ROLES.some((r) => Boolean(roleMap?.[r]))) out.add(jc)
-      if (bsFloorStatus[jc]?.completedAt) out.delete(jc)
-    }
-    return out
-  }, [assignments, bsFloorStatus])
-
-  const scopeCars = useMemo(() => (
-    vehicleListMode === 'live_on_floor'
-      ? cars.filter((c) => {
-          const k = jcKey(c.job_card_no)
-          return isLiveOnFloorRepairCard({
-            current_stage: c.current_stage,
-            overall_status: c.overall_status,
-            bodyshop_floor: c.bodyshop_floor,
-            hasOpenFloorAssignment: openAssignmentJcs.has(k),
-          })
-        })
-      : cars
-  ), [cars, vehicleListMode, openAssignmentJcs])
-
   const baseScopedCars = useMemo(() => {
-    let list = [...scopeCars]
+    let list = [...cars]
     if (branchFilter !== 'all') list = list.filter(c => matchesBodyshopBranchFilter(c.branch, branchFilter))
     if (appliedSearch.trim()) {
       const q = appliedSearch.trim().toLowerCase()
@@ -952,7 +914,7 @@ function BodyshopFloorScreenInner() {
       ),
     )
     return list
-  }, [scopeCars, branchFilter, appliedSearch, inchargeScope, assignments])
+  }, [cars, branchFilter, appliedSearch, inchargeScope, assignments])
 
   const applyListSearch = useCallback(() => {
     const q = searchDraft.trim()
@@ -1011,8 +973,8 @@ function BodyshopFloorScreenInner() {
   }, [assignmentScopeCars, assignmentView, assignments, bsFloorStatus, qcByJc, riByJc])
 
   const branches = useMemo(
-    () => Array.from(new Set(scopeCars.map((c) => bodyshopBranchLabel(c.branch)))).sort(),
-    [scopeCars],
+    () => Array.from(new Set(cars.map((c) => bodyshopBranchLabel(c.branch)))).sort(),
+    [cars],
   )
   const floors = useMemo(() => [...BODYSHOP_PHYSICAL_FLOORS], [])
 
@@ -2525,7 +2487,7 @@ function BodyshopFloorScreenInner() {
       {listTruncated ? (
         <View style={{ marginHorizontal: 12, marginBottom: 6, padding: 10, backgroundColor: '#fff8e6', borderRadius: 8, borderWidth: 1, borderColor: '#e8d48a' }}>
           <Text style={{ fontSize: 12, color: '#6b5a1a', fontWeight: '600' }}>
-            Showing the newest {vehicleListMode === 'live_on_floor' ? BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE : BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE} vehicles. Use Search or Live floor to narrow the list.
+            Showing the newest {BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE} vehicles. Use Search or filters to narrow the list.
           </Text>
         </View>
       ) : null}
@@ -2596,32 +2558,16 @@ function BodyshopFloorScreenInner() {
           })}
         </ScrollView>
 
-        <Text style={S.filterRowLabel}>List & location</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          nestedScrollEnabled
-          style={S.filterScrollRow}
-          contentContainerStyle={S.filterScrollContent}
-        >
-          {([
-            { key: 'live_on_floor' as const, label: 'Live floor' },
-            { key: 'intake_period' as const, label: 'All pipeline' },
-          ]).map(opt => {
-            const active = vehicleListMode === opt.key
-            return (
-              <TouchableOpacity
-                key={opt.key}
-                onPress={() => setVehicleListMode(opt.key)}
-                style={[S.filterChip, active && S.filterChipBranchActive]}
-              >
-                <Text style={[S.filterChipText, active && S.filterChipTextActive]} numberOfLines={1}>{opt.label}</Text>
-              </TouchableOpacity>
-            )
-          })}
-          {branches.length > 0 ? (
-            <>
-              <View style={S.filterDivider} />
+        {branches.length > 0 ? (
+          <>
+            <Text style={S.filterRowLabel}>Branch</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator
+              nestedScrollEnabled
+              style={S.filterScrollRow}
+              contentContainerStyle={S.filterScrollContent}
+            >
               {['all', ...branches].map(b => {
                 const active = branchFilter === b
                 return (
@@ -2636,9 +2582,9 @@ function BodyshopFloorScreenInner() {
                   </TouchableOpacity>
                 )
               })}
-            </>
-          ) : null}
-        </ScrollView>
+            </ScrollView>
+          </>
+        ) : null}
 
         <Text style={S.filterRowLabel}>Status</Text>
         <ScrollView

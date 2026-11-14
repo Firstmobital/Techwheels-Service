@@ -22,6 +22,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange } from '../component
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
   listRepairCards, searchRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage, cancelRepairCard,
+  reconcileBodyshopRepairCardStage,
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
   cardMatchesRepairLookup, cardInReceivedDateRange,
   REPAIR_LOOKUP_MIN_CHARS, REPAIR_LOOKUP_DEBOUNCE_MS,
@@ -1217,6 +1218,7 @@ export default function BodyshopRepairPage() {
   const autoAdvanceDocsLockRef = useRef(false)
   const autoAdvanceSurveyCustomerLockRef = useRef(false)
   const autoAdvanceStage11LockRef = useRef<Record<number, boolean>>({})
+  const autoReconcileStageLockRef = useRef<Record<number, boolean>>({})
   const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
     FLOOR_INCHARGE: null,
     DENTOR: null,
@@ -1731,6 +1733,38 @@ export default function BodyshopRepairPage() {
     selected?.survey_date,
     selected?.survey_status,
     selected?.survey_hold_reason,
+  ])
+
+  useEffect(() => {
+    if (!selected?.id || selected.overall_status !== 'active') return
+    const cardId = Number(selected.id)
+    if (!Number.isFinite(cardId) || cardId <= 0) return
+    if (autoReconcileStageLockRef.current[cardId]) return
+
+    autoReconcileStageLockRef.current[cardId] = true
+    void reconcileBodyshopRepairCardStage(cardId)
+      .then(async (res) => {
+        if (!res.advanced) return
+        const fresh = await getRepairCard(cardId)
+        setSelected(fresh)
+        setCards((prev) => prev.map((c) => (c.id === fresh.id ? fresh : c)))
+      })
+      .catch(() => {
+        /* DB trigger may reconcile on the next field update */
+      })
+      .finally(() => {
+        delete autoReconcileStageLockRef.current[cardId]
+      })
+  }, [
+    selected?.id,
+    selected?.overall_status,
+    selected?.current_stage,
+    selected?.bodyshop_floor,
+    selected?.approved_parts,
+    selected?.qc_status,
+    selected?.reinspection_status,
+    floorStageCompletedLookup,
+    floorWorkStartedLookup,
   ])
 
   useEffect(() => {

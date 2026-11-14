@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
@@ -15,6 +15,12 @@ import {
   type BodyshopSupportRow,
 } from '../lib/bodyshopEarnings'
 import { sendBodyshopEarningsTestEmail } from '../lib/api/email'
+import {
+  loadBodyshopTrackerUiSnapshot,
+  parseFlexibleIsoDateInput,
+  saveBodyshopTrackerUiSnapshot,
+  type BodyshopTrackerTabKey,
+} from '../lib/bodyshopTrackerUiStorage'
 import { normalizeEmployeeCode } from '../lib/employeeMatcher'
 import { supabase } from '../lib/supabase'
 
@@ -189,9 +195,23 @@ const BODYSHOP_ASSIGNMENT_SELECT = [
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
+function initialTrackerUi() {
+  const stored = loadBodyshopTrackerUiSnapshot()
+  return {
+    dateRange: stored?.dateRange ?? currentMonthRange(),
+    branchFilter: stored?.branchFilter ?? 'all',
+    activeTab: (stored?.activeTab ?? 'SA') as TabKey,
+    fromDate: stored?.statsFrom ?? '',
+    toDate: stored?.statsTo ?? '',
+    vehicleSearchInput: stored?.vehicleSearchInput ?? '',
+    appliedVehicleSearch: stored?.appliedVehicleSearch ?? '',
+  }
+}
+
 export default function BodyshopTrackerPage() {
+  const boot = useMemo(() => initialTrackerUi(), [])
   const [loading, setLoading]     = useState(true)
-  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [dateRange, setDateRange] = useState<DateRange>(() => boot.dateRange)
   const [error, setError]         = useState<string | null>(null)
 
   // Raw data
@@ -200,12 +220,15 @@ export default function BodyshopTrackerPage() {
   const [supportAssignments, setSupportAssignments] = useState<BodyshopSupportRow[]>([])
 
   // UI state
-  const [activeTab, setActiveTab]     = useState<TabKey>('SA')
-  const [fromDate, setFromDate]       = useState('')
-  const [toDate, setToDate]           = useState('')
-  const [branchFilter, setBranchFilter] = useState('all')
-  const [vehicleSearchInput, setVehicleSearchInput] = useState('')
-  const [appliedVehicleSearch, setAppliedVehicleSearch] = useState('')
+  const [activeTab, setActiveTab]     = useState<TabKey>(() => boot.activeTab)
+  const [fromDate, setFromDate]       = useState(() => boot.fromDate)
+  const [toDate, setToDate]           = useState(() => boot.toDate)
+  const [fromDateText, setFromDateText] = useState(() => boot.fromDate)
+  const [toDateText, setToDateText]     = useState(() => boot.toDate)
+  const [branchFilter, setBranchFilter] = useState(() => boot.branchFilter)
+  const [vehicleSearchInput, setVehicleSearchInput] = useState(() => boot.vehicleSearchInput)
+  const [appliedVehicleSearch, setAppliedVehicleSearch] = useState(() => boot.appliedVehicleSearch)
+  const periodRangeHydratedRef = useRef(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchNotice, setSearchNotice] = useState<string | null>(null)
   const [selectedMember, setSelectedMember] = useState('')
@@ -380,6 +403,18 @@ export default function BodyshopTrackerPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadData() }, [dateRange])
+
+  useEffect(() => {
+    saveBodyshopTrackerUiSnapshot({
+      dateRange,
+      branchFilter,
+      activeTab: activeTab as BodyshopTrackerTabKey,
+      statsFrom: fromDate,
+      statsTo: toDate,
+      vehicleSearchInput,
+      appliedVehicleSearch,
+    })
+  }, [dateRange, branchFilter, activeTab, fromDate, toDate, vehicleSearchInput, appliedVehicleSearch])
 
   // ── Earning % settings (persisted) ─────────────────────────────────────────
   // Loaded once on mount from bodyshop_role_earning_settings so percentages
@@ -785,10 +820,41 @@ export default function BodyshopTrackerPage() {
   useEffect(() => { setSelectedMember(''); setSelectedDayKey('') }, [activeTab, branchFilter, fromDate, toDate, appliedVehicleSearch])
 
   useEffect(() => {
+    if (!periodRangeHydratedRef.current) {
+      periodRangeHydratedRef.current = true
+      return
+    }
     setVehicleSearchInput('')
     setAppliedVehicleSearch('')
     setSearchNotice(null)
   }, [dateRange])
+
+  function commitStatsDateText(which: 'from' | 'to') {
+    const raw = which === 'from' ? fromDateText : toDateText
+    const parsed = parseFlexibleIsoDateInput(raw)
+    if (parsed === null) {
+      if (which === 'from') setFromDateText(fromDate)
+      else setToDateText(toDate)
+      return
+    }
+    if (which === 'from') {
+      const nextFrom = parsed
+      let nextTo = toDate
+      if (nextFrom && toDate && nextFrom > toDate) nextTo = nextFrom
+      setFromDate(nextFrom)
+      setToDate(nextTo)
+      setFromDateText(nextFrom)
+      setToDateText(nextTo)
+    } else {
+      const nextTo = parsed
+      let nextFrom = fromDate
+      if (nextTo && fromDate && nextTo < fromDate) nextFrom = nextTo
+      setFromDate(nextFrom)
+      setToDate(nextTo)
+      setFromDateText(nextFrom)
+      setToDateText(nextTo)
+    }
+  }
 
   // ── Branch counts ──────────────────────────────────────────────────────────
   // Use allDateScoped (before branch filter) for branch chip counts
@@ -903,7 +969,7 @@ export default function BodyshopTrackerPage() {
           <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{allDateScoped.length} records</span>
         </div>
 
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" customTextEdit />
 
         <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
@@ -1061,14 +1127,36 @@ export default function BodyshopTrackerPage() {
         {/* Date range fine-filter */}
         <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', gridColumn: 'span 3' }}>
           <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>📅 Range:</span>
+          <input
+            type="text"
+            className="inp"
+            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '104px' }}
+            placeholder="YYYY-MM-DD"
+            value={fromDateText}
+            aria-label="Stats range from (text)"
+            onChange={(e) => setFromDateText(e.target.value)}
+            onBlur={() => commitStatsDateText('from')}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitStatsDateText('from') }}
+          />
           <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
-            value={fromDate} onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v > toDate) setToDate(v) }} />
+            value={fromDate} onChange={(e) => { const v = e.target.value; setFromDate(v); setFromDateText(v); if (toDate && v > toDate) { setToDate(v); setToDateText(v) } }} />
           <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
+          <input
+            type="text"
+            className="inp"
+            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '104px' }}
+            placeholder="YYYY-MM-DD"
+            value={toDateText}
+            aria-label="Stats range to (text)"
+            onChange={(e) => setToDateText(e.target.value)}
+            onBlur={() => commitStatsDateText('to')}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitStatsDateText('to') }}
+          />
           <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
-            value={toDate} onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v < fromDate) setFromDate(v) }} />
+            value={toDate} onChange={(e) => { const v = e.target.value; setToDate(v); setToDateText(v); if (fromDate && v < fromDate) { setFromDate(v); setFromDateText(v) } }} />
           {(fromDate || toDate) && (
             <button type="button" className="btn btn--ghost btn--sm" style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
-              onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
+              onClick={() => { setFromDate(''); setToDate(''); setFromDateText(''); setToDateText('') }}>✕</button>
           )}
           <button
             type="button"
