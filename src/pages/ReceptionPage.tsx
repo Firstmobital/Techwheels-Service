@@ -12,6 +12,7 @@ import {
   getReceptionUpdationContext,
   isFloorInchargeServiceType,
   listReceptionEntriesByDateRange,
+  RECEPTION_DEFAULT_LOOKBACK_DAYS,
   normalizeReceptionLocation,
   searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
@@ -381,7 +382,7 @@ export default function ReceptionPage() {
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false)
   const [globalSearchLoadingMore, setGlobalSearchLoadingMore] = useState(false)
   const [selectedListFilter, setSelectedListFilter] = useState<ReceptionListFilter>('default')
-  const [selectedLocation] = useState<string | 'all'>('all')
+  const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
   const [selectedSa, setSelectedSa] = useState<string | 'all'>('all')
@@ -752,7 +753,9 @@ export default function ReceptionPage() {
   }, [selectedSa, saOptions])
 
   useEffect(() => {
-    // Location filter removed — no reset needed
+    if (selectedLocation === 'all') return
+    if (locationOptions.includes(selectedLocation)) return
+    setSelectedLocation('all')
   }, [selectedLocation, locationOptions])
 
   async function loadModelOptions() {
@@ -919,7 +922,7 @@ export default function ReceptionPage() {
         ? null
         : saOptions.find((option) => option.value === selectedSa)?.label ?? selectedSa
       const filterStr = [
-        null, // Location filter removed
+        selectedLocation !== 'all' ? selectedLocation : null,
         selectedFuelType !== 'all' ? selectedFuelType : null,
         selectedServiceType !== 'all' ? selectedServiceType : null,
         selectedSaLabel,
@@ -1369,8 +1372,24 @@ export default function ReceptionPage() {
         </div>
         <div className="cft__sep" />
 
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+        <DateRangeFilter
+          range={dateRange}
+          onChange={setDateRange}
+          label="Period:"
+          includeAll
+          allLookbackDays={RECEPTION_DEFAULT_LOOKBACK_DAYS}
+        />
         <div className="cft__sep" />
+
+        <span className="cft__label">Location:</span>
+        <select className="cft__sel" value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)}>
+          <option value="all">All ({locationFilterBaseEntries.length})</option>
+          {locationOptions.map((loc) => (
+            <option key={loc} value={loc}>
+              {loc} ({locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === loc).length})
+            </option>
+          ))}
+        </select>
 
         <span className="cft__label">Portal:</span>
         <select className="cft__sel" value={selectedFuelType} onChange={e => setSelectedFuelType(e.target.value)}>
@@ -1796,7 +1815,7 @@ export default function ReceptionPage() {
                   ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown${globalSearchHasMore ? ' (more available)' : ''}`
                   : `Newest first · ${visibleEntries.length} shown${filteredEntries.length > DEFAULT_RECEPTION_VISIBLE_LIMIT ? ` (latest ${DEFAULT_RECEPTION_VISIBLE_LIMIT})` : ''}`}
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
-                
+                {selectedLocation !== 'all' ? ` · ${selectedLocation}` : ''}
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
                 {selectedServiceType !== 'all' ? ` · ${selectedServiceType}` : ''}
                 {selectedSa !== 'all' ? ` · ${saOptions.find((option) => option.value === selectedSa)?.label ?? selectedSa}` : ''}
