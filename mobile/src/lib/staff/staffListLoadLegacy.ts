@@ -8,7 +8,7 @@ import type { FetchReceptionPageOptions } from '../api/receptionListPage'
 
 const TABLE_PAGE = 1000
 /** Cap full-list walks so mobile cannot OOM or white-screen on huge dealer histories. */
-const MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES = 60
+export const MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES = 60
 
 function matchesBodyshopFloorFilter(
   rowFloor: string | null | undefined,

@@ -21,14 +21,12 @@ import {
   fetchBodyshopSupportAssignmentsForJobCards,
   type BodyshopRepairCardListRow,
 } from '../../lib/api/bodyshopFloorList'
-import { fetchBodyshopRepairCardsLegacyFull } from '../../lib/staff/staffListLoadLegacy'
+import {
+  fetchBodyshopRepairCardsLegacyFull,
+  MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES,
+} from '../../lib/staff/staffListLoadLegacy'
 import { StaffListLoadErrorBanner } from '../../components/staff/StaffListLoadErrorBanner'
 import { StaffRenderErrorBoundary } from '../../components/staff/StaffRenderErrorBoundary'
-import {
-  BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
-  BODYSHOP_FLOOR_MOBILE_MAX_RECEPTION_ENRICH,
-  BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
-} from '../../lib/bodyshopFloorMobileLimits'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 import {
   BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER,
@@ -560,7 +558,9 @@ async function buildFloorCarsFromRaw(
   const entryIdsAll = Array.from(new Set(
     rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null && v > 0),
   ))
-  const entryIds = entryIdsAll.slice(0, Math.max(0, maxReceptionEnrich))
+  const enrichCap =
+    maxReceptionEnrich != null && maxReceptionEnrich > 0 ? maxReceptionEnrich : entryIdsAll.length
+  const entryIds = entryIdsAll.slice(0, Math.max(0, enrichCap))
   type ReceptionRow = {
     id: number
     model: string | null
@@ -707,7 +707,6 @@ function BodyshopFloorScreenInner() {
   const [floorFilter,    setFloorFilter]    = useState('all')
   const loadSeq = useRef(0)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [listTruncated, setListTruncated] = useState(false)
   const [searchDraft,    setSearchDraft]    = useState('')
   const [appliedSearch,  setAppliedSearch]  = useState('')
   // Detail
@@ -750,7 +749,6 @@ function BodyshopFloorScreenInner() {
     if (!isRefresh) setLoading(true)
     else setRefreshing(true)
     setLoadError(null)
-    setListTruncated(false)
     try {
       const scope = await loadBodyshopFloorInchargeScope()
       if (seq !== loadSeq.current) return
@@ -765,15 +763,10 @@ function BodyshopFloorScreenInner() {
         searchQuery: searchOverride ?? appliedSearch,
         bodyshopFloor: rpcFloor,
         liveOnFloor: false,
-        maxPages: BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL,
-        maxRows: BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE,
+        maxPages: MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES,
       })
-      if (mergedRows.length >= BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE) setListTruncated(true)
       if (seq !== loadSeq.current) return
-      const carList = await buildFloorCarsFromRaw(
-        mergedRows,
-        BODYSHOP_FLOOR_MOBILE_MAX_RECEPTION_ENRICH,
-      )
+      const carList = await buildFloorCarsFromRaw(mergedRows)
       if (seq !== loadSeq.current) return
       setCars(carList)
 
@@ -2483,14 +2476,6 @@ function BodyshopFloorScreenInner() {
       {toast && <View style={[S.toast, toast.type === 'error' && S.toastError]}><Text style={S.toastText}>{toast.type === 'error' ? '✗' : '✓'}  {toast.msg}</Text></View>}
 
       <StaffListLoadErrorBanner message={loadError ?? ''} onRetry={() => void loadAll(true)} />
-
-      {listTruncated ? (
-        <View style={{ marginHorizontal: 12, marginBottom: 6, padding: 10, backgroundColor: '#fff8e6', borderRadius: 8, borderWidth: 1, borderColor: '#e8d48a' }}>
-          <Text style={{ fontSize: 12, color: '#6b5a1a', fontWeight: '600' }}>
-            Showing the newest {BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE} vehicles. Use Search or filters to narrow the list.
-          </Text>
-        </View>
-      ) : null}
 
       <StaffNavigationChrome
         title="Bodyshop Floor"

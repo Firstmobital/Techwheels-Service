@@ -6,10 +6,12 @@
  * - Active pipeline (not closed): 739
  */
 export const BODYSHOP_FLOOR_MOBILE_MAX_CARS_LIVE = 80
+/** Bodyshop Repair mobile tab still caps list size (OOM guard). */
 export const BODYSHOP_FLOOR_MOBILE_MAX_CARS_PIPELINE = 400
 
 /** RPC pages × 100 rows/page — live needs ≤1 page; pipeline capped below full history. */
 export const BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_LIVE = 2
+/** @deprecated Floor Incharge tab loads full RPC walk — use MAX_BODYSHOP_REPAIR_CARD_RPC_PAGES */
 export const BODYSHOP_FLOOR_MOBILE_MAX_RPC_PAGES_ALL = 5
 
 /** Reception model/phone enrich — match max cars we ever load on mobile. */
