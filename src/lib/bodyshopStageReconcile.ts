@@ -91,7 +91,7 @@ function stage10Done(card: RepairCard): boolean {
   return surveyApproved && surveyApprovalDoc && approvedPartsFinalized
 }
 
-function stage12Done(card: RepairCard, additional: AdditionalSlice, effectiveStage: number): boolean {
+function stage12Done(additional: AdditionalSlice, effectiveStage: number): boolean {
   if (effectiveStage > 12) return true
   if (additional.partStatesCount > 0 && additional.pendingCount === 0) return true
   if (
@@ -129,7 +129,7 @@ export function inferBodyshopReconciledCurrentStage(
 
   const additional = parseAdditionalApprovalSlice(card.additional_approval)
   const additionalRequested = additional.status !== 'none'
-  const stage12 = stage12Done(card, additional, min)
+  const stage12 = stage12Done(additional, min)
 
   if (ctx.floorCompleted) {
     if (additionalRequested && !stage12) min = Math.max(min, 12)
