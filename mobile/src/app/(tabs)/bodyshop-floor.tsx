@@ -46,6 +46,7 @@ import {
 } from '../../lib/bodyshopFloorWork/floorFlowSteps'
 import { isBodyshopWorkerPipelineAssignRole } from '../../lib/bodyshopFloorWork/workerPipelineAssignRoles'
 import { bodyshopFloorAgeSummary, formatIstSinceShort } from '../../lib/bodyshopFloorAge'
+import { resolveBodyshopAssignmentDealerCode } from '../../lib/bodyshopAssignmentDealerCode'
 import {
   filterBodyshopFloorInchargeCandidates,
   listBodyshopFloorInchargeEmployees,
@@ -518,19 +519,12 @@ function normalizeRiDoneBy(raw: string | null | undefined): string {
   return value
 }
 
-/** Workshop dealer code is the numeric segment (3000840), not the branch name or SA suffix. */
-function dealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | undefined): string | null {
-  const parts = String(saEmployeeCode ?? '').split('_').map((p) => p.trim()).filter(Boolean)
-  const numeric = parts.find((p) => /^\d{6,}$/.test(p))
-  if (numeric) return numeric
-  const last = parts[parts.length - 1]
-  return last ? last.toUpperCase() : null
-}
-
 function assignmentDealerCode(car: FloorCar): string {
-  const explicit = String(car.dealer_code ?? '').trim()
-  if (explicit && explicit.toUpperCase() !== 'UNKNOWN') return explicit
-  return dealerCodeFromSaEmployeeCode(car.sa_employee_code) ?? 'UNKNOWN'
+  return resolveBodyshopAssignmentDealerCode({
+    dealer_code: car.dealer_code,
+    sa_employee_code: car.sa_employee_code,
+    branch: car.branch,
+  })
 }
 
 function assignFailureMessage(err: unknown): string {
@@ -1131,7 +1125,9 @@ function BodyshopFloorScreenInner() {
       execute: async () => {
         const cols = ROLE_COLUMNS[role]
         const { data: { user } } = await supabase.auth.getUser()
+        const resolvedDealerCode = assignmentDealerCode(car)
         const payload: Record<string, unknown> = {
+          dealer_code: resolvedDealerCode,
           [cols.code]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
           [cols.name]: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
           [cols.status]: optimisticSlot.work_status,

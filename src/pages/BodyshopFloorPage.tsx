@@ -36,6 +36,7 @@ import {
   normalizeBodyshopPhysicalFloor,
   type BodyshopFloorInchargeScope,
 } from '../lib/bodyshopFloorInchargeScope'
+import { resolveBodyshopAssignmentDealerCode } from '../lib/bodyshopAssignmentDealerCode'
 import { bodyshopFloorAgeSummary } from '../lib/bodyshopFloorAge'
 import {
   fetchActiveBodyshopAssignmentsAllPages,
@@ -730,14 +731,6 @@ function jcKey(car: AccidentCar): string {
   return (car.reg_number ?? '').trim().toUpperCase()
 }
 
-function deriveDealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | undefined): string | null {
-  const raw = String(saEmployeeCode ?? '').trim()
-  if (!raw) return null
-  const parts = raw.split('_').map((p) => p.trim()).filter(Boolean)
-  if (parts.length === 0) return null
-  const candidate = (parts[parts.length - 1] || '').toUpperCase()
-  return candidate || null
-}
 
 function emptyRoleMap() {
   return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined, PARTS_INCHARGE: undefined } as Record<BSRole, BSAssignment | undefined>
@@ -1579,7 +1572,13 @@ export default function BodyshopFloorPage() {
       const cols = ROLE_COLUMNS[role]
       const { data: { user } } = await supabase.auth.getUser()
       const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
+      const resolvedDealerCode = resolveBodyshopAssignmentDealerCode({
+        dealer_code: car.dealer_code,
+        sa_employee_code: car.sa_employee_code,
+        branch: car.branch,
+      })
       const payload: Record<string, unknown> = {
+        dealer_code: resolvedDealerCode,
         // "Not Required" = assignment sentinel + matching status (not a person).
         // Clear remark/out/completed so prior Completed work does not linger.
         [cols.employeeCode]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
@@ -1636,11 +1635,7 @@ export default function BodyshopFloorPage() {
           job_card_number: k,
           repair_card_id: repairCardId,
           reception_entry_id: Number.isFinite(Number(car.id)) ? Number(car.id) : null,
-          dealer_code:
-            String(car.dealer_code ?? '').trim()
-            || deriveDealerCodeFromSaEmployeeCode(car.sa_employee_code)
-            || String(car.branch ?? '').trim()
-            || 'UNKNOWN',
+          dealer_code: resolvedDealerCode,
         }
         result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
       }
