@@ -2809,7 +2809,9 @@ export default function BodyshopRepairPage() {
     })
     if (!selected) return
 
-    if (selected.current_stage < 6) {
+    // Use the effective stage (what the header shows), not the raw pointer: Cash/FOC cards need no
+    // documents, so their pointer can still sit at 5 while Documentation is already complete.
+    if (getEffectiveStageForCard(selected) < 6) {
       toast_('Complete Documentation stage first before saving Estimate', false)
       return
     }
@@ -2838,7 +2840,9 @@ export default function BodyshopRepairPage() {
         estimation_by: actor,
       }
 
-      if (selected.current_stage === 6) {
+      // Pointer 5 or 6 with Documentation complete (see guard above) moves on to Estimation Approval.
+      const movesToApproval = selected.current_stage === 6 || selected.current_stage === 5
+      if (movesToApproval) {
         patch.current_stage = 7
         patch.current_stage_name = STAGE_LABELS[7] ?? 'Estimation Approval'
       }
@@ -2852,7 +2856,7 @@ export default function BodyshopRepairPage() {
         return next
       })
 
-      toast_(selected.current_stage === 6 ? 'Estimate saved. Stage moved to Estimation Approval ✅' : 'Estimate saved ✅')
+      toast_(movesToApproval ? 'Estimate saved. Stage moved to Estimation Approval ✅' : 'Estimate saved ✅')
     } catch (e) {
       console.error('[EstimateSave] failed', e)
       toast_(e.message ?? 'Unable to save estimate', false)
