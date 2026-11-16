@@ -3,6 +3,9 @@ import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { ACCOUNTS_PAYMENT_MODES, asiaKolkataTodayDate } from '../lib/api/accounts'
 import {
   applyDmsInvoiceAndAlignPayer,
+  fetchIsAdmin,
+  isDoWriteOffAllowed,
+  writeOffDoResidual,
   getBodyshopSettlement,
   mergeSettlementCard,
   postCustomerAmount,
@@ -122,6 +125,7 @@ export function BodyshopSettlementPanel({
   const [custNote, setCustNote] = useState('')
   const [custPaymentReceivedDate, setCustPaymentReceivedDate] = useState(() => asiaKolkataTodayDate())
   const [doError, setDoError] = useState<string | null>(null)
+  const [isAdminUser, setIsAdminUser] = useState(false)
   const [custError, setCustError] = useState<string | null>(null)
 
   async function load() {
@@ -147,6 +151,10 @@ export function BodyshopSettlementPanel({
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    void fetchIsAdmin().then(setIsAdminUser).catch(() => setIsAdminUser(false))
+  }, [])
 
   useEffect(() => {
     void load()
@@ -231,6 +239,41 @@ export function BodyshopSettlementPanel({
       toast(e?.message ?? 'Could not attach DMS invoice', false)
     } finally {
       setSavingHeader(false)
+    }
+  }
+
+  const writeOffAllowed = isDoWriteOffAllowed(insuranceDue, header?.do_amount ?? card.do_amount, isAdminUser)
+  const writeOffHint = (() => {
+    const due = Number(insuranceDue ?? 0)
+    const doAmt = Number(header?.do_amount ?? card.do_amount ?? 0)
+    if (!(due > 0)) return 'No insurance due left.'
+    if (!(doAmt > 0)) return 'DO amount is not captured.'
+    if (writeOffAllowed) return `Writes off ${inr(due)} as a non-cash adjustment. Remark required.`
+    return `Remaining ${inr(due)} is above 0.5% of DO (${inr(doAmt)}). Post Main / GST / TDS lines instead.`
+  })()
+
+  async function writeOffRemaining() {
+    const remark = textOrNull(doNote)
+    if (!remark || remark.length < 3) {
+      const msg = 'Enter a Reference / Remark (reason) to write off the remaining DO'
+      setDoError(msg)
+      toast(msg, false)
+      return
+    }
+    setDoError(null)
+    setSavingDo(true)
+    try {
+      const next = await writeOffDoResidual(card.id, remark)
+      setPayload(next)
+      onCardChange(mergeSettlementCard(card, next))
+      setDoNote('')
+      toast('Remaining DO written off (not cash)')
+    } catch (e: unknown) {
+      const msg = settlementRpcError(e)
+      setDoError(msg)
+      toast(msg, false)
+    } finally {
+      setSavingDo(false)
     }
   }
 
@@ -440,7 +483,7 @@ export function BodyshopSettlementPanel({
     if (line.is_reversed || line.line_type === 'reversal') return false
     if (accountsReceipt || (!doOnly && !customerOnly)) return true
     if (customerOnly) return line.party === 'customer'
-    return (line.party === 'insurance' && line.line_type === 'do_component')
+    return (line.party === 'insurance' && (line.line_type === 'do_component' || line.line_type === 'waiver'))
       || (line.party === 'customer' && line.line_type === 'receipt')
   }
 
@@ -623,9 +666,10 @@ export function BodyshopSettlementPanel({
             <button className="btn btn--primary" type="button" disabled={savingDo} onClick={() => void saveAccountsDoReceipt(false)}>
               {savingDo ? 'Posting…' : 'Post DO Receipt'}
             </button>
-            <button className="btn" type="button" disabled={savingDo || !(Number(insuranceDue) > 0)} onClick={() => void saveAccountsDoReceipt(true)}>
-              Post Remaining DO as Received
+            <button className="btn" type="button" title={writeOffHint} disabled={savingDo || !writeOffAllowed} onClick={() => void writeOffRemaining()}>
+              Write off remaining DO (≤0.5%)
             </button>
+            <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{writeOffHint}</span>
             {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
         </div>
@@ -729,9 +773,10 @@ export function BodyshopSettlementPanel({
             <button className="btn btn--primary" type="button" disabled={savingDo} onClick={() => void saveDoPayment(false)}>
               {savingDo ? 'Posting…' : 'Post payment'}
             </button>
-            <button className="btn" type="button" disabled={savingDo || !(Number(insuranceDue) > 0)} onClick={() => void saveDoPayment(true)}>
-              Post remaining DO as received
+            <button className="btn" type="button" title={writeOffHint} disabled={savingDo || !writeOffAllowed} onClick={() => void writeOffRemaining()}>
+              Write off remaining DO (≤0.5%)
             </button>
+            <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{writeOffHint}</span>
             {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
         </div>
@@ -922,7 +967,7 @@ export function BodyshopSettlementPanel({
                 <tr key={line.id} className={line.is_reversed || line.line_type === 'reversal' ? 'is-reversed' : undefined}>
                   <td>{accountsReceipt ? formatLineReceivedWhen(line) : formatWhen(line.created_at)}</td>
                   <td>{partyLabel(line.party)}</td>
-                  <td>{line.component}{line.line_type === 'reversal' ? ' · reversal' : ''}{line.is_reversed ? ' · reversed' : ''}</td>
+                  <td>{line.component === 'WAIVER' ? 'WRITE-OFF (non-cash)' : line.component}{line.line_type === 'reversal' ? ' · reversal' : ''}{line.is_reversed ? ' · reversed' : ''}</td>
                   <td>{customerPaymentModeDisplay(line)}</td>
                   <td>{inr(line.amount)}</td>
                   <td className="brx-settle-ref">{lineRefRemark(line)}</td>

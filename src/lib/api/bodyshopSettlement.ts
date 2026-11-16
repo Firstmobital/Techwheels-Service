@@ -247,6 +247,35 @@ export async function postCustomerAmount(input: {
   return asPayload(data)
 }
 
+/** DBL-0099: write-off limit. Remaining insurance due must be > 0 and at most 0.5% of the DO amount. */
+export const DO_WRITE_OFF_MAX_PCT = 0.5
+
+export function isDoWriteOffAllowed(
+  insuranceDue: number | null | undefined,
+  doAmount: number | null | undefined,
+  isAdmin = false,
+): boolean {
+  const due = Math.round(Number(insuranceDue ?? 0) * 100)
+  const doAmt = Math.round(Number(doAmount ?? 0) * 100)
+  if (!(due > 0) || !(doAmt > 0)) return false
+  if (isAdmin) return true
+  return due * 200 <= doAmt
+}
+
+export async function writeOffDoResidual(repairCardId: number, remark: string): Promise<SettlementPayload> {
+  const { data, error } = await supabase.rpc('write_off_bodyshop_do_residual', {
+    p_repair_card_id: repairCardId,
+    p_remark: remark,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return asPayload(data)
+}
+
+export async function fetchIsAdmin(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('is_admin')
+  return !error && data === true
+}
+
 export async function reverseSettlementLine(lineId: number, reason?: string): Promise<SettlementPayload> {
   const { data, error } = await supabase.rpc('reverse_bodyshop_settlement_line', {
     p_line_id: lineId,
