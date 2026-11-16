@@ -31,6 +31,7 @@ import { bodyshopFloorAgeSummary, isBodyshopFloorAssigned } from '../lib/bodysho
 import { formatBodyshopDocumentUploadSource } from '../lib/bodyshopDocumentUploadSource'
 import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/settings'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
+import { BodyshopStageHistory } from '../components/BodyshopStageHistory'
 import {
   deriveBillingDisplayStage,
   isBillingQueueActive,
@@ -6126,6 +6127,8 @@ export default function BodyshopRepairPage() {
                       </div>
                     ))}
                   </div>
+
+                  {isAdminLikeUser && <BodyshopStageHistory repairCardId={selected.id} />}
 
                   {selected.do_amount != null && (
                   <div className="brx-settle-pills">
