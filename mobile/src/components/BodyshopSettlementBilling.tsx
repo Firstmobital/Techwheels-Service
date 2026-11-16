@@ -12,6 +12,7 @@ import {
   type SettlementCardCache,
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
+import { compareInvoiceToDms } from '../lib/invoiceDmsMatch'
 
 function inr(v: number | null | undefined) {
   if (v == null || Number.isNaN(Number(v))) return '—'
@@ -59,6 +60,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
   const [payload, setPayload] = useState<SettlementPayload | null>(null)
   const [partsStatus, setPartsStatus] = useState(card.parts_entry_status ?? 'pending')
   const [invoiceAmount, setInvoiceAmount] = useState(card.billed_amount != null ? String(card.billed_amount) : '')
+  const [invoiceReason, setInvoiceReason] = useState('')
   const [doStatus, setDoStatus] = useState(card.do_status ?? 'pending')
   const [doAmount, setDoAmount] = useState(card.do_amount != null ? String(card.do_amount) : '')
   const [mainAmt, setMainAmt] = useState('')
@@ -78,6 +80,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
       setPartsStatus(String(c.parts_entry_status ?? card.parts_entry_status ?? 'pending'))
       const billed = c.billed_amount ?? h?.invoice_amount ?? card.billed_amount
       setInvoiceAmount(billed != null ? String(billed) : '')
+      setInvoiceReason(h?.invoice_amount_variance_reason ?? '')
       setDoStatus(String(c.do_status ?? h?.do_status ?? card.do_status ?? 'pending'))
       const dAmt = c.do_amount ?? h?.do_amount ?? card.do_amount
       setDoAmount(dAmt != null ? String(dAmt) : '')
@@ -96,10 +99,18 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
   const kind = header?.customer_settlement_kind ?? card.customer_settlement_kind
   const kindLabel = kind === 'refund' ? 'Customer Refund' : kind === 'none' ? 'Settled' : 'Recoverable from customer'
 
+  const dmsAmount = payload?.suggested_invoice?.total_invoice_amount ?? null
+  const dmsMatch = compareInvoiceToDms(numOrNull(invoiceAmount), dmsAmount)
+  const invoiceAmountChanged = numOrNull(invoiceAmount) !== (header?.invoice_amount ?? null)
+
   async function saveHeader() {
     const nextDoAmt = numOrNull(doAmount)
     if (doStatus === 'received' && nextDoAmt == null) {
       onToast('DO Amount is required when DO Status is Received', 'error')
+      return
+    }
+    if (dmsMatch.status === 'differs' && invoiceAmountChanged && !invoiceReason.trim()) {
+      onToast('Billed amount differs from the DMS invoice. Enter the reason for the difference to save.', 'error')
       return
     }
     setBusy(true)
@@ -108,6 +119,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         repairCardId: card.id,
         partsEntryStatus: partsStatus,
         invoiceAmount: numOrNull(invoiceAmount),
+        invoiceAmountReason: dmsMatch.status === 'differs' ? textOrNull(invoiceReason) : null,
         doAmount: nextDoAmt,
         doStatus,
       })
@@ -266,6 +278,18 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         </View>
         <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Invoice / Billed Amount (₹)</Text>
         <TextInput style={styles.input} keyboardType="numeric" value={invoiceAmount} onChangeText={setInvoiceAmount} placeholder="0" placeholderTextColor="#a7a99f" />
+        {dmsMatch.status === 'match' && (
+          <Text style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>✓ Matches DMS invoice {inr(dmsAmount)}</Text>
+        )}
+        {dmsMatch.status === 'differs' && (
+          <>
+            <Text style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>
+              ⚠ Differs from DMS invoice {inr(dmsAmount)} by {inr(Math.abs(dmsMatch.diff))}
+            </Text>
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Reason for difference from DMS *</Text>
+            <TextInput style={styles.input} value={invoiceReason} onChangeText={setInvoiceReason} placeholder="e.g. revised bill, DMS not yet updated" placeholderTextColor="#a7a99f" />
+          </>
+        )}
         {payload?.suggested_invoice?.total_invoice_amount != null && (
           <View style={{ marginTop: 8 }}>
             <Text style={styles.fieldLabel}>DMS invoice</Text>

@@ -13,6 +13,7 @@ import {
   isDeliveryReady,
   isStage18PaymentActive,
 } from '../src/lib/bodyshopBillingStage.ts'
+import { compareInvoiceToDms } from '../src/lib/invoiceDmsMatch.ts'
 
 type C = Parameters<typeof deriveBillingDisplayStage>[0]
 const card = (billed: boolean, doRecv: boolean, doPay: string, custPay: string): C => ({
@@ -71,5 +72,17 @@ assert.equal(isBillingQueueActive(card(true, false, 'pending', 'pending'), 15), 
 // billing data saved but not billed stays in Billing (original behaviour), even before RI is done
 const entered = { ...unbilled, parts_entry_status: 'entered' }
 assert.equal(isBillingQueueActive(entered, 14), true)
+
+// Invoice amount vs DMS (BODYSHOP-BILLING-GUARD-001): rounding matches, real differences do not
+assert.equal(compareInvoiceToDms(376540, 376540.48).status, 'match')
+assert.equal(compareInvoiceToDms(90075, 90074.5).status, 'match') // exactly 0.50
+assert.equal(compareInvoiceToDms(155715, 155714.75).status, 'match')
+assert.equal(compareInvoiceToDms(29431, 29461).status, 'differs') // card 1048, -30
+assert.equal(compareInvoiceToDms(24477, 24489).status, 'differs') // card 583, -12
+assert.equal(compareInvoiceToDms(1, 0).status, 'differs') // cards 408/409
+assert.equal(compareInvoiceToDms(0, 24146).status, 'differs') // card 486
+assert.equal(compareInvoiceToDms(122055, 146844.48).diff, -24789.48)
+assert.equal(compareInvoiceToDms(5000, null).status, 'no_dms')
+assert.equal(compareInvoiceToDms(null, 5000).status, 'no_amount')
 
 console.log('bodyshop-stage-queue harness: OK')

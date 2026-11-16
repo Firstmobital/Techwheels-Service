@@ -33,6 +33,8 @@ export interface BodyshopSettlementHeader {
   customer_payment_status: PaymentStatus
   derived_payment_status: PaymentStatus
   needs_accounts_review: boolean
+  invoice_amount_variance_reason?: string | null
+  invoice_dms_amount_at_save?: number | null
 }
 
 export interface BodyshopSettlementLine {
@@ -105,6 +107,8 @@ export async function upsertBodyshopSettlementHeader(input: {
   invoiceSource?: string | null
   doAmount?: number | null
   doStatus?: string | null
+  /** Required by the DB when invoiceAmount differs from the DMS invoice amount (> 0.50). */
+  invoiceAmountReason?: string | null
 }): Promise<SettlementPayload> {
   const { data, error } = await supabase.rpc('upsert_bodyshop_settlement_header', {
     p_repair_card_id: input.repairCardId,
@@ -118,6 +122,8 @@ export async function upsertBodyshopSettlementHeader(input: {
     p_invoice_source: input.invoiceSource ?? null,
     p_do_amount: input.doAmount ?? null,
     p_do_status: input.doStatus ?? null,
+    // Only sent when set, so the call still works before migration 20261116190000 is applied.
+    ...(input.invoiceAmountReason ? { p_invoice_amount_reason: input.invoiceAmountReason } : {}),
   })
   if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)

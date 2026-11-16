@@ -12,6 +12,7 @@ import {
   upsertBodyshopSettlementHeader,
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
+import { compareInvoiceToDms } from '../lib/invoiceDmsMatch'
 import {
   CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED,
   customerPaymentModeDisplay,
@@ -105,6 +106,7 @@ export function BodyshopSettlementPanel({
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
   const [invoiceAmount, setInvoiceAmount] = useState(card.billed_amount != null ? String(card.billed_amount) : '')
+  const [invoiceReason, setInvoiceReason] = useState('')
   const [doStatus, setDoStatus] = useState(card.do_status ?? 'pending')
   const [doAmount, setDoAmount] = useState(card.do_amount != null ? String(card.do_amount) : '')
 
@@ -134,6 +136,7 @@ export function BodyshopSettlementPanel({
       setInvoiceDate(h?.invoice_date ?? next.suggested_invoice?.invoice_date ?? '')
       const billed = c.billed_amount ?? h?.invoice_amount ?? card.billed_amount
       setInvoiceAmount(billed != null ? String(billed) : '')
+      setInvoiceReason(h?.invoice_amount_variance_reason ?? '')
       setDoStatus(String(c.do_status ?? h?.do_status ?? card.do_status ?? 'pending'))
       const dAmt = c.do_amount ?? h?.do_amount ?? card.do_amount
       setDoAmount(dAmt != null ? String(dAmt) : '')
@@ -162,11 +165,19 @@ export function BodyshopSettlementPanel({
   const insuranceDue = header?.insurance_due_amount
   const remaining = header?.customer_remaining_amount
 
+  const dmsAmount = payload?.suggested_invoice?.total_invoice_amount ?? null
+  const dmsMatch = compareInvoiceToDms(numOrNull(invoiceAmount), dmsAmount)
+  const invoiceAmountChanged = numOrNull(invoiceAmount) !== (header?.invoice_amount ?? null)
+
   async function saveHeader() {
     const nextDo = doStatus
     const nextDoAmt = numOrNull(doAmount)
     if (nextDo === 'received' && nextDoAmt === null) {
       toast('DO Amount is required when DO Capture Status is Received', false)
+      return
+    }
+    if (dmsMatch.status === 'differs' && invoiceAmountChanged && !invoiceReason.trim()) {
+      toast('Billed amount differs from the DMS invoice. Enter the reason for the difference to save.', false)
       return
     }
     setSavingHeader(true)
@@ -177,6 +188,7 @@ export function BodyshopSettlementPanel({
         invoiceNumber: invoiceNumber.trim() || null,
         invoiceDate: invoiceDate.trim() || null,
         invoiceAmount: numOrNull(invoiceAmount),
+        invoiceAmountReason: dmsMatch.status === 'differs' ? invoiceReason.trim() || null : null,
         doAmount: nextDoAmt,
         doStatus: nextDo,
       })
@@ -467,7 +479,36 @@ export function BodyshopSettlementPanel({
           <label className="brx-field">
             <span className="brx-field-label">Invoice / Billed Amount (₹)</span>
             <input className="inp" type="number" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} />
+            {dmsMatch.status === 'match' && (
+              <span style={{ color: '#16a34a', fontSize: '0.78rem', marginTop: 4 }}>
+                ✓ Matches DMS invoice {inr(dmsAmount)}
+              </span>
+            )}
+            {dmsMatch.status === 'differs' && (
+              <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: 4 }}>
+                ⚠ Differs from DMS invoice {inr(dmsAmount)} by {inr(Math.abs(dmsMatch.diff))}
+                {dmsMatch.diff > 0 ? ' (higher)' : ' (lower)'}
+              </span>
+            )}
+            {dmsMatch.status === 'no_dms' && (
+              <span style={{ color: 'var(--text-2)', fontSize: '0.78rem', marginTop: 4 }}>
+                No DMS invoice amount to compare with
+              </span>
+            )}
           </label>
+          {dmsMatch.status === 'differs' && (
+            <label className="brx-field">
+              <span className="brx-field-label">
+                Reason for difference from DMS<span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+              </span>
+              <input
+                className="inp"
+                value={invoiceReason}
+                onChange={(e) => setInvoiceReason(e.target.value)}
+                placeholder="e.g. revised bill, DMS not yet updated"
+              />
+            </label>
+          )}
           <label className="brx-field">
             <span className="brx-field-label">DO Capture Status</span>
             <select className="sel" value={doStatus} onChange={(e) => setDoStatus(e.target.value)}>
