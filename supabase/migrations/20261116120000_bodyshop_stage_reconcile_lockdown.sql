@@ -5,7 +5,13 @@
 --    so staff updates still reconcile after authenticated EXECUTE is revoked.
 -- 3) Assignment match: job-card number is used only for assignments with no repair_card_id,
 --    so a reused job-card number cannot move a different card.
--- Not applied automatically. Apply per DB_CHANGE_PROTOCOL.
+-- Apply per DB_CHANGE_PROTOCOL. Ledger: DBL-0093.
+--
+-- ROLLBACK (restores the pre-change state):
+--   GRANT EXECUTE ON FUNCTION public.bodyshop_reconcile_repair_card_current_stage(integer) TO anon, authenticated, service_role;
+--   ALTER FUNCTION public.trg_bodyshop_stage_worklist_projection_card_change() SECURITY INVOKER RESET search_path;
+--   (re-run the function body from 20261114120000_bodyshop_reconcile_current_stage_pointer.sql to restore the
+--    unconditional job-card assignment match)
 
 CREATE OR REPLACE FUNCTION public.bodyshop_reconcile_repair_card_current_stage(p_repair_card_id integer)
 RETURNS jsonb
