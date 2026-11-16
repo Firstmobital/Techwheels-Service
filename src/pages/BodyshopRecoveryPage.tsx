@@ -6,8 +6,11 @@ import {
   exportBodyshopDoRecovery,
   getBodyshopRecoveryCase,
   insurerPayerMismatch,
+  bodyshopDoRecoveryRemark,
+  isBodyshopDoRecoveryRemarkEditable,
   listBodyshopDoRecovery,
   openRecoveryDocument,
+  setBodyshopDoRecoveryRemark,
   settlementCardFromRecoveryRow,
   type DoRecoveryRow,
   type RecoveryCase,
@@ -159,10 +162,44 @@ export default function BodyshopRecoveryPage() {
   const [importing, setImporting] = useState(false)
   const [committing, setCommitting] = useState(false)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const [recoveryRemarkDrafts, setRecoveryRemarkDrafts] = useState<Record<number, string>>({})
+  const [savingRecoveryRemarkId, setSavingRecoveryRemarkId] = useState<number | null>(null)
 
   function flash(msg: string, ok = true) {
     setToast({ msg, ok })
     window.setTimeout(() => setToast(null), 4000)
+  }
+
+  function recoveryRemarkDraftValue(row: DoRecoveryRow) {
+    const id = row.repair_card_id
+    if (Object.prototype.hasOwnProperty.call(recoveryRemarkDrafts, id)) return recoveryRemarkDrafts[id]
+    return row.do_recovery_remark ?? ''
+  }
+
+  function patchRecoveryRow(repairCardId: number, patch: Partial<DoRecoveryRow>) {
+    setRows((prev) => prev.map((r) => (r.repair_card_id === repairCardId ? { ...r, ...patch } : r)))
+  }
+
+  async function saveRecoveryRemark(row: DoRecoveryRow) {
+    if (!isBodyshopDoRecoveryRemarkEditable(row)) return
+    const next = recoveryRemarkDraftValue(row).trim()
+    const current = bodyshopDoRecoveryRemark(row)
+    if (next === current) return
+    setSavingRecoveryRemarkId(row.repair_card_id)
+    try {
+      const saved = await setBodyshopDoRecoveryRemark(row.repair_card_id, next || null)
+      patchRecoveryRow(row.repair_card_id, { do_recovery_remark: saved.do_recovery_remark })
+      setRecoveryRemarkDrafts((prev) => {
+        const nextDrafts = { ...prev }
+        delete nextDrafts[row.repair_card_id]
+        return nextDrafts
+      })
+      flash('Remark saved')
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Could not save remark', false)
+    } finally {
+      setSavingRecoveryRemarkId(null)
+    }
   }
 
   async function load() {
@@ -456,6 +493,7 @@ export default function BodyshopRecoveryPage() {
           'Insurance due': r.insurance_due_amount,
           'Customer amount (CA)': customerAmount,
           'DO payment': r.do_payment_status,
+          Remark: bodyshopDoRecoveryRemark(r) || (extra as { do_recovery_remark?: string | null } | undefined)?.do_recovery_remark || '',
           'Ageing days': ageingDays(r.invoice_date),
           'Posted line count': lines.filter((l) => !l.is_reversed && l.line_type !== 'reversal').length,
           'PAN URL': urlFor('doc_pan'),
@@ -813,6 +851,7 @@ export default function BodyshopRecoveryPage() {
                 <th>Insurance due</th>
                 <th>Customer payment (CP)</th>
                 <th>DO Payment Status</th>
+                <th>Remark</th>
                 <th>Ageing</th>
                 <th></th>
               </tr>
@@ -860,6 +899,45 @@ export default function BodyshopRecoveryPage() {
                         {statusLabel(r.do_payment_status)}
                       </span>
                     </td>
+                    <td className="acct-pending-remark">
+                      {isBodyshopDoRecoveryRemarkEditable(r) ? (
+                        <div className="acct-pending-remark__edit">
+                          <input
+                            className="inp"
+                            value={recoveryRemarkDraftValue(r)}
+                            maxLength={500}
+                            placeholder="Why pending / partial?"
+                            aria-label={`Recovery remark for ${r.job_card_no}`}
+                            disabled={savingRecoveryRemarkId === r.repair_card_id}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setRecoveryRemarkDrafts((prev) => ({ ...prev, [r.repair_card_id]: value }))
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                void saveRecoveryRemark(r)
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn--sm btn--primary"
+                            disabled={
+                              savingRecoveryRemarkId === r.repair_card_id
+                              || recoveryRemarkDraftValue(r).trim() === bodyshopDoRecoveryRemark(r)
+                            }
+                            onClick={() => void saveRecoveryRemark(r)}
+                          >
+                            {savingRecoveryRemarkId === r.repair_card_id ? '…' : 'Save'}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="acct-pending-remark__ro" title={bodyshopDoRecoveryRemark(r) || undefined}>
+                          {bodyshopDoRecoveryRemark(r) || '—'}
+                        </span>
+                      )}
+                    </td>
                     <td>{days == null ? '—' : `${days}d`}</td>
                     <td>
                       <div className="brx-recov-actions">
@@ -906,6 +984,10 @@ export default function BodyshopRecoveryPage() {
                     <Field label="Claim no" value={moreCase.claim_intimation_no ?? ''} />
                     <Field label="Invoice" value={[moreCase.invoice_number, fmtDate(moreCase.invoice_date)].filter((v) => v && v !== '—').join(' · ')} />
                     <Field label="DO / due" value={`${inr(moreCase.do_amount)} · due ${inr(moreCase.insurance_due_amount)}`} />
+                    <Field
+                      label="Recovery remark"
+                      value={bodyshopDoRecoveryRemark(rows.find((r) => r.repair_card_id === moreCase.repair_card_id) ?? { do_recovery_remark: null })}
+                    />
                     <Field label="Customer payment" value={inr(rows.find((r) => r.repair_card_id === moreCase.repair_card_id)?.customer_posted_amount ?? 0)} />
                   </div>
                   <div className="brx-panel-h" style={{ marginTop: 16 }}>Documents</div>

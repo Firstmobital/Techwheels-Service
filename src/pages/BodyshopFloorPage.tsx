@@ -17,7 +17,6 @@ import {
   BODYSHOP_FLOOR_EMPLOYEE_MASTER_OR_FILTER,
   isEmployeeEligibleForBodyshopFloorRole,
 } from '../lib/bodyshopFloorEmployeePicker'
-import { arePipelineWorkStepsFinished } from '../lib/bodyshopFloorWork/pipeline'
 import {
   classifyFloorWorkPipelineStage,
   emptyPipelineStageCounts,
@@ -2087,9 +2086,22 @@ export default function BodyshopFloorPage() {
       showToast('BS floor already completed for this job card', 'success')
       return
     }
-    const assignRow = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
-    if (!arePipelineWorkStepsFinished(assignRow)) {
-      showToast('Mark floor complete only after all Floor Work steps are Done (Dentor → Rubbing).', 'error')
+    const roleMap = assignments[k]
+    const fi = roleMap?.FLOOR_INCHARGE
+    const floorInchargeReady = Boolean(fi?.employee_code) && !isNotRequiredAssignment(fi)
+    if (!floorInchargeReady) {
+      showToast('Assign a Floor Incharge before marking the floor complete', 'error')
+      return
+    }
+    const otherRoleOpen = BODYSHOP_FLOOR_PIPELINE_ROLES.some((role) => {
+      if (role === 'FLOOR_INCHARGE') return false
+      const assignment = roleMap?.[role]
+      if (!assignment || isNotRequiredAssignment(assignment)) return false
+      const status = String(assignment.work_status ?? '').trim().toLowerCase()
+      return status !== 'completed'
+    })
+    if (otherRoleOpen) {
+      showToast('Mark other roles Not Required or Completed before finishing the floor. Only the Floor Incharge name is required.', 'error')
       return
     }
 
@@ -2683,11 +2695,12 @@ export default function BodyshopFloorPage() {
               const riOtherNameRequired = riDraft.reinspection_type === 'other' && !String(riDraft.reinspection_by ?? '').trim()
               const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
               const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
-              const hasActiveRoleWork = BODYSHOP_FLOOR_PIPELINE_ROLES.some((role) => {
+              const otherRoleOpen = BODYSHOP_FLOOR_PIPELINE_ROLES.some((role) => {
+                if (role === 'FLOOR_INCHARGE') return false
                 const assignment = carMap[role]
                 if (!assignment || isNotRequiredAssignment(assignment)) return false
                 const status = String(assignment.work_status ?? '').trim().toLowerCase()
-                return status === 'work_inprocess' || status === 'hold'
+                return status !== 'completed'
               })
               const fiReassignBlocked = isFloorInchargeReassignmentBlocked({
                 bsFloorCompleted: isFloorCompleted,
@@ -2703,11 +2716,8 @@ export default function BodyshopFloorPage() {
                 carMap.FLOOR_INCHARGE?.employee_code &&
                 !isNotRequiredAssignment(carMap.FLOOR_INCHARGE)
               )
-              const pipelineWorkDone = arePipelineWorkStepsFinished(
-                assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
-              )
               const canEditFloor = canEditBodyshopFloorAssignments(inchargeScope)
-              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && pipelineWorkDone && !hasActiveRoleWork && additionalApprovalResolved && floorInchargeAssigned
+              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && floorInchargeAssigned && !otherRoleOpen && additionalApprovalResolved
               const isSavingAdditionalApproval = saving === `${k}-additional-approval`
               const additionalApprovalLabel = additionalApproval.status === 'approved'
                 ? 'All Approved'
@@ -3212,13 +3222,11 @@ export default function BodyshopFloorPage() {
                           disabled={!canEditFloor || !canMarkFloorCompleted}
                           title={!floorInchargeAssigned
                             ? 'Assign a Floor Incharge before marking BS Floor Completed'
-                            : !pipelineWorkDone
-                              ? 'All Floor Work steps must be Done (Dentor → Rubbing) in the Floor Work app first'
-                              : hasActiveRoleWork
-                                ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
-                                : !additionalApprovalResolved
-                                  ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
-                                  : undefined}
+                            : otherRoleOpen
+                              ? 'Mark every other role Not Required or Completed. Only the Floor Incharge name is required.'
+                              : !additionalApprovalResolved
+                                ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
+                                : undefined}
                           onClick={() => void markBsFloorCompleted(car)}
                         >
                           {isSavingFloorStatus ? 'Saving…' : isFloorCompleted ? 'Completed' : 'Mark Floor Completed'}
@@ -3229,12 +3237,12 @@ export default function BodyshopFloorPage() {
                           Assign a Floor Incharge to enable.
                         </div>
                       )}
-                      {!isFloorCompleted && floorInchargeAssigned && hasActiveRoleWork && (
+                      {!isFloorCompleted && floorInchargeAssigned && otherRoleOpen && (
                         <div className="bsf-floor-note is-warn">
-                          Disabled until all assigned roles are not Work In Process/Hold.
+                          Other roles can stay empty or be marked Not Required. A named person on those roles must be Completed first.
                         </div>
                       )}
-                      {!isFloorCompleted && !hasActiveRoleWork && !additionalApprovalResolved && (
+                      {!isFloorCompleted && !otherRoleOpen && !additionalApprovalResolved && (
                         <div className="bsf-floor-note is-warn">
                           Disabled until Additional Approval is fully resolved.
                         </div>

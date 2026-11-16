@@ -26,6 +26,7 @@ export interface DoRecoveryRow {
   tds_amount?: number | null
   do_payment_status: string | null
   needs_accounts_review: boolean
+  do_recovery_remark?: string | null
 }
 
 export interface RecoveryCaseDocument {
@@ -85,6 +86,7 @@ export interface RecoveryExportCase {
   do_payment_status: string | null
   insurer_mismatch: boolean
   customer_posted_amount?: number | null
+  do_recovery_remark?: string | null
 }
 
 export interface RecoveryExportLine {
@@ -153,6 +155,36 @@ export async function listBodyshopDoRecovery(): Promise<DoRecoveryRow[]> {
   const { data, error } = await supabase.rpc('list_bodyshop_do_recovery')
   if (error) throw new Error(settlementRpcError(error))
   return Array.isArray(data) ? (data as DoRecoveryRow[]) : []
+}
+
+export function bodyshopDoRecoveryRemark(
+  row: Pick<DoRecoveryRow, 'do_recovery_remark'>,
+): string {
+  return String(row.do_recovery_remark ?? '').trim()
+}
+
+export function isBodyshopDoRecoveryRemarkEditable(
+  row: Pick<DoRecoveryRow, 'do_payment_status' | 'insurance_due_amount'>,
+): boolean {
+  const st = String(row.do_payment_status ?? 'pending').toLowerCase()
+  if (st === 'received' && (Number(row.insurance_due_amount) || 0) <= 0) return false
+  return st === 'pending' || st === 'partial' || st === 'not_received' || (Number(row.insurance_due_amount) || 0) > 0
+}
+
+export async function setBodyshopDoRecoveryRemark(
+  repairCardId: number,
+  remark: string | null,
+): Promise<{ repair_card_id: number; do_recovery_remark: string | null }> {
+  const { data, error } = await supabase.rpc('set_bodyshop_do_recovery_remark', {
+    p_repair_card_id: repairCardId,
+    p_remark: remark,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  const raw = (data ?? {}) as { repair_card_id?: number; do_recovery_remark?: string | null }
+  return {
+    repair_card_id: Number(raw.repair_card_id ?? repairCardId),
+    do_recovery_remark: raw.do_recovery_remark ?? null,
+  }
 }
 
 export async function exportBodyshopDoRecovery(repairCardIds: number[]): Promise<RecoveryExportPayload> {

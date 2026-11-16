@@ -1704,9 +1704,21 @@ function BodyshopFloorScreenInner() {
     const rowId = getRowId(assignments[k])
     if (!rowId) { showToast('Assign at least one role first', 'error'); return }
     if (bsFloorStatus[k]?.completedAt) { showToast('Already marked completed', 'success'); return }
-    const assignRow = assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined
-    if (!arePipelineWorkStepsFinished(assignRow)) {
-      showToast('Mark floor complete only after all Floor Work steps are Done (Dentor → Rubbing).', 'error')
+    const roleMap = assignments[k]
+    const fi = roleMap?.FLOOR_INCHARGE
+    if (!fi?.employee_code || isNotRequiredAssignment(fi)) {
+      showToast('Assign a Floor Incharge before marking the floor complete', 'error')
+      return
+    }
+    const otherRoleOpen = BODYSHOP_FLOOR_PIPELINE_ROLES.some((role) => {
+      if (role === 'FLOOR_INCHARGE') return false
+      const assignment = roleMap?.[role]
+      if (!assignment || isNotRequiredAssignment(assignment)) return false
+      const status = String(assignment.work_status ?? '').trim().toLowerCase()
+      return status !== 'completed'
+    })
+    if (otherRoleOpen) {
+      showToast('Mark other roles Not Required or Completed. Only the Floor Incharge name is required.', 'error')
       return
     }
     const prevBs = bsFloorStatus[k]
@@ -1897,6 +1909,14 @@ function BodyshopFloorScreenInner() {
     })
     const qc = qcByJc[k] ?? { repairCardId: car.id, qc_status: 'pending', qc_fail_reason: '', qc_checked_by: '', qc_checked_at: '' }
     const ri = riByJc[k] ?? emptyRiState()
+    const fiAssigned = Boolean(roleMap?.FLOOR_INCHARGE?.employee_code) && !isNotRequiredAssignment(roleMap?.FLOOR_INCHARGE)
+    const otherRoleOpen = BODYSHOP_FLOOR_PIPELINE_ROLES.some((role) => {
+      if (role === 'FLOOR_INCHARGE') return false
+      const assignment = roleMap?.[role]
+      if (!assignment || isNotRequiredAssignment(assignment)) return false
+      const status = String(assignment.work_status ?? '').trim().toLowerCase()
+      return status !== 'completed'
+    })
     const pipelineWorkDone = arePipelineWorkStepsFinished(assignmentRawByJc[k] as unknown as Record<string, unknown>)
     const flowSteps = computeBodyshopFloorFlowSteps({
       assignRow: assignmentRawByJc[k] as unknown as Record<string, unknown> | undefined,
@@ -2059,9 +2079,9 @@ function BodyshopFloorScreenInner() {
           ) : null}
 
           {/* Mark floor completed (legacy — prefer worker QC) */}
-          {!bsComp && assignedCount > 0 && pipelineWorkDone && canEditFloor && (
+          {!bsComp && fiAssigned && !otherRoleOpen && canEditFloor && (
             <TouchableOpacity style={[S.markDoneBtn, saving?.includes('-bs-floor') && { opacity: 0.5 }]} disabled={!!saving} onPress={() => markFloorCompleted(car)}>
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✓ Mark Floor Work Completed</Text>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✓ Mark Floor Completed</Text>
             </TouchableOpacity>
           )}
 
