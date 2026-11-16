@@ -4,7 +4,25 @@
 **Created:** 2026-11-16
 **Priority:** HIGH
 **Owner:** Platform Team
-**Status:** Phase 1 migration written, NOT applied (DBL-0097 PROPOSED).
+**Status:** Phase 1 migration written and reviewed, NOT applied. **DEFERRED by the owner on 2026-11-16; apply later** (DBL-0097 stays PROPOSED). Until then the two customer-data leaks below remain open.
+
+## Before applying (checklist for the later run)
+
+Customer-app impact was checked on 2026-11-16 by static analysis, not against the live app:
+- The customer mobile app calls the database through `cpRpc` in `mobile/src/lib/api/customerPortal.ts` (29 function names); none is in the 73-function list.
+- The customer-portal edge functions (`customer-portal-doc-view`, `-floor-photo-view`, `-upload`) call only `customer_get_bodyshop_document`, `customer_get_floor_work_photo`, `customer_get_active_job`, `customer_get_repair_card` with the service-role key; none is in the list.
+- No client code outside staff screens calls any of the 73 names.
+- No SECURITY INVOKER function or trigger calls a revoked function, so customer functions that use these helpers keep working (they run as the owner).
+- Not covered: callers outside this repo (other repo, dashboard webhooks); an old `full_metadata.sql` snapshot.
+
+Apply steps:
+1. Re-run `python3 scripts/audit_anon_definer_functions.py` after a fresh metadata refresh; if new flagged functions appeared since 2026-11-16, add them to the migration list or decide to keep them.
+2. Have the customer app open and logged in on a second device.
+3. Apply the migration in the SQL Editor; run the paired checks one SELECT at a time.
+4. Customer smoke test: phone + OTP login, tracker, open a document, floor-work gallery, raise a complaint, receive a notification.
+5. Staff smoke test: Accounts lists, bodyshop tracker, Reception, PSF CRE page, Import page, Fuel settings; check next morning's scheduled job and push logs.
+6. If anything fails: run the one-line re-grant in the migration header.
+7. Mark DBL-0097 APPLIED then VERIFIED; regenerate `full_metadata.sql` with the team script.
 
 ---
 
