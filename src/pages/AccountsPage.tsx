@@ -11,6 +11,7 @@ import {
   deleteAccountsMechanicalPayment,
   updateAccountsMechanicalPayment,
   buildBodyshopBusyPaymentExportRows,
+  bodyshopAccountsInsurerLabel,
   buildMechanicalAccountsExportRows,
   buildMechanicalBusyPaymentExportRows,
   BUSY_PAYMENT_EXPORT_HEADERS,
@@ -1082,6 +1083,7 @@ export default function AccountsPage() {
       Customer: r.customer_name ?? '',
       Branch: r.branch ?? '',
       SA: r.sa_name ?? '',
+      'Insurance company': bodyshopAccountsInsurerLabel(r),
       'Invoice number': r.invoice_number ?? '',
       'Invoice date': r.invoice_date ?? '',
       'Billed amount': r.invoice_amount ?? r.billed_amount ?? '',
@@ -1589,6 +1591,7 @@ export default function AccountsPage() {
               </thead>
               <tbody>
                 {searchedBs.map((r) => {
+                  const insurerLabel = bodyshopAccountsInsurerLabel(r)
                   const customerReceiptLines = bodyshopCustomerReceiptLinesForCase(bsPayLines, r.repair_card_id)
                   const canPrintCustomerReceipt = isBodyshopConsolidatedCustomerReceiptEligible(r, customerReceiptLines)
                   return (
@@ -1605,8 +1608,8 @@ export default function AccountsPage() {
                       <div style={{ fontWeight: 600 }}>{r.customer_name || '—'}</div>
                     </td>
                     <td>
-                      {String(r.insurance_company ?? '').trim() ? (
-                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{String(r.insurance_company).trim()}</div>
+                      {insurerLabel ? (
+                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{insurerLabel}</div>
                       ) : null}
                       <div>{r.invoice_number || '—'}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)}</div>

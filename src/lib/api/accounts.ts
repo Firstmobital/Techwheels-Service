@@ -850,6 +850,19 @@ export function bodyshopSettlementReceiptDate(
  * NULL / cheque / bank / other / insurance / refund / waiver contribute ₹0.
  * Does not use Mechanical payment lines or settlement status.
  */
+/** Repair card policy insurer, else DMS bill-to name (strip C/O agent), aligned with Recovery / settlement mismatch logic. */
+export function bodyshopAccountsInsurerLabel(
+  row: Pick<AccountsBodyshopCase, 'insurance_company' | 'invoice_account'>,
+): string {
+  const policy = String(row.insurance_company ?? '').trim()
+  if (policy) return policy
+  const billTo = String(row.invoice_account ?? '').trim()
+  if (!billTo) return ''
+  const beforeCo = billTo.split(/\s+c\/o\s+/i)[0] ?? billTo
+  const stripped = beforeCo.replace(/^m\/s\.?\s+/i, '').replace(/^the\s+/i, '').trim()
+  return stripped || billTo
+}
+
 export function accountsBodyshopOutstandingAmount(
   row: Pick<AccountsBodyshopCase, 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>,
 ): number {
