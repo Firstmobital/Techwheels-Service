@@ -2801,6 +2801,12 @@ export default function BodyshopRepairPage() {
   }
 
   async function handleSaveEstimateStage() {
+    console.info('[EstimateSave] click', {
+      hasSelected: Boolean(selected),
+      stage: selected?.current_stage,
+      amount: selected?.estimated_amount,
+      hasDoc: Boolean(bodyshopDocsByKey.doc_estimate),
+    })
     if (!selected) return
 
     if (selected.current_stage < 6) {
@@ -2848,6 +2854,7 @@ export default function BodyshopRepairPage() {
 
       toast_(selected.current_stage === 6 ? 'Estimate saved. Stage moved to Estimation Approval ✅' : 'Estimate saved ✅')
     } catch (e) {
+      console.error('[EstimateSave] failed', e)
       toast_(e.message ?? 'Unable to save estimate', false)
     } finally {
       setSaving(false)
