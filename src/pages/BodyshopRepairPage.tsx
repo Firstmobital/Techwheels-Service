@@ -33,7 +33,7 @@ import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/setting
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
   deriveBillingDisplayStage,
-  hasAnyBillingData,
+  isBillingQueueActive,
   isDeliveryReady,
   isBillingStage15Done,
   isBillingStage16Done,
@@ -4914,7 +4914,8 @@ export default function BodyshopRepairPage() {
     const stage15Done = isBillingStage15Done(card)
     const stage16Done = isBillingStage16Done(card)
 
-    if (stage === 15) return hasAnyBillingData(card) && !stage15Done
+    // Billing: billing data saved, or the car is past QC + RI and still waiting for billing.
+    if (stage === 15) return isBillingQueueActive(card, clampStageUntilRiComplete(card, effectiveCurrentStage))
     if (stage === 16) return stage15Done && !stage16Done
     if (stage === 18) return isStage18PaymentActive(card)
 
@@ -5901,7 +5902,7 @@ export default function BodyshopRepairPage() {
                   const stage15Done = isBillingStage15Done(selected)
                   const stage16Done = isBillingStage16Done(selected)
                   const stage18Done = isStage18PaymentDone(selected)
-                  const stage15Active = hasAnyBillingData(selected) && !stage15Done
+                  const stage15Active = isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
                   const stage16Active = stage15Done && !stage16Done
                   const stage18Active = isStage18PaymentActive(selected)
 
@@ -6244,7 +6245,7 @@ export default function BodyshopRepairPage() {
                               : num === 14
                                 ? stage14Active
                               : num === 15
-                                ? (hasAnyBillingData(selected) && !isBillingStage15Done(selected))
+                                ? isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
                               : num === 16
                                 ? (isBillingStage15Done(selected) && !isBillingStage16Done(selected))
                               : num === 18

@@ -302,6 +302,7 @@ export {
   isStage18PaymentDone,
   isStage18PaymentActive,
   isDeliveryReady,
+  isBillingQueueActive,
   deriveBillingDisplayStage,
 } from '../bodyshopBillingStage'
 

@@ -9,6 +9,7 @@ import {
   hasAnyBillingData,
   isBillingStage15Done,
   isBillingStage16Done,
+  isBillingQueueActive,
   isDeliveryReady,
   isStage18PaymentActive,
 } from '../src/lib/bodyshopBillingStage.ts'
@@ -60,5 +61,15 @@ assert.equal(deriveBillingDisplayStage(paid, 14), 14)
 
 // pointer 18 with no billing data at all keeps its pointer
 assert.equal(deriveBillingDisplayStage(unbilled, 18), 18)
+
+// Billing queue: a car past QC+RI (clamped stage 15) with no billing data is waiting for billing
+assert.equal(isBillingQueueActive(unbilled, 15), true)
+assert.equal(isBillingQueueActive(unbilled, 14), false) // still in Re-Inspection
+assert.equal(isBillingQueueActive(unbilled, 18), false)
+// billed cars leave the Billing queue
+assert.equal(isBillingQueueActive(card(true, false, 'pending', 'pending'), 15), false)
+// billing data saved but not billed stays in Billing (original behaviour), even before RI is done
+const entered = { ...unbilled, parts_entry_status: 'entered' }
+assert.equal(isBillingQueueActive(entered, 14), true)
 
 console.log('bodyshop-stage-queue harness: OK')

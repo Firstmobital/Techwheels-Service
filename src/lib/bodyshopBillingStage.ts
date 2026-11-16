@@ -65,6 +65,19 @@ export function isDeliveryReady(card: Pick<BillingCard, 'do_payment_status' | 'c
 }
 
 /**
+ * Billing queue (stage 15): any billing data saved and not yet billed, OR the car is past
+ * QC + Re-Inspection (clamped stage is exactly 15) and not yet billed, i.e. it is waiting
+ * for billing work. `clampedStage` is the pointer after the QC/RI clamp.
+ */
+export function isBillingQueueActive(
+  card: Pick<BillingCard, 'parts_entry_status' | 'billed_amount' | 'do_status' | 'do_amount'>,
+  clampedStage: number,
+): boolean {
+  if (isBillingStage15Done(card)) return false
+  return hasAnyBillingData(card) || clampedStage === 15
+}
+
+/**
  * Stage label for a card whose pointer says 15+ (i.e. past QC and Re-Inspection).
  * Billing data wins over a stale pointer so the card label agrees with the queue tiles.
  * Pointer 17 is an explicit Delivery state and is kept. Cards with no billing or
