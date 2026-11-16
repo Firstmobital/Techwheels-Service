@@ -4,7 +4,7 @@
 **Created:** 2026-11-16
 **Priority:** CRITICAL
 **Owner:** Bodyshop Team + Platform Team
-**Status:** PLAN ONLY. No code or DB change is authorised until this plan is approved.
+**Status (2026-11-16):** Phase 1 and 4 shipped (cddc5c66, DBL-0093 VERIFIED). Phase 3 applied (DBL-0094 VERIFIED: 18 reset, 759 relabelled, cards 1198 and 1253 held for manual review). Phase 2 applied (DBL-0095 VERIFIED: stage history table, pointer follows billing data, 116 pointers moved). Remaining: Phase 5 UI verification, refresh metadata dump with the team script, decide on cards 1198 / 1253, Delivered handling (separate plan).
 
 ---
 
