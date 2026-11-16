@@ -80,7 +80,7 @@ Principle kept from the old behaviour: a vehicle may be in several queues at onc
 **Exit criteria:** a written list of pointer changes since 14 Nov, and confirmation of whether the backup is usable for Phase 3.
 
 ### Phase 1: Queue rules and label (web + mobile, no data change)
-- [ ] **1.1** Keep the existing Stage 15 rule (`hasAnyBillingData && !billed`). The gate existed before 2026-09-04 (commit bc59dea3^), so it is original behaviour and is NOT being removed. The 12 unbilled pointer-15 cars are invisible in the Billing tile today and were before too; they are handled by the pointer fix in Phase 2, not by changing the tile rule.
+- [x] **1.1** REVISED 2026-11-16 (commit 090eafa7). The original rule (`hasAnyBillingData && !billed`, present before 2026-09-04) left cars that are past QC + Re-Inspection and waiting for billing in no tile while their label said "Stage 15 - Billing". Billing queue is now: not billed AND (billing data saved OR clamped stage is exactly 15) (`isBillingQueueActive`). Cars still in Re-Inspection with no billing data stay out of Billing.
 - [ ] **1.2** Stage 16 and 18 rules unchanged. Concurrency (a card in 15/16/18 together, and alongside 14) is original behaviour and stays.
 - [ ] **1.3** Stage 17 (Delivery) queue becomes data-driven: both payments received and not delivered. Fully paid cars stay there until delivery is built (separate plan). This restores the old "payment done moves the car to Delivery" behaviour.
 - [x] **1.4** Card label and `getEffectiveStageForCard` read the same predicates as the tiles (`src/lib/bodyshopBillingStage.ts`), so a card cannot say Billing while counted as Payment.
@@ -126,6 +126,7 @@ Backup-free approach (backup is used only if available, as a cross-check). Alrea
 
 ### Phase 5: Verification
 - [ ] **5.1** Re-run the June SQL. Expected: Payment equals the data-driven cards, Delivery holds the fully paid car, and the 12 unbilled pointer-15 cars appear in Billing as soon as billing data is saved.
+- [x] **5.2a** UAT 2026-11-16 14:00 (June, 55 cards, web): Billing 12 + Payment 42 + Delivery 1 = 55, every card in a tile, labels match tiles.
 - [ ] **5.2** Query for active cards in no queue and for cards where label and tile disagree. Both must return zero.
 - [ ] **5.3** Run the same checks for July to October.
 - [ ] **5.4** Manual UAT: walk one car 15 to 16 to 18 to delivered, web and mobile; confirm the history rows.
