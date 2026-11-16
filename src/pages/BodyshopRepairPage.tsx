@@ -215,7 +215,6 @@ const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
 
 /** Set true to allow Employee Master role BODYSHOP_MANAGER on the Verify tab (in addition to Admin). */
 const BODYSHOP_SURVEY_VERIFY_ALLOW_MANAGER_ROLE = false
-
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading
   const stage2Done = intakePhotoCount > 0

@@ -1605,6 +1605,9 @@ export default function AccountsPage() {
                       <div style={{ fontWeight: 600 }}>{r.customer_name || '—'}</div>
                     </td>
                     <td>
+                      {String(r.insurance_company ?? '').trim() ? (
+                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{String(r.insurance_company).trim()}</div>
+                      ) : null}
                       <div>{r.invoice_number || '—'}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)}</div>
                     </td>
