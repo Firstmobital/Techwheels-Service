@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { updateRepairCard, type RepairCard } from './bodyshopRepair'
+import { isBillingStage16Done } from '../bodyshopBillingStage'
 
 export type SettlementKind = 'due' | 'refund' | 'none'
 export type PaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
@@ -293,41 +294,16 @@ export async function applyDmsInvoiceAndAlignPayer(input: {
   return { payload, card: mergeSettlementCard(nextCard, payload) }
 }
 
-export function bothPaymentsReceived(card: Pick<RepairCard, 'do_payment_status' | 'customer_payment_status'>): boolean {
-  return String(card.do_payment_status ?? '').toLowerCase() === 'received'
-    && String(card.customer_payment_status ?? '').toLowerCase() === 'received'
-}
-
-export function isBillingStage15Done(card: Pick<RepairCard, 'parts_entry_status' | 'billed_amount'>): boolean {
-  return String(card.parts_entry_status ?? '').trim().toLowerCase() === 'billed'
-    && card.billed_amount != null
-}
-
-export function isBillingStage16Done(card: Pick<RepairCard, 'do_status' | 'do_amount'>): boolean {
-  return String(card.do_status ?? '').trim().toLowerCase() === 'received'
-    && card.do_amount != null
-}
-
-export function hasAnyBillingData(card: Pick<RepairCard, 'parts_entry_status' | 'billed_amount' | 'do_status' | 'do_amount'>): boolean {
-  const parts = String(card.parts_entry_status ?? '').trim().toLowerCase()
-  const doStatus = String(card.do_status ?? '').trim().toLowerCase()
-  return parts === 'billed'
-    || parts === 'entered'
-    || card.billed_amount != null
-    || (doStatus !== '' && doStatus !== 'pending')
-    || card.do_amount != null
-}
-
-export function isStage18PaymentDone(card: Pick<RepairCard, 'do_payment_status' | 'customer_payment_status'>): boolean {
-  return bothPaymentsReceived(card)
-}
-
-export function isStage18PaymentActive(card: Pick<RepairCard, 'do_status' | 'do_amount' | 'do_payment_status' | 'customer_payment_status'>): boolean {
-  const doPay = String(card.do_payment_status ?? '').toLowerCase()
-  const custPay = String(card.customer_payment_status ?? '').toLowerCase()
-  const anyPosted = doPay === 'partial' || doPay === 'received' || custPay === 'partial' || custPay === 'received'
-  return (isBillingStage16Done(card) || anyPosted) && !bothPaymentsReceived(card)
-}
+export {
+  bothPaymentsReceived,
+  isBillingStage15Done,
+  isBillingStage16Done,
+  hasAnyBillingData,
+  isStage18PaymentDone,
+  isStage18PaymentActive,
+  isDeliveryReady,
+  deriveBillingDisplayStage,
+} from '../bodyshopBillingStage'
 
 export function isInsuranceDuePending(card: Pick<RepairCard, 'overall_status' | 'do_status' | 'do_amount' | 'do_payment_status'>): boolean {
   if (card.overall_status !== 'active') return false

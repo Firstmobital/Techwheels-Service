@@ -1,0 +1,83 @@
+/**
+ * Pure billing / payment / delivery stage predicates for Bodyshop stages 15-18.
+ * No runtime imports, so it can be used from the UI and from node harnesses.
+ *
+ * Stages 15, 16, 18 (and the fully-paid Delivery bucket, stage 17) are driven by
+ * billing and settlement columns, not by the `current_stage` pointer. A card can be
+ * in several of these queues at once; that is intentional (BODYSHOP-STAGE-002).
+ */
+
+type BillingCard = {
+  parts_entry_status?: string | null
+  billed_amount?: number | null
+  do_status?: string | null
+  do_amount?: number | null
+  do_payment_status?: string | null
+  customer_payment_status?: string | null
+}
+
+const norm = (v: unknown) => String(v ?? '').trim().toLowerCase()
+
+export function bothPaymentsReceived(card: Pick<BillingCard, 'do_payment_status' | 'customer_payment_status'>): boolean {
+  return norm(card.do_payment_status) === 'received' && norm(card.customer_payment_status) === 'received'
+}
+
+export function isBillingStage15Done(card: Pick<BillingCard, 'parts_entry_status' | 'billed_amount'>): boolean {
+  return norm(card.parts_entry_status) === 'billed' && card.billed_amount != null
+}
+
+export function isBillingStage16Done(card: Pick<BillingCard, 'do_status' | 'do_amount'>): boolean {
+  return norm(card.do_status) === 'received' && card.do_amount != null
+}
+
+export function hasAnyBillingData(
+  card: Pick<BillingCard, 'parts_entry_status' | 'billed_amount' | 'do_status' | 'do_amount'>,
+): boolean {
+  const parts = norm(card.parts_entry_status)
+  const doStatus = norm(card.do_status)
+  return parts === 'billed'
+    || parts === 'entered'
+    || card.billed_amount != null
+    || (doStatus !== '' && doStatus !== 'pending')
+    || card.do_amount != null
+}
+
+export function isStage18PaymentDone(card: Pick<BillingCard, 'do_payment_status' | 'customer_payment_status'>): boolean {
+  return bothPaymentsReceived(card)
+}
+
+export function isStage18PaymentActive(
+  card: Pick<BillingCard, 'do_status' | 'do_amount' | 'do_payment_status' | 'customer_payment_status'>,
+): boolean {
+  const doPay = norm(card.do_payment_status)
+  const custPay = norm(card.customer_payment_status)
+  const anyPosted = doPay === 'partial' || doPay === 'received' || custPay === 'partial' || custPay === 'received'
+  return (isBillingStage16Done(card) || anyPosted) && !bothPaymentsReceived(card)
+}
+
+/**
+ * Fully paid (DO + customer both received). Such a car stays in the Delivery queue
+ * (stage 17) until delivery handling exists. Caller must already have checked the
+ * card is active.
+ */
+export function isDeliveryReady(card: Pick<BillingCard, 'do_payment_status' | 'customer_payment_status'>): boolean {
+  return bothPaymentsReceived(card)
+}
+
+/**
+ * Stage label for a card whose pointer says 15+ (i.e. past QC and Re-Inspection).
+ * Billing data wins over a stale pointer so the card label agrees with the queue tiles.
+ * Pointer 17 is an explicit Delivery state and is kept. Cards with no billing or
+ * payment data at all keep their pointer.
+ */
+export function deriveBillingDisplayStage(card: BillingCard, stage: number): number {
+  if (stage < 15) return stage
+  if (stage === 17) return 17
+  const anyPayment = norm(card.do_payment_status) !== '' && norm(card.do_payment_status) !== 'pending'
+    || norm(card.customer_payment_status) !== '' && norm(card.customer_payment_status) !== 'pending'
+  if (!hasAnyBillingData(card) && !anyPayment) return stage
+  if (isDeliveryReady(card)) return 17
+  if (isStage18PaymentActive(card)) return 18
+  if (isBillingStage15Done(card)) return 16
+  return 15
+}
