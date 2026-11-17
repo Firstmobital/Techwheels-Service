@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict WaydQOVaaMHmgjxvXXHPTfpDUeMUcgek41ML2VFESeSD5RbFHh7rWwDIParU03R
+\restrict NhU3Yn1aoJKUjkBGDW9L66rtJhbpu1o7IDwtnQfrpGFnw3ToiVknTcGpTgDyl3J
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-11-17 13:32:13 IST
+-- Started on 2026-11-17 17:36:14 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -51147,7 +51147,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_role_earning_sett
 
 
 --
--- TOC entry 9698 (class 3256 OID 62758)
+-- TOC entry 9700 (class 3256 OID 77700)
 -- Name: bodyshop_settlement_lines admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -52843,7 +52843,7 @@ CREATE POLICY bodyshop_role_earning_settings_service_all ON public.bodyshop_role
 ALTER TABLE public.bodyshop_settlement_lines ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 9700 (class 3256 OID 57364)
+-- TOC entry 9699 (class 3256 OID 57364)
 -- Name: bodyshop_settlement_lines bodyshop_settlement_lines_insert_internal; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -52867,7 +52867,7 @@ CREATE POLICY bodyshop_settlement_lines_service ON public.bodyshop_settlement_li
 
 
 --
--- TOC entry 9699 (class 3256 OID 57365)
+-- TOC entry 9698 (class 3256 OID 57365)
 -- Name: bodyshop_settlement_lines bodyshop_settlement_lines_update_internal; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -79903,11 +79903,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-11-17 13:33:14 IST
+-- Completed on 2026-11-17 17:37:17 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WaydQOVaaMHmgjxvXXHPTfpDUeMUcgek41ML2VFESeSD5RbFHh7rWwDIParU03R
+\unrestrict NhU3Yn1aoJKUjkBGDW9L66rtJhbpu1o7IDwtnQfrpGFnw3ToiVknTcGpTgDyl3J
 
