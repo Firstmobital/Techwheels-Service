@@ -249,7 +249,7 @@ export function BodyshopSettlementPanel({
     if (!(due > 0)) return 'No insurance due left.'
     if (!(doAmt > 0)) return 'DO amount is not captured.'
     if (writeOffAllowed) return `Writes off ${inr(due)} as a non-cash adjustment. Remark required.`
-    return `Remaining ${inr(due)} is above 0.5% of DO (${inr(doAmt)}). Post Main / GST / TDS lines instead.`
+    return `Remaining ${inr(due)} is above 1% of DO (${inr(doAmt)}). Post Main / GST / TDS lines instead.`
   })()
 
   async function writeOffRemaining() {
@@ -667,7 +667,7 @@ export function BodyshopSettlementPanel({
               {savingDo ? 'Posting…' : 'Post DO Receipt'}
             </button>
             <button className="btn" type="button" title={writeOffHint} disabled={savingDo || !writeOffAllowed} onClick={() => void writeOffRemaining()}>
-              Write off remaining DO (≤0.5%)
+              Write off remaining DO (≤1%)
             </button>
             <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{writeOffHint}</span>
             {doError && <div className="brx-settle-error">{doError}</div>}
@@ -774,7 +774,7 @@ export function BodyshopSettlementPanel({
               {savingDo ? 'Posting…' : 'Post payment'}
             </button>
             <button className="btn" type="button" title={writeOffHint} disabled={savingDo || !writeOffAllowed} onClick={() => void writeOffRemaining()}>
-              Write off remaining DO (≤0.5%)
+              Write off remaining DO (≤1%)
             </button>
             <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{writeOffHint}</span>
             {doError && <div className="brx-settle-error">{doError}</div>}

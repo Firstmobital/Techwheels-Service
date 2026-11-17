@@ -247,8 +247,8 @@ export async function postCustomerAmount(input: {
   return asPayload(data)
 }
 
-/** DBL-0099: write-off limit. Remaining insurance due must be > 0 and at most 0.5% of the DO amount. */
-export const DO_WRITE_OFF_MAX_PCT = 0.5
+/** DBL-0099: write-off limit. Remaining insurance due must be > 0 and at most 1% of the DO amount. */
+export const DO_WRITE_OFF_MAX_PCT = 1
 
 export function isDoWriteOffAllowed(
   insuranceDue: number | null | undefined,
@@ -259,7 +259,7 @@ export function isDoWriteOffAllowed(
   const doAmt = Math.round(Number(doAmount ?? 0) * 100)
   if (!(due > 0) || !(doAmt > 0)) return false
   if (isAdmin) return true
-  return due * 200 <= doAmt
+  return due * 100 <= doAmt
 }
 
 export async function writeOffDoResidual(repairCardId: number, remark: string): Promise<SettlementPayload> {
