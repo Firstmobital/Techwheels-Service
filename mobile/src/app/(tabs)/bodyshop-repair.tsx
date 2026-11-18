@@ -43,6 +43,19 @@ import {
   resendSurveyApprovalToCustomer,
   uploadBodyshopRepairDocument,
 } from '../../lib/api/bodyshopRepairDocumentUpload'
+import { printMergedTwoSidedDocument } from '../../lib/customer/customerTwoSidedPrint'
+
+const BODYSHOP_TWO_SIDED_DOC_PAIRS: Record<
+  string,
+  { frontKey: string; backKey: string; name: string }
+> = {
+  doc_aadhaar: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+  doc_aadhaar_back: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+  doc_dl: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
+  doc_dl_back: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
+  doc_rc: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+  doc_rc_back: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -526,20 +539,51 @@ export default function BodyshopRepairScreen() {
     }
   }
 
-  async function openUploadedDoc(docKey: string) {
-    const doc = uploadedDocsByKey[docKey]
-    if (!doc) return
-    if (doc.drive_url) {
-      const ok = await Linking.canOpenURL(doc.drive_url)
-      if (ok) await Linking.openURL(doc.drive_url)
-      return
-    }
+  async function resolveUploadedDocViewUrl(
+    doc: { storage_path: string; drive_url?: string | null },
+  ): Promise<string | null> {
+    const driveUrl = String(doc.drive_url ?? '').trim()
+    if (driveUrl) return driveUrl
     if (doc.storage_path) {
       const { data } = await supabase.storage.from('autodoc').createSignedUrl(doc.storage_path, 3600)
-      if (data?.signedUrl) {
-        const ok = await Linking.canOpenURL(data.signedUrl)
-        if (ok) await Linking.openURL(data.signedUrl)
+      return data?.signedUrl?.trim() || null
+    }
+    return null
+  }
+
+  async function openUploadedDoc(docKey: string) {
+    const pair = BODYSHOP_TWO_SIDED_DOC_PAIRS[docKey]
+    if (pair && selectedCard) {
+      const frontDoc = uploadedDocsByKey[pair.frontKey]
+      const backDoc = uploadedDocsByKey[pair.backKey]
+      if (frontDoc && backDoc) {
+        try {
+          const [frontUrl, backUrl] = await Promise.all([
+            resolveUploadedDocViewUrl(frontDoc),
+            resolveUploadedDocViewUrl(backDoc),
+          ])
+          if (frontUrl && backUrl) {
+            await printMergedTwoSidedDocument({
+              docName: pair.name,
+              regNumber: selectedCard.reg_number?.trim() || 'Vehicle',
+              frontUrl,
+              backUrl,
+            })
+            return
+          }
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : 'Merged print failed', 'error')
+          return
+        }
       }
+    }
+
+    const doc = uploadedDocsByKey[docKey]
+    if (!doc) return
+    const viewUrl = await resolveUploadedDocViewUrl(doc)
+    if (viewUrl) {
+      const ok = await Linking.canOpenURL(viewUrl)
+      if (ok) await Linking.openURL(viewUrl)
     }
   }
 

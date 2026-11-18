@@ -4124,7 +4124,7 @@ export default function BodyshopRepairPage() {
   <style>
     @page {
       size: A4 portrait;
-      margin: 2mm;
+      margin: 0;
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -4221,7 +4221,7 @@ export default function BodyshopRepairPage() {
     @media print {
       @page {
         size: A4 portrait;
-        margin: 2mm;
+        margin: 0;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
@@ -4229,7 +4229,8 @@ export default function BodyshopRepairPage() {
       html, body {
         width: 210mm !important;
         height: 297mm !important;
-        margin: 0 auto !important;
+        max-height: 297mm !important;
+        margin: 0 !important;
         padding: 0 !important;
         background: #fff !important;
         overflow: hidden !important;
@@ -4242,20 +4243,25 @@ export default function BodyshopRepairPage() {
         border-radius: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
-        width: 206mm !important;
-        height: 293mm !important;
-        min-height: 293mm !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        max-height: 297mm !important;
+        min-height: 0 !important;
         max-width: none !important;
         box-shadow: none !important;
         display: flex !important;
         flex-direction: column !important;
         gap: 0 !important;
+        page-break-after: avoid !important;
+        break-after: avoid-page !important;
         page-break-inside: avoid !important;
-        break-inside: avoid !important;
+        break-inside: avoid-page !important;
         overflow: hidden !important;
       }
       .side-block {
-        flex: 1 1 0 !important;
+        flex: 0 0 50% !important;
+        height: 50% !important;
+        max-height: 50% !important;
         min-height: 0 !important;
         width: 100% !important;
         margin: 0 !important;
@@ -4263,15 +4269,19 @@ export default function BodyshopRepairPage() {
         display: flex !important;
         flex-direction: column !important;
         align-items: stretch !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+        justify-content: center !important;
         overflow: hidden !important;
+        page-break-before: avoid !important;
+        page-break-after: avoid !important;
+        break-before: avoid-page !important;
+        break-after: avoid-page !important;
       }
       .img-container {
         flex: 1 1 auto !important;
         min-height: 0 !important;
         width: 100% !important;
-        height: auto !important;
+        height: 100% !important;
+        max-height: 100% !important;
         display: block !important;
         line-height: 0 !important;
         overflow: hidden !important;
@@ -4279,24 +4289,21 @@ export default function BodyshopRepairPage() {
       .side-img {
         display: block !important;
         width: 100% !important;
-        height: 146.5mm !important;
+        height: 100% !important;
         max-width: 100% !important;
-        max-height: 146.5mm !important;
+        max-height: 148.4mm !important;
         object-fit: contain !important;
         object-position: center center !important;
         border: none !important;
         border-radius: 0 !important;
         box-shadow: none !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
       }
       .side-frame {
         width: 100% !important;
-        height: 146.5mm !important;
-        min-height: 146.5mm !important;
+        height: 100% !important;
+        max-height: 148.4mm !important;
+        min-height: 0 !important;
         border: none !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
       }
       .mid-gap {
         display: none !important;
