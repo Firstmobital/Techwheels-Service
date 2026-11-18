@@ -38,6 +38,23 @@ export const TRACKER_GAP_ACTIONABLE: TrackerGapType[] = [
   'placeholder_jc',
 ]
 
+export type TrackerGapChip = 'all' | 'reception' | 'jc' | 'placeholder' | 'invoice_pending'
+
+export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip): boolean {
+  if (chip === 'all') return true
+  if (chip === 'reception') return gap === 'reception_no_card'
+  if (chip === 'jc') return gap === 'jc_missing' || gap === 'jc_missing_same_reg'
+  if (chip === 'placeholder') return gap === 'placeholder_jc'
+  if (chip === 'invoice_pending') return gap === 'invoice_pending'
+  return true
+}
+
+export function countTrackerGapsByChip(rows: TrackerGapRow[], chip: TrackerGapChip, includeInvoicePending: boolean): number {
+  const base = includeInvoicePending ? rows : rows.filter((r) => r.gap_type !== 'invoice_pending')
+  if (chip === 'all') return base.length
+  return base.filter((r) => trackerGapMatchesChip(r.gap_type, chip)).length
+}
+
 function normalizeGapType(raw: string): TrackerGapType {
   const v = raw.toLowerCase()
   if (

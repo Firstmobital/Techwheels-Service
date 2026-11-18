@@ -5885,6 +5885,29 @@ button.bsf-vcard--pick {
   user-select: none;
 }
 
+/* Repair Tracker gaps: page scroll only (avoid nested trap from acct-table-scroll) */
+.brx-tracker-gaps-panel {
+  margin-top: 4px;
+  overflow: visible;
+  padding: 12px 14px 16px;
+}
+.brx-tracker-gaps-table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  max-height: none;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: auto;
+  touch-action: pan-x pan-y;
+}
+.brx-tracker-gaps-table-wrap .brx-settle-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--canvas);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
 .brx-settle-pill.is-gap-jc_missing,
 .brx-settle-pill.is-gap-jc_missing_same_reg {
   background: #fee2e2;
@@ -5909,6 +5932,104 @@ button.bsf-vcard--pick {
 .brx-settle-pill.is-gap-invoice_pending {
   background: #f1f5f9;
   color: #475569;
+}
+
+.brx-gap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.brx-gap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.brx-gap-chip.is-active {
+  border-color: #64748b;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.brx-gap-chip__n {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.brx-data-health {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.brx-data-health__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+}
+
+.brx-data-health__badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.brx-data-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 6px 16px;
+  margin-top: 12px;
+}
+
+.brx-data-health-row {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.brx-data-health-row.has-issues {
+  background: #fff7ed;
+}
+
+.brx-data-health-row__code {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.brx-data-health-row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.brx-data-health-row__n {
+  font-weight: 700;
+  min-width: 2ch;
+  text-align: right;
 }
 
 .brx-settle-banner {

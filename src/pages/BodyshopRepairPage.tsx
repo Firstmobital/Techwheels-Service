@@ -47,9 +47,13 @@ import {
 import {
   TRACKER_GAP_ACTIONABLE,
   TRACKER_GAP_LABELS,
+  countTrackerGapsByChip,
   listTrackerGaps,
+  trackerGapMatchesChip,
+  type TrackerGapChip,
   type TrackerGapRow,
 } from '../lib/api/bodyshopDmsMissing'
+import { getBodyshopIntegritySummary, type IntegritySummaryRow } from '../lib/api/bodyshopIntegrity'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
 import {
   isBodyshopSurveyManagerVerified,
@@ -559,7 +563,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'verify' | 'floor' | 'qc' | 'billing'
-type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining' | 'Missing on tracker'
+type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining' | 'Gaps & health'
 
 type BrowseFilterSnapshot = {
   dateRange: DateRange
@@ -1160,6 +1164,11 @@ export default function BodyshopRepairPage() {
   const [trackerGapsLoading, setTrackerGapsLoading] = useState(false)
   const [trackerGapsError, setTrackerGapsError] = useState<string | null>(null)
   const [showInvoicePendingGaps, setShowInvoicePendingGaps] = useState(false)
+  const [trackerGapChip, setTrackerGapChip] = useState<TrackerGapChip>('all')
+  const [dataHealthOpen, setDataHealthOpen] = useState(false)
+  const [integritySummary, setIntegritySummary] = useState<IntegritySummaryRow[]>([])
+  const [integrityLoading, setIntegrityLoading] = useState(false)
+  const [integrityError, setIntegrityError] = useState<string | null>(null)
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [kmPresentByReceptionId, setKmPresentByReceptionId] = useState<Record<number, boolean>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
@@ -1342,6 +1351,27 @@ export default function BodyshopRepairPage() {
     })()
     return () => { cancelled = true }
   }, [userScopeResolved, lookupSession, dateRange.from, dateRange.to, branchFilter])
+
+  useEffect(() => {
+    if (!dataHealthOpen || !isAdminLikeUser) return
+    let cancelled = false
+    setIntegrityLoading(true)
+    setIntegrityError(null)
+    ;(async () => {
+      try {
+        const rows = await getBodyshopIntegritySummary()
+        if (!cancelled) setIntegritySummary(rows)
+      } catch (e) {
+        if (!cancelled) {
+          setIntegritySummary([])
+          setIntegrityError(e instanceof Error ? e.message : 'Could not load data health')
+        }
+      } finally {
+        if (!cancelled) setIntegrityLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [dataHealthOpen, isAdminLikeUser])
 
   useEffect(() => {
     let cancelled = false
@@ -5480,9 +5510,20 @@ export default function BodyshopRepairPage() {
   )
 
   const visibleTrackerGaps = useMemo(() => {
-    if (showInvoicePendingGaps) return trackerGapRows
-    return trackerGapRows.filter((r) => r.gap_type !== 'invoice_pending')
-  }, [trackerGapRows, showInvoicePendingGaps])
+    let rows = showInvoicePendingGaps ? trackerGapRows : trackerGapRows.filter((r) => r.gap_type !== 'invoice_pending')
+    if (trackerGapChip !== 'all') {
+      rows = rows.filter((r) => trackerGapMatchesChip(r.gap_type, trackerGapChip))
+    }
+    return rows
+  }, [trackerGapRows, showInvoicePendingGaps, trackerGapChip])
+
+  const trackerGapChipCounts = useMemo(() => ({
+    all: countTrackerGapsByChip(trackerGapRows, 'all', showInvoicePendingGaps),
+    reception: countTrackerGapsByChip(trackerGapRows, 'reception', showInvoicePendingGaps),
+    jc: countTrackerGapsByChip(trackerGapRows, 'jc', showInvoicePendingGaps),
+    placeholder: countTrackerGapsByChip(trackerGapRows, 'placeholder', showInvoicePendingGaps),
+    invoice_pending: countTrackerGapsByChip(trackerGapRows, 'invoice_pending', true),
+  }), [trackerGapRows, showInvoicePendingGaps])
 
   const missingOnTrackerCount = useMemo(
     () => trackerGapRows.filter((r) => TRACKER_GAP_ACTIONABLE.includes(r.gap_type)).length,
@@ -5494,7 +5535,12 @@ export default function BodyshopRepairPage() {
     [trackerGapRows],
   )
 
-  const showDmsMissingTable = pipelineFilter === 'Missing on tracker'
+  const showDmsMissingTable = pipelineFilter === 'Gaps & health'
+
+  const integrityOpenCount = useMemo(
+    () => integritySummary.reduce((acc, r) => acc + (r.issue_count > 0 ? r.issue_count : 0), 0),
+    [integritySummary],
+  )
 
   const openRepairCardById = async (cardId: number) => {
     const local = cards.find((c) => c.id === cardId)
@@ -5649,21 +5695,18 @@ export default function BodyshopRepairPage() {
         </button>
         <button
           type="button"
-          className={`brx-pipe-pill brx-pipe-pill--dms ${pipelineFilter === 'Missing on tracker' ? 'is-active' : ''}`}
+          className={`brx-pipe-pill brx-pipe-pill--dms ${pipelineFilter === 'Gaps & health' ? 'is-active' : ''}`}
           onClick={() => {
-            setPipelineFilter((prev) => prev === 'Missing on tracker' ? 'all' : 'Missing on tracker')
+            setPipelineFilter((prev) => prev === 'Gaps & health' ? 'all' : 'Gaps & health')
             setStageFilter('all')
+            setTrackerGapChip('all')
           }}
-          title="DMS accident job cards (not cancelled) with no live repair card on that job card number. Period = DMS invoice date."
+          title="Period-scoped tracker gaps (reception, job card, placeholder). Admin can expand full data health below."
         >
           <span className="brx-pipe-pill__n">{trackerGapsLoading ? '…' : missingOnTrackerCount}</span>
           <span className="brx-pipe-pill__l">
-            Missing on tracker
-            <small>
-              {invoicePendingGapCount > 0
-                ? `gaps · +${invoicePendingGapCount} invoice pending`
-                : 'reception · JC · placeholder'}
-            </small>
+            Gaps & health
+            <small>Reception · JC · placeholder</small>
           </span>
         </button>
       </div>
@@ -5721,6 +5764,7 @@ export default function BodyshopRepairPage() {
 
       {/* ── Card Grid ─────────────────────────────────────────────────────── */}
       <div className="page__body">
+        {!showDmsMissingTable && (
         <div className="brx-queue">
           <div className="brx-queue-title">Stage Queue</div>
           <div className="brx-queue-grid">
@@ -5761,16 +5805,43 @@ export default function BodyshopRepairPage() {
             })}
           </div>
         </div>
+        )}
 
         {showDmsMissingTable ? (
-          <div className="brx-panel acct-table-panel">
-            <div className="brx-panel-h">Missing on tracker</div>
+          <div className="brx-panel brx-tracker-gaps-panel">
+            <div className="brx-panel-h">Gaps &amp; health</div>
             <p className="brx-dms-missing-hint">
-              Action gaps: accident <strong>reception without a card</strong>, DMS <strong>job card</strong> not on a live card, or live card still on <strong>placeholder JC</strong>.
-              DMS rows use <strong>invoice date</strong>; reception rows use <strong>reception date</strong>
+              Period-scoped gaps for this tracker. DMS rows use <strong>invoice date</strong>; reception rows use <strong>reception date</strong>
               {dateRange.from || dateRange.to ? ` (${dateRange.from || '…'} to ${dateRange.to || '…'})` : ''}
               {branchFilter !== 'all' ? ` · Branch ${branchFilter}` : ''}.
+              Money and pipeline stages use the other KPI pills above.
             </p>
+            <div className="brx-gap-chips" role="tablist" aria-label="Filter gap type">
+              {(
+                [
+                  ['all', 'All'] as const,
+                  ['reception', 'Reception'] as const,
+                  ['jc', 'Job card'] as const,
+                  ['placeholder', 'Placeholder JC'] as const,
+                  ['invoice_pending', 'Invoice pending'] as const,
+                ]
+              ).map(([chip, label]) => (
+                <button
+                  key={chip}
+                  type="button"
+                  role="tab"
+                  aria-selected={trackerGapChip === chip}
+                  className={`brx-gap-chip ${trackerGapChip === chip ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setTrackerGapChip(chip)
+                    if (chip === 'invoice_pending') setShowInvoicePendingGaps(true)
+                  }}
+                >
+                  {label}
+                  <span className="brx-gap-chip__n">{trackerGapChipCounts[chip]}</span>
+                </button>
+              ))}
+            </div>
             <label className="brx-dms-missing-toggle">
               <input
                 type="checkbox"
@@ -5783,9 +5854,9 @@ export default function BodyshopRepairPage() {
             {trackerGapsLoading && visibleTrackerGaps.length === 0 ? (
               <div className="brx-settle-status">Loading tracker gaps…</div>
             ) : visibleTrackerGaps.length === 0 ? (
-              <div className="brx-settle-status">No tracker gaps in this period.</div>
+              <div className="brx-settle-status">No rows for this filter in the period.</div>
             ) : (
-              <div className="acct-table-scroll">
+              <div className="brx-tracker-gaps-table-wrap tbl-wrap">
                 <table className="brx-settle-table">
                   <thead>
                     <tr>
@@ -5839,6 +5910,47 @@ export default function BodyshopRepairPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {isAdminLikeUser && (
+              <div className="brx-data-health">
+                <button
+                  type="button"
+                  className="brx-data-health__toggle"
+                  onClick={() => setDataHealthOpen((v) => !v)}
+                  aria-expanded={dataHealthOpen}
+                >
+                  {dataHealthOpen ? '▼' : '▶'} Data health (all live cards)
+                  {integritySummary.length > 0 && !dataHealthOpen ? (
+                    <span className="brx-data-health__badge">{integrityOpenCount} flagged</span>
+                  ) : null}
+                </button>
+                <p className="brx-dms-missing-hint" style={{ marginTop: 8 }}>
+                  Full-system integrity counts (not limited by Period). Fixes follow <code>docs/BODYSHOP_INTEGRITY_FIX_PLAN.md</code> batches.
+                </p>
+                {dataHealthOpen && (
+                  <>
+                    {integrityError && <div className="brx-settle-error">{integrityError}</div>}
+                    {integrityLoading && integritySummary.length === 0 ? (
+                      <div className="brx-settle-status">Loading integrity summary…</div>
+                    ) : (
+                      <div className="brx-data-health-grid">
+                        {integritySummary.map((row) => (
+                          <div
+                            key={row.issue_code}
+                            className={`brx-data-health-row ${row.issue_count > 0 ? 'has-issues' : ''}`}
+                          >
+                            <span className="brx-data-health-row__code">{row.issue_code}</span>
+                            <span className="brx-data-health-row__label" title={row.issue_label}>
+                              {row.issue_label.replace(/^\S+\s+/, '')}
+                            </span>
+                            <span className="brx-data-health-row__n">{row.issue_count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
