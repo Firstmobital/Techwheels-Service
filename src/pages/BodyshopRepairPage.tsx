@@ -5632,7 +5632,10 @@ export default function BodyshopRepairPage() {
       toast_(`Card created for JC ${result.job_card_no} — opening…`)
       await openRepairCardById(result.repair_card_id)
     } catch (e) {
-      toast_(e instanceof Error ? e.message : 'Could not create from DMS', false)
+      const msg = e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+        ? (e as { message: string }).message
+        : e instanceof Error ? e.message : 'Could not create from DMS'
+      toast_(msg, false)
       setDmsGapBootstrapSaving(false)
     }
   }

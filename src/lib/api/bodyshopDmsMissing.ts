@@ -166,6 +166,14 @@ export type DmsGapBootstrapInput = {
   portal?: string | null
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  if (err instanceof Error) return err.message
+  return fallback
+}
+
 export async function bootstrapVisitFromDmsGap(input: DmsGapBootstrapInput): Promise<DmsGapBootstrapResult> {
   const { data, error } = await supabase.rpc('bodyshop_bootstrap_visit_from_dms_gap', {
     p_reg_number: input.reg_number.trim().toUpperCase(),
@@ -182,7 +190,7 @@ export async function bootstrapVisitFromDmsGap(input: DmsGapBootstrapInput): Pro
     p_portal: input.portal?.trim() || null,
   })
 
-  if (error) throw error
+  if (error) throw new Error(errorMessage(error, 'Create from DMS failed'))
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
   if (!row) throw new Error('Create failed: no row returned')
   const cardId = Number(row.repair_card_id)
