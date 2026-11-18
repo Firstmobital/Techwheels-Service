@@ -55,7 +55,8 @@ import {
   type TrackerGapChip,
   type TrackerGapRow,
 } from '../lib/api/bodyshopDmsMissing'
-import { listReceptionEmployees, type ReceptionEmployeeOption } from '../lib/api/reception'
+import { listReceptionEmployees, lookupVehicleByRegNumber, type ReceptionEmployeeOption } from '../lib/api/reception'
+import { matchModelFromDmsHint, portalToFuel } from '../lib/bodyshopDmsPrefill'
 import { getModelNames } from '../lib/api/settings'
 import { getBodyshopIntegritySummary, type IntegritySummaryRow } from '../lib/api/bodyshopIntegrity'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
@@ -5570,23 +5571,65 @@ export default function BodyshopRepairPage() {
 
   const openDmsGapBootstrap = async (row: TrackerGapRow) => {
     setDmsGapBootstrapRow(row)
+    let employees = dmsGapBootstrapEmployees
+    let models = dmsGapBootstrapModels
+    if (employees.length === 0) {
+      const empRes = await listReceptionEmployees()
+      if (empRes.data) {
+        employees = empRes.data
+        setDmsGapBootstrapEmployees(empRes.data)
+      }
+    }
+    if (models.length === 0) {
+      const modelRes = await getModelNames()
+      if (modelRes.data?.length) {
+        models = modelRes.data
+        setDmsGapBootstrapModels(modelRes.data)
+      }
+    }
+
+    let model = matchModelFromDmsHint(row.dms_model_hint, models)
+    let fuel_type = portalToFuel(row.dms_portal)
+    let sa_employee_code = String(row.dms_sa_employee_code ?? '').trim().toUpperCase()
+    let owner_phone = String(row.dms_owner_phone ?? '').replace(/\D/g, '').slice(-10)
+    let owner_name = row.customer_name?.trim() || ''
+
+    const bodyshopSaCodes = new Set(
+      employees
+        .filter((e) => isBodyshopDepartment(e.department))
+        .map((e) => String(e.employee_code ?? '').trim().toUpperCase()),
+    )
+    if (sa_employee_code && !bodyshopSaCodes.has(sa_employee_code)) {
+      sa_employee_code = ''
+    }
+
+    if (row.reg_number?.trim()) {
+      const lookup = await lookupVehicleByRegNumber(row.reg_number)
+      const info = lookup.data
+      if (info?.found) {
+        if (!model && info.model) model = info.model
+        if (info.vehicle_type) fuel_type = info.vehicle_type
+        if (!owner_phone && info.owner_phone) owner_phone = info.owner_phone.replace(/\D/g, '').slice(-10)
+        if (!owner_name && info.owner_name) owner_name = info.owner_name.trim()
+        const lookupSa = String(info.sa_employee_code ?? '').trim().toUpperCase()
+        if (!sa_employee_code && lookupSa && bodyshopSaCodes.has(lookupSa)) {
+          sa_employee_code = lookupSa
+        }
+      }
+    }
+    if (!fuel_type && model) {
+      fuel_type = model.toUpperCase().includes('EV') ? 'EV' : 'PV'
+    }
+
     setDmsGapBootstrapForm({
-      model: '',
-      fuel_type: '',
-      sa_employee_code: '',
-      owner_name: row.customer_name?.trim() || '',
-      owner_phone: '',
+      model,
+      fuel_type,
+      sa_employee_code,
+      owner_name,
+      owner_phone,
       source: 'Walk-in',
       remark: '',
     })
-    if (dmsGapBootstrapEmployees.length === 0) {
-      const empRes = await listReceptionEmployees()
-      if (empRes.data) setDmsGapBootstrapEmployees(empRes.data)
-    }
-    if (dmsGapBootstrapModels.length === 0) {
-      const modelRes = await getModelNames()
-      if (modelRes.data?.length) setDmsGapBootstrapModels(modelRes.data)
-    }
   }
 
   const closeDmsGapBootstrap = () => {
@@ -6157,6 +6200,7 @@ export default function BodyshopRepairPage() {
               <p className="brx-dms-missing-hint" style={{ marginTop: 0 }}>
                 Creates <strong>Accident</strong> reception (today) and repair card with DMS job card.
                 Card <strong>received_at</strong> uses DMS invoice date ({dmsGapBootstrapRow.event_date || 'today'}).
+                Model, phone, and portal are prefilled from <strong>psf_revenue_dms</strong> / JC closed data when available — always confirm <strong>Bodyshop SA</strong> (DMS <code>employee_code</code> is often workshop, not bodyshop).
               </p>
               <div className="brx-gap-bootstrap-summary">
                 <div><span>Reg</span> <strong className="mono">{dmsGapBootstrapRow.reg_number}</strong></div>

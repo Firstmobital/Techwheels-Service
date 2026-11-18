@@ -21,6 +21,10 @@ export type TrackerGapRow = {
   tracker_card_ids: number[]
   reception_entry_id: number | null
   tracker_note: string | null
+  dms_owner_phone: string | null
+  dms_portal: string | null
+  dms_sa_employee_code: string | null
+  dms_model_hint: string | null
 }
 
 export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
@@ -91,6 +95,10 @@ function normalizeRpcRow(raw: Record<string, unknown>): TrackerGapRow {
     tracker_card_ids: toIntArray(raw.tracker_card_ids),
     reception_entry_id: raw.reception_entry_id != null ? Number(raw.reception_entry_id) : null,
     tracker_note: raw.tracker_note != null ? String(raw.tracker_note) : null,
+    dms_owner_phone: raw.dms_owner_phone != null ? String(raw.dms_owner_phone) : null,
+    dms_portal: raw.dms_portal != null ? String(raw.dms_portal) : null,
+    dms_sa_employee_code: raw.dms_sa_employee_code != null ? String(raw.dms_sa_employee_code) : null,
+    dms_model_hint: raw.dms_model_hint != null ? String(raw.dms_model_hint) : null,
   }
 }
 
