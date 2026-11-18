@@ -4087,22 +4087,11 @@ export default function BodyshopRepairPage() {
           const frontDriveId = extractDriveFileId(frontInfo.driveUrl)
           const backDriveId = extractDriveFileId(backInfo.driveUrl)
 
-          const printedDate = new Date().toLocaleString('en-IN', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'Asia/Kolkata',
-          })
-
           const renderSideHtml = (title: string, info: typeof frontInfo, driveId: string | null) => {
             if (info.isPdf) {
               return `
               <div class="side-block">
-                <div class="side-title">${title} (PDF Document)</div>
                 <iframe src="${info.displayUrl}#toolbar=0" class="side-frame" title="${title}"></iframe>
-                ${info.driveUrl ? `<div class="side-meta"><a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="drive-link">Open in Google Drive ↗</a></div>` : ''}
               </div>`
             }
 
@@ -4110,7 +4099,6 @@ export default function BodyshopRepairPage() {
 
             return `
             <div class="side-block">
-              <div class="side-title">${title}</div>
               <div class="img-container">
                 <img
                   src="${info.displayUrl}"
@@ -4124,9 +4112,6 @@ export default function BodyshopRepairPage() {
                   ${info.driveUrl ? `<a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm">Open on Google Drive</a>` : ''}
                 </div>
               </div>
-              <div class="side-meta">
-                ${info.driveUrl ? `<a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="drive-link">Open Full Size in Google Drive ↗</a>` : ''}
-              </div>
             </div>`
           }
 
@@ -4139,7 +4124,7 @@ export default function BodyshopRepairPage() {
   <style>
     @page {
       size: A4 portrait;
-      margin: 4mm 5mm;
+      margin: 2mm;
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -4182,76 +4167,53 @@ export default function BodyshopRepairPage() {
     .btn-close { background: #64748b; }
     .btn-sm { font-size: 11px; padding: 5px 10px; }
     .page-box {
-      max-width: 900px;
+      max-width: 210mm;
       width: 100%;
+      min-height: 290mm;
       margin: 0 auto;
       border: 1.5px solid #cbd5e1;
-      padding: 12px 14px;
+      padding: 4mm 3mm;
       border-radius: 10px;
       background: #fff;
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
-      gap: 8px;
-    }
-    .doc-header {
-      font-size: 15px;
-      font-weight: 900;
-      color: #0f172a;
-      margin: 0;
-      padding-bottom: 6px;
-      border-bottom: 2px solid #0f172a;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .doc-sub {
-      font-size: 10px;
-      font-weight: 600;
-      color: #64748b;
-      margin-top: 2px;
+      gap: 0;
     }
     .side-block {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      align-items: stretch;
+      justify-content: flex-start;
       width: 100%;
-      min-height: 0;
-    }
-    .side-title {
-      font-size: 11px;
-      font-weight: 800;
-      color: #334155;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      flex: 1 1 0;
+      min-height: 145mm;
+      min-width: 0;
     }
     .img-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
       width: 100%;
-      min-height: 0;
+      flex: 1 1 auto;
+      min-height: 145mm;
+      line-height: 0;
     }
     .side-img {
+      display: block;
+      width: 100%;
+      height: 145mm;
       max-width: 100%;
-      max-height: 44vh;
-      width: auto;
-      height: auto;
       object-fit: contain;
-      border: 1.5px solid #94a3b8;
-      border-radius: 6px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+      object-position: center center;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
     }
     .side-frame {
       width: 100%;
-      height: 44vh;
-      border: 1.5px solid #94a3b8;
-      border-radius: 6px;
-    }
-    .side-meta {
-      margin-top: 4px;
-      font-size: 11px;
+      height: 145mm;
+      min-height: 145mm;
+      border: none;
+      border-radius: 0;
     }
     .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
     .img-fallback { padding: 12px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; }
@@ -4259,21 +4221,20 @@ export default function BodyshopRepairPage() {
     @media print {
       @page {
         size: A4 portrait;
-        margin: 3mm 4mm;
+        margin: 2mm;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
       }
       html, body {
-        height: 100% !important;
-        max-height: 100% !important;
-        width: 100% !important;
-        margin: 0 !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        margin: 0 auto !important;
         padding: 0 !important;
         background: #fff !important;
         overflow: hidden !important;
       }
-      .print-actions, .side-meta {
+      .print-actions {
         display: none !important;
       }
       .page-box {
@@ -4281,84 +4242,59 @@ export default function BodyshopRepairPage() {
         border-radius: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
-        max-width: 100% !important;
-        width: 100% !important;
+        width: 206mm !important;
+        height: 293mm !important;
+        min-height: 293mm !important;
+        max-width: none !important;
         box-shadow: none !important;
-        height: 100vh !important;
-        max-height: 100vh !important;
         display: flex !important;
         flex-direction: column !important;
-        justify-content: space-between !important;
+        gap: 0 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
         overflow: hidden !important;
-      }
-      .doc-header {
-        flex: 0 0 auto !important;
-        font-size: 13px !important;
-        font-weight: 900 !important;
-        margin: 0 0 1mm 0 !important;
-        padding: 0 0 1mm 0 !important;
-        border-bottom: 1.5px solid #0f172a !important;
-        text-align: center !important;
-      }
-      .doc-sub {
-        font-size: 8.5px !important;
-        color: #64748b !important;
-        margin-top: 1px !important;
       }
       .side-block {
         flex: 1 1 0 !important;
         min-height: 0 !important;
-        height: calc(50vh - 12mm) !important;
-        max-height: calc(50vh - 12mm) !important;
         width: 100% !important;
         margin: 0 !important;
-        padding: 0.5mm 0 !important;
+        padding: 0 !important;
         display: flex !important;
         flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
+        align-items: stretch !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
         overflow: hidden !important;
       }
-      .side-title {
-        flex: 0 0 auto !important;
-        font-size: 10.5px !important;
-        font-weight: 900 !important;
-        margin: 0 0 1mm 0 !important;
-        color: #0f172a !important;
-        text-align: center !important;
-      }
       .img-container {
-        flex: 1 1 0 !important;
+        flex: 1 1 auto !important;
         min-height: 0 !important;
         width: 100% !important;
-        height: 100% !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        height: auto !important;
+        display: block !important;
+        line-height: 0 !important;
         overflow: hidden !important;
       }
       .side-img {
-        max-height: 100% !important;
+        display: block !important;
+        width: 100% !important;
+        height: 146.5mm !important;
         max-width: 100% !important;
-        width: auto !important;
-        height: auto !important;
+        max-height: 146.5mm !important;
         object-fit: contain !important;
-        border: 1px solid #94a3b8 !important;
-        border-radius: 4px !important;
+        object-position: center center !important;
+        border: none !important;
+        border-radius: 0 !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
       .side-frame {
-        height: 100% !important;
         width: 100% !important;
-        border: 1px solid #94a3b8 !important;
+        height: 146.5mm !important;
+        min-height: 146.5mm !important;
+        border: none !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
@@ -4376,12 +4312,8 @@ export default function BodyshopRepairPage() {
     <button class="btn btn-close" onclick="window.close()">✕ Close</button>
   </div>
   <div class="page-box">
-    <div class="doc-header">
-      ${pair.name} — ${regNo}
-      <div class="doc-sub">Techwheels Service · Merged 1-Page Document · Printed ${printedDate}</div>
-    </div>
-    ${renderSideHtml('FRONT SIDE', frontInfo, frontDriveId)}
-    ${renderSideHtml('BACK SIDE', backInfo, backDriveId)}
+    ${renderSideHtml('Front', frontInfo, frontDriveId)}
+    ${renderSideHtml('Back', backInfo, backDriveId)}
   </div>
 </body>
 </html>`)
