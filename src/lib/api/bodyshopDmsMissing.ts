@@ -121,3 +121,69 @@ export async function listTrackerGaps(opts: {
 export type DmsMissingOnTrackerRow = TrackerGapRow
 export const listDmsMissingOnTracker = listTrackerGaps
 export const DMS_MISSING_GAP_LABELS = TRACKER_GAP_LABELS
+
+export type DmsGapBootstrapResult = {
+  reception_entry_id: number
+  repair_card_id: number
+  job_card_no: string
+}
+
+export function buildAccidentIntakeReceptionUrl(
+  row: Pick<TrackerGapRow, 'reg_number' | 'job_card_number' | 'customer_name' | 'dms_branch' | 'event_date' | 'invoice_number'>,
+): string {
+  const p = new URLSearchParams()
+  p.set('intake', 'accident')
+  p.set('from', 'gaps')
+  if (row.reg_number) p.set('reg', row.reg_number)
+  if (row.job_card_number) p.set('jc', row.job_card_number)
+  if (row.customer_name) p.set('owner', row.customer_name)
+  if (row.dms_branch) p.set('branch', row.dms_branch)
+  if (row.event_date) p.set('visit', row.event_date)
+  if (row.invoice_number) p.set('invoice', row.invoice_number)
+  return `/reception?${p.toString()}`
+}
+
+export type DmsGapBootstrapInput = {
+  reg_number: string
+  job_card_number: string
+  model: string
+  sa_employee_code: string
+  owner_name: string
+  owner_phone: string
+  source: string
+  branch?: string | null
+  received_date?: string | null
+  dms_invoice_number?: string | null
+  remark: string
+  portal?: string | null
+}
+
+export async function bootstrapVisitFromDmsGap(input: DmsGapBootstrapInput): Promise<DmsGapBootstrapResult> {
+  const { data, error } = await supabase.rpc('bodyshop_bootstrap_visit_from_dms_gap', {
+    p_reg_number: input.reg_number.trim().toUpperCase(),
+    p_job_card_number: input.job_card_number.trim().toUpperCase(),
+    p_model: input.model.trim(),
+    p_sa_employee_code: input.sa_employee_code.trim().toUpperCase(),
+    p_owner_name: input.owner_name.trim(),
+    p_owner_phone: input.owner_phone.replace(/\D/g, '').slice(0, 10),
+    p_source: input.source.trim(),
+    p_branch: input.branch?.trim() || null,
+    p_received_date: input.received_date?.trim() || null,
+    p_dms_invoice_number: input.dms_invoice_number?.trim() || null,
+    p_remark: input.remark.trim(),
+    p_portal: input.portal?.trim() || null,
+  })
+
+  if (error) throw error
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
+  if (!row) throw new Error('Create failed: no row returned')
+  const cardId = Number(row.repair_card_id)
+  const receptionId = Number(row.reception_entry_id)
+  if (!Number.isFinite(cardId) || cardId <= 0) throw new Error('Create failed: invalid repair card id')
+  if (!Number.isFinite(receptionId) || receptionId <= 0) throw new Error('Create failed: invalid reception id')
+  return {
+    reception_entry_id: receptionId,
+    repair_card_id: cardId,
+    job_card_no: String(row.job_card_no ?? input.job_card_number).trim().toUpperCase(),
+  }
+}

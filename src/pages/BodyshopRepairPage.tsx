@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getDealerContext, getDealerScopeContext } from '../lib/api'
 import {
@@ -48,11 +48,15 @@ import {
   TRACKER_GAP_ACTIONABLE,
   TRACKER_GAP_LABELS,
   countTrackerGapsByChip,
+  bootstrapVisitFromDmsGap,
+  buildAccidentIntakeReceptionUrl,
   listTrackerGaps,
   trackerGapMatchesChip,
   type TrackerGapChip,
   type TrackerGapRow,
 } from '../lib/api/bodyshopDmsMissing'
+import { listReceptionEmployees, type ReceptionEmployeeOption } from '../lib/api/reception'
+import { getModelNames } from '../lib/api/settings'
 import { getBodyshopIntegritySummary, type IntegritySummaryRow } from '../lib/api/bodyshopIntegrity'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
 import {
@@ -1165,6 +1169,19 @@ export default function BodyshopRepairPage() {
   const [trackerGapsError, setTrackerGapsError] = useState<string | null>(null)
   const [showInvoicePendingGaps, setShowInvoicePendingGaps] = useState(false)
   const [trackerGapChip, setTrackerGapChip] = useState<TrackerGapChip>('all')
+  const [dmsGapBootstrapRow, setDmsGapBootstrapRow] = useState<TrackerGapRow | null>(null)
+  const [dmsGapBootstrapSaving, setDmsGapBootstrapSaving] = useState(false)
+  const [dmsGapBootstrapEmployees, setDmsGapBootstrapEmployees] = useState<ReceptionEmployeeOption[]>([])
+  const [dmsGapBootstrapModels, setDmsGapBootstrapModels] = useState<string[]>([])
+  const [dmsGapBootstrapForm, setDmsGapBootstrapForm] = useState({
+    model: '',
+    fuel_type: '' as 'EV' | 'PV' | '',
+    sa_employee_code: '',
+    owner_name: '',
+    owner_phone: '',
+    source: 'Walk-in',
+    remark: '',
+  })
   const [dataHealthOpen, setDataHealthOpen] = useState(false)
   const [integritySummary, setIntegritySummary] = useState<IntegritySummaryRow[]>([])
   const [integrityLoading, setIntegrityLoading] = useState(false)
@@ -1324,30 +1341,33 @@ export default function BodyshopRepairPage() {
     void load()
   }, [dateRange, debouncedSearch, lookupSession, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
 
-  useEffect(() => {
+  const reloadTrackerGaps = async () => {
     if (!userScopeResolved || lookupSession) return
-    let cancelled = false
     setTrackerGapsLoading(true)
     setTrackerGapsError(null)
-    ;(async () => {
-      try {
-        const from = String(dateRange.from ?? '').trim()
-        const to = String(dateRange.to ?? '').trim()
-        const rows = await listTrackerGaps({
-          from: from || undefined,
-          to: to || undefined,
-          branch: branchFilter,
-          includeInvoicePending: true,
-        })
-        if (!cancelled) setTrackerGapRows(rows)
-      } catch (e) {
-        if (!cancelled) {
-          setTrackerGapRows([])
-          setTrackerGapsError(e instanceof Error ? e.message : 'Could not load tracker gaps')
-        }
-      } finally {
-        if (!cancelled) setTrackerGapsLoading(false)
-      }
+    try {
+      const from = String(dateRange.from ?? '').trim()
+      const to = String(dateRange.to ?? '').trim()
+      const rows = await listTrackerGaps({
+        from: from || undefined,
+        to: to || undefined,
+        branch: branchFilter,
+        includeInvoicePending: true,
+      })
+      setTrackerGapRows(rows)
+    } catch (e) {
+      setTrackerGapRows([])
+      setTrackerGapsError(e instanceof Error ? e.message : 'Could not load tracker gaps')
+    } finally {
+      setTrackerGapsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (cancelled) return
+      await reloadTrackerGaps()
     })()
     return () => { cancelled = true }
   }, [userScopeResolved, lookupSession, dateRange.from, dateRange.to, branchFilter])
@@ -5537,6 +5557,104 @@ export default function BodyshopRepairPage() {
     [integritySummary],
   )
 
+  const dmsGapBootstrapSaOptions = useMemo(() => {
+    const fuel = dmsGapBootstrapForm.fuel_type
+      || (dmsGapBootstrapForm.model.toUpperCase().includes('EV') ? 'EV' : 'PV')
+    return dmsGapBootstrapEmployees.filter((emp) => {
+      if (!isBodyshopDepartment(emp.department)) return false
+      if (!emp.fuel_type) return true
+      const bucket = emp.fuel_type.toUpperCase().includes('EV') ? 'EV' : 'PV'
+      return bucket === fuel
+    })
+  }, [dmsGapBootstrapEmployees, dmsGapBootstrapForm.fuel_type, dmsGapBootstrapForm.model])
+
+  const openDmsGapBootstrap = async (row: TrackerGapRow) => {
+    setDmsGapBootstrapRow(row)
+    setDmsGapBootstrapForm({
+      model: '',
+      fuel_type: '',
+      sa_employee_code: '',
+      owner_name: row.customer_name?.trim() || '',
+      owner_phone: '',
+      source: 'Walk-in',
+      remark: '',
+    })
+    if (dmsGapBootstrapEmployees.length === 0) {
+      const empRes = await listReceptionEmployees()
+      if (empRes.data) setDmsGapBootstrapEmployees(empRes.data)
+    }
+    if (dmsGapBootstrapModels.length === 0) {
+      const modelRes = await getModelNames()
+      if (modelRes.data?.length) setDmsGapBootstrapModels(modelRes.data)
+    }
+  }
+
+  const closeDmsGapBootstrap = () => {
+    setDmsGapBootstrapRow(null)
+    setDmsGapBootstrapSaving(false)
+  }
+
+  const submitDmsGapBootstrap = async () => {
+    const row = dmsGapBootstrapRow
+    if (!row?.reg_number?.trim() || !row.job_card_number?.trim()) {
+      toast_('Reg and job card are required', false)
+      return
+    }
+    if (!dmsGapBootstrapForm.model.trim()) {
+      toast_('Model is required', false)
+      return
+    }
+    if (!dmsGapBootstrapForm.sa_employee_code.trim()) {
+      toast_('Bodyshop SA is required', false)
+      return
+    }
+    if (!dmsGapBootstrapForm.owner_name.trim()) {
+      toast_('Owner name is required', false)
+      return
+    }
+    if (dmsGapBootstrapForm.owner_phone.replace(/\D/g, '').length !== 10) {
+      toast_('Owner phone must be 10 digits', false)
+      return
+    }
+    if (dmsGapBootstrapForm.remark.trim().length < 3) {
+      toast_('Remark required (why creating from DMS)', false)
+      return
+    }
+
+    const summary = [
+      `Reg ${row.reg_number}`,
+      `JC ${row.job_card_number}`,
+      row.event_date ? `Received ${row.event_date}` : null,
+      row.invoice_number ? `Invoice ${row.invoice_number}` : null,
+    ].filter(Boolean).join(' · ')
+    if (!window.confirm(`Create Accident reception + repair card?\n\n${summary}`)) return
+
+    setDmsGapBootstrapSaving(true)
+    try {
+      const result = await bootstrapVisitFromDmsGap({
+        reg_number: row.reg_number,
+        job_card_number: row.job_card_number,
+        model: dmsGapBootstrapForm.model,
+        sa_employee_code: dmsGapBootstrapForm.sa_employee_code,
+        owner_name: dmsGapBootstrapForm.owner_name,
+        owner_phone: dmsGapBootstrapForm.owner_phone,
+        source: dmsGapBootstrapForm.source,
+        branch: row.dms_branch,
+        received_date: row.event_date,
+        dms_invoice_number: row.invoice_number,
+        remark: dmsGapBootstrapForm.remark,
+        portal: dmsGapBootstrapForm.fuel_type || null,
+      })
+      closeDmsGapBootstrap()
+      await reloadTrackerGaps()
+      toast_(`Card created for JC ${result.job_card_no} — opening…`)
+      await openRepairCardById(result.repair_card_id)
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Could not create from DMS', false)
+      setDmsGapBootstrapSaving(false)
+    }
+  }
+
   const openRepairCardById = async (cardId: number) => {
     const local = cards.find((c) => c.id === cardId)
     if (local) {
@@ -5889,16 +6007,37 @@ export default function BodyshopRepairPage() {
                           <td>{inr(row.total_invoice_amount)}</td>
                           <td style={{ fontSize: 12, maxWidth: 280 }}>{row.tracker_note || '—'}</td>
                           <td>
-                            {row.gap_type === 'reception_no_card' && row.reception_entry_id != null ? (
-                              <a className="btn btn--ghost btn--sm" href="/reception" title={`Reception entry ${row.reception_entry_id}`}>
-                                Reception #{row.reception_entry_id}
-                              </a>
-                            ) : null}
-                            {cardId != null && row.gap_type !== 'reception_no_card' ? (
-                              <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openRepairCardById(cardId)}>
-                                Open card
-                              </button>
-                            ) : null}
+                            <div className="brx-gap-actions">
+                              {row.gap_type === 'jc_missing' ? (
+                                <>
+                                  <Link
+                                    className="btn btn--soft btn--sm"
+                                    to={buildAccidentIntakeReceptionUrl(row)}
+                                    title="Open Reception with DMS fields prefilled"
+                                  >
+                                    Start intake
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    className="btn btn--primary btn--sm"
+                                    onClick={() => void openDmsGapBootstrap(row)}
+                                    title="Create reception + card in one step (card backdated to DMS date)"
+                                  >
+                                    Create from DMS
+                                  </button>
+                                </>
+                              ) : null}
+                              {row.gap_type === 'reception_no_card' && row.reception_entry_id != null ? (
+                                <a className="btn btn--ghost btn--sm" href="/reception" title={`Reception entry ${row.reception_entry_id}`}>
+                                  Reception #{row.reception_entry_id}
+                                </a>
+                              ) : null}
+                              {cardId != null && row.gap_type !== 'reception_no_card' && row.gap_type !== 'jc_missing' ? (
+                                <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openRepairCardById(cardId)}>
+                                  Open card
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -6005,6 +6144,124 @@ export default function BodyshopRepairPage() {
           </div>
         )}
       </div>
+
+      {/* ── DMS gap: create reception + card ───────────────────────────────── */}
+      {dmsGapBootstrapRow && (
+        <div className="modal-overlay" onClick={() => !dmsGapBootstrapSaving && closeDmsGapBootstrap()}>
+          <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2 className="modal__title">Create from DMS gap</h2>
+              <button type="button" className="modal__close" disabled={dmsGapBootstrapSaving} onClick={closeDmsGapBootstrap}>✕</button>
+            </div>
+            <div className="modal__body">
+              <p className="brx-dms-missing-hint" style={{ marginTop: 0 }}>
+                Creates <strong>Accident</strong> reception (today) and repair card with DMS job card.
+                Card <strong>received_at</strong> uses DMS invoice date ({dmsGapBootstrapRow.event_date || 'today'}).
+              </p>
+              <div className="brx-gap-bootstrap-summary">
+                <div><span>Reg</span> <strong className="mono">{dmsGapBootstrapRow.reg_number}</strong></div>
+                <div><span>Job card</span> <strong className="mono">{dmsGapBootstrapRow.job_card_number}</strong></div>
+                {dmsGapBootstrapRow.invoice_number ? (
+                  <div><span>Invoice</span> <strong className="mono">{dmsGapBootstrapRow.invoice_number}</strong></div>
+                ) : null}
+              </div>
+              <div className="brx-new-grid" style={{ marginTop: 16 }}>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Model *</span>
+                  <select
+                    className="sel"
+                    value={dmsGapBootstrapForm.model}
+                    onChange={(e) => {
+                      const model = e.target.value
+                      const fuel = model.toUpperCase().includes('EV') ? 'EV' : 'PV'
+                      setDmsGapBootstrapForm((f) => ({ ...f, model, fuel_type: fuel as 'EV' | 'PV', sa_employee_code: '' }))
+                    }}
+                  >
+                    <option value="">Select model</option>
+                    {dmsGapBootstrapModels.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Portal</span>
+                  <select
+                    className="sel"
+                    value={dmsGapBootstrapForm.fuel_type}
+                    onChange={(e) => setDmsGapBootstrapForm((f) => ({
+                      ...f,
+                      fuel_type: e.target.value as 'EV' | 'PV' | '',
+                      sa_employee_code: '',
+                    }))}
+                  >
+                    <option value="EV">EV</option>
+                    <option value="PV">PV</option>
+                  </select>
+                </label>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Bodyshop SA *</span>
+                  <select
+                    className="sel"
+                    value={dmsGapBootstrapForm.sa_employee_code}
+                    onChange={(e) => setDmsGapBootstrapForm((f) => ({ ...f, sa_employee_code: e.target.value }))}
+                  >
+                    <option value="">Select SA</option>
+                    {dmsGapBootstrapSaOptions.map((emp) => (
+                      <option key={emp.employee_code} value={emp.employee_code}>
+                        {emp.employee_name} ({emp.employee_code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Owner name *</span>
+                  <input
+                    className="inp"
+                    value={dmsGapBootstrapForm.owner_name}
+                    onChange={(e) => setDmsGapBootstrapForm((f) => ({ ...f, owner_name: e.target.value }))}
+                  />
+                </label>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Owner phone *</span>
+                  <input
+                    className="inp"
+                    inputMode="numeric"
+                    value={dmsGapBootstrapForm.owner_phone}
+                    onChange={(e) => setDmsGapBootstrapForm((f) => ({ ...f, owner_phone: e.target.value }))}
+                  />
+                </label>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Source *</span>
+                  <select
+                    className="sel"
+                    value={dmsGapBootstrapForm.source}
+                    onChange={(e) => setDmsGapBootstrapForm((f) => ({ ...f, source: e.target.value }))}
+                  >
+                    {['Walk-in', 'Self', 'Driver Pickup', 'RSA'].map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="brx-new-field brx-new-field--full">
+                  <span className="brx-new-label">Remark * (audit)</span>
+                  <input
+                    className="inp"
+                    placeholder="e.g. DMS invoiced Jul; tracker card missing"
+                    value={dmsGapBootstrapForm.remark}
+                    onChange={(e) => setDmsGapBootstrapForm((f) => ({ ...f, remark: e.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="modal__footer">
+              <button type="button" className="btn btn--ghost" disabled={dmsGapBootstrapSaving} onClick={closeDmsGapBootstrap}>Cancel</button>
+              <button type="button" className="btn btn--primary" disabled={dmsGapBootstrapSaving} onClick={() => void submitDmsGapBootstrap()}>
+                {dmsGapBootstrapSaving ? 'Creating…' : 'Create reception + card'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── New Intake Modal ───────────────────────────────────────────────── */}
       {showNew && (

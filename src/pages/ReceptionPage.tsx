@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
@@ -103,6 +104,7 @@ type FormState = {
   owner_phone: string
   source: string
   service_type: string
+  jc_number: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -115,6 +117,13 @@ const EMPTY_FORM: FormState = {
   owner_phone: '',
   source: SOURCE_OPTIONS[0],
   service_type: '',
+  jc_number: '',
+}
+
+function receivedAtFromVisitDate(visitYmd: string | null): string {
+  const v = String(visitYmd ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date().toISOString()
+  return new Date(`${v}T00:00:00+05:30`).toISOString()
 }
 
 type ReceptionListFilter = 'default' | 'today'
@@ -133,6 +142,7 @@ const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   source: ['source'],
   service_type: ['service_type', 'service type'],
   fuel_type: ['fuel_type', 'fuel type', 'portal'],
+  jc_number: ['jc_number', 'job card number', 'job card no', 'job card'],
 }
 
 const IMPORT_SERVICE_TYPE_ALIASES = ['service_type', 'service type']
@@ -353,6 +363,7 @@ function getServiceTypeAbbreviation(label: string): string {
 }
 
 export default function ReceptionPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
   const [employeeOptions, setEmployeeOptions] = useState<ReceptionEmployeeOption[]>([])
@@ -363,6 +374,8 @@ export default function ReceptionPage() {
   const [canDelete, setCanDelete] = useState(false)
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [dmsGapVisitDate, setDmsGapVisitDate] = useState<string | null>(null)
+  const [dmsGapIntakeHint, setDmsGapIntakeHint] = useState<string | null>(null)
   // True while the SA field holds the round-robin preview (not a manual pick); the DB re-allocates at save.
   const [saAutoAllocated, setSaAutoAllocated] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -614,6 +627,44 @@ export default function ReceptionPage() {
     return () => {
       mounted = false
     }
+  }, [])
+
+  useEffect(() => {
+    if (String(searchParams.get('intake') ?? '').toLowerCase() !== 'accident') return
+    if (String(searchParams.get('from') ?? '') !== 'gaps') return
+
+    const reg = String(searchParams.get('reg') ?? '').trim().toUpperCase()
+    const jc = String(searchParams.get('jc') ?? '').trim().toUpperCase()
+    const owner = String(searchParams.get('owner') ?? '').trim()
+    const branch = String(searchParams.get('branch') ?? '').trim()
+    const visit = String(searchParams.get('visit') ?? '').trim()
+    const invoice = String(searchParams.get('invoice') ?? '').trim()
+
+    setEditingId(null)
+    setForm((prev) => ({
+      ...prev,
+      reg_number: reg || prev.reg_number,
+      jc_number: jc || prev.jc_number,
+      owner_name: owner || prev.owner_name,
+      service_type: 'Accident',
+      source: prev.source || SOURCE_OPTIONS[0],
+    }))
+    if (visit) setDmsGapVisitDate(visit)
+    const hintParts = [
+      'Prefilled from Repair Tracker · DMS gap',
+      visit ? `visit date ${visit}` : null,
+      branch ? branch : null,
+      invoice ? `invoice ${invoice}` : null,
+      jc ? `JC ${jc}` : null,
+    ].filter(Boolean)
+    setDmsGapIntakeHint(hintParts.join(' · '))
+
+    if (reg) scheduleVehicleLookup(reg)
+
+    const next = new URLSearchParams(searchParams)
+    ;['intake', 'from', 'reg', 'jc', 'owner', 'branch', 'visit', 'invoice'].forEach((k) => next.delete(k))
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill from query string
   }, [])
 
   useEffect(() => {
@@ -945,6 +996,8 @@ export default function ReceptionPage() {
 
   function resetForm() {
     setForm(EMPTY_FORM)
+    setDmsGapVisitDate(null)
+    setDmsGapIntakeHint(null)
     setSaAutoAllocated(false)
     setEditingId(null)
     setRevisitContext(null)
@@ -1163,6 +1216,11 @@ export default function ReceptionPage() {
       return
     }
 
+    if (form.service_type === 'Accident' && editingId === null && !form.jc_number.trim()) {
+      setError('Job card number is required for Accident intake')
+      return
+    }
+
     setSaving(true)
 
     const payload: ReceptionEntryInput = {
@@ -1170,6 +1228,7 @@ export default function ReceptionPage() {
       km_reading: null,
       model: form.model,
       service_type: form.service_type || null,
+      jc_number: form.service_type === 'Accident' ? form.jc_number || null : null,
       // Auto-allocated SA is re-picked by the DB at save time so concurrent entries rotate correctly.
       sa_employee_code: saAutoAllocated && editingId === null && isRunningRepair ? '' : form.sa_employee_code,
       branch: saAutoAllocated && editingId === null && isRunningRepair ? rrLocation : null,
@@ -1237,7 +1296,7 @@ export default function ReceptionPage() {
           current_stage:       1,
           current_stage_name:  'Vehicle Receiving',
           overall_status:      'active',
-          received_at:         new Date().toISOString(),
+          received_at:         receivedAtFromVisitDate(dmsGapVisitDate),
         })
       }
     }
@@ -1273,6 +1332,7 @@ export default function ReceptionPage() {
       owner_phone: entry.owner_phone ?? '',
       source: entry.source,
       service_type: entry.service_type ?? '',
+      jc_number: entry.jc_number ?? '',
     })
     setNotice(null)
     setError(null)
@@ -1471,6 +1531,25 @@ export default function ReceptionPage() {
             </div>
           </div>
           <div className="card__body">
+            {dmsGapIntakeHint && editingId === null && (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: '12px 14px',
+                  borderRadius: 'var(--r-sm)',
+                  border: '1px solid #fecaca',
+                  background: '#fef2f2',
+                  fontSize: 13,
+                  color: '#991b1b',
+                }}
+              >
+                <strong>Accident intake from tracker gap.</strong>
+                <div>{dmsGapIntakeHint}</div>
+                <div style={{ marginTop: 6 }}>
+                  Complete model, phone, and SA, then save. Card <code>received_at</code> uses the visit date when provided.
+                </div>
+              </div>
+            )}
             <div className="form-grid-2">
               <label className="field">
                 <span className="label">Registration No <span className="req">*</span></span>
@@ -1698,6 +1777,19 @@ export default function ReceptionPage() {
                   </span>
                 )}
               </label>
+
+              {form.service_type === 'Accident' && (
+                <label className="field">
+                  <span className="label">Job card no. (DMS) <span className="req">*</span></span>
+                  <input
+                    value={form.jc_number}
+                    onChange={(event) => setForm((prev) => ({ ...prev, jc_number: event.target.value.toUpperCase() }))}
+                    className="inp inp--uc mono"
+                    placeholder="JC from DMS"
+                    autoCapitalize="characters"
+                  />
+                </label>
+              )}
             </div>
 
             <div className="form-grid-2">

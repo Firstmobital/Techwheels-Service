@@ -5885,6 +5885,33 @@ button.bsf-vcard--pick {
   user-select: none;
 }
 
+.brx-gap-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 9.5rem;
+}
+
+.brx-gap-bootstrap-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--canvas);
+  font-size: 13px;
+}
+.brx-gap-bootstrap-summary span {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.brx-new-field--full {
+  grid-column: 1 / -1;
+}
+
 /* Repair Tracker gaps: page scroll only (avoid nested trap from acct-table-scroll) */
 .brx-tracker-gaps-panel {
   margin-top: 4px;
