@@ -5912,6 +5912,20 @@ button.bsf-vcard--pick {
   grid-column: 1 / -1;
 }
 
+.brx-dms-sa-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--border);
+  background: var(--canvas);
+}
+.brx-dms-sa-hint strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* Repair Tracker gaps: page scroll only (avoid nested trap from acct-table-scroll) */
 .brx-tracker-gaps-panel {
   margin-top: 4px;

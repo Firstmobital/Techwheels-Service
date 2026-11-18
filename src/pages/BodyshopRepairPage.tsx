@@ -56,7 +56,7 @@ import {
   type TrackerGapRow,
 } from '../lib/api/bodyshopDmsMissing'
 import { listReceptionEmployees, lookupVehicleByRegNumber, type ReceptionEmployeeOption } from '../lib/api/reception'
-import { matchModelFromDmsHint, portalToFuel } from '../lib/bodyshopDmsPrefill'
+import { filterAccidentBodyshopAdvisors, formatDmsAdvisorHint, matchModelFromDmsHint, portalToFuel } from '../lib/bodyshopDmsPrefill'
 import { getModelNames } from '../lib/api/settings'
 import { getBodyshopIntegritySummary, type IntegritySummaryRow } from '../lib/api/bodyshopIntegrity'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
@@ -5559,15 +5559,15 @@ export default function BodyshopRepairPage() {
   )
 
   const dmsGapBootstrapSaOptions = useMemo(() => {
-    const fuel = dmsGapBootstrapForm.fuel_type
-      || (dmsGapBootstrapForm.model.toUpperCase().includes('EV') ? 'EV' : 'PV')
-    return dmsGapBootstrapEmployees.filter((emp) => {
-      if (!isBodyshopDepartment(emp.department)) return false
-      if (!emp.fuel_type) return true
-      const bucket = emp.fuel_type.toUpperCase().includes('EV') ? 'EV' : 'PV'
-      return bucket === fuel
-    })
-  }, [dmsGapBootstrapEmployees, dmsGapBootstrapForm.fuel_type, dmsGapBootstrapForm.model])
+    const branch = dmsGapBootstrapRow?.dms_branch ?? null
+    return filterAccidentBodyshopAdvisors(dmsGapBootstrapEmployees, { location: branch })
+  }, [dmsGapBootstrapEmployees, dmsGapBootstrapRow?.dms_branch])
+
+  const dmsGapBootstrapDmsSaHint = useMemo(() => {
+    const code = dmsGapBootstrapRow?.dms_sa_employee_code
+    if (!code) return ''
+    return formatDmsAdvisorHint(code, dmsGapBootstrapEmployees)
+  }, [dmsGapBootstrapRow?.dms_sa_employee_code, dmsGapBootstrapEmployees])
 
   const openDmsGapBootstrap = async (row: TrackerGapRow) => {
     setDmsGapBootstrapRow(row)
@@ -5594,11 +5594,11 @@ export default function BodyshopRepairPage() {
     let owner_phone = String(row.dms_owner_phone ?? '').replace(/\D/g, '').slice(-10)
     let owner_name = row.customer_name?.trim() || ''
 
+    const accidentSaOptions = filterAccidentBodyshopAdvisors(employees, { location: row.dms_branch })
     const bodyshopSaCodes = new Set(
-      employees
-        .filter((e) => isBodyshopDepartment(e.department))
-        .map((e) => String(e.employee_code ?? '').trim().toUpperCase()),
+      accidentSaOptions.map((e) => String(e.employee_code ?? '').trim().toUpperCase()),
     )
+    // Keep DMS code only if it is a valid Bodyshop SA in the pick list; otherwise show hint only.
     if (sa_employee_code && !bodyshopSaCodes.has(sa_employee_code)) {
       sa_employee_code = ''
     }
@@ -6244,18 +6244,36 @@ export default function BodyshopRepairPage() {
                 </label>
                 <label className="brx-new-field">
                   <span className="brx-new-label">Bodyshop SA *</span>
+                  {dmsGapBootstrapDmsSaHint ? (
+                    <div className="brx-dms-sa-hint" title="From DMS invoice (sr_assigned_to / employee_code) — verify against Bodyshop SA below">
+                      DMS invoice SA: <strong>{dmsGapBootstrapDmsSaHint}</strong>
+                    </div>
+                  ) : null}
                   <select
                     className="sel"
                     value={dmsGapBootstrapForm.sa_employee_code}
                     onChange={(e) => setDmsGapBootstrapForm((f) => ({ ...f, sa_employee_code: e.target.value }))}
                   >
                     <option value="">Select SA</option>
+                    {dmsGapBootstrapForm.sa_employee_code
+                      && !dmsGapBootstrapSaOptions.some((e) => e.employee_code === dmsGapBootstrapForm.sa_employee_code) ? (
+                        <option value={dmsGapBootstrapForm.sa_employee_code}>{dmsGapBootstrapForm.sa_employee_code}</option>
+                      ) : null}
                     {dmsGapBootstrapSaOptions.map((emp) => (
                       <option key={emp.employee_code} value={emp.employee_code}>
                         {emp.employee_name} ({emp.employee_code})
                       </option>
                     ))}
                   </select>
+                  {dmsGapBootstrapSaOptions.length === 0 ? (
+                    <span style={{ fontSize: 12, color: 'var(--warn)', marginTop: 4, display: 'block' }}>
+                      No Bodyshop SAs for this branch in Employee Master — check location vs DMS branch ({dmsGapBootstrapRow.dms_branch || '—'}).
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                      Same list as Reception → Accident (Body Shop; EV/PV not filtered).
+                    </span>
+                  )}
                 </label>
                 <label className="brx-new-field">
                   <span className="brx-new-label">Owner name *</span>
