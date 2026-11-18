@@ -376,6 +376,8 @@ export default function ReceptionPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [dmsGapVisitDate, setDmsGapVisitDate] = useState<string | null>(null)
   const [dmsGapIntakeHint, setDmsGapIntakeHint] = useState<string | null>(null)
+  /** DMS JC from Repair Tracker gap only — not shown on form; applied on save to reception + bodyshop card. */
+  const [dmsGapJobCard, setDmsGapJobCard] = useState('')
   // True while the SA field holds the round-robin preview (not a manual pick); the DB re-allocates at save.
   const [saAutoAllocated, setSaAutoAllocated] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -644,11 +646,11 @@ export default function ReceptionPage() {
     setForm((prev) => ({
       ...prev,
       reg_number: reg || prev.reg_number,
-      jc_number: jc || prev.jc_number,
       owner_name: owner || prev.owner_name,
       service_type: 'Accident',
       source: prev.source || SOURCE_OPTIONS[0],
     }))
+    if (jc) setDmsGapJobCard(jc)
     if (visit) setDmsGapVisitDate(visit)
     const hintParts = [
       'Prefilled from Repair Tracker · DMS gap',
@@ -998,6 +1000,7 @@ export default function ReceptionPage() {
     setForm(EMPTY_FORM)
     setDmsGapVisitDate(null)
     setDmsGapIntakeHint(null)
+    setDmsGapJobCard('')
     setSaAutoAllocated(false)
     setEditingId(null)
     setRevisitContext(null)
@@ -1216,19 +1219,21 @@ export default function ReceptionPage() {
       return
     }
 
-    if (form.service_type === 'Accident' && editingId === null && !form.jc_number.trim()) {
-      setError('Job card number is required for Accident intake')
+    if (dmsGapIntakeHint && editingId === null && !dmsGapJobCard.trim()) {
+      setError('This tracker-gap link is missing the DMS job card — use Create from DMS on the tracker instead.')
       return
     }
 
     setSaving(true)
+
+    const jcForSave = dmsGapJobCard.trim() || form.jc_number.trim() || ''
 
     const payload: ReceptionEntryInput = {
       reg_number: form.reg_number,
       km_reading: null,
       model: form.model,
       service_type: form.service_type || null,
-      jc_number: form.service_type === 'Accident' ? form.jc_number || null : null,
+      jc_number: jcForSave ? jcForSave : null,
       // Auto-allocated SA is re-picked by the DB at save time so concurrent entries rotate correctly.
       sa_employee_code: saAutoAllocated && editingId === null && isRunningRepair ? '' : form.sa_employee_code,
       branch: saAutoAllocated && editingId === null && isRunningRepair ? rrLocation : null,
@@ -1253,7 +1258,7 @@ export default function ReceptionPage() {
     // Auto-create bodyshop repair card for Accident service type
     if (editingId === null && form.service_type === 'Accident' && result.data) {
       const entry = result.data as { id?: number; jc_number?: string | null; reg_number?: string; owner_name?: string | null; owner_phone?: string | null; branch?: string | null; sa_name?: string | null; sa_display_name?: string | null; created_at?: string }
-      const jcNo = String(entry.jc_number ?? '').trim().toUpperCase()
+      const jcNo = String(entry.jc_number ?? dmsGapJobCard ?? '').trim().toUpperCase()
       const receptionEntryId = Number(entry.id)
       let existingCard: { id: number } | null = null
 
@@ -1546,7 +1551,7 @@ export default function ReceptionPage() {
                 <strong>Accident intake from tracker gap.</strong>
                 <div>{dmsGapIntakeHint}</div>
                 <div style={{ marginTop: 6 }}>
-                  Complete model, phone, and SA, then save. Card <code>received_at</code> uses the visit date when provided.
+                  Complete model, phone, and SA, then save. The DMS job card above will be written to reception and the new Bodyshop card automatically — no JC field on this form.
                 </div>
               </div>
             )}
@@ -1778,18 +1783,6 @@ export default function ReceptionPage() {
                 )}
               </label>
 
-              {form.service_type === 'Accident' && (
-                <label className="field">
-                  <span className="label">Job card no. (DMS) <span className="req">*</span></span>
-                  <input
-                    value={form.jc_number}
-                    onChange={(event) => setForm((prev) => ({ ...prev, jc_number: event.target.value.toUpperCase() }))}
-                    className="inp inp--uc mono"
-                    placeholder="JC from DMS"
-                    autoCapitalize="characters"
-                  />
-                </label>
-              )}
             </div>
 
             <div className="form-grid-2">
