@@ -5530,11 +5530,6 @@ export default function BodyshopRepairPage() {
     [trackerGapRows],
   )
 
-  const invoicePendingGapCount = useMemo(
-    () => trackerGapRows.filter((r) => r.gap_type === 'invoice_pending').length,
-    [trackerGapRows],
-  )
-
   const showDmsMissingTable = pipelineFilter === 'Gaps & health'
 
   const integrityOpenCount = useMemo(
