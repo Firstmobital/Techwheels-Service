@@ -5859,6 +5859,36 @@ button.bsf-vcard--pick {
   color: #b45309;
 }
 
+.brx-pipe-pill--dms {
+  --pc: #475569;
+}
+
+.brx-pipe-pill--dms .brx-pipe-pill__n {
+  color: #64748b;
+}
+
+.brx-dms-missing-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.brx-settle-pill.is-gap-t18a {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.brx-settle-pill.is-gap-t18b {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.brx-settle-pill.is-gap-t18c {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .brx-settle-banner {
   margin: 0 0 12px;
   padding: 10px 12px;

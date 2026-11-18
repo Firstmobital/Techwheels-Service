@@ -44,6 +44,11 @@ import {
   isStage18PaymentDone,
   settlementStatusLabel,
 } from '../lib/api/bodyshopSettlement'
+import {
+  DMS_MISSING_GAP_LABELS,
+  listDmsMissingOnTracker,
+  type DmsMissingOnTrackerRow,
+} from '../lib/api/bodyshopDmsMissing'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
 import {
   isBodyshopSurveyManagerVerified,
@@ -553,7 +558,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'verify' | 'floor' | 'qc' | 'billing'
-type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining'
+type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining' | 'Missing on tracker'
 
 type BrowseFilterSnapshot = {
   dateRange: DateRange
@@ -1150,6 +1155,9 @@ export default function BodyshopRepairPage() {
   const [statusFilter, setStatusFilter]   = useState('active')
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
   const [pipelineFilter, setPipelineFilter] = useState<PipelineFilter>('all')
+  const [dmsMissingRows, setDmsMissingRows] = useState<DmsMissingOnTrackerRow[]>([])
+  const [dmsMissingLoading, setDmsMissingLoading] = useState(false)
+  const [dmsMissingError, setDmsMissingError] = useState<string | null>(null)
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [kmPresentByReceptionId, setKmPresentByReceptionId] = useState<Record<number, boolean>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
@@ -1304,6 +1312,33 @@ export default function BodyshopRepairPage() {
     if (lookupSession) return
     void load()
   }, [dateRange, debouncedSearch, lookupSession, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
+
+  useEffect(() => {
+    if (!userScopeResolved || lookupSession) return
+    let cancelled = false
+    setDmsMissingLoading(true)
+    setDmsMissingError(null)
+    ;(async () => {
+      try {
+        const from = String(dateRange.from ?? '').trim()
+        const to = String(dateRange.to ?? '').trim()
+        const rows = await listDmsMissingOnTracker({
+          from: from || undefined,
+          to: to || undefined,
+          branch: branchFilter,
+        })
+        if (!cancelled) setDmsMissingRows(rows)
+      } catch (e) {
+        if (!cancelled) {
+          setDmsMissingRows([])
+          setDmsMissingError(e instanceof Error ? e.message : 'Could not load DMS missing list')
+        }
+      } finally {
+        if (!cancelled) setDmsMissingLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [userScopeResolved, lookupSession, dateRange.from, dateRange.to, branchFilter])
 
   useEffect(() => {
     let cancelled = false
@@ -5441,6 +5476,32 @@ export default function BodyshopRepairPage() {
     [advisorScopedCards],
   )
 
+  const missingOnTrackerCount = dmsMissingRows.length
+
+  const showDmsMissingTable = pipelineFilter === 'Missing on tracker'
+
+  const openRepairCardById = async (cardId: number) => {
+    const local = cards.find((c) => c.id === cardId)
+    if (local) {
+      setSelected(local)
+      setDetailTab('overview')
+      setSaActiveCard(null)
+      setApprovalActiveCard(null)
+      setEditPatch({})
+      return
+    }
+    try {
+      const full = await getRepairCard(cardId)
+      setSelected(full)
+      setDetailTab('overview')
+      setSaActiveCard(null)
+      setApprovalActiveCard(null)
+      setEditPatch({})
+    } catch (e) {
+      setToast({ ok: false, msg: e instanceof Error ? e.message : 'Could not open repair card' })
+    }
+  }
+
   const pipelineSelected = pipelineFilter !== 'all'
 
   const canBodyshopSurveyVerify = isAdminLikeUser
@@ -5570,6 +5631,18 @@ export default function BodyshopRepairPage() {
           <span className="brx-pipe-pill__n">{customerRemainingCount}</span>
           <span className="brx-pipe-pill__l">Customer remaining<small>due or refund</small></span>
         </button>
+        <button
+          type="button"
+          className={`brx-pipe-pill brx-pipe-pill--dms ${pipelineFilter === 'Missing on tracker' ? 'is-active' : ''}`}
+          onClick={() => {
+            setPipelineFilter((prev) => prev === 'Missing on tracker' ? 'all' : 'Missing on tracker')
+            setStageFilter('all')
+          }}
+          title="DMS accident invoices (not cancelled) with no matching invoice on a live repair card. Period = DMS invoice date."
+        >
+          <span className="brx-pipe-pill__n">{dmsMissingLoading ? '…' : missingOnTrackerCount}</span>
+          <span className="brx-pipe-pill__l">Missing on tracker<small>DMS invoice not on card</small></span>
+        </button>
       </div>
 
       {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
@@ -5666,7 +5739,87 @@ export default function BodyshopRepairPage() {
           </div>
         </div>
 
-        {!userScopeResolved ? (
+        {showDmsMissingTable ? (
+          <div className="brx-panel acct-table-panel">
+            <div className="brx-panel-h">Missing on tracker</div>
+            <p className="brx-dms-missing-hint">
+              Accident invoices in DMS (not cancelled) with no matching invoice on a live repair card.
+              Period uses <strong>DMS invoice date</strong>
+              {dateRange.from || dateRange.to ? ` (${dateRange.from || '…'} to ${dateRange.to || '…'})` : ' (all dates)'}
+              {branchFilter !== 'all' ? ` · Branch ${branchFilter}` : ''}.
+            </p>
+            {dmsMissingError && <div className="brx-settle-error">{dmsMissingError}</div>}
+            {dmsMissingLoading && dmsMissingRows.length === 0 ? (
+              <div className="brx-settle-status">Loading DMS gaps…</div>
+            ) : dmsMissingRows.length === 0 ? (
+              <div className="brx-settle-status">No missing DMS invoices in this period.</div>
+            ) : (
+              <div className="acct-table-scroll">
+                <table className="brx-settle-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Reg no.</th>
+                      <th>Customer</th>
+                      <th>Job card</th>
+                      <th>Amount</th>
+                      <th>Gap</th>
+                      <th>On tracker</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dmsMissingRows.map((row) => {
+                      const cardId = row.live_cards_same_jc[0] ?? row.live_cards_same_reg[0] ?? null
+                      const gapLabel = DMS_MISSING_GAP_LABELS[row.gap_subclass] ?? row.gap_subclass
+                      return (
+                        <tr key={row.invoice_number}>
+                          <td>
+                            <div className="mono">{row.invoice_number}</div>
+                            <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                              {row.invoice_date ? fmt(row.invoice_date) : '—'}
+                              {row.dms_branch ? ` · ${row.dms_branch}` : ''}
+                            </div>
+                          </td>
+                          <td>{row.reg_number || '—'}</td>
+                          <td>{row.customer_name || '—'}</td>
+                          <td className="mono">{row.job_card_number || '—'}</td>
+                          <td>{inr(row.total_invoice_amount)}</td>
+                          <td>
+                            <span className={`brx-settle-pill is-gap-${row.gap_subclass}`}>{gapLabel}</span>
+                          </td>
+                          <td>
+                            {row.live_cards_same_jc.length > 0 && (
+                              <div>Card {row.live_cards_same_jc.join(', ')}</div>
+                            )}
+                            {row.invoice_on_jc_card && (
+                              <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                                Invoice on card: {row.invoice_on_jc_card}
+                              </div>
+                            )}
+                            {row.live_cards_same_jc.length === 0 && row.live_cards_same_reg.length > 0 && (
+                              <div>Reg match: card {row.live_cards_same_reg.join(', ')}</div>
+                            )}
+                            {row.live_cards_same_jc.length === 0 && row.live_cards_same_reg.length === 0 && (
+                              <span style={{ color: 'var(--muted)' }}>—</span>
+                            )}
+                          </td>
+                          <td>
+                            {cardId != null ? (
+                              <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openRepairCardById(cardId)}>
+                                Open card
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : !userScopeResolved ? (
           <div className="empty-state">Resolving role access…</div>
         ) : loading ? (
           <div className="empty-state">Loading…</div>
