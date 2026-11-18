@@ -45,9 +45,10 @@ import {
   settlementStatusLabel,
 } from '../lib/api/bodyshopSettlement'
 import {
-  DMS_MISSING_GAP_LABELS,
-  listDmsMissingOnTracker,
-  type DmsMissingOnTrackerRow,
+  TRACKER_GAP_ACTIONABLE,
+  TRACKER_GAP_LABELS,
+  listTrackerGaps,
+  type TrackerGapRow,
 } from '../lib/api/bodyshopDmsMissing'
 import { isBodyshopSurveyApprovalEvidenceSatisfied } from '../lib/bodyshopSurveyCustomerApproval'
 import {
@@ -1155,9 +1156,10 @@ export default function BodyshopRepairPage() {
   const [statusFilter, setStatusFilter]   = useState('active')
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
   const [pipelineFilter, setPipelineFilter] = useState<PipelineFilter>('all')
-  const [dmsMissingRows, setDmsMissingRows] = useState<DmsMissingOnTrackerRow[]>([])
-  const [dmsMissingLoading, setDmsMissingLoading] = useState(false)
-  const [dmsMissingError, setDmsMissingError] = useState<string | null>(null)
+  const [trackerGapRows, setTrackerGapRows] = useState<TrackerGapRow[]>([])
+  const [trackerGapsLoading, setTrackerGapsLoading] = useState(false)
+  const [trackerGapsError, setTrackerGapsError] = useState<string | null>(null)
+  const [showInvoicePendingGaps, setShowInvoicePendingGaps] = useState(false)
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [kmPresentByReceptionId, setKmPresentByReceptionId] = useState<Record<number, boolean>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
@@ -1316,25 +1318,26 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!userScopeResolved || lookupSession) return
     let cancelled = false
-    setDmsMissingLoading(true)
-    setDmsMissingError(null)
+    setTrackerGapsLoading(true)
+    setTrackerGapsError(null)
     ;(async () => {
       try {
         const from = String(dateRange.from ?? '').trim()
         const to = String(dateRange.to ?? '').trim()
-        const rows = await listDmsMissingOnTracker({
+        const rows = await listTrackerGaps({
           from: from || undefined,
           to: to || undefined,
           branch: branchFilter,
+          includeInvoicePending: true,
         })
-        if (!cancelled) setDmsMissingRows(rows)
+        if (!cancelled) setTrackerGapRows(rows)
       } catch (e) {
         if (!cancelled) {
-          setDmsMissingRows([])
-          setDmsMissingError(e instanceof Error ? e.message : 'Could not load DMS missing list')
+          setTrackerGapRows([])
+          setTrackerGapsError(e instanceof Error ? e.message : 'Could not load tracker gaps')
         }
       } finally {
-        if (!cancelled) setDmsMissingLoading(false)
+        if (!cancelled) setTrackerGapsLoading(false)
       }
     })()
     return () => { cancelled = true }
@@ -5476,7 +5479,20 @@ export default function BodyshopRepairPage() {
     [advisorScopedCards],
   )
 
-  const missingOnTrackerCount = dmsMissingRows.length
+  const visibleTrackerGaps = useMemo(() => {
+    if (showInvoicePendingGaps) return trackerGapRows
+    return trackerGapRows.filter((r) => r.gap_type !== 'invoice_pending')
+  }, [trackerGapRows, showInvoicePendingGaps])
+
+  const missingOnTrackerCount = useMemo(
+    () => trackerGapRows.filter((r) => TRACKER_GAP_ACTIONABLE.includes(r.gap_type)).length,
+    [trackerGapRows],
+  )
+
+  const invoicePendingGapCount = useMemo(
+    () => trackerGapRows.filter((r) => r.gap_type === 'invoice_pending').length,
+    [trackerGapRows],
+  )
 
   const showDmsMissingTable = pipelineFilter === 'Missing on tracker'
 
@@ -5638,10 +5654,17 @@ export default function BodyshopRepairPage() {
             setPipelineFilter((prev) => prev === 'Missing on tracker' ? 'all' : 'Missing on tracker')
             setStageFilter('all')
           }}
-          title="DMS accident invoices (not cancelled) with no matching invoice on a live repair card. Period = DMS invoice date."
+          title="DMS accident job cards (not cancelled) with no live repair card on that job card number. Period = DMS invoice date."
         >
-          <span className="brx-pipe-pill__n">{dmsMissingLoading ? '…' : missingOnTrackerCount}</span>
-          <span className="brx-pipe-pill__l">Missing on tracker<small>DMS invoice not on card</small></span>
+          <span className="brx-pipe-pill__n">{trackerGapsLoading ? '…' : missingOnTrackerCount}</span>
+          <span className="brx-pipe-pill__l">
+            Missing on tracker
+            <small>
+              {invoicePendingGapCount > 0
+                ? `gaps · +${invoicePendingGapCount} invoice pending`
+                : 'reception · JC · placeholder'}
+            </small>
+          </span>
         </button>
       </div>
 
@@ -5743,69 +5766,69 @@ export default function BodyshopRepairPage() {
           <div className="brx-panel acct-table-panel">
             <div className="brx-panel-h">Missing on tracker</div>
             <p className="brx-dms-missing-hint">
-              Accident invoices in DMS (not cancelled) with no matching invoice on a live repair card.
-              Period uses <strong>DMS invoice date</strong>
-              {dateRange.from || dateRange.to ? ` (${dateRange.from || '…'} to ${dateRange.to || '…'})` : ' (all dates)'}
+              Action gaps: accident <strong>reception without a card</strong>, DMS <strong>job card</strong> not on a live card, or live card still on <strong>placeholder JC</strong>.
+              DMS rows use <strong>invoice date</strong>; reception rows use <strong>reception date</strong>
+              {dateRange.from || dateRange.to ? ` (${dateRange.from || '…'} to ${dateRange.to || '…'})` : ''}
               {branchFilter !== 'all' ? ` · Branch ${branchFilter}` : ''}.
             </p>
-            {dmsMissingError && <div className="brx-settle-error">{dmsMissingError}</div>}
-            {dmsMissingLoading && dmsMissingRows.length === 0 ? (
-              <div className="brx-settle-status">Loading DMS gaps…</div>
-            ) : dmsMissingRows.length === 0 ? (
-              <div className="brx-settle-status">No missing DMS invoices in this period.</div>
+            <label className="brx-dms-missing-toggle">
+              <input
+                type="checkbox"
+                checked={showInvoicePendingGaps}
+                onChange={(e) => setShowInvoicePendingGaps(e.target.checked)}
+              />
+              Also show invoice pending (JC on card; billing not entered yet)
+            </label>
+            {trackerGapsError && <div className="brx-settle-error">{trackerGapsError}</div>}
+            {trackerGapsLoading && visibleTrackerGaps.length === 0 ? (
+              <div className="brx-settle-status">Loading tracker gaps…</div>
+            ) : visibleTrackerGaps.length === 0 ? (
+              <div className="brx-settle-status">No tracker gaps in this period.</div>
             ) : (
               <div className="acct-table-scroll">
                 <table className="brx-settle-table">
                   <thead>
                     <tr>
-                      <th>Invoice</th>
+                      <th>Date</th>
+                      <th>Gap</th>
                       <th>Reg no.</th>
                       <th>Customer</th>
                       <th>Job card</th>
+                      <th>Invoice</th>
                       <th>Amount</th>
-                      <th>Gap</th>
-                      <th>On tracker</th>
+                      <th>Note</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dmsMissingRows.map((row) => {
-                      const cardId = row.live_cards_same_jc[0] ?? row.live_cards_same_reg[0] ?? null
-                      const gapLabel = DMS_MISSING_GAP_LABELS[row.gap_subclass] ?? row.gap_subclass
+                    {visibleTrackerGaps.map((row) => {
+                      const cardId = row.tracker_card_ids[0] ?? null
+                      const gapLabel = TRACKER_GAP_LABELS[row.gap_type] ?? row.gap_type
                       return (
-                        <tr key={row.invoice_number}>
+                        <tr key={row.row_key}>
                           <td>
-                            <div className="mono">{row.invoice_number}</div>
+                            <div>{row.event_date ? fmt(row.event_date) : '—'}</div>
                             <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                              {row.invoice_date ? fmt(row.invoice_date) : '—'}
+                              {row.period_basis === 'reception' ? 'Reception' : 'DMS invoice'}
                               {row.dms_branch ? ` · ${row.dms_branch}` : ''}
                             </div>
+                          </td>
+                          <td>
+                            <span className={`brx-settle-pill is-gap-${row.gap_type}`}>{gapLabel}</span>
                           </td>
                           <td>{row.reg_number || '—'}</td>
                           <td>{row.customer_name || '—'}</td>
                           <td className="mono">{row.job_card_number || '—'}</td>
+                          <td className="mono">{row.invoice_number || '—'}</td>
                           <td>{inr(row.total_invoice_amount)}</td>
+                          <td style={{ fontSize: 12, maxWidth: 280 }}>{row.tracker_note || '—'}</td>
                           <td>
-                            <span className={`brx-settle-pill is-gap-${row.gap_subclass}`}>{gapLabel}</span>
-                          </td>
-                          <td>
-                            {row.live_cards_same_jc.length > 0 && (
-                              <div>Card {row.live_cards_same_jc.join(', ')}</div>
-                            )}
-                            {row.invoice_on_jc_card && (
-                              <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                                Invoice on card: {row.invoice_on_jc_card}
-                              </div>
-                            )}
-                            {row.live_cards_same_jc.length === 0 && row.live_cards_same_reg.length > 0 && (
-                              <div>Reg match: card {row.live_cards_same_reg.join(', ')}</div>
-                            )}
-                            {row.live_cards_same_jc.length === 0 && row.live_cards_same_reg.length === 0 && (
-                              <span style={{ color: 'var(--muted)' }}>—</span>
-                            )}
-                          </td>
-                          <td>
-                            {cardId != null ? (
+                            {row.gap_type === 'reception_no_card' && row.reception_entry_id != null ? (
+                              <a className="btn btn--ghost btn--sm" href="/reception" title={`Reception entry ${row.reception_entry_id}`}>
+                                Reception #{row.reception_entry_id}
+                              </a>
+                            ) : null}
+                            {cardId != null && row.gap_type !== 'reception_no_card' ? (
                               <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openRepairCardById(cardId)}>
                                 Open card
                               </button>

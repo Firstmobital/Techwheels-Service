@@ -5868,23 +5868,45 @@ button.bsf-vcard--pick {
 }
 
 .brx-dms-missing-hint {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-size: 13px;
   color: var(--muted);
   line-height: 1.45;
 }
 
-.brx-settle-pill.is-gap-t18a {
-  background: #fef3c7;
-  color: #92400e;
+.brx-dms-missing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
 }
 
-.brx-settle-pill.is-gap-t18b {
+.brx-settle-pill.is-gap-jc_missing,
+.brx-settle-pill.is-gap-jc_missing_same_reg {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.brx-settle-pill.is-gap-jc_missing_same_reg {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.brx-settle-pill.is-gap-reception_no_card {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.brx-settle-pill.is-gap-placeholder_jc {
   background: #e0e7ff;
   color: #3730a3;
 }
 
-.brx-settle-pill.is-gap-t18c {
+.brx-settle-pill.is-gap-invoice_pending {
   background: #f1f5f9;
   color: #475569;
 }

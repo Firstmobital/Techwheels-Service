@@ -1,6 +1,7 @@
 -- READ-ONLY. T18 pilot: DMS Accident invoices in a month vs live bodyshop cards.
 -- Use July+ after bodyshop go-live (June is expected noisy). Change month bounds in all three queries.
--- Plan: docs/BODYSHOP_INTEGRITY_FIX_PLAN.md (T18). App KPI: list_bodyshop_dms_missing_on_tracker RPC.
+-- Plan: docs/BODYSHOP_INTEGRITY_FIX_PLAN.md (T18 invoice-audit variant).
+-- Repair Tracker KPI uses list_bodyshop_dms_missing_on_tracker RPC (matches by job card, not invoice).
 -- Subclasses (missing on live card):
 --   T18a = live card has same JC as DMS but not this invoice (often wrong invoice or blank)
 --   T18b = live card for same reg but different JC
