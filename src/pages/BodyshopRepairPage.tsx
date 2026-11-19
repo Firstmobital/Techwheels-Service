@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -1174,6 +1175,7 @@ export default function BodyshopRepairPage() {
   const [trackerGapsLoading, setTrackerGapsLoading] = useState(false)
   const [trackerGapsError, setTrackerGapsError] = useState<string | null>(null)
   const [showInvoicePendingGaps, setShowInvoicePendingGaps] = useState(false)
+  const [exportingBrowseExcel, setExportingBrowseExcel] = useState(false)
   const [trackerGapChip, setTrackerGapChip] = useState<TrackerGapChip>('all')
   const [dmsGapBootstrapRow, setDmsGapBootstrapRow] = useState<TrackerGapRow | null>(null)
   const [dmsGapBootstrapSaving, setDmsGapBootstrapSaving] = useState(false)
@@ -5451,6 +5453,122 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  async function handleExportBrowseExcel() {
+    const gapView = pipelineFilter === 'Gaps & health'
+    const exportCount = gapView ? visibleTrackerGaps.length : filtered.length
+    if (exportCount === 0) {
+      toast_('No rows to export for the current filters', false)
+      return
+    }
+    setExportingBrowseExcel(true)
+    try {
+      const dateStr = dateRange.from === dateRange.to
+        ? (dateRange.from || 'all')
+        : [dateRange.from, dateRange.to].filter(Boolean).join('_to_') || 'all'
+      const filterParts = [
+        gapView ? 'gaps_health' : null,
+        gapView ? TRACKER_GAP_CHIP_LABELS[trackerGapChip] : null,
+        gapView && showInvoicePendingGaps ? 'incl_invoice_pending' : null,
+        !gapView && pipelineFilter !== 'all' ? pipelineFilter.replace(/\s+/g, '_') : null,
+        !gapView && stageFilter !== 'all' ? `stage_${stageFilter}` : null,
+        branchFilter !== 'all' ? branchFilter : null,
+        statusFilter !== 'active' ? statusFilter : null,
+        advisorFilter !== 'all'
+          ? (advisorOptions.find((a) => a.value === advisorFilter)?.label ?? advisorFilter)
+          : null,
+        debouncedSearch.length >= REPAIR_LOOKUP_MIN_CHARS ? `search_${debouncedSearch.slice(0, 24)}` : null,
+      ].filter(Boolean).map((s) => String(s).replace(/[^\w.-]+/g, '_'))
+      const suffix = filterParts.length ? `_${filterParts.join('_')}` : ''
+
+      let headers: string[]
+      let rows: (string | number)[][]
+
+      if (gapView) {
+        headers = [
+          'Event date',
+          'Period basis',
+          'Branch',
+          'Gap type',
+          'Gap label',
+          'Reg no.',
+          'Customer',
+          'Job card',
+          'Invoice',
+          'Amount (INR)',
+          'Tracker note',
+          'Tracker card id',
+          'Reception entry id',
+          'DMS SA code',
+          'DMS model hint',
+          'DMS portal',
+          'Owner phone',
+        ]
+        rows = visibleTrackerGaps.map((row) => [
+          row.event_date ? fmt(row.event_date) : '',
+          row.period_basis === 'reception' ? 'Reception' : 'DMS invoice',
+          row.dms_branch ?? '',
+          row.gap_type,
+          TRACKER_GAP_LABELS[row.gap_type] ?? row.gap_type,
+          row.reg_number ?? '',
+          row.customer_name ?? '',
+          row.job_card_number ?? '',
+          row.invoice_number ?? '',
+          row.total_invoice_amount != null ? Number(row.total_invoice_amount) : '',
+          row.tracker_note ?? '',
+          row.tracker_card_ids[0] ?? '',
+          row.reception_entry_id ?? '',
+          row.dms_sa_employee_code ?? '',
+          row.dms_model_hint ?? '',
+          row.dms_portal ?? '',
+          row.dms_owner_phone ?? '',
+        ])
+      } else {
+        headers = [
+          'Job card',
+          'Reg no.',
+          'Customer',
+          'Branch',
+          'Customer type',
+          'SA',
+          'Overall status',
+          'Effective stage',
+          'Stage label',
+          'Current stage (DB)',
+          'Bodyshop floor',
+          'Received at',
+        ]
+        rows = filtered.map((card) => {
+          const stage = getEffectiveStageForCard(card)
+          return [
+            card.job_card_no ?? '',
+            card.reg_number ?? '',
+            card.customer_name ?? '',
+            card.branch ?? '',
+            CT_LABELS[String(card.customer_type ?? '')] ?? card.customer_type ?? '',
+            card.sa_name ?? '',
+            card.overall_status ?? '',
+            stage,
+            STAGE_LABELS[stage] ?? '',
+            Number(card.current_stage ?? ''),
+            card.bodyshop_floor ?? '',
+            card.received_at ? fmt(card.received_at) : '',
+          ]
+        })
+      }
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+      ws['!cols'] = headers.map((h) => ({ wch: Math.min(Math.max(h.length + 2, 12), 36) }))
+      XLSX.utils.book_append_sheet(wb, ws, gapView ? 'Gaps health' : 'Repair cards')
+      XLSX.writeFile(wb, `Bodyshop_${gapView ? 'Gaps_health' : 'Tracker'}_${dateStr}${suffix}.xlsx`)
+      toast_(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'}`, true)
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Export failed', false)
+    } finally {
+      setExportingBrowseExcel(false)
+    }
+  }
+
   const openRepairCardById = async (cardId: number) => {
     const local = cards.find((c) => c.id === cardId)
     if (local) {
@@ -5657,6 +5775,26 @@ export default function BodyshopRepairPage() {
           <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
         </select>
+
+        <button
+          type="button"
+          className="btn btn--soft brx-export-excel"
+          disabled={
+            exportingBrowseExcel
+            || loading
+            || (pipelineFilter === 'Gaps & health'
+              ? visibleTrackerGaps.length === 0
+              : filtered.length === 0)
+          }
+          title={
+            pipelineFilter === 'Gaps & health'
+              ? 'Download Excel for the Gaps & health table (period, branch, gap chips, invoice pending toggle)'
+              : 'Download Excel for repair cards matching Period, search, branch, advisor, status, pipeline and stage filters'
+          }
+          onClick={() => void handleExportBrowseExcel()}
+        >
+          {exportingBrowseExcel ? 'Exporting…' : 'Export Excel'}
+        </button>
       </div>
       {lookupSession && (
         <div className="brx-lookup-hint" role="status">
