@@ -6002,6 +6002,16 @@ button.bsf-vcard--pick {
   color: #0f172a;
 }
 
+.brx-gap-chip--jc-missing.is-active {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.brx-gap-chip--jc-same-reg.is-active {
+  border-color: #fb923c;
+  background: #fff7ed;
+}
+
 .brx-gap-chip__n {
   font-size: 12px;
   font-weight: 700;

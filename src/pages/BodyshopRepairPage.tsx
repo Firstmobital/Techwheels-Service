@@ -51,6 +51,7 @@ import {
   bootstrapVisitFromDmsGap,
   buildAccidentIntakeReceptionUrl,
   listTrackerGaps,
+  TRACKER_GAP_CHIP_LABELS,
   trackerGapMatchesChip,
   type TrackerGapChip,
   type TrackerGapRow,
@@ -5480,10 +5481,23 @@ export default function BodyshopRepairPage() {
   const trackerGapChipCounts = useMemo(() => ({
     all: countTrackerGapsByChip(trackerGapRows, 'all', showInvoicePendingGaps),
     reception: countTrackerGapsByChip(trackerGapRows, 'reception', showInvoicePendingGaps),
-    jc: countTrackerGapsByChip(trackerGapRows, 'jc', showInvoicePendingGaps),
+    jc_missing: countTrackerGapsByChip(trackerGapRows, 'jc_missing', showInvoicePendingGaps),
+    jc_missing_same_reg: countTrackerGapsByChip(trackerGapRows, 'jc_missing_same_reg', showInvoicePendingGaps),
     placeholder: countTrackerGapsByChip(trackerGapRows, 'placeholder', showInvoicePendingGaps),
     invoice_pending: countTrackerGapsByChip(trackerGapRows, 'invoice_pending', true),
   }), [trackerGapRows, showInvoicePendingGaps])
+
+  const trackerGapChips = useMemo(
+    (): TrackerGapChip[] => [
+      'all',
+      'reception',
+      'jc_missing',
+      'jc_missing_same_reg',
+      'placeholder',
+      'invoice_pending',
+    ],
+    [],
+  )
 
   const missingOnTrackerCount = useMemo(
     () => trackerGapRows.filter((r) => TRACKER_GAP_ACTIONABLE.includes(r.gap_type)).length,
@@ -5804,7 +5818,7 @@ export default function BodyshopRepairPage() {
           <span className="brx-pipe-pill__n">{trackerGapsLoading ? '…' : missingOnTrackerCount}</span>
           <span className="brx-pipe-pill__l">
             Gaps & health
-            <small>Reception · JC · placeholder</small>
+            <small>Reception · JC gaps · placeholder</small>
           </span>
         </button>
       </div>
@@ -5915,27 +5929,19 @@ export default function BodyshopRepairPage() {
               Money and pipeline stages use the other KPI pills above.
             </p>
             <div className="brx-gap-chips" role="tablist" aria-label="Filter gap type">
-              {(
-                [
-                  ['all', 'All'] as const,
-                  ['reception', 'Reception'] as const,
-                  ['jc', 'Job card'] as const,
-                  ['placeholder', 'Placeholder JC'] as const,
-                  ['invoice_pending', 'Invoice pending'] as const,
-                ]
-              ).map(([chip, label]) => (
+              {trackerGapChips.map((chip) => (
                 <button
                   key={chip}
                   type="button"
                   role="tab"
                   aria-selected={trackerGapChip === chip}
-                  className={`brx-gap-chip ${trackerGapChip === chip ? 'is-active' : ''}`}
+                  className={`brx-gap-chip ${chip === 'jc_missing' ? 'brx-gap-chip--jc-missing' : ''} ${chip === 'jc_missing_same_reg' ? 'brx-gap-chip--jc-same-reg' : ''} ${trackerGapChip === chip ? 'is-active' : ''}`}
                   onClick={() => {
                     setTrackerGapChip(chip)
                     if (chip === 'invoice_pending') setShowInvoicePendingGaps(true)
                   }}
                 >
-                  {label}
+                  {TRACKER_GAP_CHIP_LABELS[chip]}
                   <span className="brx-gap-chip__n">{trackerGapChipCounts[chip]}</span>
                 </button>
               ))}

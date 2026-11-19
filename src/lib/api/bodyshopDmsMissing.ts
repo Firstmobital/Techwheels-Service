@@ -42,12 +42,28 @@ export const TRACKER_GAP_ACTIONABLE: TrackerGapType[] = [
   'placeholder_jc',
 ]
 
-export type TrackerGapChip = 'all' | 'reception' | 'jc' | 'placeholder' | 'invoice_pending'
+export type TrackerGapChip =
+  | 'all'
+  | 'reception'
+  | 'jc_missing'
+  | 'jc_missing_same_reg'
+  | 'placeholder'
+  | 'invoice_pending'
+
+export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
+  all: 'All',
+  reception: 'Reception',
+  jc_missing: 'Not on tracker',
+  jc_missing_same_reg: 'Other card for reg',
+  placeholder: 'Placeholder JC',
+  invoice_pending: 'Invoice pending',
+}
 
 export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip): boolean {
   if (chip === 'all') return true
   if (chip === 'reception') return gap === 'reception_no_card'
-  if (chip === 'jc') return gap === 'jc_missing' || gap === 'jc_missing_same_reg'
+  if (chip === 'jc_missing') return gap === 'jc_missing'
+  if (chip === 'jc_missing_same_reg') return gap === 'jc_missing_same_reg'
   if (chip === 'placeholder') return gap === 'placeholder_jc'
   if (chip === 'invoice_pending') return gap === 'invoice_pending'
   return true
