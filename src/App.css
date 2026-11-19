@@ -5950,6 +5950,7 @@ button.bsf-vcard--pick {
 }
 
 .brx-settle-pill.is-gap-jc_missing,
+.brx-settle-pill.is-gap-jc_missing_extra_visit,
 .brx-settle-pill.is-gap-jc_missing_same_reg {
   background: #fee2e2;
   color: #991b1b;

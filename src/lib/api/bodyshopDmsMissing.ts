@@ -2,6 +2,7 @@ import { supabase } from '../supabase'
 
 export type TrackerGapType =
   | 'jc_missing'
+  | 'jc_missing_extra_visit'
   | 'jc_missing_same_reg'
   | 'reception_no_card'
   | 'placeholder_jc'
@@ -29,7 +30,8 @@ export type TrackerGapRow = {
 
 export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
   jc_missing: 'Job card not on tracker',
-  jc_missing_same_reg: 'Job card missing — other card for reg',
+  jc_missing_extra_visit: 'Extra DMS visit — JC not on tracker',
+  jc_missing_same_reg: 'Wrong JC on card for reg',
   reception_no_card: 'Accident received — no card',
   placeholder_jc: 'Placeholder JC — enter real JC',
   invoice_pending: 'JC on card — invoice pending',
@@ -37,6 +39,7 @@ export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
 
 export const TRACKER_GAP_ACTIONABLE: TrackerGapType[] = [
   'jc_missing',
+  'jc_missing_extra_visit',
   'jc_missing_same_reg',
   'reception_no_card',
   'placeholder_jc',
@@ -46,6 +49,7 @@ export type TrackerGapChip =
   | 'all'
   | 'reception'
   | 'jc_missing'
+  | 'jc_missing_extra_visit'
   | 'jc_missing_same_reg'
   | 'placeholder'
   | 'invoice_pending'
@@ -54,7 +58,8 @@ export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   all: 'All',
   reception: 'Reception',
   jc_missing: 'Not on tracker',
-  jc_missing_same_reg: 'Other card for reg',
+  jc_missing_extra_visit: 'Extra DMS visit',
+  jc_missing_same_reg: 'Wrong JC on card',
   placeholder: 'Placeholder JC',
   invoice_pending: 'Invoice pending',
 }
@@ -63,6 +68,7 @@ export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip)
   if (chip === 'all') return true
   if (chip === 'reception') return gap === 'reception_no_card'
   if (chip === 'jc_missing') return gap === 'jc_missing'
+  if (chip === 'jc_missing_extra_visit') return gap === 'jc_missing_extra_visit'
   if (chip === 'jc_missing_same_reg') return gap === 'jc_missing_same_reg'
   if (chip === 'placeholder') return gap === 'placeholder_jc'
   if (chip === 'invoice_pending') return gap === 'invoice_pending'
@@ -79,6 +85,7 @@ function normalizeGapType(raw: string): TrackerGapType {
   const v = raw.toLowerCase()
   if (
     v === 'jc_missing'
+    || v === 'jc_missing_extra_visit'
     || v === 'jc_missing_same_reg'
     || v === 'reception_no_card'
     || v === 'placeholder_jc'

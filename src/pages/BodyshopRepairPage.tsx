@@ -5482,6 +5482,7 @@ export default function BodyshopRepairPage() {
     all: countTrackerGapsByChip(trackerGapRows, 'all', showInvoicePendingGaps),
     reception: countTrackerGapsByChip(trackerGapRows, 'reception', showInvoicePendingGaps),
     jc_missing: countTrackerGapsByChip(trackerGapRows, 'jc_missing', showInvoicePendingGaps),
+    jc_missing_extra_visit: countTrackerGapsByChip(trackerGapRows, 'jc_missing_extra_visit', showInvoicePendingGaps),
     jc_missing_same_reg: countTrackerGapsByChip(trackerGapRows, 'jc_missing_same_reg', showInvoicePendingGaps),
     placeholder: countTrackerGapsByChip(trackerGapRows, 'placeholder', showInvoicePendingGaps),
     invoice_pending: countTrackerGapsByChip(trackerGapRows, 'invoice_pending', true),
@@ -5492,6 +5493,7 @@ export default function BodyshopRepairPage() {
       'all',
       'reception',
       'jc_missing',
+      'jc_missing_extra_visit',
       'jc_missing_same_reg',
       'placeholder',
       'invoice_pending',
@@ -5935,7 +5937,7 @@ export default function BodyshopRepairPage() {
                   type="button"
                   role="tab"
                   aria-selected={trackerGapChip === chip}
-                  className={`brx-gap-chip ${chip === 'jc_missing' ? 'brx-gap-chip--jc-missing' : ''} ${chip === 'jc_missing_same_reg' ? 'brx-gap-chip--jc-same-reg' : ''} ${trackerGapChip === chip ? 'is-active' : ''}`}
+                  className={`brx-gap-chip ${chip === 'jc_missing' || chip === 'jc_missing_extra_visit' ? 'brx-gap-chip--jc-missing' : ''} ${chip === 'jc_missing_same_reg' ? 'brx-gap-chip--jc-same-reg' : ''} ${trackerGapChip === chip ? 'is-active' : ''}`}
                   onClick={() => {
                     setTrackerGapChip(chip)
                     if (chip === 'invoice_pending') setShowInvoicePendingGaps(true)
@@ -5999,7 +6001,7 @@ export default function BodyshopRepairPage() {
                           <td style={{ fontSize: 12, maxWidth: 280 }}>{row.tracker_note || '—'}</td>
                           <td>
                             <div className="brx-gap-actions">
-                              {row.gap_type === 'jc_missing' ? (
+                              {row.gap_type === 'jc_missing' || row.gap_type === 'jc_missing_extra_visit' ? (
                                 <>
                                   <Link
                                     className="btn btn--soft btn--sm"
@@ -6023,7 +6025,7 @@ export default function BodyshopRepairPage() {
                                   Reception #{row.reception_entry_id}
                                 </a>
                               ) : null}
-                              {cardId != null && row.gap_type !== 'reception_no_card' && row.gap_type !== 'jc_missing' ? (
+                              {cardId != null && row.gap_type !== 'reception_no_card' && row.gap_type !== 'jc_missing' && row.gap_type !== 'jc_missing_extra_visit' ? (
                                 <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openRepairCardById(cardId)}>
                                   Open card
                                 </button>
