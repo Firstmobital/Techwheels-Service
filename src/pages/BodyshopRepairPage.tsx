@@ -29,6 +29,10 @@ import {
 } from '../lib/api/bodyshopRepair'
 import { bodyshopFloorAgeSummary, isBodyshopFloorAssigned } from '../lib/bodyshopFloorAge'
 import { formatBodyshopDocumentUploadSource } from '../lib/bodyshopDocumentUploadSource'
+import {
+  buildTwoSidedMergedPrintHtml,
+  type TwoSidedPrintSide,
+} from '../lib/print/twoSidedMergedPrintHtml'
 import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/settings'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import { BodyshopStageHistory } from '../components/BodyshopStageHistory'
@@ -4088,248 +4092,39 @@ export default function BodyshopRepairPage() {
           const frontDriveId = extractDriveFileId(frontInfo.driveUrl)
           const backDriveId = extractDriveFileId(backInfo.driveUrl)
 
-          const renderSideHtml = (title: string, info: typeof frontInfo, driveId: string | null) => {
+          const toPrintSide = (
+            title: string,
+            info: typeof frontInfo,
+            driveId: string | null,
+          ): TwoSidedPrintSide => {
             if (info.isPdf) {
-              return `
-              <div class="side-block">
-                <iframe src="${info.displayUrl}#toolbar=0" class="side-frame" title="${title}"></iframe>
-              </div>`
+              return { kind: 'pdf', src: info.displayUrl, alt: title }
             }
-
-            const driveThumbnailFallback = driveId ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600` : ''
-
-            return `
-            <div class="side-block">
-              <div class="img-container">
-                <img
-                  src="${info.displayUrl}"
-                  class="side-img"
-                  alt="${title}"
-                  loading="eager"
-                  onerror="if(!this.dataset.fallback && '${driveThumbnailFallback}'){this.dataset.fallback='1';this.src='${driveThumbnailFallback}';}else{this.style.display='none';this.nextElementSibling.style.display='block';}"
-                />
-                <div class="img-fallback" style="display:none;">
-                  <p>⚠️ Unable to display image preview directly.</p>
-                  ${info.driveUrl ? `<a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm">Open on Google Drive</a>` : ''}
-                </div>
-              </div>
-            </div>`
+            return {
+              kind: 'image',
+              src: info.displayUrl,
+              alt: title,
+              driveThumbnailFallback: driveId ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600` : '',
+              driveUrl: info.driveUrl,
+            }
           }
 
-          previewTab.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Merged 1-Page Print · ${pair.name} - ${regNo}</title>
-  <style>
-    @page {
-      size: A4 portrait;
-      margin: 0;
-    }
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f8fafc;
-      margin: 0;
-      padding: 10px 14px;
-      color: #0f172a;
-      text-align: center;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .print-actions {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-    .btn {
-      background: #2563eb;
-      color: #fff;
-      border: none;
-      padding: 9px 18px;
-      font-weight: 800;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 13px;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .btn:hover { background: #1d4ed8; }
-    .btn-secondary { background: #475569; }
-    .btn-secondary:hover { background: #334155; }
-    .btn-close { background: #64748b; }
-    .btn-sm { font-size: 11px; padding: 5px 10px; }
-    .page-box {
-      max-width: 210mm;
-      width: 100%;
-      min-height: 290mm;
-      margin: 0 auto;
-      border: 1.5px solid #cbd5e1;
-      padding: 4mm 3mm;
-      border-radius: 10px;
-      background: #fff;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-    }
-    .side-block {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: flex-start;
-      width: 100%;
-      flex: 1 1 0;
-      min-height: 145mm;
-      min-width: 0;
-    }
-    .img-container {
-      display: block;
-      width: 100%;
-      flex: 1 1 auto;
-      min-height: 145mm;
-      line-height: 0;
-    }
-    .side-img {
-      display: block;
-      width: 100%;
-      height: 145mm;
-      max-width: 100%;
-      object-fit: contain;
-      object-position: center center;
-      border: none;
-      border-radius: 0;
-      box-shadow: none;
-    }
-    .side-frame {
-      width: 100%;
-      height: 145mm;
-      min-height: 145mm;
-      border: none;
-      border-radius: 0;
-    }
-    .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
-    .img-fallback { padding: 12px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; }
-    .mid-gap { display: none; }
-    @media print {
-      @page {
-        size: A4 portrait;
-        margin: 0;
-      }
-      *, *::before, *::after {
-        box-sizing: border-box !important;
-      }
-      html, body {
-        width: 210mm !important;
-        height: 297mm !important;
-        max-height: 297mm !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: #fff !important;
-        overflow: hidden !important;
-      }
-      .print-actions {
-        display: none !important;
-      }
-      .page-box {
-        border: none !important;
-        border-radius: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 210mm !important;
-        height: 297mm !important;
-        max-height: 297mm !important;
-        min-height: 0 !important;
-        max-width: none !important;
-        box-shadow: none !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 0 !important;
-        page-break-after: avoid !important;
-        break-after: avoid-page !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid-page !important;
-        overflow: hidden !important;
-      }
-      .side-block {
-        flex: 0 0 50% !important;
-        height: 50% !important;
-        max-height: 50% !important;
-        min-height: 0 !important;
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        justify-content: center !important;
-        overflow: hidden !important;
-        page-break-before: avoid !important;
-        page-break-after: avoid !important;
-        break-before: avoid-page !important;
-        break-after: avoid-page !important;
-      }
-      .img-container {
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        max-height: 100% !important;
-        display: block !important;
-        line-height: 0 !important;
-        overflow: hidden !important;
-      }
-      .side-img {
-        display: block !important;
-        width: 100% !important;
-        height: 100% !important;
-        max-width: 100% !important;
-        max-height: 148.4mm !important;
-        object-fit: contain !important;
-        object-position: center center !important;
-        border: none !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-      }
-      .side-frame {
-        width: 100% !important;
-        height: 100% !important;
-        max-height: 148.4mm !important;
-        min-height: 0 !important;
-        border: none !important;
-      }
-      .mid-gap {
-        display: none !important;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="print-actions">
-    <button class="btn" onclick="window.print()">🖨️ Print 1-Page (Merged Front + Back)</button>
-    ${frontInfo.driveUrl ? `<a href="${frontInfo.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Open Front on Drive</a>` : ''}
-    ${backInfo.driveUrl ? `<a href="${backInfo.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Open Back on Drive</a>` : ''}
-    <button class="btn btn-close" onclick="window.close()">✕ Close</button>
-  </div>
-  <div class="page-box">
-    ${renderSideHtml('Front', frontInfo, frontDriveId)}
-    ${renderSideHtml('Back', backInfo, backDriveId)}
-  </div>
-</body>
-</html>`)
+          previewTab.document.write(
+            buildTwoSidedMergedPrintHtml({
+              title: `Merged 1-Page Print · ${pair.name} - ${regNo}`,
+              docName: pair.name,
+              regNo,
+              front: toPrintSide('Front', frontInfo, frontDriveId),
+              back: toPrintSide('Back', backInfo, backDriveId),
+              driveLinks: { front: frontInfo.driveUrl, back: backInfo.driveUrl },
+            }),
+          )
           previewTab.document.close()
       return
         }
       }
     }
+
 
     const row = bodyshopDocsByKey[docKey] || (docKey === 'doc_job_card' ? bodyshopDocsByKey['job_card'] : null) || (docKey === 'job_card' ? bodyshopDocsByKey['doc_job_card'] : null)
     if (!row) {
