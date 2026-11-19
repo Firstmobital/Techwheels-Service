@@ -48,6 +48,28 @@ export function isTrackerInvoiceGap(gap: TrackerGapType): boolean {
   return gap === 'invoice_missing' || gap === 'invoice_mismatch' || gap === 'invoice_pending'
 }
 
+/** RPC row_key prefixes — use when gap_type and deployed frontend types are out of sync. */
+export function inferTrackerGapTypeFromRowKey(rowKey: string): TrackerGapType | null {
+  const k = String(rowKey ?? '').trim()
+  if (k.startsWith('inv-mismatch:')) return 'invoice_mismatch'
+  if (k.startsWith('inv-missing:')) return 'invoice_missing'
+  if (k.startsWith('inv:')) return 'invoice_pending'
+  if (k.startsWith('rec:')) return 'reception_no_card'
+  if (k.startsWith('ph:')) return 'placeholder_jc'
+  return null
+}
+
+export const TRACKER_GAP_TYPES_KNOWN: readonly TrackerGapType[] = [
+  'jc_missing',
+  'jc_missing_extra_visit',
+  'jc_missing_same_reg',
+  'reception_no_card',
+  'placeholder_jc',
+  'invoice_missing',
+  'invoice_mismatch',
+  'invoice_pending',
+] as const
+
 export const TRACKER_GAP_ACTIONABLE: TrackerGapType[] = [
   'jc_missing',
   'jc_missing_extra_visit',
@@ -95,23 +117,19 @@ export function countTrackerGapsByChip(rows: TrackerGapRow[], chip: TrackerGapCh
   return base.filter((r) => trackerGapMatchesChip(r.gap_type, chip)).length
 }
 
-function normalizeGapType(raw: string): TrackerGapType {
+function normalizeGapType(raw: string, rowKey?: string): TrackerGapType {
   const v = raw.toLowerCase().trim()
-  if (
-    v === 'jc_missing'
-    || v === 'jc_missing_extra_visit'
-    || v === 'jc_missing_same_reg'
-    || v === 'reception_no_card'
-    || v === 'placeholder_jc'
-    || v === 'invoice_missing'
-    || v === 'invoice_mismatch'
-    || v === 'invoice_pending'
-  ) {
-    return v
+  if ((TRACKER_GAP_TYPES_KNOWN as readonly string[]).includes(v)) {
+    return v as TrackerGapType
   }
   // DB may return new invoice_* types before a frontend deploy — never collapse these to jc_missing.
   if (v.startsWith('invoice_')) {
     return v.includes('mismatch') ? 'invoice_mismatch' : 'invoice_missing'
+  }
+  const fromKey = rowKey ? inferTrackerGapTypeFromRowKey(rowKey) : null
+  if (fromKey) return fromKey
+  if (import.meta.env.DEV && v) {
+    console.warn('[tracker-gaps] unknown gap_type from RPC:', raw, rowKey ?? '')
   }
   return 'jc_missing'
 }
@@ -126,7 +144,7 @@ function normalizeRpcRow(raw: Record<string, unknown>): TrackerGapRow {
 
   return {
     row_key: String(raw.row_key ?? ''),
-    gap_type: normalizeGapType(String(raw.gap_type ?? '')),
+    gap_type: normalizeGapType(String(raw.gap_type ?? ''), String(raw.row_key ?? '')),
     period_basis: basis === 'reception' ? 'reception' : 'dms_invoice',
     event_date: raw.event_date != null ? String(raw.event_date) : null,
     invoice_number: raw.invoice_number != null ? String(raw.invoice_number) : null,

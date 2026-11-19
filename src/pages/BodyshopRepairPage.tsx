@@ -5277,7 +5277,7 @@ export default function BodyshopRepairPage() {
   }, [trackerGapRows, showInvoicePendingGaps, trackerGapChip])
 
   const trackerGapChipCounts = useMemo(() => ({
-    all: countTrackerGapsByChip(trackerGapRows, 'all', showInvoicePendingGaps),
+    all: trackerGapRows.length,
     reception: countTrackerGapsByChip(trackerGapRows, 'reception', showInvoicePendingGaps),
     jc_missing: countTrackerGapsByChip(trackerGapRows, 'jc_missing', showInvoicePendingGaps),
     jc_missing_extra_visit: countTrackerGapsByChip(trackerGapRows, 'jc_missing_extra_visit', showInvoicePendingGaps),
@@ -5301,7 +5301,9 @@ export default function BodyshopRepairPage() {
     [],
   )
 
-  const missingOnTrackerCount = useMemo(
+  const missingOnTrackerCount = useMemo(() => trackerGapRows.length, [trackerGapRows])
+
+  const trackerGapActionableCount = useMemo(
     () => trackerGapRows.filter((r) => TRACKER_GAP_ACTIONABLE.includes(r.gap_type)).length,
     [trackerGapRows],
   )
@@ -5731,12 +5733,12 @@ export default function BodyshopRepairPage() {
             setStageFilter('all')
             setTrackerGapChip('all')
           }}
-          title="Period-scoped tracker gaps (reception, job card, placeholder). Admin can expand full data health below."
+          title={`Period-scoped tracker gaps (${trackerGapActionableCount} intake/JC/placeholder${trackerGapRows.length > trackerGapActionableCount ? ` · ${trackerGapRows.length - trackerGapActionableCount} invoice/billing` : ''}). Toggle “Also show invoice gaps” in the table. Admin: full data health below.`}
         >
           <span className="brx-pipe-pill__n">{trackerGapsLoading ? '…' : missingOnTrackerCount}</span>
           <span className="brx-pipe-pill__l">
             Gaps & health
-            <small>Reception · JC gaps · placeholder</small>
+            <small>Reception · JC · placeholder · invoice</small>
           </span>
         </button>
       </div>
