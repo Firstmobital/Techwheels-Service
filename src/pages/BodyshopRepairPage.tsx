@@ -53,6 +53,7 @@ import {
   TRACKER_GAP_ACTIONABLE,
   TRACKER_GAP_LABELS,
   countTrackerGapsByChip,
+  isTrackerInvoiceGap,
   bootstrapVisitFromDmsGap,
   buildAccidentIntakeReceptionUrl,
   listTrackerGaps,
@@ -5268,7 +5269,7 @@ export default function BodyshopRepairPage() {
   )
 
   const visibleTrackerGaps = useMemo(() => {
-    let rows = showInvoicePendingGaps ? trackerGapRows : trackerGapRows.filter((r) => r.gap_type !== 'invoice_pending')
+    let rows = showInvoicePendingGaps ? trackerGapRows : trackerGapRows.filter((r) => !isTrackerInvoiceGap(r.gap_type))
     if (trackerGapChip !== 'all') {
       rows = rows.filter((r) => trackerGapMatchesChip(r.gap_type, trackerGapChip))
     }
@@ -5282,7 +5283,8 @@ export default function BodyshopRepairPage() {
     jc_missing_extra_visit: countTrackerGapsByChip(trackerGapRows, 'jc_missing_extra_visit', showInvoicePendingGaps),
     jc_missing_same_reg: countTrackerGapsByChip(trackerGapRows, 'jc_missing_same_reg', showInvoicePendingGaps),
     placeholder: countTrackerGapsByChip(trackerGapRows, 'placeholder', showInvoicePendingGaps),
-    invoice_pending: countTrackerGapsByChip(trackerGapRows, 'invoice_pending', true),
+    invoice_missing: countTrackerGapsByChip(trackerGapRows, 'invoice_missing', true),
+    invoice_mismatch: countTrackerGapsByChip(trackerGapRows, 'invoice_mismatch', true),
   }), [trackerGapRows, showInvoicePendingGaps])
 
   const trackerGapChips = useMemo(
@@ -5293,7 +5295,8 @@ export default function BodyshopRepairPage() {
       'jc_missing_extra_visit',
       'jc_missing_same_reg',
       'placeholder',
-      'invoice_pending',
+      'invoice_missing',
+      'invoice_mismatch',
     ],
     [],
   )
@@ -5870,10 +5873,10 @@ export default function BodyshopRepairPage() {
                   type="button"
                   role="tab"
                   aria-selected={trackerGapChip === chip}
-                  className={`brx-gap-chip ${chip === 'jc_missing' || chip === 'jc_missing_extra_visit' ? 'brx-gap-chip--jc-missing' : ''} ${chip === 'jc_missing_same_reg' ? 'brx-gap-chip--jc-same-reg' : ''} ${trackerGapChip === chip ? 'is-active' : ''}`}
+                  className={`brx-gap-chip ${chip === 'jc_missing' || chip === 'jc_missing_extra_visit' ? 'brx-gap-chip--jc-missing' : ''} ${chip === 'jc_missing_same_reg' ? 'brx-gap-chip--jc-same-reg' : ''} ${chip === 'invoice_mismatch' ? 'brx-gap-chip--jc-same-reg' : ''} ${trackerGapChip === chip ? 'is-active' : ''}`}
                   onClick={() => {
                     setTrackerGapChip(chip)
-                    if (chip === 'invoice_pending') setShowInvoicePendingGaps(true)
+                    if (chip === 'invoice_missing' || chip === 'invoice_mismatch') setShowInvoicePendingGaps(true)
                   }}
                 >
                   {TRACKER_GAP_CHIP_LABELS[chip]}
@@ -5887,7 +5890,7 @@ export default function BodyshopRepairPage() {
                 checked={showInvoicePendingGaps}
                 onChange={(e) => setShowInvoicePendingGaps(e.target.checked)}
               />
-              Also show invoice pending (JC on card; billing not entered yet)
+              Also show invoice gaps (blank or wrong invoice on card vs DMS)
             </label>
             {trackerGapsError && <div className="brx-settle-error">{trackerGapsError}</div>}
             {trackerGapsLoading && visibleTrackerGaps.length === 0 ? (
@@ -5934,7 +5937,8 @@ export default function BodyshopRepairPage() {
                           <td style={{ fontSize: 12, maxWidth: 280 }}>{row.tracker_note || '—'}</td>
                           <td>
                             <div className="brx-gap-actions">
-                              {row.gap_type === 'jc_missing' || row.gap_type === 'jc_missing_extra_visit' ? (
+                              {(row.gap_type === 'jc_missing' || row.gap_type === 'jc_missing_extra_visit')
+                              && !row.row_key.startsWith('inv-') ? (
                                 <>
                                   <Link
                                     className="btn btn--soft btn--sm"
@@ -5958,7 +5962,11 @@ export default function BodyshopRepairPage() {
                                   Reception #{row.reception_entry_id}
                                 </a>
                               ) : null}
-                              {cardId != null && row.gap_type !== 'reception_no_card' && row.gap_type !== 'jc_missing' && row.gap_type !== 'jc_missing_extra_visit' ? (
+                              {cardId != null
+                              && row.gap_type !== 'reception_no_card'
+                              && (row.row_key.startsWith('inv-')
+                                || isTrackerInvoiceGap(row.gap_type)
+                                || (row.gap_type !== 'jc_missing' && row.gap_type !== 'jc_missing_extra_visit')) ? (
                                 <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openRepairCardById(cardId)}>
                                   Open card
                                 </button>

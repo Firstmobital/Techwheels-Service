@@ -5971,9 +5971,15 @@ button.bsf-vcard--pick {
   color: #3730a3;
 }
 
+.brx-settle-pill.is-gap-invoice_missing,
 .brx-settle-pill.is-gap-invoice_pending {
   background: #f1f5f9;
   color: #475569;
+}
+
+.brx-settle-pill.is-gap-invoice_mismatch {
+  background: #ffedd5;
+  color: #c2410c;
 }
 
 .brx-gap-chips {

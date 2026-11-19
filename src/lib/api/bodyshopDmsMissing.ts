@@ -6,6 +6,9 @@ export type TrackerGapType =
   | 'jc_missing_same_reg'
   | 'reception_no_card'
   | 'placeholder_jc'
+  | 'invoice_missing'
+  | 'invoice_mismatch'
+  /** @deprecated RPC no longer emits; mapped client-side for stale caches */
   | 'invoice_pending'
 
 export type TrackerGapRow = {
@@ -34,7 +37,15 @@ export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
   jc_missing_same_reg: 'Wrong JC on card for reg',
   reception_no_card: 'Accident received — no card',
   placeholder_jc: 'Placeholder JC — enter real JC',
+  invoice_missing: 'JC on card — invoice not entered',
+  invoice_mismatch: 'JC on card — wrong invoice',
   invoice_pending: 'JC on card — invoice pending',
+}
+
+export const TRACKER_GAP_INVOICE_TYPES: TrackerGapType[] = ['invoice_missing', 'invoice_mismatch']
+
+export function isTrackerInvoiceGap(gap: TrackerGapType): boolean {
+  return gap === 'invoice_missing' || gap === 'invoice_mismatch' || gap === 'invoice_pending'
 }
 
 export const TRACKER_GAP_ACTIONABLE: TrackerGapType[] = [
@@ -52,7 +63,8 @@ export type TrackerGapChip =
   | 'jc_missing_extra_visit'
   | 'jc_missing_same_reg'
   | 'placeholder'
-  | 'invoice_pending'
+  | 'invoice_missing'
+  | 'invoice_mismatch'
 
 export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   all: 'All',
@@ -61,7 +73,8 @@ export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   jc_missing_extra_visit: 'Extra DMS visit',
   jc_missing_same_reg: 'Wrong JC on card',
   placeholder: 'Placeholder JC',
-  invoice_pending: 'Invoice pending',
+  invoice_missing: 'Invoice blank',
+  invoice_mismatch: 'Wrong invoice',
 }
 
 export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip): boolean {
@@ -71,27 +84,34 @@ export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip)
   if (chip === 'jc_missing_extra_visit') return gap === 'jc_missing_extra_visit'
   if (chip === 'jc_missing_same_reg') return gap === 'jc_missing_same_reg'
   if (chip === 'placeholder') return gap === 'placeholder_jc'
-  if (chip === 'invoice_pending') return gap === 'invoice_pending'
+  if (chip === 'invoice_missing') return gap === 'invoice_missing'
+  if (chip === 'invoice_mismatch') return gap === 'invoice_mismatch'
   return true
 }
 
-export function countTrackerGapsByChip(rows: TrackerGapRow[], chip: TrackerGapChip, includeInvoicePending: boolean): number {
-  const base = includeInvoicePending ? rows : rows.filter((r) => r.gap_type !== 'invoice_pending')
+export function countTrackerGapsByChip(rows: TrackerGapRow[], chip: TrackerGapChip, includeInvoiceGaps: boolean): number {
+  const base = includeInvoiceGaps ? rows : rows.filter((r) => !isTrackerInvoiceGap(r.gap_type))
   if (chip === 'all') return base.length
   return base.filter((r) => trackerGapMatchesChip(r.gap_type, chip)).length
 }
 
 function normalizeGapType(raw: string): TrackerGapType {
-  const v = raw.toLowerCase()
+  const v = raw.toLowerCase().trim()
   if (
     v === 'jc_missing'
     || v === 'jc_missing_extra_visit'
     || v === 'jc_missing_same_reg'
     || v === 'reception_no_card'
     || v === 'placeholder_jc'
+    || v === 'invoice_missing'
+    || v === 'invoice_mismatch'
     || v === 'invoice_pending'
   ) {
     return v
+  }
+  // DB may return new invoice_* types before a frontend deploy — never collapse these to jc_missing.
+  if (v.startsWith('invoice_')) {
+    return v.includes('mismatch') ? 'invoice_mismatch' : 'invoice_missing'
   }
   return 'jc_missing'
 }
