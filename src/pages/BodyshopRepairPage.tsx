@@ -6507,7 +6507,8 @@ export default function BodyshopRepairPage() {
                     && surveyApprovalDoc
                   const stage11Ready = stage10Ready && stage9Done
 
-                  const stage15Done = isBillingStage15Done(selected)
+                  const preBillingWaived = isPreBillingStagesWaived(selected)
+                  const stage15Done = isBillingStage15DoneForQueues(selected)
                   const stage16Done = isBillingStage16Done(selected)
                   const stage18Done = isStage18PaymentDone(selected)
                   const stage15Active = isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
@@ -6515,7 +6516,9 @@ export default function BodyshopRepairPage() {
                   const stage18Active = isStage18PaymentActive(selected)
 
                   const num    = Number(numStr)
-                  const isDone = num <= 4
+                  const isDone = preBillingWaived && num <= 14
+                    ? true
+                    : num <= 4
                     ? num === 1
                       ? stage1Done
                       : num === 2
@@ -6542,29 +6545,31 @@ export default function BodyshopRepairPage() {
                           : num === 18
                             ? stage18Done
                         : effectiveCurrentStage > num
-                  const stage10Active = stage10Ready && !stage10Done
-                  const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
-                  const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
-                  const stage13Active = floorStageCompleted && !isQcPassed(selected)
-                  const stage14Active = floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
+                  const stage10Active = preBillingWaived ? false : stage10Ready && !stage10Done
+                  const stage11Active = preBillingWaived ? false : !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
+                  const stage12Active = preBillingWaived ? false : stage11Ready && additionalApprovalRequested && !stage12Done
+                  const stage13Active = preBillingWaived ? false : floorStageCompleted && !isQcPassed(selected)
+                  const stage14Active = preBillingWaived ? false : floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
 
-                  const isCur = num === 10
-                    ? stage10Active
-                    : num === 11
-                      ? stage11Active
-                      : num === 12
-                        ? stage12Active
-                        : num === 13
-                          ? stage13Active
-                          : num === 14
-                            ? stage14Active
-                            : num === 15
-                              ? stage15Active
-                              : num === 16
-                                ? stage16Active
-                              : num === 18
-                                ? stage18Active
-                        : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                  const isCur = preBillingWaived
+                    ? num === effectiveCurrentStage
+                    : num === 10
+                      ? stage10Active
+                      : num === 11
+                        ? stage11Active
+                        : num === 12
+                          ? stage12Active
+                          : num === 13
+                            ? stage13Active
+                            : num === 14
+                              ? stage14Active
+                              : num === 15
+                                ? stage15Active
+                                : num === 16
+                                  ? stage16Active
+                                : num === 18
+                                  ? stage18Active
+                          : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
                     <div
@@ -6582,7 +6587,7 @@ export default function BodyshopRepairPage() {
                     </div>
                   ]
 
-                  if (num === 9) {
+                  if (num === 9 && !preBillingWaived) {
                     const verifyDone = managerVerified
                     const verifyPending = managerVerifyPending
                     const verifyBorder = verifyDone ? '#86efac' : verifyPending ? '#fcd34d' : '#cbd5e1'
@@ -6613,7 +6618,7 @@ export default function BodyshopRepairPage() {
                     )
                   }
 
-                  if (num === 11) {
+                  if (num === 11 && !preBillingWaived) {
                     if (loadingFloorPrimary) {
                       rows.push(
                         <div key="stage-11-sub-loading" className="brx-sub-loading">
@@ -6813,8 +6818,11 @@ export default function BodyshopRepairPage() {
                         && surveyApproved
                         && surveyApprovalDoc
                       const stage11Ready = stage10Ready && stage9Done
+                      const preBillingWaived = isPreBillingStagesWaived(selected)
                       const num     = Number(numStr)
-                      const isDone  = num <= 4
+                      const isDone  = preBillingWaived && num <= 14
+                        ? true
+                        : num <= 4
                         ? num === 1
                           ? stage1Done
                           : num === 2
@@ -6833,34 +6841,36 @@ export default function BodyshopRepairPage() {
                           : num === 14
                             ? isRiCompleted(selected)
                           : num === 15
-                            ? isBillingStage15Done(selected)
+                            ? isBillingStage15DoneForQueues(selected)
                           : num === 16
                             ? isBillingStage16Done(selected)
                           : num === 18
                             ? isStage18PaymentDone(selected)
                           : effectiveCurrentStage > num
-                      const stage10Active = stage10Ready && !stage10Done
-                      const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
-                      const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
-                      const stage13Active = floorStageCompleted && !isQcPassed(selected)
-                      const stage14Active = floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
-                      const isCur   = num === 10
-                        ? stage10Active
-                        : num === 11
-                          ? stage11Active
-                          : num === 12
-                            ? stage12Active
-                            : num === 13
-                              ? stage13Active
-                              : num === 14
-                                ? stage14Active
-                              : num === 15
-                                ? isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
-                              : num === 16
-                                ? (isBillingStage15Done(selected) && !isBillingStage16Done(selected))
-                              : num === 18
-                                ? isStage18PaymentActive(selected)
-                            : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                      const stage10Active = preBillingWaived ? false : stage10Ready && !stage10Done
+                      const stage11Active = preBillingWaived ? false : !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
+                      const stage12Active = preBillingWaived ? false : stage11Ready && additionalApprovalRequested && !stage12Done
+                      const stage13Active = preBillingWaived ? false : floorStageCompleted && !isQcPassed(selected)
+                      const stage14Active = preBillingWaived ? false : floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
+                      const isCur   = preBillingWaived
+                        ? num === effectiveCurrentStage
+                        : num === 10
+                          ? stage10Active
+                          : num === 11
+                            ? stage11Active
+                            : num === 12
+                              ? stage12Active
+                              : num === 13
+                                ? stage13Active
+                                : num === 14
+                                  ? stage14Active
+                                : num === 15
+                                  ? isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
+                                : num === 16
+                                  ? (isBillingStage15DoneForQueues(selected) && !isBillingStage16Done(selected))
+                                : num === 18
+                                  ? isStage18PaymentActive(selected)
+                              : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       const handleStepClick = (sNum: number) => {
                         if (sNum <= 4) {
