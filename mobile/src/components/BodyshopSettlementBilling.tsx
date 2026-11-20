@@ -12,7 +12,7 @@ import {
   type SettlementCardCache,
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
-import { compareInvoiceToDms } from '../lib/invoiceDmsMatch'
+import { canAttachSuggestedDmsInvoice, compareInvoiceToDms } from '../lib/invoiceDmsMatch'
 
 function inr(v: number | null | undefined) {
   if (v == null || Number.isNaN(Number(v))) return '—'
@@ -135,8 +135,13 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
 
   async function useDmsInvoice() {
     const inv = payload?.suggested_invoice
-    if (!inv?.total_invoice_amount) {
-      onToast('No DMS invoice found for this job card', 'error')
+    if (!canAttachSuggestedDmsInvoice(inv)) {
+      onToast(
+        inv?.invoice_number?.trim()
+          ? 'DMS invoice amount is missing for this job card — enter billing manually or fix DMS import'
+          : 'No DMS invoice found for this job card',
+        'error',
+      )
       return
     }
     setBusy(true)
@@ -290,12 +295,12 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
             <TextInput style={styles.input} value={invoiceReason} onChangeText={setInvoiceReason} placeholder="e.g. revised bill, DMS not yet updated" placeholderTextColor="#a7a99f" />
           </>
         )}
-        {payload?.suggested_invoice?.total_invoice_amount != null && (
+        {canAttachSuggestedDmsInvoice(payload?.suggested_invoice) ? (
           <View style={{ marginTop: 8 }}>
             <Text style={styles.fieldLabel}>DMS invoice</Text>
             <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>
-              {payload.suggested_invoice.invoice_number ?? '—'}
-              {payload.suggested_invoice.account ? ` · ${payload.suggested_invoice.account}` : ''}
+              {payload?.suggested_invoice?.invoice_number ?? '—'}
+              {payload?.suggested_invoice?.account ? ` · ${payload.suggested_invoice.account}` : ''}
             </Text>
             {card.insurance_company ? (
               <Text style={{ fontSize: 12, color: '#82858f', marginTop: 4 }}>Policy on card: {card.insurance_company}</Text>
@@ -304,7 +309,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#2a4cd0' }}>Use DMS invoice</Text>
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
         <Text style={[styles.fieldLabel, { marginTop: 10 }]}>DO Status</Text>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           {['pending', 'received', 'not_received'].map((s) => {

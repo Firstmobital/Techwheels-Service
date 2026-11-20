@@ -15,7 +15,7 @@ import {
   upsertBodyshopSettlementHeader,
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
-import { compareInvoiceToDms } from '../lib/invoiceDmsMatch'
+import { canAttachSuggestedDmsInvoice, compareInvoiceToDms } from '../lib/invoiceDmsMatch'
 import {
   CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED,
   customerPaymentModeDisplay,
@@ -212,8 +212,13 @@ export function BodyshopSettlementPanel({
 
   async function applyDmsInvoice() {
     const inv = payload?.suggested_invoice
-    if (!inv?.total_invoice_amount) {
-      toast('No DMS invoice found for this job card', false)
+    if (!canAttachSuggestedDmsInvoice(inv)) {
+      toast(
+        inv?.invoice_number?.trim()
+          ? 'DMS invoice amount is missing for this job card — enter billing manually or fix DMS import'
+          : 'No DMS invoice found for this job card',
+        false,
+      )
       return
     }
     setSavingHeader(true)
@@ -587,7 +592,7 @@ export function BodyshopSettlementPanel({
               {(payload?.suggested_invoice?.account || header?.invoice_account) && (
                 <span style={{ color: 'var(--text-2)' }}>{payload?.suggested_invoice?.account ?? header?.invoice_account}</span>
               )}
-              {payload?.suggested_invoice?.total_invoice_amount != null && (
+              {canAttachSuggestedDmsInvoice(payload?.suggested_invoice) && (
                 <button type="button" className="btn" onClick={() => void applyDmsInvoice()} disabled={savingHeader}>
                   Use DMS invoice
                 </button>
