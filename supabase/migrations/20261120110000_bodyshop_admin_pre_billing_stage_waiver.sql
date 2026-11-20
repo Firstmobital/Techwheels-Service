@@ -87,8 +87,7 @@ BEGIN
 	v_is_active := (COALESCE(v_card.overall_status, 'active') = 'active');
 	v_pre_billing_waived := (
 		v_card.pre_billing_stages_waived_at IS NOT NULL
-		AND lower(btrim(COALESCE(v_card.parts_entry_status, ''))) = 'billed'
-		AND v_card.billed_amount IS NOT NULL
+		AND COALESCE(v_card.billed_amount, 0) > 0
 	);
 	v_effective_current_stage := COALESCE(v_card.current_stage, 1);
 	v_customer_type := lower(btrim(COALESCE(v_card.customer_type, '')));
@@ -466,9 +465,8 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'card_not_active');
   END IF;
 
-  IF lower(btrim(coalesce(v_card.parts_entry_status, ''))) <> 'billed'
-     OR v_card.billed_amount IS NULL THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'billing_stage_15_not_done');
+  IF COALESCE(v_card.billed_amount, 0) <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'billing_amount_missing');
   END IF;
 
   IF v_card.pre_billing_stages_waived_at IS NOT NULL THEN

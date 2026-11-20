@@ -26,6 +26,12 @@ export function isBillingStage15Done(card: Pick<BillingCard, 'parts_entry_status
   return norm(card.parts_entry_status) === 'billed' && card.billed_amount != null
 }
 
+/** Billed amount on card (includes imports where parts_entry_status is still pending). */
+export function hasBillingAmountOnCard(card: Pick<BillingCard, 'billed_amount'>): boolean {
+  const amt = Number(card.billed_amount ?? 0)
+  return Number.isFinite(amt) && amt > 0
+}
+
 export function isBillingStage16Done(card: Pick<BillingCard, 'do_status' | 'do_amount'>): boolean {
   return norm(card.do_status) === 'received' && card.do_amount != null
 }

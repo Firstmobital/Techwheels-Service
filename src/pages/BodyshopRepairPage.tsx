@@ -42,6 +42,7 @@ import {
   deriveBillingDisplayStage,
   isBillingQueueActive,
   isDeliveryReady,
+  hasBillingAmountOnCard,
   isBillingStage15Done,
   isBillingStage16Done,
   isCustomerRemainingPending,
@@ -2624,15 +2625,28 @@ export default function BodyshopRepairPage() {
 
   const PRE_BILLING_WAIVE_ADMIN_EMAIL = 'admin@firstmobital.com'
 
+  const isPreBillingWaiveAdmin = authUserEmail === PRE_BILLING_WAIVE_ADMIN_EMAIL
+
   const canWaivePreBillingStages = useMemo(() => {
-    if (!selected || authUserEmail !== PRE_BILLING_WAIVE_ADMIN_EMAIL) return false
+    if (!selected || !isPreBillingWaiveAdmin) return false
     if (selected.overall_status !== 'active') return false
-    if (!isBillingStage15Done(selected)) return false
+    if (!isBillingStage15Done(selected) && !hasBillingAmountOnCard(selected)) return false
     if (selected.pre_billing_stages_waived_at) return false
     if (!projectionPendingLoaded) return false
     const pending = projectionPendingStagesByCard[selected.id] ?? []
     return pending.some((stageNo) => stageNo >= 1 && stageNo <= 14)
-  }, [selected, authUserEmail, projectionPendingStagesByCard, projectionPendingLoaded])
+  }, [selected, isPreBillingWaiveAdmin, projectionPendingStagesByCard, projectionPendingLoaded])
+
+  const preBillingWaiveHint = useMemo(() => {
+    if (!selected || !isPreBillingWaiveAdmin || selected.pre_billing_stages_waived_at) return null
+    if (!(isBillingStage15Done(selected) || hasBillingAmountOnCard(selected))) {
+      return 'Admin waiver needs a billed amount on this card.'
+    }
+    if (!projectionPendingLoaded) return 'Loading stage queue…'
+    const pending = projectionPendingStagesByCard[selected.id] ?? []
+    if (!pending.some((s) => s >= 1 && s <= 14)) return 'Stages 1–14 are already clear on the worklist.'
+    return null
+  }, [selected, isPreBillingWaiveAdmin, projectionPendingLoaded, projectionPendingStagesByCard])
 
   async function handleWaivePreBillingStages() {
     if (!selected || !canWaivePreBillingStages) return
@@ -6375,6 +6389,9 @@ export default function BodyshopRepairPage() {
               >
                 Stages 1–14 waived
               </span>
+            ) : null}
+            {isPreBillingWaiveAdmin && preBillingWaiveHint ? (
+              <span className="brx-dms-missing-hint" style={{ margin: 0, fontSize: 12 }}>{preBillingWaiveHint}</span>
             ) : null}
             {canWaivePreBillingStages ? (
               <button

@@ -333,6 +333,7 @@ export {
   bothPaymentsReceived,
   isBillingStage15Done,
   isBillingStage16Done,
+  hasBillingAmountOnCard,
   hasAnyBillingData,
   isStage18PaymentDone,
   isStage18PaymentActive,
