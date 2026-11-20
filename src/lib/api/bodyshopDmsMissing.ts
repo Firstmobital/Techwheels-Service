@@ -40,7 +40,7 @@ export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
   placeholder_jc: 'Placeholder JC — enter real JC',
   invoice_missing: 'JC on card — invoice not entered',
   invoice_mismatch: 'JC on card — wrong invoice',
-  insurance_do_zero: 'Insurance claim — DO not captured',
+  insurance_do_zero: 'DMS insurer bill — DO not captured',
   invoice_pending: 'JC on card — invoice pending',
 }
 
@@ -102,7 +102,7 @@ export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   placeholder: 'Placeholder JC',
   invoice_missing: 'Invoice blank',
   invoice_mismatch: 'Wrong invoice',
-  insurance_do_zero: 'DO not captured',
+  insurance_do_zero: 'Insurer DO blank',
 }
 
 export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip): boolean {
