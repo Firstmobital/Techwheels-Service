@@ -8,6 +8,7 @@ export type TrackerGapType =
   | 'placeholder_jc'
   | 'invoice_missing'
   | 'invoice_mismatch'
+  | 'insurance_do_zero'
   /** @deprecated RPC no longer emits; mapped client-side for stale caches */
   | 'invoice_pending'
 
@@ -39,6 +40,7 @@ export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
   placeholder_jc: 'Placeholder JC — enter real JC',
   invoice_missing: 'JC on card — invoice not entered',
   invoice_mismatch: 'JC on card — wrong invoice',
+  insurance_do_zero: 'Insurance claim — DO not captured',
   invoice_pending: 'JC on card — invoice pending',
 }
 
@@ -53,6 +55,7 @@ export function inferTrackerGapTypeFromRowKey(rowKey: string): TrackerGapType | 
   const k = String(rowKey ?? '').trim()
   if (k.startsWith('inv-mismatch:')) return 'invoice_mismatch'
   if (k.startsWith('inv-missing:')) return 'invoice_missing'
+  if (k.startsWith('do-zero:')) return 'insurance_do_zero'
   if (k.startsWith('inv:')) return 'invoice_pending'
   if (k.startsWith('rec:')) return 'reception_no_card'
   if (k.startsWith('ph:')) return 'placeholder_jc'
@@ -67,6 +70,7 @@ export const TRACKER_GAP_TYPES_KNOWN: readonly TrackerGapType[] = [
   'placeholder_jc',
   'invoice_missing',
   'invoice_mismatch',
+  'insurance_do_zero',
   'invoice_pending',
 ] as const
 
@@ -87,6 +91,7 @@ export type TrackerGapChip =
   | 'placeholder'
   | 'invoice_missing'
   | 'invoice_mismatch'
+  | 'insurance_do_zero'
 
 export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   all: 'All',
@@ -97,6 +102,7 @@ export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   placeholder: 'Placeholder JC',
   invoice_missing: 'Invoice blank',
   invoice_mismatch: 'Wrong invoice',
+  insurance_do_zero: 'DO not captured',
 }
 
 export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip): boolean {
@@ -108,6 +114,7 @@ export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip)
   if (chip === 'placeholder') return gap === 'placeholder_jc'
   if (chip === 'invoice_missing') return gap === 'invoice_missing'
   if (chip === 'invoice_mismatch') return gap === 'invoice_mismatch'
+  if (chip === 'insurance_do_zero') return gap === 'insurance_do_zero'
   return true
 }
 

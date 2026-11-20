@@ -5982,6 +5982,12 @@ button.bsf-vcard--pick {
   color: #c2410c;
 }
 
+.brx-settle-pill.is-gap-insurance_do_zero {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
 .brx-gap-chips {
   display: flex;
   flex-wrap: wrap;
