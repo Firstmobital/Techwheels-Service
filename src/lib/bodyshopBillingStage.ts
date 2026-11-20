@@ -113,8 +113,9 @@ export function resolveBodyshopCardDisplayStage(
   const ptr = Math.max(1, Math.min(18, pointerStage))
   const billingLed =
     ptr >= 15
-    || (preBillingStagesClear && (hasBillingAmountOnCard(card) || hasAnyBillingData(card)))
+    || hasAnyBillingData(card)
     || (isPreBillingStagesWaived(card) && hasBillingAmountOnCard(card))
+    || (preBillingStagesClear && (hasBillingAmountOnCard(card) || hasAnyBillingData(card)))
   if (!billingLed) return ptr
   return deriveBillingDisplayStage(card, Math.max(ptr, 15))
 }

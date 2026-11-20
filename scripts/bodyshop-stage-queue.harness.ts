@@ -106,4 +106,15 @@ const waivedBilledDo = {
 }
 assert.equal(deriveBillingDisplayStage(waivedBilledDo, 16), 18)
 
+// DMS import: pointer 1 but billed amount on card → Billing (15), not Vehicle Receiving (1)
+const importAtPointer1 = {
+  parts_entry_status: 'pending',
+  billed_amount: 18196,
+  do_status: 'pending',
+  do_amount: null,
+  do_payment_status: 'pending',
+  customer_payment_status: 'pending',
+}
+assert.equal(resolveBodyshopCardDisplayStage(importAtPointer1, 1, false), 15)
+
 console.log('bodyshop-stage-queue harness: OK')

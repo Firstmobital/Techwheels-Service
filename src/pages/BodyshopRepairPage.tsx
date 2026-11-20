@@ -41,6 +41,7 @@ import { BodyshopStageHistory } from '../components/BodyshopStageHistory'
 import {
   isBillingQueueActive,
   isDeliveryReady,
+  hasAnyBillingData,
   hasBillingAmountOnCard,
   isBillingStage15Done,
   isBillingStage15DoneForQueues,
@@ -1359,7 +1360,18 @@ export default function BodyshopRepairPage() {
     }
     if (lookupSession) return
     void load()
-  }, [dateRange, debouncedSearch, lookupSession, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
+  }, [
+    dateRange,
+    debouncedSearch,
+    lookupSession,
+    userScopeResolved,
+    isAdminLikeUser,
+    bodyshopSaCodesForUser,
+    bodyshopSsaBranchesForUser,
+    bodyshopSurveyBranchesForUser,
+    branchFilter,
+    statusFilter,
+  ])
 
   const reloadTrackerGaps = async () => {
     if (!userScopeResolved || lookupSession) return
@@ -2225,6 +2237,8 @@ export default function BodyshopRepairPage() {
         listRepairCards({
           from: dateRange.from,
           to: dateRange.to,
+          branch: branchFilter !== 'all' ? branchFilter : undefined,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
           saCodes: scopedSaCodes ?? undefined,
           saNames: scopedSaNames ?? undefined,
           branches: scopedBranches.length > 0 ? scopedBranches : undefined,
@@ -2372,6 +2386,8 @@ export default function BodyshopRepairPage() {
         ? await listRepairCards({
             from: dateRange.from,
             to: dateRange.to,
+            branch: branchFilter !== 'all' ? branchFilter : undefined,
+            status: statusFilter !== 'all' ? statusFilter : undefined,
             saCodes: scopedSaCodes ?? undefined,
             saNames: scopedSaNames ?? undefined,
             branches: scopedBranches.length > 0 ? scopedBranches : undefined,
@@ -4699,11 +4715,20 @@ export default function BodyshopRepairPage() {
   }
 
   function cardDoneStageCount(card: RepairCard): number {
+    const effective = getEffectiveStageForCard(card)
     if (projectionPendingLoaded) {
       const pending = projectionPendingStagesByCard[card.id] ?? []
-      return Math.max(0, Math.min(18, 18 - pending.length))
+      const postBillingOnly = isPreBillingStagesWaived(card)
+      const pendingCount = postBillingOnly
+        ? pending.filter((s) => s > 14).length
+        : pending.length
+      const fromProjection = Math.max(0, Math.min(18, 18 - pendingCount))
+      if (hasAnyBillingData(card) || isPreBillingStagesWaived(card)) {
+        return Math.max(fromProjection, Math.min(17, effective - 1))
+      }
+      return fromProjection
     }
-    return Math.max(0, Math.min(18, getEffectiveStageForCard(card) - 1))
+    return Math.max(0, Math.min(18, effective - 1))
   }
 
   function getFloorStageCompletedForCard(card: RepairCard): boolean {
@@ -5219,17 +5244,26 @@ export default function BodyshopRepairPage() {
     return cards
   }, [cards])
 
+  const scopeSearchQuery = lookupSession ? debouncedSearch : search
+
   const scopeFilteredCards = useMemo(() => roleScopedCards.filter((c) => {
-    if (lookupSession && (dateRange.from || dateRange.to)) {
+    // Period always applies (browse + lookup) so grid and Excel match toolbar Period.
+    if (dateRange.from || dateRange.to) {
       if (!cardInReceivedDateRange(c, dateRange.from, dateRange.to)) return false
     }
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
     if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
-    if (search.trim()) {
-      return cardMatchesRepairLookup(c, search)
-    }
+    const q = scopeSearchQuery.trim()
+    if (q) return cardMatchesRepairLookup(c, q)
     return true
-  }), [roleScopedCards, branchFilter, statusFilter, search, lookupSession, dateRange.from, dateRange.to])
+  }), [
+    roleScopedCards,
+    branchFilter,
+    statusFilter,
+    scopeSearchQuery,
+    dateRange.from,
+    dateRange.to,
+  ])
 
   const stageScopedCards = useMemo(() => {
     if (stageFilter === 'all') return scopeFilteredCards
@@ -5298,6 +5332,7 @@ export default function BodyshopRepairPage() {
     })
   }, [baseFiltered, pipelineFilter, projectionPendingStagesByCard, projectionPendingLoaded, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
+  /** Grid + Export Excel share this list (period, branch, status, search, advisor, stage queue, pipeline). */
   const filtered = useMemo(() => pipelineFiltered, [pipelineFiltered])
 
   const stageCounts = useMemo(() => {
@@ -5537,9 +5572,29 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  function browseExportFilterSummary(): { label: string; value: string }[] {
+    const period = dateRange.from || dateRange.to
+      ? [dateRange.from, dateRange.to].filter(Boolean).join(' → ')
+      : 'All dates'
+  const advisorLabel = advisorFilter === 'all'
+    ? 'All advisors'
+    : (advisorOptions.find((a) => a.value === advisorFilter)?.label ?? advisorFilter)
+    return [
+      { label: 'Period (received)', value: period },
+      { label: 'Branch', value: branchFilter === 'all' ? 'All branches' : branchFilter },
+      { label: 'Status', value: statusFilter === 'all' ? 'All status' : statusFilter },
+      { label: 'Advisor', value: advisorLabel },
+      { label: 'Stage queue', value: stageFilter === 'all' ? 'All stages' : `Stage ${stageFilter}` },
+      { label: 'Pipeline pill', value: pipelineFilter === 'all' ? 'All' : pipelineFilter },
+      { label: 'Search', value: scopeSearchQuery.trim() || '—' },
+      { label: 'Lookup mode', value: lookupSession ? 'Yes (org-wide search)' : 'No' },
+    ]
+  }
+
   async function handleExportBrowseExcel() {
     const gapView = pipelineFilter === 'Gaps & health'
-    const exportCount = gapView ? visibleTrackerGaps.length : filtered.length
+    const exportCards = gapView ? [] : filtered
+    const exportCount = gapView ? visibleTrackerGaps.length : exportCards.length
     if (exportCount === 0) {
       toast_('No rows to export for the current filters', false)
       return
@@ -5556,11 +5611,11 @@ export default function BodyshopRepairPage() {
         !gapView && pipelineFilter !== 'all' ? pipelineFilter.replace(/\s+/g, '_') : null,
         !gapView && stageFilter !== 'all' ? `stage_${stageFilter}` : null,
         branchFilter !== 'all' ? branchFilter : null,
-        statusFilter !== 'active' ? statusFilter : null,
+        statusFilter !== 'all' ? statusFilter : 'active',
         advisorFilter !== 'all'
           ? (advisorOptions.find((a) => a.value === advisorFilter)?.label ?? advisorFilter)
           : null,
-        debouncedSearch.length >= REPAIR_LOOKUP_MIN_CHARS ? `search_${debouncedSearch.slice(0, 24)}` : null,
+        scopeSearchQuery.trim() ? `search_${scopeSearchQuery.trim().slice(0, 24)}` : null,
       ].filter(Boolean).map((s) => String(s).replace(/[^\w.-]+/g, '_'))
       const suffix = filterParts.length ? `_${filterParts.join('_')}` : ''
 
@@ -5617,12 +5672,16 @@ export default function BodyshopRepairPage() {
           'Overall status',
           'Effective stage',
           'Stage label',
+          'Stages complete',
+          'Pre-billing 1–14 waived',
+          'Billed amount (INR)',
           'Current stage (DB)',
           'Bodyshop floor',
           'Received at',
         ]
-        rows = filtered.map((card) => {
+        rows = exportCards.map((card) => {
           const stage = getEffectiveStageForCard(card)
+          const doneStages = cardDoneStageCount(card)
           return [
             card.job_card_no ?? '',
             card.reg_number ?? '',
@@ -5633,6 +5692,9 @@ export default function BodyshopRepairPage() {
             card.overall_status ?? '',
             stage,
             STAGE_LABELS[stage] ?? '',
+            `${doneStages}/18`,
+            isPreBillingStagesWaived(card) ? 'Y' : '',
+            card.billed_amount != null ? Number(card.billed_amount) : '',
             Number(card.current_stage ?? ''),
             card.bodyshop_floor ?? '',
             card.received_at ? fmt(card.received_at) : '',
@@ -5644,8 +5706,26 @@ export default function BodyshopRepairPage() {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
       ws['!cols'] = headers.map((h) => ({ wch: Math.min(Math.max(h.length + 2, 12), 36) }))
       XLSX.utils.book_append_sheet(wb, ws, gapView ? 'Gaps health' : 'Repair cards')
+
+      if (!gapView) {
+        const summary = browseExportFilterSummary()
+        summary.push({ label: 'Rows exported', value: String(rows.length) })
+        summary.push({ label: 'Cards loaded in UI', value: String(cards.length) })
+        const filterSheet = XLSX.utils.aoa_to_sheet([
+          ['Filter', 'Value'],
+          ...summary.map((row) => [row.label, row.value]),
+        ])
+        filterSheet['!cols'] = [{ wch: 22 }, { wch: 48 }]
+        XLSX.utils.book_append_sheet(wb, filterSheet, 'Export filters')
+      }
+
       XLSX.writeFile(wb, `Bodyshop_${gapView ? 'Gaps_health' : 'Tracker'}_${dateStr}${suffix}.xlsx`)
-      toast_(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'}`, true)
+      toast_(
+        gapView
+          ? `Exported ${rows.length} gap row${rows.length === 1 ? '' : 's'}`
+          : `Exported ${rows.length} row${rows.length === 1 ? '' : 's'} (same as on-screen grid)`,
+        true,
+      )
     } catch (e) {
       toast_(e instanceof Error ? e.message : 'Export failed', false)
     } finally {
@@ -5737,8 +5817,10 @@ export default function BodyshopRepairPage() {
           <h1>Repair Tracker</h1>
           <p>
             {lookupSession
-              ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'} across all records for “${debouncedSearch}”.`
-              : `${cards.length} repair cards · accident repairs from receiving to delivery across 18 stages.`}
+              ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'} for “${debouncedSearch}” (grid + Export use these filters).`
+              : filtered.length === cards.length
+                ? `${filtered.length} repair cards · grid and Export Excel use the same filters.`
+                : `${filtered.length} shown of ${cards.length} loaded · Export Excel exports only the ${filtered.length} shown.`}
           </p>
         </div>
 

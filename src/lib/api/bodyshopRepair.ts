@@ -278,34 +278,42 @@ export async function listRepairCards(opts: {
     return []
   }
 
-  let q = supabase
-    .from('bodyshop_repair_cards')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const LIST_PAGE = 1000
+  const all: RepairCard[] = []
 
-  if (opts.status && opts.status !== 'all') q = q.eq('overall_status', opts.status)
-  if (opts.branch && opts.branch !== 'all')  q = q.eq('branch', opts.branch)
-  if (opts.from) q = q.gte('received_at', opts.from)
-  if (opts.to)   q = q.lte('received_at', opts.to)
+  for (let from = 0; ; from += LIST_PAGE) {
+    let q = supabase
+      .from('bodyshop_repair_cards')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
 
-  // For SA: filter by sa_employee_code
-  if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
-    const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-    const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-    q = q.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv})`)
-  } else if (scopedSaCodes && scopedSaCodes.length > 0) {
-    q = q.in('sa_employee_code', scopedSaCodes)
-  } else if (scopedSaNames && scopedSaNames.length > 0) {
-    q = q.in('sa_name', scopedSaNames)
+    if (opts.status && opts.status !== 'all') q = q.eq('overall_status', opts.status)
+    if (opts.branch && opts.branch !== 'all') q = q.eq('branch', opts.branch)
+    if (opts.from) q = q.gte('received_at', opts.from)
+    if (opts.to) q = q.lte('received_at', opts.to)
+
+    if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
+      const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+      const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+      q = q.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv})`)
+    } else if (scopedSaCodes && scopedSaCodes.length > 0) {
+      q = q.in('sa_employee_code', scopedSaCodes)
+    } else if (scopedSaNames && scopedSaNames.length > 0) {
+      q = q.in('sa_name', scopedSaNames)
+    }
+    if (scopedBranches && scopedBranches.length > 0) {
+      q = q.in('branch', scopedBranches)
+    }
+
+    const { data, error } = await q.range(from, from + LIST_PAGE - 1)
+    if (error) throw error
+    const batch = (data ?? []) as RepairCard[]
+    all.push(...batch)
+    if (batch.length < LIST_PAGE) break
   }
-  // For SSA: filter by branch
-  if (scopedBranches && scopedBranches.length > 0) {
-    q = q.in('branch', scopedBranches)
-  }
 
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []) as RepairCard[]
+  return all
 }
 
 export async function searchRepairCards(opts: {
@@ -337,29 +345,41 @@ export async function searchRepairCards(opts: {
     return []
   }
 
-  let q = supabase
-    .from('bodyshop_repair_cards')
-    .select('*')
-    .or(orFilter)
-    .order('created_at', { ascending: false })
-    .limit(opts.limit ?? REPAIR_LOOKUP_LIMIT)
+  const pageSize = Math.max(1, Math.min(5000, opts.limit ?? REPAIR_LOOKUP_LIMIT))
+  const all: RepairCard[] = []
 
-  if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
-    const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-    const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-    q = q.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv})`)
-  } else if (scopedSaCodes && scopedSaCodes.length > 0) {
-    q = q.in('sa_employee_code', scopedSaCodes)
-  } else if (scopedSaNames && scopedSaNames.length > 0) {
-    q = q.in('sa_name', scopedSaNames)
-  }
-  if (scopedBranches && scopedBranches.length > 0) {
-    q = q.in('branch', scopedBranches)
+  for (let from = 0; ; from += pageSize) {
+    let q = supabase
+      .from('bodyshop_repair_cards')
+      .select('*')
+      .or(orFilter)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+
+    if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
+      const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+      const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+      q = q.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv})`)
+    } else if (scopedSaCodes && scopedSaCodes.length > 0) {
+      q = q.in('sa_employee_code', scopedSaCodes)
+    } else if (scopedSaNames && scopedSaNames.length > 0) {
+      q = q.in('sa_name', scopedSaNames)
+    }
+    if (scopedBranches && scopedBranches.length > 0) {
+      q = q.in('branch', scopedBranches)
+    }
+
+    const { data, error } = await q.range(from, from + pageSize - 1)
+    if (error) throw error
+    const batch = (data ?? []) as RepairCard[]
+    all.push(...batch)
+    if (batch.length < pageSize) break
+    if (opts.limit != null && all.length >= opts.limit) {
+      return all.slice(0, opts.limit)
+    }
   }
 
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []) as RepairCard[]
+  return all
 }
 
 export async function getRepairCard(id: number): Promise<RepairCard> {
