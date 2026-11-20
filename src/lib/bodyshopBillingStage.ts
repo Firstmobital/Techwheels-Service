@@ -75,11 +75,27 @@ export function isDeliveryReady(card: Pick<BillingCard, 'do_payment_status' | 'c
  * QC + Re-Inspection (clamped stage is exactly 15) and not yet billed, i.e. it is waiting
  * for billing work. `clampedStage` is the pointer after the QC/RI clamp.
  */
+type BillingCardWithWaiver = BillingCard & {
+  pre_billing_stages_waived_at?: string | null
+}
+
+export function isPreBillingStagesWaived(card: Pick<BillingCardWithWaiver, 'pre_billing_stages_waived_at'>): boolean {
+  return Boolean(String(card.pre_billing_stages_waived_at ?? '').trim())
+}
+
+/** Stage 15 complete for queues when import has amount but parts_entry_status stuck on pending. */
+export function isBillingStage15DoneForQueues(
+  card: Pick<BillingCardWithWaiver, 'parts_entry_status' | 'billed_amount' | 'pre_billing_stages_waived_at'>,
+): boolean {
+  if (isBillingStage15Done(card)) return true
+  return isPreBillingStagesWaived(card) && hasBillingAmountOnCard(card)
+}
+
 export function isBillingQueueActive(
-  card: Pick<BillingCard, 'parts_entry_status' | 'billed_amount' | 'do_status' | 'do_amount'>,
+  card: Pick<BillingCardWithWaiver, 'parts_entry_status' | 'billed_amount' | 'do_status' | 'do_amount' | 'pre_billing_stages_waived_at'>,
   clampedStage: number,
 ): boolean {
-  if (isBillingStage15Done(card)) return false
+  if (isBillingStage15DoneForQueues(card)) return false
   return hasAnyBillingData(card) || clampedStage === 15
 }
 
@@ -89,6 +105,20 @@ export function isBillingQueueActive(
  * Pointer 17 is an explicit Delivery state and is kept. Cards with no billing or
  * payment data at all keep their pointer.
  */
+export function resolveBodyshopCardDisplayStage(
+  card: BillingCardWithWaiver,
+  pointerStage: number,
+  preBillingStagesClear: boolean,
+): number {
+  const ptr = Math.max(1, Math.min(18, pointerStage))
+  const billingLed =
+    ptr >= 15
+    || (preBillingStagesClear && (hasBillingAmountOnCard(card) || hasAnyBillingData(card)))
+    || (isPreBillingStagesWaived(card) && hasBillingAmountOnCard(card))
+  if (!billingLed) return ptr
+  return deriveBillingDisplayStage(card, Math.max(ptr, 15))
+}
+
 export function deriveBillingDisplayStage(card: BillingCard, stage: number): number {
   if (stage < 15) return stage
   if (stage === 17) return 17
@@ -98,5 +128,10 @@ export function deriveBillingDisplayStage(card: BillingCard, stage: number): num
   if (isDeliveryReady(card)) return 17
   if (isStage18PaymentActive(card)) return 18
   if (isBillingStage15Done(card)) return 16
+  if (isPreBillingStagesWaived(card as BillingCardWithWaiver) && hasBillingAmountOnCard(card)) {
+    // DMS/historical import: billed amount present but formal billing flag may still be pending — show Billing (15).
+    if (norm(card.parts_entry_status) !== 'billed' && !isBillingStage16Done(card)) return 15
+    return 16
+  }
   return 15
 }

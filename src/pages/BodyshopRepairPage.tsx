@@ -39,12 +39,14 @@ import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/setting
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import { BodyshopStageHistory } from '../components/BodyshopStageHistory'
 import {
-  deriveBillingDisplayStage,
   isBillingQueueActive,
   isDeliveryReady,
   hasBillingAmountOnCard,
   isBillingStage15Done,
+  isBillingStage15DoneForQueues,
   isBillingStage16Done,
+  isPreBillingStagesWaived,
+  resolveBodyshopCardDisplayStage,
   isCustomerRemainingPending,
   isInsuranceDuePending,
   isStage18PaymentActive,
@@ -266,8 +268,13 @@ function isRiCompleted(card: Pick<RepairCard, 'reinspection_status'>): boolean {
  * - QC Pass and RI not Completed → always show Re-Inspection (14)
  * - RI Completed → allow Billing+ as stored
  */
-function clampStageUntilRiComplete(card: Pick<RepairCard, 'qc_status' | 'reinspection_status'>, stage: number): number {
+function clampStageUntilRiComplete(
+  card: Pick<RepairCard, 'qc_status' | 'reinspection_status' | 'pre_billing_stages_waived_at'>,
+  stage: number,
+): number {
   if (!Number.isFinite(stage) || stage < 1) return 1
+  // Admin pre-billing waiver: pointer and billing data are authoritative; do not pull back to QC/RI.
+  if (isPreBillingStagesWaived(card)) return stage
   if (isQcPassed(card) && !isRiCompleted(card)) return 14
   if (!isQcPassed(card) && stage > 13) return 13
   return stage
@@ -4672,8 +4679,10 @@ export default function BodyshopRepairPage() {
 
   function getEffectiveStageForCard(card: RepairCard): number {
     let stage = Number(card.current_stage ?? 1)
+    let preBillingClear = isPreBillingStagesWaived(card)
     if (projectionPendingLoaded) {
       const pendingStages = projectionPendingStagesByCard[card.id] ?? []
+      preBillingClear = preBillingClear || !pendingStages.some((s) => s >= 1 && s <= 14)
       if (pendingStages.length > 0) {
         // Projection can contain earlier pending worklist stages; keep current-stage
         // display anchored to persisted pointer stage to avoid visual regressions.
@@ -4686,8 +4695,15 @@ export default function BodyshopRepairPage() {
     }
 
     const clamped = clampStageUntilRiComplete(card, stage)
-    // Stage 15+ is billing/payment driven: label must agree with the queue tiles.
-    return clamped >= 15 ? deriveBillingDisplayStage(card, clamped) : clamped
+    return resolveBodyshopCardDisplayStage(card, clamped, preBillingClear)
+  }
+
+  function cardDoneStageCount(card: RepairCard): number {
+    if (projectionPendingLoaded) {
+      const pending = projectionPendingStagesByCard[card.id] ?? []
+      return Math.max(0, Math.min(18, 18 - pending.length))
+    }
+    return Math.max(0, Math.min(18, getEffectiveStageForCard(card) - 1))
   }
 
   function getFloorStageCompletedForCard(card: RepairCard): boolean {
@@ -4803,15 +4819,17 @@ export default function BodyshopRepairPage() {
     const riDone = isRiCompleted(card)
 
     if (stage === 13) {
+      if (isPreBillingStagesWaived(card)) return false
       return floorCompleted && !qcPassed
     }
     if (stage === 14) {
+      if (isPreBillingStagesWaived(card)) return false
       return floorCompleted && qcPassed && !riDone
     }
 
     // Billing 15/16 and Payment 18 are data-driven. Payment received does not
     // auto-advance Delivery (stage 17).
-    const stage15Done = isBillingStage15Done(card)
+    const stage15Done = isBillingStage15DoneForQueues(card)
     const stage16Done = isBillingStage16Done(card)
 
     // Billing: billing data saved, or the car is past QC + RI and still waiting for billing.
@@ -6109,7 +6127,7 @@ export default function BodyshopRepairPage() {
                 : card.overall_status === 'cancelled'
                   ? 'is-cancelled'
                   : 'is-active'
-              const doneStages = Math.max(0, Math.min(18, effectiveStage - 1))
+              const doneStages = cardDoneStageCount(card)
               return (
                 <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setApprovalActiveCard(null); setEditPatch({}) }}
                   className="brx-card" style={{ '--sc': grp.color } as React.CSSProperties}>

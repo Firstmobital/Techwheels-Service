@@ -358,8 +358,36 @@ BEGIN
 					v_reason_codes := array_append(v_reason_codes, 'additional_approval_decision_missing');
 				END IF;
 			ELSIF v_stage BETWEEN 13 AND 18 THEN
-				v_done := (v_effective_current_stage > v_stage);
-				v_pending := (v_effective_current_stage = v_stage);
+				IF v_pre_billing_waived AND v_stage >= 15 THEN
+					IF v_stage = 15 THEN
+						v_done := COALESCE(v_card.billed_amount, 0) > 0;
+						v_pending := NOT v_done;
+					ELSIF v_stage = 16 THEN
+						v_done := lower(btrim(COALESCE(v_card.do_status, ''))) = 'received'
+							AND v_card.do_amount IS NOT NULL;
+						v_pending := COALESCE(v_card.billed_amount, 0) > 0 AND NOT v_done;
+					ELSIF v_stage = 17 THEN
+						v_done := lower(btrim(COALESCE(v_card.delivery_status, ''))) = 'done';
+						v_pending := lower(btrim(COALESCE(v_card.do_payment_status, ''))) = 'received'
+							AND lower(btrim(COALESCE(v_card.customer_payment_status, ''))) = 'received'
+							AND NOT v_done;
+					ELSIF v_stage = 18 THEN
+						v_done := lower(btrim(COALESCE(v_card.do_payment_status, ''))) = 'received'
+							AND lower(btrim(COALESCE(v_card.customer_payment_status, ''))) = 'received';
+						v_pending := NOT v_done
+							AND (
+								lower(btrim(COALESCE(v_card.do_status, ''))) = 'received'
+								OR lower(btrim(COALESCE(v_card.do_payment_status, ''))) IN ('partial', 'received')
+								OR lower(btrim(COALESCE(v_card.customer_payment_status, ''))) IN ('partial', 'received')
+							);
+					ELSE
+						v_done := true;
+						v_pending := false;
+					END IF;
+				ELSE
+					v_done := (v_effective_current_stage > v_stage);
+					v_pending := (v_effective_current_stage = v_stage);
+				END IF;
 			ELSE
 				v_done := (v_stage < v_effective_current_stage);
 				v_pending := (v_stage = v_effective_current_stage);

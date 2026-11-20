@@ -11,7 +11,9 @@ import {
   isBillingStage16Done,
   isBillingQueueActive,
   isDeliveryReady,
+  isPreBillingStagesWaived,
   isStage18PaymentActive,
+  resolveBodyshopCardDisplayStage,
 } from '../src/lib/bodyshopBillingStage.ts'
 import { compareInvoiceToDms } from '../src/lib/invoiceDmsMatch.ts'
 
@@ -84,5 +86,24 @@ assert.equal(compareInvoiceToDms(0, 24146).status, 'differs') // card 486
 assert.equal(compareInvoiceToDms(122055, 146844.48).diff, -24789.48)
 assert.equal(compareInvoiceToDms(5000, null).status, 'no_dms')
 assert.equal(compareInvoiceToDms(null, 5000).status, 'no_amount')
+
+// Pre-billing waiver: pointer 16 + QC not done → display Billing (15), not QC (13)
+const waivedImport = {
+  ...card(true, false, 'pending', 'pending'),
+  parts_entry_status: 'pending',
+  billed_amount: 1000,
+  pre_billing_stages_waived_at: '2026-11-20T06:00:00.000Z',
+}
+assert.equal(isPreBillingStagesWaived(waivedImport), true)
+assert.equal(resolveBodyshopCardDisplayStage(waivedImport, 13, true), 15)
+assert.equal(resolveBodyshopCardDisplayStage(waivedImport, 16, true), 15)
+assert.equal(deriveBillingDisplayStage(waivedImport, 16), 15)
+
+// After formal billed + DO received, waiver follows normal 16 / 18 labels
+const waivedBilledDo = {
+  ...card(true, true, 'partial', 'pending'),
+  pre_billing_stages_waived_at: '2026-11-20T06:00:00.000Z',
+}
+assert.equal(deriveBillingDisplayStage(waivedBilledDo, 16), 18)
 
 console.log('bodyshop-stage-queue harness: OK')
