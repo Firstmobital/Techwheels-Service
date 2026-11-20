@@ -9,6 +9,7 @@ export type TrackerGapType =
   | 'invoice_missing'
   | 'invoice_mismatch'
   | 'insurance_do_zero'
+  | 'insurance_do_zero_unmapped'
   /** @deprecated RPC no longer emits; mapped client-side for stale caches */
   | 'invoice_pending'
 
@@ -40,7 +41,8 @@ export const TRACKER_GAP_LABELS: Record<TrackerGapType, string> = {
   placeholder_jc: 'Placeholder JC — enter real JC',
   invoice_missing: 'JC on card — invoice not entered',
   invoice_mismatch: 'JC on card — wrong invoice',
-  insurance_do_zero: 'DMS insurer bill — DO not captured',
+  insurance_do_zero: 'Mapped insurer DMS — DO not captured',
+  insurance_do_zero_unmapped: 'Unmapped insurer DMS — DO not captured',
   invoice_pending: 'JC on card — invoice pending',
 }
 
@@ -55,6 +57,7 @@ export function inferTrackerGapTypeFromRowKey(rowKey: string): TrackerGapType | 
   const k = String(rowKey ?? '').trim()
   if (k.startsWith('inv-mismatch:')) return 'invoice_mismatch'
   if (k.startsWith('inv-missing:')) return 'invoice_missing'
+  if (k.startsWith('do-zero-unmapped:')) return 'insurance_do_zero_unmapped'
   if (k.startsWith('do-zero:')) return 'insurance_do_zero'
   if (k.startsWith('inv:')) return 'invoice_pending'
   if (k.startsWith('rec:')) return 'reception_no_card'
@@ -71,6 +74,7 @@ export const TRACKER_GAP_TYPES_KNOWN: readonly TrackerGapType[] = [
   'invoice_missing',
   'invoice_mismatch',
   'insurance_do_zero',
+  'insurance_do_zero_unmapped',
   'invoice_pending',
 ] as const
 
@@ -92,6 +96,7 @@ export type TrackerGapChip =
   | 'invoice_missing'
   | 'invoice_mismatch'
   | 'insurance_do_zero'
+  | 'insurance_do_zero_unmapped'
 
 export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   all: 'All',
@@ -102,7 +107,8 @@ export const TRACKER_GAP_CHIP_LABELS: Record<TrackerGapChip, string> = {
   placeholder: 'Placeholder JC',
   invoice_missing: 'Invoice blank',
   invoice_mismatch: 'Wrong invoice',
-  insurance_do_zero: 'Insurer DO blank',
+  insurance_do_zero: 'Mapped insurer DO',
+  insurance_do_zero_unmapped: 'Unmapped insurer DO',
 }
 
 export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip): boolean {
@@ -115,6 +121,7 @@ export function trackerGapMatchesChip(gap: TrackerGapType, chip: TrackerGapChip)
   if (chip === 'invoice_missing') return gap === 'invoice_missing'
   if (chip === 'invoice_mismatch') return gap === 'invoice_mismatch'
   if (chip === 'insurance_do_zero') return gap === 'insurance_do_zero'
+  if (chip === 'insurance_do_zero_unmapped') return gap === 'insurance_do_zero_unmapped'
   return true
 }
 
@@ -130,6 +137,9 @@ function normalizeGapType(raw: string, rowKey?: string): TrackerGapType {
     return v as TrackerGapType
   }
   // DB may return new invoice_* types before a frontend deploy — never collapse these to jc_missing.
+  if (v.startsWith('insurance_do_zero')) {
+    return v.includes('unmapped') ? 'insurance_do_zero_unmapped' : 'insurance_do_zero'
+  }
   if (v.startsWith('invoice_')) {
     return v.includes('mismatch') ? 'invoice_mismatch' : 'invoice_missing'
   }

@@ -5400,6 +5400,7 @@ export default function BodyshopRepairPage() {
     invoice_missing: countTrackerGapsByChip(trackerGapRows, 'invoice_missing', true),
     invoice_mismatch: countTrackerGapsByChip(trackerGapRows, 'invoice_mismatch', true),
     insurance_do_zero: countTrackerGapsByChip(trackerGapRows, 'insurance_do_zero', true),
+    insurance_do_zero_unmapped: countTrackerGapsByChip(trackerGapRows, 'insurance_do_zero_unmapped', true),
   }), [trackerGapRows, showInvoicePendingGaps])
 
   const trackerGapChips = useMemo(
@@ -5413,6 +5414,7 @@ export default function BodyshopRepairPage() {
       'invoice_missing',
       'invoice_mismatch',
       'insurance_do_zero',
+      'insurance_do_zero_unmapped',
     ],
     [],
   )
