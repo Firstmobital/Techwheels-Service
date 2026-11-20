@@ -23,6 +23,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange } from '../component
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
   listRepairCards, searchRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage, cancelRepairCard,
+  adminWaivePreBillingStages,
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
   cardMatchesRepairLookup, cardInReceivedDateRange,
   REPAIR_LOOKUP_MIN_CHARS, REPAIR_LOOKUP_DEBOUNCE_MS,
@@ -1235,6 +1236,8 @@ export default function BodyshopRepairPage() {
   const [savingApprovedParts, setSavingApprovedParts] = useState(false)
   const [userScopeResolved, setUserScopeResolved] = useState(false)
   const [isAdminLikeUser, setIsAdminLikeUser] = useState(false)
+  const [authUserEmail, setAuthUserEmail] = useState('')
+  const [preBillingWaiveSaving, setPreBillingWaiveSaving] = useState(false)
   const [hasBodyshopSaAccess, setHasBodyshopSaAccess] = useState(false)
   const [hasBodyshopSsaAccess, setHasBodyshopSsaAccess] = useState(false)
   const [hasBodyshopSurveyAccess, setHasBodyshopSurveyAccess] = useState(false)
@@ -1470,8 +1473,10 @@ export default function BodyshopRepairPage() {
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         const userId = sessionData.session?.user?.id ?? null
+        const sessionEmail = String(sessionData.session?.user?.email ?? '').trim().toLowerCase()
 
         if (!userId) {
+          setAuthUserEmail('')
           if (cancelled) return
           setIsAdminLikeUser(false)
           setHasBodyshopSaAccess(false)
@@ -1500,6 +1505,8 @@ export default function BodyshopRepairPage() {
           supabase.rpc('has_module_modify', { p_module: 'bodyshop_repair' }),
           supabase.rpc('has_module_modify', { p_module: 'bodyshop_survey_verify' }),
         ])
+
+        if (!cancelled) setAuthUserEmail(sessionEmail)
 
         const profile = profileRes.data
         const scopeRows = (scopeRes.data ?? []) as Array<{
@@ -2613,6 +2620,46 @@ export default function BodyshopRepairPage() {
       toast_('Saved ✅')
     } catch (e) { toast_(e.message, false) }
     setSaving(false)
+  }
+
+  const PRE_BILLING_WAIVE_ADMIN_EMAIL = 'admin@firstmobital.com'
+
+  const canWaivePreBillingStages = useMemo(() => {
+    if (!selected || authUserEmail !== PRE_BILLING_WAIVE_ADMIN_EMAIL) return false
+    if (selected.overall_status !== 'active') return false
+    if (!isBillingStage15Done(selected)) return false
+    if (selected.pre_billing_stages_waived_at) return false
+    if (!projectionPendingLoaded) return false
+    const pending = projectionPendingStagesByCard[selected.id] ?? []
+    return pending.some((stageNo) => stageNo >= 1 && stageNo <= 14)
+  }, [selected, authUserEmail, projectionPendingStagesByCard, projectionPendingLoaded])
+
+  async function handleWaivePreBillingStages() {
+    if (!selected || !canWaivePreBillingStages) return
+    const ok = window.confirm(
+      `Close stages 1–14 on the worklist for ${selected.job_card_no}?\n\n`
+      + 'Billing and documents are unchanged. This is for cards billed before intake/survey steps were completed (e.g. DMS import).\n\n'
+      + 'Proceed?',
+    )
+    if (!ok) return
+    setPreBillingWaiveSaving(true)
+    try {
+      const result = await adminWaivePreBillingStages(selected.id)
+      const fresh = await getRepairCard(selected.id)
+      setSelected(fresh)
+      setCards((prev) => prev.map((c) => (c.id === fresh.id ? fresh : c)))
+      setProjectionPendingLoaded(false)
+      setProjectionPendingStagesByCard((prev) => {
+        const next = { ...prev }
+        delete next[fresh.id]
+        return next
+      })
+      toast_(result.already_waived ? 'Pre-billing waiver already applied — projection refreshed' : 'Stages 1–14 closed on worklist ✅')
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Waiver failed', false)
+    } finally {
+      setPreBillingWaiveSaving(false)
+    }
   }
 
   async function handleCancelRepair() {
@@ -6321,6 +6368,25 @@ export default function BodyshopRepairPage() {
             <span className={`brx-dstatus ${selected.overall_status === 'delivered' ? 'is-delivered' : selected.overall_status === 'cancelled' ? 'is-cancelled' : 'is-active'}`}>
               {selected.overall_status}
             </span>
+            {selected.pre_billing_stages_waived_at ? (
+              <span
+                className="brx-settle-pill"
+                title={`Pre-billing stages waived by ${selected.pre_billing_stages_waived_by ?? 'admin'} · ${fmt(selected.pre_billing_stages_waived_at)}`}
+              >
+                Stages 1–14 waived
+              </span>
+            ) : null}
+            {canWaivePreBillingStages ? (
+              <button
+                type="button"
+                className="btn btn--soft"
+                onClick={() => void handleWaivePreBillingStages()}
+                disabled={preBillingWaiveSaving || saving}
+                title="Queue display only: mark stages 1–14 complete when billing is already done"
+              >
+                {preBillingWaiveSaving ? 'Waiving…' : 'Close stages 1–14 (admin)'}
+              </button>
+            ) : null}
             {selected.overall_status === 'active' && (
               <button type="button" className="btn" onClick={() => void handleCancelRepair()} disabled={saving}>
                 Cancel repair

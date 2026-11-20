@@ -158,6 +158,28 @@ export interface RepairCard {
   created_by: string | null
   created_at: string
   updated_at: string
+  pre_billing_stages_waived_at?: string | null
+  pre_billing_stages_waived_by?: string | null
+}
+
+export type AdminWaivePreBillingResult = {
+  ok: boolean
+  error?: string
+  already_waived?: boolean
+  repair_card_id?: number
+  waived_by?: string
+  reconcile?: Record<string, unknown>
+}
+
+export async function adminWaivePreBillingStages(repairCardId: number): Promise<AdminWaivePreBillingResult> {
+  const { data, error } = await supabase.rpc('bodyshop_admin_waive_pre_billing_stages', {
+    p_repair_card_id: repairCardId,
+  })
+  if (error) throw error
+  const row = (Array.isArray(data) ? data[0] : data) as AdminWaivePreBillingResult | null
+  if (!row) throw new Error('No response from waive pre-billing stages')
+  if (!row.ok && row.error) throw new Error(String(row.error))
+  return row
 }
 
 function escapePostgrestIlike(value: string): string {

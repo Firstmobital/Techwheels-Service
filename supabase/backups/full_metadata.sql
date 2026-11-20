@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict E2gja4hNTXBffgCpxKY00FZGqo6ZBP3MlNtrLybPMBSIZw9zsdRsbgLVKklz0KE
+\restrict gBQRypHdTg7JRprCHEK3c48XBFdZ7Ic8jjuQeUUCGbRvRelW5BLTCSNWNCecyXo
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-11-18 15:47:57 IST
+-- Started on 2026-11-20 10:56:03 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -3933,34 +3933,56 @@ BEGIN
   )
   RETURNING id INTO v_reception_id;
 
-  INSERT INTO public.bodyshop_repair_cards (
-    reception_entry_id,
-    job_card_no,
-    reg_number,
-    customer_name,
-    customer_phone,
-    branch,
-    sa_employee_code,
-    sa_name,
-    current_stage,
-    current_stage_name,
-    overall_status,
-    received_at
-  ) VALUES (
-    v_reception_id,
-    v_jc,
-    v_reg,
-    NULLIF(btrim(p_owner_name), ''),
-    btrim(p_owner_phone),
-    NULLIF(btrim(coalesce(p_branch, '')), ''),
-    v_sa_code,
-    v_sa_name,
-    1,
-    'Vehicle Receiving',
-    'active',
-    v_received_at
-  )
-  RETURNING id INTO v_card_id;
+  SELECT c.id
+    INTO v_card_id
+    FROM public.bodyshop_repair_cards c
+   WHERE c.reception_entry_id = v_reception_id
+   ORDER BY c.id DESC
+   LIMIT 1;
+
+  IF v_card_id IS NULL THEN
+    INSERT INTO public.bodyshop_repair_cards (
+      reception_entry_id,
+      job_card_no,
+      reg_number,
+      customer_name,
+      customer_phone,
+      branch,
+      sa_employee_code,
+      sa_name,
+      current_stage,
+      current_stage_name,
+      overall_status,
+      received_at
+    ) VALUES (
+      v_reception_id,
+      v_jc,
+      v_reg,
+      NULLIF(btrim(p_owner_name), ''),
+      btrim(p_owner_phone),
+      NULLIF(btrim(coalesce(p_branch, '')), ''),
+      v_sa_code,
+      v_sa_name,
+      1,
+      'Vehicle Receiving',
+      'active',
+      v_received_at
+    )
+    RETURNING id INTO v_card_id;
+  ELSE
+    UPDATE public.bodyshop_repair_cards
+    SET
+      job_card_no = v_jc,
+      reg_number = v_reg,
+      customer_name = NULLIF(btrim(p_owner_name), ''),
+      customer_phone = btrim(p_owner_phone),
+      branch = NULLIF(btrim(coalesce(p_branch, '')), ''),
+      sa_employee_code = v_sa_code,
+      sa_name = v_sa_name,
+      received_at = v_received_at,
+      updated_at = now()
+    WHERE id = v_card_id;
+  END IF;
 
   INSERT INTO public.audit_logs (actor_id, action, resource_type, resource_id, details)
   VALUES (
@@ -3993,7 +4015,7 @@ $_$;
 -- Name: FUNCTION bodyshop_bootstrap_visit_from_dms_gap(p_reg_number text, p_job_card_number text, p_model text, p_sa_employee_code text, p_owner_name text, p_owner_phone text, p_source text, p_branch text, p_received_date date, p_dms_invoice_number text, p_remark text, p_portal text); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.bodyshop_bootstrap_visit_from_dms_gap(p_reg_number text, p_job_card_number text, p_model text, p_sa_employee_code text, p_owner_name text, p_owner_phone text, p_source text, p_branch text, p_received_date date, p_dms_invoice_number text, p_remark text, p_portal text) IS 'Creates Accident reception + bodyshop repair card from DMS jc_missing gap. reception.created_at is now(); card.received_at may follow DMS invoice date. Audited.';
+COMMENT ON FUNCTION public.bodyshop_bootstrap_visit_from_dms_gap(p_reg_number text, p_job_card_number text, p_model text, p_sa_employee_code text, p_owner_name text, p_owner_phone text, p_source text, p_branch text, p_received_date date, p_dms_invoice_number text, p_remark text, p_portal text) IS 'Creates Accident reception + bodyshop card from DMS gap. Reuses card created by sync_bodyshop_repair_card_from_reception when present; sets received_at from DMS date.';
 
 
 --
@@ -15807,6 +15829,23 @@ BEGIN
       CASE
         WHEN m.reg_norm NOT IN ('', 'AF')
           AND EXISTS (
+            SELECT 1
+            FROM public.bodyshop_repair_cards c
+            WHERE c.overall_status <> 'cancelled'
+              AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+              AND upper(btrim(c.job_card_no)) <> m.jc
+              AND EXISTS (
+                SELECT 1
+                FROM public.psf_revenue_dms d2
+                WHERE upper(btrim(d2.job_card_number)) = upper(btrim(c.job_card_no))
+                  AND regexp_replace(upper(coalesce(d2.vehicle_registration_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+                  AND d2.sr_type = 'Accident'
+                  AND nullif(btrim(d2.job_card_number), '') IS NOT NULL
+                  AND NOT public._bodyshop_dms_invoice_is_cancelled(d2.invoice_status)
+              )
+          ) THEN 'jc_missing_extra_visit'
+        WHEN m.reg_norm NOT IN ('', 'AF')
+          AND EXISTS (
             SELECT 1 FROM public.bodyshop_repair_cards c
             WHERE c.overall_status <> 'cancelled'
               AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
@@ -15830,16 +15869,59 @@ BEGIN
       ) AS tracker_card_ids,
       NULL::bigint AS reception_entry_id,
       (
-        SELECT nullif(string_agg(x.inv, ', '), '')
-        FROM (
-          SELECT DISTINCT upper(btrim(s.invoice_number)) AS inv
-          FROM public.bodyshop_repair_cards c
-          LEFT JOIN public.bodyshop_settlements s ON s.repair_card_id = c.id
-          WHERE c.overall_status <> 'cancelled'
-            AND m.reg_norm NOT IN ('', 'AF')
-            AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
-            AND nullif(btrim(s.invoice_number), '') IS NOT NULL
-        ) x
+        CASE
+          WHEN m.reg_norm NOT IN ('', 'AF')
+            AND EXISTS (
+              SELECT 1
+              FROM public.bodyshop_repair_cards c
+              WHERE c.overall_status <> 'cancelled'
+                AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+                AND upper(btrim(c.job_card_no)) <> m.jc
+                AND EXISTS (
+                  SELECT 1
+                  FROM public.psf_revenue_dms d2
+                  WHERE upper(btrim(d2.job_card_number)) = upper(btrim(c.job_card_no))
+                    AND regexp_replace(upper(coalesce(d2.vehicle_registration_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+                    AND d2.sr_type = 'Accident'
+                    AND NOT public._bodyshop_dms_invoice_is_cancelled(d2.invoice_status)
+                )
+            ) THEN (
+              SELECT format(
+                'Reg OK — other DMS visit on tracker: card %s · JC %s%s',
+                c.id,
+                upper(btrim(c.job_card_no)),
+                CASE
+                  WHEN nullif(btrim(s.invoice_number), '') IS NOT NULL
+                  THEN ' · inv ' || upper(btrim(s.invoice_number))
+                  ELSE ''
+                END
+              )
+              FROM public.bodyshop_repair_cards c
+              LEFT JOIN public.bodyshop_settlements s ON s.repair_card_id = c.id
+              WHERE c.overall_status <> 'cancelled'
+                AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+                AND upper(btrim(c.job_card_no)) <> m.jc
+              ORDER BY c.received_at DESC NULLS LAST, c.id DESC
+              LIMIT 1
+            )
+          WHEN m.reg_norm NOT IN ('', 'AF')
+            AND EXISTS (
+              SELECT 1 FROM public.bodyshop_repair_cards c
+              WHERE c.overall_status <> 'cancelled'
+                AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+            ) THEN (
+              SELECT nullif(string_agg(x.inv, ', '), '')
+              FROM (
+                SELECT DISTINCT upper(btrim(s.invoice_number)) AS inv
+                FROM public.bodyshop_repair_cards c
+                LEFT JOIN public.bodyshop_settlements s ON s.repair_card_id = c.id
+                WHERE c.overall_status <> 'cancelled'
+                  AND regexp_replace(upper(coalesce(c.reg_number, '')), '[^A-Z0-9]', '', 'g') = m.reg_norm
+                  AND nullif(btrim(s.invoice_number), '') IS NOT NULL
+              ) x
+            )
+          ELSE NULL
+        END
       )::text AS tracker_note,
       m.contact_phone::text,
       m.portal::text,
@@ -15925,10 +16007,10 @@ BEGIN
     )
     ORDER BY c.id, d.jc, d.inv_date DESC
   ),
-  invoice_pending AS (
+  invoice_missing AS (
     SELECT
-      ('inv:' || d.jc || ':' || d.inv)::text,
-      'invoice_pending'::text,
+      ('inv-missing:' || d.jc || ':' || d.inv)::text,
+      'invoice_missing'::text,
       'dms_invoice'::text,
       d.inv_date,
       d.inv::text,
@@ -15940,8 +16022,7 @@ BEGIN
       ARRAY[c.id]::integer[],
       c.reception_entry_id,
       (
-        'Card ' || c.id::text || ' has JC; invoice on card: '
-        || coalesce(upper(btrim(s.invoice_number)), '(blank)')
+        'Card ' || c.id::text || ' has JC; settlement invoice not entered (DMS: ' || d.inv || ')'
       )::text,
       d.contact_phone::text,
       d.portal::text,
@@ -15953,25 +16034,58 @@ BEGIN
       AND upper(btrim(c.job_card_no)) = d.jc
     LEFT JOIN public.bodyshop_settlements s ON s.repair_card_id = c.id
     WHERE p_include_invoice_pending
-      AND (
-        nullif(btrim(s.invoice_number), '') IS NULL
-        OR upper(btrim(s.invoice_number)) <> d.inv
-      )
+      AND nullif(btrim(s.invoice_number), '') IS NULL
+  ),
+  invoice_mismatch AS (
+    SELECT
+      ('inv-mismatch:' || d.jc || ':' || d.inv)::text,
+      'invoice_mismatch'::text,
+      'dms_invoice'::text,
+      d.inv_date,
+      d.inv::text,
+      d.raw_reg::text,
+      d.jc::text,
+      nullif(d.cust, '')::text,
+      d.amt,
+      d.loc::text,
+      ARRAY[c.id]::integer[],
+      c.reception_entry_id,
+      (
+        'Card ' || c.id::text || ' invoice '
+        || upper(btrim(s.invoice_number))
+        || ' does not match DMS '
+        || d.inv
+      )::text,
+      d.contact_phone::text,
+      d.portal::text,
+      d.emp_code::text,
+      d.model_hint::text
+    FROM dms_scoped d
+    JOIN public.bodyshop_repair_cards c
+      ON c.overall_status <> 'cancelled'
+      AND upper(btrim(c.job_card_no)) = d.jc
+    INNER JOIN public.bodyshop_settlements s ON s.repair_card_id = c.id
+    WHERE p_include_invoice_pending
+      AND nullif(btrim(s.invoice_number), '') IS NOT NULL
+      AND upper(btrim(s.invoice_number)) <> d.inv
   )
   SELECT u.*
   FROM (
     SELECT * FROM jc_missing
     UNION ALL SELECT * FROM reception_no_card
     UNION ALL SELECT * FROM placeholder_jc
-    UNION ALL SELECT * FROM invoice_pending
+    UNION ALL SELECT * FROM invoice_missing
+    UNION ALL SELECT * FROM invoice_mismatch
   ) u
   ORDER BY
     CASE u.gap_type
       WHEN 'jc_missing' THEN 2
+      WHEN 'jc_missing_extra_visit' THEN 2
       WHEN 'jc_missing_same_reg' THEN 3
       WHEN 'reception_no_card' THEN 4
       WHEN 'placeholder_jc' THEN 5
-      WHEN 'invoice_pending' THEN 6
+      WHEN 'invoice_missing' THEN 6
+      WHEN 'invoice_mismatch' THEN 6
       ELSE 99
     END,
     u.event_date DESC NULLS LAST,
@@ -15986,7 +16100,7 @@ $_$;
 -- Name: FUNCTION list_bodyshop_dms_missing_on_tracker(p_from date, p_to date, p_branch text, p_include_invoice_pending boolean); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.list_bodyshop_dms_missing_on_tracker(p_from date, p_to date, p_branch text, p_include_invoice_pending boolean) IS 'Tracker gaps with DMS prefill hints: phone, portal, SA code, model hint (product_line from job_card_closed_data).';
+COMMENT ON FUNCTION public.list_bodyshop_dms_missing_on_tracker(p_from date, p_to date, p_branch text, p_include_invoice_pending boolean) IS 'Tracker gaps. invoice_missing = JC on card, settlement invoice blank; invoice_mismatch = JC on card, settlement invoice differs from DMS.';
 
 
 --
@@ -34056,7 +34170,7 @@ ALTER TABLE public.bodyshop_repair_card_documents ALTER COLUMN id ADD GENERATED 
 
 
 --
--- TOC entry 727 (class 1259 OID 77475)
+-- TOC entry 725 (class 1259 OID 77475)
 -- Name: bodyshop_repair_card_stage_history; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -34073,7 +34187,7 @@ CREATE TABLE public.bodyshop_repair_card_stage_history (
 
 
 --
--- TOC entry 726 (class 1259 OID 77474)
+-- TOC entry 724 (class 1259 OID 77474)
 -- Name: bodyshop_repair_card_stage_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -34087,7 +34201,7 @@ CREATE SEQUENCE public.bodyshop_repair_card_stage_history_id_seq
 
 --
 -- TOC entry 11895 (class 0 OID 0)
--- Dependencies: 726
+-- Dependencies: 724
 -- Name: bodyshop_repair_card_stage_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -34349,7 +34463,7 @@ CREATE TABLE public.bodyshop_stage_worklist_projection (
 
 
 --
--- TOC entry 725 (class 1259 OID 77459)
+-- TOC entry 723 (class 1259 OID 77459)
 -- Name: bodyshop_survey_backfill_repair_log; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -34364,7 +34478,7 @@ CREATE TABLE public.bodyshop_survey_backfill_repair_log (
 
 
 --
--- TOC entry 724 (class 1259 OID 77458)
+-- TOC entry 722 (class 1259 OID 77458)
 -- Name: bodyshop_survey_backfill_repair_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -34378,7 +34492,7 @@ CREATE SEQUENCE public.bodyshop_survey_backfill_repair_log_id_seq
 
 --
 -- TOC entry 11914 (class 0 OID 0)
--- Dependencies: 724
+-- Dependencies: 722
 -- Name: bodyshop_survey_backfill_repair_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -41133,49 +41247,7 @@ PARTITION BY RANGE (inserted_at);
 
 
 --
--- TOC entry 719 (class 1259 OID 76831)
--- Name: messages_2026_11_15; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_11_15 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
-    inserted_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    skip_broadcast boolean DEFAULT false NOT NULL,
-    expires_at timestamp without time zone,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 720 (class 1259 OID 76966)
--- Name: messages_2026_11_16; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_11_16 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
-    inserted_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    skip_broadcast boolean DEFAULT false NOT NULL,
-    expires_at timestamp without time zone,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 721 (class 1259 OID 77083)
+-- TOC entry 719 (class 1259 OID 77083)
 -- Name: messages_2026_11_17; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -41196,7 +41268,7 @@ CREATE TABLE realtime.messages_2026_11_17 (
 
 
 --
--- TOC entry 722 (class 1259 OID 77265)
+-- TOC entry 720 (class 1259 OID 77265)
 -- Name: messages_2026_11_18; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -41217,7 +41289,7 @@ CREATE TABLE realtime.messages_2026_11_18 (
 
 
 --
--- TOC entry 723 (class 1259 OID 77379)
+-- TOC entry 721 (class 1259 OID 77379)
 -- Name: messages_2026_11_19; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -41238,7 +41310,7 @@ CREATE TABLE realtime.messages_2026_11_19 (
 
 
 --
--- TOC entry 728 (class 1259 OID 77604)
+-- TOC entry 726 (class 1259 OID 77604)
 -- Name: messages_2026_11_20; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -41259,11 +41331,53 @@ CREATE TABLE realtime.messages_2026_11_20 (
 
 
 --
--- TOC entry 729 (class 1259 OID 77770)
+-- TOC entry 727 (class 1259 OID 77770)
 -- Name: messages_2026_11_21; Type: TABLE; Schema: realtime; Owner: -
 --
 
 CREATE TABLE realtime.messages_2026_11_21 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
+    inserted_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    skip_broadcast boolean DEFAULT false NOT NULL,
+    expires_at timestamp without time zone,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 728 (class 1259 OID 78092)
+-- Name: messages_2026_11_22; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_11_22 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
+    inserted_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    skip_broadcast boolean DEFAULT false NOT NULL,
+    expires_at timestamp without time zone,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 729 (class 1259 OID 78222)
+-- Name: messages_2026_11_23; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_11_23 (
     topic text NOT NULL,
     extension text NOT NULL,
     payload jsonb,
@@ -41553,22 +41667,6 @@ CREATE TABLE supabase_migrations.schema_migrations (
 
 --
 -- TOC entry 6279 (class 0 OID 0)
--- Name: messages_2026_11_15; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_15 FOR VALUES FROM ('2026-11-15 00:00:00') TO ('2026-11-16 00:00:00');
-
-
---
--- TOC entry 6280 (class 0 OID 0)
--- Name: messages_2026_11_16; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_16 FOR VALUES FROM ('2026-11-16 00:00:00') TO ('2026-11-17 00:00:00');
-
-
---
--- TOC entry 6281 (class 0 OID 0)
 -- Name: messages_2026_11_17; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -41576,7 +41674,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_17
 
 
 --
--- TOC entry 6282 (class 0 OID 0)
+-- TOC entry 6280 (class 0 OID 0)
 -- Name: messages_2026_11_18; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -41584,7 +41682,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_18
 
 
 --
--- TOC entry 6283 (class 0 OID 0)
+-- TOC entry 6281 (class 0 OID 0)
 -- Name: messages_2026_11_19; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -41592,7 +41690,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_19
 
 
 --
--- TOC entry 6284 (class 0 OID 0)
+-- TOC entry 6282 (class 0 OID 0)
 -- Name: messages_2026_11_20; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -41600,11 +41698,27 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_20
 
 
 --
--- TOC entry 6285 (class 0 OID 0)
+-- TOC entry 6283 (class 0 OID 0)
 -- Name: messages_2026_11_21; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_21 FOR VALUES FROM ('2026-11-21 00:00:00') TO ('2026-11-22 00:00:00');
+
+
+--
+-- TOC entry 6284 (class 0 OID 0)
+-- Name: messages_2026_11_22; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_22 FOR VALUES FROM ('2026-11-22 00:00:00') TO ('2026-11-23 00:00:00');
+
+
+--
+-- TOC entry 6285 (class 0 OID 0)
+-- Name: messages_2026_11_23; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_11_23 FOR VALUES FROM ('2026-11-23 00:00:00') TO ('2026-11-24 00:00:00');
 
 
 --
@@ -41648,7 +41762,7 @@ ALTER TABLE ONLY public.bodyshop_assignments ALTER COLUMN id SET DEFAULT nextval
 
 
 --
--- TOC entry 7186 (class 2604 OID 77478)
+-- TOC entry 7176 (class 2604 OID 77478)
 -- Name: bodyshop_repair_card_stage_history id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -41664,7 +41778,7 @@ ALTER TABLE ONLY public.bodyshop_repair_cards ALTER COLUMN id SET DEFAULT nextva
 
 
 --
--- TOC entry 7184 (class 2604 OID 77462)
+-- TOC entry 7174 (class 2604 OID 77462)
 -- Name: bodyshop_survey_backfill_repair_log id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -42591,7 +42705,7 @@ ALTER TABLE ONLY public.bodyshop_repair_card_documents
 
 
 --
--- TOC entry 8619 (class 2606 OID 77483)
+-- TOC entry 8613 (class 2606 OID 77483)
 -- Name: bodyshop_repair_card_stage_history bodyshop_repair_card_stage_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -42672,7 +42786,7 @@ ALTER TABLE ONLY public.bodyshop_stage_worklist_projection
 
 
 --
--- TOC entry 8617 (class 2606 OID 77467)
+-- TOC entry 8611 (class 2606 OID 77467)
 -- Name: bodyshop_survey_backfill_repair_log bodyshop_survey_backfill_repair_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -44490,25 +44604,7 @@ ALTER TABLE ONLY realtime.messages
 
 
 --
--- TOC entry 8602 (class 2606 OID 76841)
--- Name: messages_2026_11_15 messages_2026_11_15_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_11_15
-    ADD CONSTRAINT messages_2026_11_15_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 8605 (class 2606 OID 76976)
--- Name: messages_2026_11_16 messages_2026_11_16_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_11_16
-    ADD CONSTRAINT messages_2026_11_16_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 8608 (class 2606 OID 77093)
+-- TOC entry 8602 (class 2606 OID 77093)
 -- Name: messages_2026_11_17 messages_2026_11_17_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -44517,7 +44613,7 @@ ALTER TABLE ONLY realtime.messages_2026_11_17
 
 
 --
--- TOC entry 8611 (class 2606 OID 77275)
+-- TOC entry 8605 (class 2606 OID 77275)
 -- Name: messages_2026_11_18 messages_2026_11_18_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -44526,7 +44622,7 @@ ALTER TABLE ONLY realtime.messages_2026_11_18
 
 
 --
--- TOC entry 8614 (class 2606 OID 77389)
+-- TOC entry 8608 (class 2606 OID 77389)
 -- Name: messages_2026_11_19 messages_2026_11_19_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -44535,7 +44631,7 @@ ALTER TABLE ONLY realtime.messages_2026_11_19
 
 
 --
--- TOC entry 8622 (class 2606 OID 77614)
+-- TOC entry 8616 (class 2606 OID 77614)
 -- Name: messages_2026_11_20 messages_2026_11_20_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -44544,12 +44640,30 @@ ALTER TABLE ONLY realtime.messages_2026_11_20
 
 
 --
--- TOC entry 8625 (class 2606 OID 77780)
+-- TOC entry 8619 (class 2606 OID 77780)
 -- Name: messages_2026_11_21 messages_2026_11_21_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages_2026_11_21
     ADD CONSTRAINT messages_2026_11_21_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 8622 (class 2606 OID 78102)
+-- Name: messages_2026_11_22 messages_2026_11_22_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_11_22
+    ADD CONSTRAINT messages_2026_11_22_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 8625 (class 2606 OID 78232)
+-- Name: messages_2026_11_23 messages_2026_11_23_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_11_23
+    ADD CONSTRAINT messages_2026_11_23_pkey PRIMARY KEY (id, inserted_at);
 
 
 --
@@ -46038,7 +46152,7 @@ CREATE INDEX idx_bodyshop_settlements_job_card_no ON public.bodyshop_settlements
 
 
 --
--- TOC entry 8620 (class 1259 OID 77484)
+-- TOC entry 8614 (class 1259 OID 77484)
 -- Name: idx_bodyshop_stage_history_card; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -48511,23 +48625,7 @@ CREATE INDEX messages_replay_index ON ONLY realtime.messages USING btree (topic,
 
 
 --
--- TOC entry 8603 (class 1259 OID 76842)
--- Name: messages_2026_11_15_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_11_15_topic_inserted_at_coalesce_idx ON realtime.messages_2026_11_15 USING btree (topic, inserted_at DESC, COALESCE(expires_at, 'infinity'::timestamp without time zone)) WHERE ((extension = 'broadcast'::text) AND (private = true));
-
-
---
--- TOC entry 8606 (class 1259 OID 76977)
--- Name: messages_2026_11_16_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_11_16_topic_inserted_at_coalesce_idx ON realtime.messages_2026_11_16 USING btree (topic, inserted_at DESC, COALESCE(expires_at, 'infinity'::timestamp without time zone)) WHERE ((extension = 'broadcast'::text) AND (private = true));
-
-
---
--- TOC entry 8609 (class 1259 OID 77094)
+-- TOC entry 8603 (class 1259 OID 77094)
 -- Name: messages_2026_11_17_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -48535,7 +48633,7 @@ CREATE INDEX messages_2026_11_17_topic_inserted_at_coalesce_idx ON realtime.mess
 
 
 --
--- TOC entry 8612 (class 1259 OID 77276)
+-- TOC entry 8606 (class 1259 OID 77276)
 -- Name: messages_2026_11_18_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -48543,7 +48641,7 @@ CREATE INDEX messages_2026_11_18_topic_inserted_at_coalesce_idx ON realtime.mess
 
 
 --
--- TOC entry 8615 (class 1259 OID 77390)
+-- TOC entry 8609 (class 1259 OID 77390)
 -- Name: messages_2026_11_19_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -48551,7 +48649,7 @@ CREATE INDEX messages_2026_11_19_topic_inserted_at_coalesce_idx ON realtime.mess
 
 
 --
--- TOC entry 8623 (class 1259 OID 77615)
+-- TOC entry 8617 (class 1259 OID 77615)
 -- Name: messages_2026_11_20_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -48559,11 +48657,27 @@ CREATE INDEX messages_2026_11_20_topic_inserted_at_coalesce_idx ON realtime.mess
 
 
 --
--- TOC entry 8626 (class 1259 OID 77781)
+-- TOC entry 8620 (class 1259 OID 77781)
 -- Name: messages_2026_11_21_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
 CREATE INDEX messages_2026_11_21_topic_inserted_at_coalesce_idx ON realtime.messages_2026_11_21 USING btree (topic, inserted_at DESC, COALESCE(expires_at, 'infinity'::timestamp without time zone)) WHERE ((extension = 'broadcast'::text) AND (private = true));
+
+
+--
+-- TOC entry 8623 (class 1259 OID 78103)
+-- Name: messages_2026_11_22_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_11_22_topic_inserted_at_coalesce_idx ON realtime.messages_2026_11_22 USING btree (topic, inserted_at DESC, COALESCE(expires_at, 'infinity'::timestamp without time zone)) WHERE ((extension = 'broadcast'::text) AND (private = true));
+
+
+--
+-- TOC entry 8626 (class 1259 OID 78233)
+-- Name: messages_2026_11_23_topic_inserted_at_coalesce_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_11_23_topic_inserted_at_coalesce_idx ON realtime.messages_2026_11_23 USING btree (topic, inserted_at DESC, COALESCE(expires_at, 'infinity'::timestamp without time zone)) WHERE ((extension = 'broadcast'::text) AND (private = true));
 
 
 --
@@ -48696,38 +48810,6 @@ CREATE UNIQUE INDEX vector_indexes_name_bucket_id_idx ON storage.vector_indexes 
 
 --
 -- TOC entry 8627 (class 0 OID 0)
--- Name: messages_2026_11_15_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_15_pkey;
-
-
---
--- TOC entry 8628 (class 0 OID 0)
--- Name: messages_2026_11_15_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_2026_11_15_topic_inserted_at_coalesce_idx;
-
-
---
--- TOC entry 8629 (class 0 OID 0)
--- Name: messages_2026_11_16_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_16_pkey;
-
-
---
--- TOC entry 8630 (class 0 OID 0)
--- Name: messages_2026_11_16_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_2026_11_16_topic_inserted_at_coalesce_idx;
-
-
---
--- TOC entry 8631 (class 0 OID 0)
 -- Name: messages_2026_11_17_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48735,7 +48817,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_17
 
 
 --
--- TOC entry 8632 (class 0 OID 0)
+-- TOC entry 8628 (class 0 OID 0)
 -- Name: messages_2026_11_17_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48743,7 +48825,7 @@ ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_20
 
 
 --
--- TOC entry 8633 (class 0 OID 0)
+-- TOC entry 8629 (class 0 OID 0)
 -- Name: messages_2026_11_18_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48751,7 +48833,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_18
 
 
 --
--- TOC entry 8634 (class 0 OID 0)
+-- TOC entry 8630 (class 0 OID 0)
 -- Name: messages_2026_11_18_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48759,7 +48841,7 @@ ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_20
 
 
 --
--- TOC entry 8635 (class 0 OID 0)
+-- TOC entry 8631 (class 0 OID 0)
 -- Name: messages_2026_11_19_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48767,7 +48849,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_19
 
 
 --
--- TOC entry 8636 (class 0 OID 0)
+-- TOC entry 8632 (class 0 OID 0)
 -- Name: messages_2026_11_19_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48775,7 +48857,7 @@ ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_20
 
 
 --
--- TOC entry 8637 (class 0 OID 0)
+-- TOC entry 8633 (class 0 OID 0)
 -- Name: messages_2026_11_20_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48783,7 +48865,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_20
 
 
 --
--- TOC entry 8638 (class 0 OID 0)
+-- TOC entry 8634 (class 0 OID 0)
 -- Name: messages_2026_11_20_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48791,7 +48873,7 @@ ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_20
 
 
 --
--- TOC entry 8639 (class 0 OID 0)
+-- TOC entry 8635 (class 0 OID 0)
 -- Name: messages_2026_11_21_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -48799,11 +48881,43 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_21
 
 
 --
--- TOC entry 8640 (class 0 OID 0)
+-- TOC entry 8636 (class 0 OID 0)
 -- Name: messages_2026_11_21_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_2026_11_21_topic_inserted_at_coalesce_idx;
+
+
+--
+-- TOC entry 8637 (class 0 OID 0)
+-- Name: messages_2026_11_22_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_22_pkey;
+
+
+--
+-- TOC entry 8638 (class 0 OID 0)
+-- Name: messages_2026_11_22_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_2026_11_22_topic_inserted_at_coalesce_idx;
+
+
+--
+-- TOC entry 8639 (class 0 OID 0)
+-- Name: messages_2026_11_23_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_11_23_pkey;
+
+
+--
+-- TOC entry 8640 (class 0 OID 0)
+-- Name: messages_2026_11_23_topic_inserted_at_coalesce_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_replay_index ATTACH PARTITION realtime.messages_2026_11_23_topic_inserted_at_coalesce_idx;
 
 
 --
@@ -53331,7 +53445,7 @@ CREATE POLICY bodyshop_repair_card_documents_update_rbac_v4 ON public.bodyshop_r
 
 --
 -- TOC entry 9261 (class 0 OID 77475)
--- Dependencies: 727
+-- Dependencies: 725
 -- Name: bodyshop_repair_card_stage_history; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -53501,7 +53615,7 @@ CREATE POLICY bodyshop_stage_history_admin_select ON public.bodyshop_repair_card
 
 --
 -- TOC entry 9260 (class 0 OID 77459)
--- Dependencies: 725
+-- Dependencies: 723
 -- Name: bodyshop_survey_backfill_repair_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -77318,7 +77432,7 @@ GRANT ALL ON SEQUENCE public.bodyshop_repair_card_documents_id_seq TO service_ro
 
 --
 -- TOC entry 11894 (class 0 OID 0)
--- Dependencies: 727
+-- Dependencies: 725
 -- Name: TABLE bodyshop_repair_card_stage_history; Type: ACL; Schema: public; Owner: -
 --
 
@@ -77328,7 +77442,7 @@ GRANT SELECT ON TABLE public.bodyshop_repair_card_stage_history TO authenticated
 
 --
 -- TOC entry 11896 (class 0 OID 0)
--- Dependencies: 726
+-- Dependencies: 724
 -- Name: SEQUENCE bodyshop_repair_card_stage_history_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -77435,7 +77549,7 @@ GRANT ALL ON TABLE public.bodyshop_stage_worklist_projection TO service_role;
 
 --
 -- TOC entry 11913 (class 0 OID 0)
--- Dependencies: 725
+-- Dependencies: 723
 -- Name: TABLE bodyshop_survey_backfill_repair_log; Type: ACL; Schema: public; Owner: -
 --
 
@@ -77444,7 +77558,7 @@ GRANT ALL ON TABLE public.bodyshop_survey_backfill_repair_log TO service_role;
 
 --
 -- TOC entry 11915 (class 0 OID 0)
--- Dependencies: 724
+-- Dependencies: 722
 -- Name: SEQUENCE bodyshop_survey_backfill_repair_log_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -79977,28 +80091,6 @@ GRANT SELECT,INSERT,UPDATE ON TABLE realtime.messages TO service_role;
 --
 -- TOC entry 12324 (class 0 OID 0)
 -- Dependencies: 719
--- Name: TABLE messages_2026_11_15; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE realtime.messages_2026_11_15 TO postgres;
-GRANT SELECT,INSERT ON TABLE realtime.messages_2026_11_15 TO postgres WITH GRANT OPTION;
-GRANT ALL ON TABLE realtime.messages_2026_11_15 TO dashboard_user;
-
-
---
--- TOC entry 12325 (class 0 OID 0)
--- Dependencies: 720
--- Name: TABLE messages_2026_11_16; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE realtime.messages_2026_11_16 TO postgres;
-GRANT SELECT,INSERT ON TABLE realtime.messages_2026_11_16 TO postgres WITH GRANT OPTION;
-GRANT ALL ON TABLE realtime.messages_2026_11_16 TO dashboard_user;
-
-
---
--- TOC entry 12326 (class 0 OID 0)
--- Dependencies: 721
 -- Name: TABLE messages_2026_11_17; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -80008,8 +80100,8 @@ GRANT ALL ON TABLE realtime.messages_2026_11_17 TO dashboard_user;
 
 
 --
--- TOC entry 12327 (class 0 OID 0)
--- Dependencies: 722
+-- TOC entry 12325 (class 0 OID 0)
+-- Dependencies: 720
 -- Name: TABLE messages_2026_11_18; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -80019,8 +80111,8 @@ GRANT ALL ON TABLE realtime.messages_2026_11_18 TO dashboard_user;
 
 
 --
--- TOC entry 12328 (class 0 OID 0)
--- Dependencies: 723
+-- TOC entry 12326 (class 0 OID 0)
+-- Dependencies: 721
 -- Name: TABLE messages_2026_11_19; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -80030,8 +80122,8 @@ GRANT ALL ON TABLE realtime.messages_2026_11_19 TO dashboard_user;
 
 
 --
--- TOC entry 12329 (class 0 OID 0)
--- Dependencies: 728
+-- TOC entry 12327 (class 0 OID 0)
+-- Dependencies: 726
 -- Name: TABLE messages_2026_11_20; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -80041,14 +80133,36 @@ GRANT ALL ON TABLE realtime.messages_2026_11_20 TO dashboard_user;
 
 
 --
--- TOC entry 12330 (class 0 OID 0)
--- Dependencies: 729
+-- TOC entry 12328 (class 0 OID 0)
+-- Dependencies: 727
 -- Name: TABLE messages_2026_11_21; Type: ACL; Schema: realtime; Owner: -
 --
 
 GRANT REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE realtime.messages_2026_11_21 TO postgres;
 GRANT SELECT,INSERT ON TABLE realtime.messages_2026_11_21 TO postgres WITH GRANT OPTION;
 GRANT ALL ON TABLE realtime.messages_2026_11_21 TO dashboard_user;
+
+
+--
+-- TOC entry 12329 (class 0 OID 0)
+-- Dependencies: 728
+-- Name: TABLE messages_2026_11_22; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE realtime.messages_2026_11_22 TO postgres;
+GRANT SELECT,INSERT ON TABLE realtime.messages_2026_11_22 TO postgres WITH GRANT OPTION;
+GRANT ALL ON TABLE realtime.messages_2026_11_22 TO dashboard_user;
+
+
+--
+-- TOC entry 12330 (class 0 OID 0)
+-- Dependencies: 729
+-- Name: TABLE messages_2026_11_23; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE realtime.messages_2026_11_23 TO postgres;
+GRANT SELECT,INSERT ON TABLE realtime.messages_2026_11_23 TO postgres WITH GRANT OPTION;
+GRANT ALL ON TABLE realtime.messages_2026_11_23 TO dashboard_user;
 
 
 --
@@ -80536,11 +80650,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-11-18 15:49:07 IST
+-- Completed on 2026-11-20 10:57:02 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict E2gja4hNTXBffgCpxKY00FZGqo6ZBP3MlNtrLybPMBSIZw9zsdRsbgLVKklz0KE
+\unrestrict gBQRypHdTg7JRprCHEK3c48XBFdZ7Ic8jjuQeUUCGbRvRelW5BLTCSNWNCecyXo
 
