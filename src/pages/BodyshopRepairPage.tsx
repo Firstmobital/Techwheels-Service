@@ -4695,10 +4695,8 @@ export default function BodyshopRepairPage() {
 
   function getEffectiveStageForCard(card: RepairCard): number {
     let stage = Number(card.current_stage ?? 1)
-    let preBillingClear = isPreBillingStagesWaived(card)
     if (projectionPendingLoaded) {
       const pendingStages = projectionPendingStagesByCard[card.id] ?? []
-      preBillingClear = preBillingClear || !pendingStages.some((s) => s >= 1 && s <= 14)
       if (pendingStages.length > 0) {
         // Projection can contain earlier pending worklist stages; keep current-stage
         // display anchored to persisted pointer stage to avoid visual regressions.
@@ -4711,7 +4709,7 @@ export default function BodyshopRepairPage() {
     }
 
     const clamped = clampStageUntilRiComplete(card, stage)
-    return resolveBodyshopCardDisplayStage(card, clamped, preBillingClear)
+    return resolveBodyshopCardDisplayStage(card, clamped)
   }
 
   function cardDoneStageCount(card: RepairCard): number {
@@ -4723,7 +4721,7 @@ export default function BodyshopRepairPage() {
         ? pending.filter((s) => s > 14).length
         : pending.length
       const fromProjection = Math.max(0, Math.min(18, 18 - pendingCount))
-      if (hasAnyBillingData(card) || isPreBillingStagesWaived(card)) {
+      if (isPreBillingStagesWaived(card)) {
         return Math.max(fromProjection, Math.min(17, effective - 1))
       }
       return fromProjection

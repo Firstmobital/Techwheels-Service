@@ -101,21 +101,19 @@ export function isBillingQueueActive(
 
 /**
  * Stage label for a card whose pointer says 15+ (i.e. past QC and Re-Inspection).
- * Billing data wins over a stale pointer so the card label agrees with the queue tiles.
- * Pointer 17 is an explicit Delivery state and is kept. Cards with no billing or
- * payment data at all keep their pointer.
+ * Billing data wins over a stale pointer only after admin "Close stages 1–14"
+ * (`pre_billing_stages_waived_at`) or when the pointer is already 15+.
+ * Pointer 17 is an explicit Delivery state and is kept.
  */
 export function resolveBodyshopCardDisplayStage(
   card: BillingCardWithWaiver,
   pointerStage: number,
-  preBillingStagesClear: boolean,
+  _preBillingStagesClear?: boolean,
 ): number {
   const ptr = Math.max(1, Math.min(18, pointerStage))
   const billingLed =
     ptr >= 15
-    || hasAnyBillingData(card)
-    || (isPreBillingStagesWaived(card) && hasBillingAmountOnCard(card))
-    || (preBillingStagesClear && (hasBillingAmountOnCard(card) || hasAnyBillingData(card)))
+    || (isPreBillingStagesWaived(card) && (hasBillingAmountOnCard(card) || hasAnyBillingData(card)))
   if (!billingLed) return ptr
   return deriveBillingDisplayStage(card, Math.max(ptr, 15))
 }

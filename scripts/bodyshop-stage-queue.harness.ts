@@ -106,7 +106,7 @@ const waivedBilledDo = {
 }
 assert.equal(deriveBillingDisplayStage(waivedBilledDo, 16), 18)
 
-// DMS import: pointer 1 but billed amount on card → Billing (15), not Vehicle Receiving (1)
+// DMS import amount without admin waiver: workflow label stays on pointer (not Billing/DO)
 const importAtPointer1 = {
   parts_entry_status: 'pending',
   billed_amount: 18196,
@@ -115,6 +115,15 @@ const importAtPointer1 = {
   do_payment_status: 'pending',
   customer_payment_status: 'pending',
 }
-assert.equal(resolveBodyshopCardDisplayStage(importAtPointer1, 1, false), 15)
+assert.equal(resolveBodyshopCardDisplayStage(importAtPointer1, 1, false), 1)
+
+// Live workflow: saving billing on an early pointer must not inflate display to DO (16)
+// and falsely mark intake/floor stages complete in the overview UI.
+const billedAtPointer1 = {
+  ...importAtPointer1,
+  parts_entry_status: 'billed',
+}
+assert.equal(resolveBodyshopCardDisplayStage(billedAtPointer1, 1, false), 1)
+assert.equal(resolveBodyshopCardDisplayStage(billedAtPointer1, 11, false), 11)
 
 console.log('bodyshop-stage-queue harness: OK')
