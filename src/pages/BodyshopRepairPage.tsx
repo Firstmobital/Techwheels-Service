@@ -41,7 +41,6 @@ import { BodyshopStageHistory } from '../components/BodyshopStageHistory'
 import {
   isBillingQueueActive,
   isDeliveryReady,
-  hasAnyBillingData,
   hasBillingAmountOnCard,
   isBillingStage15Done,
   isBillingStage15DoneForQueues,
@@ -7119,7 +7118,7 @@ export default function BodyshopRepairPage() {
                             <div className="brx-sa-card-stages">
                               {group.stages.map((stage) => {
                                 const done = stageDone(stage)
-                                const current = effectiveCurrentStage === stage
+                                const current = workflowStage === stage
                                 const notStarted = !done && !current
 
                                 const borderColor = done ? '#86efac' : current ? group.color : '#d1d5db'
@@ -7646,7 +7645,7 @@ export default function BodyshopRepairPage() {
                         {(() => {
                           const estimateDoc = bodyshopDocsByKey.doc_estimate
                           const estimateAmount = Number(selected.estimated_amount ?? 0)
-                          const isEstimateLocked = effectiveCurrentStage < 6
+                          const isEstimateLocked = workflowStage < 6
                           const canSaveEstimate = !isEstimateLocked && estimateAmount > 0 && Boolean(estimateDoc)
                           const estimateDocBusy = uploadingDocKey === 'doc_estimate'
 
@@ -7708,7 +7707,7 @@ export default function BodyshopRepairPage() {
                                     : undefined
                               }
                             >
-                              {saving ? 'Saving…' : effectiveCurrentStage === 6 ? 'Save Estimate & Complete Stage 6' : 'Update Estimate'}
+                              {saving ? 'Saving…' : workflowStage === 6 ? 'Save Estimate & Complete Stage 6' : 'Update Estimate'}
                             </button>
                           </div>
                         </div>
@@ -7726,8 +7725,8 @@ export default function BodyshopRepairPage() {
                           {(() => {
                             const estimationApproved = Boolean(String(selected.estimation_approved_by ?? '').trim())
                             const claimNoDraft = String(selected.claim_intimation_no ?? '').trim()
-                            const isClaimInputLocked = effectiveCurrentStage < 7
-                            const isClaimSaveLocked = !estimationApproved || effectiveCurrentStage < 7
+                            const isClaimInputLocked = workflowStage < 7
+                            const isClaimSaveLocked = !estimationApproved || workflowStage < 7
                             return (
                               <>
                           <label className="brx-docs-field">
@@ -7740,7 +7739,7 @@ export default function BodyshopRepairPage() {
                               disabled={isClaimInputLocked}
                             />
                           </label>
-                          {effectiveCurrentStage === 7 && !estimationApproved ? (
+                          {workflowStage === 7 && !estimationApproved ? (
                             <p className="brx-survey-approval-sub" style={{ margin: '0 0 8px', color: '#b45309' }}>
                               You can enter the claim number now. Save unlocks after EDP approves the estimate on the <strong>Approval</strong> tab (Stage 7).
                             </p>
@@ -7760,7 +7759,7 @@ export default function BodyshopRepairPage() {
                                     : undefined
                             }
                           >
-                            {saving ? 'Saving…' : effectiveCurrentStage <= 8 ? 'Save Claim Intimation & Complete Stage 8' : 'Update Claim Intimation'}
+                            {saving ? 'Saving…' : workflowStage <= 8 ? 'Save Claim Intimation & Complete Stage 8' : 'Update Claim Intimation'}
                           </button>
                               </>
                             )
@@ -7840,8 +7839,8 @@ export default function BodyshopRepairPage() {
                           type="button"
                           className="btn btn--primary brx-approval-save"
                           onClick={() => void handleApproveEstimationStage()}
-                          disabled={saving || effectiveCurrentStage < 7 || isApprovedStageDone}
-                          title={effectiveCurrentStage < 7 ? 'Move to Estimation Approval stage first' : undefined}
+                          disabled={saving || workflowStage < 7 || isApprovedStageDone}
+                          title={workflowStage < 7 ? 'Move to Estimation Approval stage first' : undefined}
                         >
                           {saving ? 'Saving…' : 'Approved'}
                         </button>
