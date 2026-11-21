@@ -2993,7 +2993,7 @@ export default function BodyshopRepairPage() {
 
     // Use the effective stage (what the header shows), not the raw pointer: Cash/FOC cards need no
     // documents, so their pointer can still sit at 5 while Documentation is already complete.
-    if (getEffectiveStageForCard(selected) < 6) {
+    if (getWorkflowStageForCard(selected) < 6) {
       toast_('Complete Documentation stage first before saving Estimate', false)
       return
     }
@@ -4693,7 +4693,8 @@ export default function BodyshopRepairPage() {
     patch('surveyor_contact', picked.surveyor_contact_number)
   }
 
-  function getEffectiveStageForCard(card: RepairCard): number {
+  /** Persisted workflow pointer (+ projection / intake), before billing label overlay. */
+  function getWorkflowStageForCard(card: RepairCard): number {
     let stage = Number(card.current_stage ?? 1)
     if (projectionPendingLoaded) {
       const pendingStages = projectionPendingStagesByCard[card.id] ?? []
@@ -4708,8 +4709,19 @@ export default function BodyshopRepairPage() {
       stage = getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
     }
 
-    const clamped = clampStageUntilRiComplete(card, stage)
-    return resolveBodyshopCardDisplayStage(card, clamped)
+    return clampStageUntilRiComplete(card, stage)
+  }
+
+  /** Queue tiles / list labels — billing overlay only after admin waiver or pointer 15+. */
+  function getEffectiveStageForCard(card: RepairCard): number {
+    const workflow = getWorkflowStageForCard(card)
+    return resolveBodyshopCardDisplayStage(card, workflow)
+  }
+
+  /** Card detail UI: workflow stage unless pre-billing was waived by admin. */
+  function getDetailCardStage(card: RepairCard): number {
+    if (isPreBillingStagesWaived(card)) return getEffectiveStageForCard(card)
+    return getWorkflowStageForCard(card)
   }
 
   function cardDoneStageCount(card: RepairCard): number {
@@ -6456,7 +6468,8 @@ export default function BodyshopRepairPage() {
             {/* Stage group pills */}
             <div className="brx-dgroupbar">
               {STAGE_GROUPS.map((g) => {
-                const effectiveCurrentStage = getEffectiveStageForCard(selected)
+                const workflowStage = getWorkflowStageForCard(selected)
+                const detailStage = getDetailCardStage(selected)
                 const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                 const noDocsRequired = ct === 'cash' || ct === 'foc'
                 const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
@@ -6465,11 +6478,24 @@ export default function BodyshopRepairPage() {
                   : []
                 const collectedMandatory = mandatoryDocs.filter(d => advisorVerifiedDoc(selected, d.k)).length
                 const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
-                const inGroup = g.stages.includes(effectiveCurrentStage)
-                  || (effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted && g.stages.includes(11))
+                const billingOpen =
+                  isBillingQueueActive(selected, clampStageUntilRiComplete(selected, workflowStage))
+                  || (isBillingStage15DoneForQueues(selected) && !isBillingStage16Done(selected))
+                const inGroup = g.label === 'Billing'
+                  ? billingOpen
+                  : g.stages.includes(detailStage)
+                  || (workflowStage === 10 && floorWorkStarted && !floorStageCompleted && g.stages.includes(11))
                   || (additionalApprovalPending && floorWorkStarted && !floorStageCompleted && g.stages.includes(12))
-                const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
-                  || (g.stages.includes(5) && docsDone)
+                const done = isPreBillingStagesWaived(selected) && Math.max(...g.stages) <= 14
+                  ? true
+                  : g.label === 'Billing'
+                    ? isBillingStage16Done(selected)
+                    : g.label === 'QC'
+                      ? isQcPassed(selected)
+                      : g.label === 'RI'
+                        ? isRiCompleted(selected)
+                        : g.stages[g.stages.length - 1] < workflowStage
+                          || (g.stages.includes(5) && docsDone)
                 return (
                   <div
                     key={g.label}
@@ -6521,10 +6547,10 @@ export default function BodyshopRepairPage() {
               <div className="brx-stp-head">
                 <div className="brx-stp-head-k">Current Stage</div>
                 {(() => {
-                  const effectiveCurrentStage = getEffectiveStageForCard(selected)
+                  const detailStage = getDetailCardStage(selected)
                   return (
-                <div className="brx-stp-head-v" style={{ '--sc': getGroupForStage(effectiveCurrentStage).color } as React.CSSProperties}>
-                  {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
+                <div className="brx-stp-head-v" style={{ '--sc': getGroupForStage(detailStage).color } as React.CSSProperties}>
+                  {getCurrentStageDisplay(detailStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                 </div>
                   )
                 })()}
@@ -6534,7 +6560,8 @@ export default function BodyshopRepairPage() {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                   const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                  const effectiveCurrentStage = getEffectiveStageForCard(selected)
+                  const workflowStage = getWorkflowStageForCard(selected)
+                  const detailStage = getDetailCardStage(selected)
                   const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                   const noDocsRequired = ct === 'cash' || ct === 'foc'
                   const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
@@ -6550,16 +6577,16 @@ export default function BodyshopRepairPage() {
                   const surveyApprovalDoc = isBodyshopSurveyApprovalEvidenceSatisfied(
                     selected,
                     Boolean(bodyshopDocsByKey.doc_survey_approval?.id),
-                  ) || effectiveCurrentStage >= 10
+                  ) || workflowStage >= 10
                   const approvedPartsFinalized = parseApprovedPartsState(selected.approved_parts).finalized
                   const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
                   const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
                   const stage5Done = noDocsRequired
                     || mandatoryDocs.every((doc) => advisorVerifiedDoc(selected, doc.k))
-                    || effectiveCurrentStage > 5
-                  const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
-                  const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
-                  const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
+                    || workflowStage > 5
+                  const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || workflowStage > 6
+                  const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || workflowStage > 7
+                  const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || workflowStage > 8
                   const managerVerified = isBodyshopSurveyManagerVerified(selected)
                   const managerVerifyPending = isBodyshopSurveyManagerVerifyPending(selected)
                   const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
@@ -6567,18 +6594,18 @@ export default function BodyshopRepairPage() {
                     && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason))
                     && managerVerified
                     && floorAssigned)
-                    || effectiveCurrentStage > 9
+                    || workflowStage > 9
                   const stage12Done = (
                     (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
                     || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
-                    || effectiveCurrentStage > 12
+                    || workflowStage > 12
                   )
                   const stage11Done = floorStageCompleted && (!additionalApprovalRequested || stage12Done)
                   // Trust persisted progression for early intake milestones on advanced cards.
-                  const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
-                  const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
-                  const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
-                  const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
+                  const stage1Done = milestones.stage1Done || workflowStage > 1
+                  const stage2Done = milestones.stage2Done || workflowStage > 2
+                  const stage3Done = milestones.stage3Done || workflowStage > 3
+                  const stage4Done = milestones.stage4Done || workflowStage > 4
                   const stage10Ready = stage1Done
                     && stage2Done
                     && stage3Done
@@ -6595,7 +6622,7 @@ export default function BodyshopRepairPage() {
                   const stage15Done = isBillingStage15DoneForQueues(selected)
                   const stage16Done = isBillingStage16Done(selected)
                   const stage18Done = isStage18PaymentDone(selected)
-                  const stage15Active = isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
+                  const stage15Active = isBillingQueueActive(selected, clampStageUntilRiComplete(selected, workflowStage))
                   const stage16Active = stage15Done && !stage16Done
                   const stage18Active = isStage18PaymentActive(selected)
 
@@ -6611,7 +6638,7 @@ export default function BodyshopRepairPage() {
                           ? stage3Done
                           : stage4Done
                     : num === 5
-                      ? docsDone || effectiveCurrentStage > num
+                      ? docsDone || workflowStage > num
                       : num === 10
                         ? stage10Done
                         : num === 11
@@ -6628,7 +6655,7 @@ export default function BodyshopRepairPage() {
                             ? stage16Done
                           : num === 18
                             ? stage18Done
-                        : effectiveCurrentStage > num
+                        : workflowStage > num
                   const stage10Active = preBillingWaived ? false : stage10Ready && !stage10Done
                   const stage11Active = preBillingWaived ? false : !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                   const stage12Active = preBillingWaived ? false : stage11Ready && additionalApprovalRequested && !stage12Done
@@ -6636,7 +6663,7 @@ export default function BodyshopRepairPage() {
                   const stage14Active = preBillingWaived ? false : floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
 
                   const isCur = preBillingWaived
-                    ? num === effectiveCurrentStage
+                    ? num === detailStage
                     : num === 10
                       ? stage10Active
                       : num === 11
@@ -6653,7 +6680,7 @@ export default function BodyshopRepairPage() {
                                   ? stage16Active
                                 : num === 18
                                   ? stage18Active
-                          : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                          : isStageConcurrentActive(num, workflowStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
                     <div
@@ -6836,10 +6863,10 @@ export default function BodyshopRepairPage() {
                   <div className="brx-overview-stagebox">
                     <div className="brx-overview-stagebox-k">Current Stage</div>
                       {(() => {
-                        const effectiveCurrentStage = getEffectiveStageForCard(selected)
+                        const detailStage = getDetailCardStage(selected)
                         return (
-                          <div className="brx-overview-stagebox-v" style={{ '--sc': getGroupForStage(effectiveCurrentStage).color } as React.CSSProperties}>
-                            {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
+                          <div className="brx-overview-stagebox-v" style={{ '--sc': getGroupForStage(detailStage).color } as React.CSSProperties}>
+                            {getCurrentStageDisplay(detailStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                           </div>
                         )
                       })()}
@@ -6851,7 +6878,8 @@ export default function BodyshopRepairPage() {
                       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                       const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                       const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                      const effectiveCurrentStage = getEffectiveStageForCard(selected)
+                      const workflowStage = getWorkflowStageForCard(selected)
+                      const detailStage = getDetailCardStage(selected)
                       const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                       const noDocsRequired = ct === 'cash' || ct === 'foc'
                       const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
@@ -6865,32 +6893,32 @@ export default function BodyshopRepairPage() {
                       const surveyApprovalDoc = isBodyshopSurveyApprovalEvidenceSatisfied(
                         selected,
                         Boolean(bodyshopDocsByKey.doc_survey_approval?.id),
-                      ) || effectiveCurrentStage >= 10
+                      ) || workflowStage >= 10
                       const approvedPartsFinalized = parseApprovedPartsState(selected.approved_parts).finalized
                       const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
                       const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
                       const stage5Done = noDocsRequired
                         || mandatoryDocs.every((doc) => advisorVerifiedDoc(selected, doc.k))
-                        || effectiveCurrentStage > 5
-                      const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
-                      const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
-                      const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
+                        || workflowStage > 5
+                      const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || workflowStage > 6
+                      const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || workflowStage > 7
+                      const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || workflowStage > 8
                       const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
                         && (surveyStatusNormalized === 'hold' || surveyStatusNormalized === 'approved')
                         && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason))
                         && floorAssigned)
-                        || effectiveCurrentStage > 9
+                        || workflowStage > 9
                       const stage12Done = (
                         (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
                         || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
-                        || effectiveCurrentStage > 12
+                        || workflowStage > 12
                       )
                       const stage11Done = floorStageCompleted && (!additionalApprovalRequested || stage12Done)
                       // Trust persisted progression for early intake milestones on advanced cards.
-                      const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
-                      const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
-                      const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
-                      const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
+                      const stage1Done = milestones.stage1Done || workflowStage > 1
+                      const stage2Done = milestones.stage2Done || workflowStage > 2
+                      const stage3Done = milestones.stage3Done || workflowStage > 3
+                      const stage4Done = milestones.stage4Done || workflowStage > 4
                       const stage10Ready = stage1Done
                         && stage2Done
                         && stage3Done
@@ -6930,14 +6958,14 @@ export default function BodyshopRepairPage() {
                             ? isBillingStage16Done(selected)
                           : num === 18
                             ? isStage18PaymentDone(selected)
-                          : effectiveCurrentStage > num
+                          : workflowStage > num
                       const stage10Active = preBillingWaived ? false : stage10Ready && !stage10Done
                       const stage11Active = preBillingWaived ? false : !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                       const stage12Active = preBillingWaived ? false : stage11Ready && additionalApprovalRequested && !stage12Done
                       const stage13Active = preBillingWaived ? false : floorStageCompleted && !isQcPassed(selected)
                       const stage14Active = preBillingWaived ? false : floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
                       const isCur   = preBillingWaived
-                        ? num === effectiveCurrentStage
+                        ? num === detailStage
                         : num === 10
                           ? stage10Active
                           : num === 11
@@ -6949,12 +6977,12 @@ export default function BodyshopRepairPage() {
                                 : num === 14
                                   ? stage14Active
                                 : num === 15
-                                  ? isBillingQueueActive(selected, clampStageUntilRiComplete(selected, effectiveCurrentStage))
+                                  ? isBillingQueueActive(selected, clampStageUntilRiComplete(selected, workflowStage))
                                 : num === 16
                                   ? (isBillingStage15DoneForQueues(selected) && !isBillingStage16Done(selected))
                                 : num === 18
                                   ? isStage18PaymentActive(selected)
-                              : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                              : isStageConcurrentActive(num, workflowStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       const handleStepClick = (sNum: number) => {
                         if (sNum <= 4) {
@@ -7008,7 +7036,7 @@ export default function BodyshopRepairPage() {
                 const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                 const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                 const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                const effectiveCurrentStage = getEffectiveStageForCard(selected)
+                const workflowStage = getWorkflowStageForCard(selected)
 
                 // Calculate docs completion status for stage 5
                 const ct = String(selected.customer_type ?? '').trim().toLowerCase()
@@ -7025,9 +7053,9 @@ export default function BodyshopRepairPage() {
                   if (stage === 2) return milestones.stage2Done
                   if (stage === 3) return milestones.stage3Done
                   if (stage === 4) return milestones.stage4Done
-                  if (stage === 5) return allMandatoryDone || effectiveCurrentStage > stage
-                  if (stage === 8) return (effectiveCurrentStage >= 8 && Boolean(String(selected.claim_intimation_no ?? '').trim())) || effectiveCurrentStage > stage
-                  return effectiveCurrentStage > stage
+                  if (stage === 5) return allMandatoryDone || workflowStage > stage
+                  if (stage === 8) return (workflowStage >= 8 && Boolean(String(selected.claim_intimation_no ?? '').trim())) || workflowStage > stage
+                  return workflowStage > stage
                 }
 
                 const groups = [
@@ -7757,8 +7785,8 @@ export default function BodyshopRepairPage() {
 
               {/* ── Approval ── */}
               {detailTab === 'approval' && (() => {
-                const effectiveCurrentStage = getEffectiveStageForCard(selected)
-                const isApprovedStageDone = effectiveCurrentStage > 7
+                const workflowStage = getWorkflowStageForCard(selected)
+                const isApprovedStageDone = workflowStage > 7
                 const estimateDoc = bodyshopDocsByKey.doc_estimate
                 const hasEstimateAmount = Number(selected.estimated_amount ?? 0) > 0
 
