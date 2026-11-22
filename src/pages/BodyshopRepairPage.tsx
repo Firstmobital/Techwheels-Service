@@ -30,6 +30,12 @@ import {
   type RepairCard, type CustomerType,
 } from '../lib/api/bodyshopRepair'
 import { bodyshopFloorAgeSummary, isBodyshopFloorAssigned } from '../lib/bodyshopFloorAge'
+import {
+  buildTrackerStatusReportRows,
+  fetchActiveAssignmentsForReport,
+  trackerStatusReportToAoA,
+  type TrackerStatusReportRow,
+} from '../lib/bodyshopTrackerStatusReport'
 import { formatBodyshopDocumentUploadSource } from '../lib/bodyshopDocumentUploadSource'
 import {
   buildTwoSidedMergedPrintHtml,
@@ -1186,6 +1192,10 @@ export default function BodyshopRepairPage() {
   const [trackerGapsError, setTrackerGapsError] = useState<string | null>(null)
   const [showInvoicePendingGaps, setShowInvoicePendingGaps] = useState(false)
   const [exportingBrowseExcel, setExportingBrowseExcel] = useState(false)
+  const [generatingStatusReport, setGeneratingStatusReport] = useState(false)
+  const [statusReportOpen, setStatusReportOpen] = useState(false)
+  const [statusReportRows, setStatusReportRows] = useState<TrackerStatusReportRow[]>([])
+  const [exportingStatusReportExcel, setExportingStatusReportExcel] = useState(false)
   const [trackerGapChip, setTrackerGapChip] = useState<TrackerGapChip>('all')
   const [dmsGapBootstrapRow, setDmsGapBootstrapRow] = useState<TrackerGapRow | null>(null)
   const [dmsGapBootstrapSaving, setDmsGapBootstrapSaving] = useState(false)
@@ -5746,6 +5756,66 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  async function handleGenerateStatusReport() {
+    if (pipelineFilter === 'Gaps & health') {
+      toast_('Switch out of Gaps & health to generate the vehicle status report', false)
+      return
+    }
+    if (filtered.length === 0) {
+      toast_('No repair cards match the current filters', false)
+      return
+    }
+    setGeneratingStatusReport(true)
+    try {
+      const maps = await fetchActiveAssignmentsForReport(filtered)
+      const rows = buildTrackerStatusReportRows(
+        filtered,
+        maps,
+        getEffectiveStageForCard,
+        cardDoneStageCount,
+      )
+      rows.sort((a, b) => (b.shop_aging_days ?? -1) - (a.shop_aging_days ?? -1))
+      setStatusReportRows(rows)
+      setStatusReportOpen(true)
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Could not generate report', false)
+    } finally {
+      setGeneratingStatusReport(false)
+    }
+  }
+
+  async function handleExportStatusReportExcel() {
+    if (statusReportRows.length === 0) return
+    setExportingStatusReportExcel(true)
+    try {
+      const dateStr = dateRange.from === dateRange.to
+        ? (dateRange.from || 'all')
+        : [dateRange.from, dateRange.to].filter(Boolean).join('_to_') || 'all'
+      const wb = XLSX.utils.book_new()
+      const aoa = trackerStatusReportToAoA(statusReportRows)
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      const headers = aoa[0] ?? []
+      ws['!cols'] = headers.map((h) => ({
+        wch: Math.min(Math.max(String(h).length + 2, 10), 40),
+      }))
+      XLSX.utils.book_append_sheet(wb, ws, 'Status report')
+      const summary = browseExportFilterSummary()
+      summary.push({ label: 'Rows', value: String(statusReportRows.length) })
+      const filterSheet = XLSX.utils.aoa_to_sheet([
+        ['Filter', 'Value'],
+        ...summary.map((row) => [row.label, row.value]),
+      ])
+      filterSheet['!cols'] = [{ wch: 22 }, { wch: 48 }]
+      XLSX.utils.book_append_sheet(wb, filterSheet, 'Export filters')
+      XLSX.writeFile(wb, `Bodyshop_Tracker_Status_${dateStr}.xlsx`)
+      toast_(`Downloaded status report (${statusReportRows.length} vehicles)`, true)
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Export failed', false)
+    } finally {
+      setExportingStatusReportExcel(false)
+    }
+  }
+
   const openRepairCardById = async (cardId: number) => {
     const local = cards.find((c) => c.id === cardId)
     if (local) {
@@ -5973,6 +6043,21 @@ export default function BodyshopRepairPage() {
           onClick={() => void handleExportBrowseExcel()}
         >
           {exportingBrowseExcel ? 'Exporting…' : 'Export Excel'}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn--soft"
+          disabled={
+            generatingStatusReport
+            || loading
+            || pipelineFilter === 'Gaps & health'
+            || filtered.length === 0
+          }
+          title="Operational snapshot: reg, advisor, aging, floor, denting/painting process, floor team — same filters as the grid"
+          onClick={() => void handleGenerateStatusReport()}
+        >
+          {generatingStatusReport ? 'Building…' : 'Generate report'}
         </button>
       </div>
       {lookupSession && (
@@ -6386,6 +6471,77 @@ export default function BodyshopRepairPage() {
               <button type="button" className="btn btn--ghost" disabled={dmsGapBootstrapSaving} onClick={closeDmsGapBootstrap}>Cancel</button>
               <button type="button" className="btn btn--primary" disabled={dmsGapBootstrapSaving} onClick={() => void submitDmsGapBootstrap()}>
                 {dmsGapBootstrapSaving ? 'Creating…' : 'Create reception + card'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tracker status report ─────────────────────────────────────────── */}
+      {statusReportOpen && (
+        <div className="modal-overlay" onClick={() => setStatusReportOpen(false)}>
+          <div
+            className="modal modal--xl brx-status-report-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h2 className="modal__title">Vehicle status report</h2>
+              <button type="button" className="modal__close" onClick={() => setStatusReportOpen(false)}>✕</button>
+            </div>
+            <div className="modal__body">
+              <p className="brx-status-report-intro">
+                {statusReportRows.length} vehicle{statusReportRows.length === 1 ? '' : 's'} — filters match the Repair Tracker grid.
+                Floor process from live <code>bodyshop_assignments</code>; advisor = SA on the repair card.
+              </p>
+              <div className="brx-status-report-scroll">
+                <table className="brx-status-report-table">
+                  <thead>
+                    <tr>
+                      <th>Reg</th>
+                      <th>Job card</th>
+                      <th>Customer</th>
+                      <th>Advisor (SA)</th>
+                      <th>Days in shop</th>
+                      <th>Stage</th>
+                      <th>Bodyshop floor</th>
+                      <th>Process now</th>
+                      <th>With (now)</th>
+                      <th>Denting</th>
+                      <th>Painting</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statusReportRows.map((row) => (
+                      <tr key={`${row.job_card_no}-${row.reg_number}`}>
+                        <td>{row.reg_number || '—'}</td>
+                        <td className="brx-status-report-jc">{row.job_card_no || '—'}</td>
+                        <td>{row.customer_name || '—'}</td>
+                        <td>{row.sa_advisor || '—'}</td>
+                        <td>{row.shop_aging_days != null ? row.shop_aging_days : '—'}</td>
+                        <td title={row.stage_label}>
+                          {row.effective_stage}
+                          <span className="brx-status-report-stage-label"> {row.stage_label}</span>
+                        </td>
+                        <td>{row.bodyshop_floor || '—'}</td>
+                        <td title={row.floor_process_detail}>{row.floor_process || '—'}</td>
+                        <td>{row.with_now || '—'}</td>
+                        <td>{row.denting || '—'}</td>
+                        <td>{row.painting || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal__footer">
+              <button type="button" className="btn btn--ghost" onClick={() => setStatusReportOpen(false)}>Close</button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={exportingStatusReportExcel || statusReportRows.length === 0}
+                onClick={() => void handleExportStatusReportExcel()}
+              >
+                {exportingStatusReportExcel ? 'Exporting…' : 'Download full Excel'}
               </button>
             </div>
           </div>
