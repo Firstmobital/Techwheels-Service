@@ -135,7 +135,7 @@ export async function fetchActiveAssignmentsForReport(
       .eq('is_active', true)
       .in('job_card_number', chunk)
     if (error) throw error
-    if (data?.length) allRows.push(...(data as AssignmentRow[]))
+    if (data?.length) allRows.push(...(data as unknown as AssignmentRow[]))
   }
 
   for (let i = 0; i < idList.length; i += ASSIGNMENT_CHUNK) {
@@ -146,7 +146,7 @@ export async function fetchActiveAssignmentsForReport(
       .eq('is_active', true)
       .in('repair_card_id', chunk)
     if (error) throw error
-    if (data?.length) allRows.push(...(data as AssignmentRow[]))
+    if (data?.length) allRows.push(...(data as unknown as AssignmentRow[]))
   }
 
   const byJobCard = buildAssignmentRowByJobCard(allRows)
@@ -180,6 +180,8 @@ export function buildTrackerStatusReportRows(
     const assignment = resolveAssignmentForCard(card, maps)
     const effectiveStage = effectiveStageFor(card)
     const summary = buildFloorWorkVehicleStatusSummary(assignment, card.qc_status, {
+      reg: card.reg_number,
+      customer: card.customer_name,
       bodyshopFloor: card.bodyshop_floor,
     })
     const shopDays = calendarDaysSince(card.received_at ?? card.created_at)
