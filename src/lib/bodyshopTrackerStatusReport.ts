@@ -284,3 +284,49 @@ export function trackerStatusReportToAoA(rows: TrackerStatusReportRow[]): (strin
   )
   return [headers, ...body]
 }
+
+export type TrackerStatusReportStageSummary = {
+  stage: number
+  stage_label: string
+  pipeline_group: string
+  count: number
+}
+
+/** Count vehicles per effective stage for the filtered report set. */
+export function summarizeTrackerStatusReportByStage(
+  rows: TrackerStatusReportRow[],
+): TrackerStatusReportStageSummary[] {
+  const map = new Map<number, number>()
+  for (const row of rows) {
+    const stage = row.effective_stage
+    map.set(stage, (map.get(stage) ?? 0) + 1)
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([stage, count]) => {
+      const sample = rows.find((r) => r.effective_stage === stage)
+      return {
+        stage,
+        stage_label: sample?.stage_label ?? STAGE_LABELS[stage] ?? String(stage),
+        pipeline_group: sample?.pipeline_group ?? getGroupForStage(stage).label,
+        count,
+      }
+    })
+}
+
+export function trackerStatusReportStageSummaryToAoA(
+  summary: TrackerStatusReportStageSummary[],
+  filterRows: { label: string; value: string }[],
+  totalVehicles: number,
+): (string | number)[][] {
+  return [
+    ['Active filters (same as Repair Tracker grid)'],
+    ['Filter', 'Value'],
+    ...filterRows.map((r) => [r.label, r.value]),
+    [],
+    ['Stage', 'Stage label', 'Pipeline group', 'Vehicle count'],
+    ...summary.map((s) => [s.stage, s.stage_label, s.pipeline_group, s.count]),
+    [],
+    ['Total vehicles', totalVehicles],
+  ]
+}

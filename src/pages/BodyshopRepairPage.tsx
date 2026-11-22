@@ -33,6 +33,8 @@ import { bodyshopFloorAgeSummary, isBodyshopFloorAssigned } from '../lib/bodysho
 import {
   buildTrackerStatusReportRows,
   fetchActiveAssignmentsForReport,
+  summarizeTrackerStatusReportByStage,
+  trackerStatusReportStageSummaryToAoA,
   trackerStatusReportToAoA,
   type TrackerStatusReportRow,
 } from '../lib/bodyshopTrackerStatusReport'
@@ -5792,21 +5794,25 @@ export default function BodyshopRepairPage() {
         ? (dateRange.from || 'all')
         : [dateRange.from, dateRange.to].filter(Boolean).join('_to_') || 'all'
       const wb = XLSX.utils.book_new()
+      const exportFilters = browseExportFilterSummary()
+      exportFilters.push({ label: 'Rows', value: String(statusReportRows.length) })
+      const stageSummary = summarizeTrackerStatusReportByStage(statusReportRows)
+      const stageAoa = trackerStatusReportStageSummaryToAoA(
+        stageSummary,
+        exportFilters,
+        statusReportRows.length,
+      )
+      const stageWs = XLSX.utils.aoa_to_sheet(stageAoa)
+      stageWs['!cols'] = [{ wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 14 }]
+      XLSX.utils.book_append_sheet(wb, stageWs, 'Stage summary')
+
       const aoa = trackerStatusReportToAoA(statusReportRows)
       const ws = XLSX.utils.aoa_to_sheet(aoa)
       const headers = aoa[0] ?? []
       ws['!cols'] = headers.map((h) => ({
         wch: Math.min(Math.max(String(h).length + 2, 10), 40),
       }))
-      XLSX.utils.book_append_sheet(wb, ws, 'Status report')
-      const summary = browseExportFilterSummary()
-      summary.push({ label: 'Rows', value: String(statusReportRows.length) })
-      const filterSheet = XLSX.utils.aoa_to_sheet([
-        ['Filter', 'Value'],
-        ...summary.map((row) => [row.label, row.value]),
-      ])
-      filterSheet['!cols'] = [{ wch: 22 }, { wch: 48 }]
-      XLSX.utils.book_append_sheet(wb, filterSheet, 'Export filters')
+      XLSX.utils.book_append_sheet(wb, ws, 'Vehicle detail')
       XLSX.writeFile(wb, `Bodyshop_Tracker_Status_${dateStr}.xlsx`)
       toast_(`Downloaded status report (${statusReportRows.length} vehicles)`, true)
     } catch (e) {
@@ -5839,6 +5845,11 @@ export default function BodyshopRepairPage() {
   }
 
   const pipelineSelected = pipelineFilter !== 'all'
+
+  const statusReportStageSummary = useMemo(
+    () => summarizeTrackerStatusReportByStage(statusReportRows),
+    [statusReportRows],
+  )
 
   const canBodyshopSurveyVerify = isAdminLikeUser
     || hasBodyshopSurveyVerifyModuleAccess
@@ -6490,9 +6501,38 @@ export default function BodyshopRepairPage() {
             </div>
             <div className="modal__body">
               <p className="brx-status-report-intro">
-                {statusReportRows.length} vehicle{statusReportRows.length === 1 ? '' : 's'} — filters match the Repair Tracker grid.
-                Floor process from live <code>bodyshop_assignments</code>; advisor = SA on the repair card.
+                {statusReportRows.length} vehicle{statusReportRows.length === 1 ? '' : 's'} — same filters as the Repair Tracker grid.
               </p>
+              <section className="brx-status-report-filters" aria-label="Report filters">
+                <span className="brx-status-report-filters__title">Active filters</span>
+                <ul className="brx-status-report-filters__list">
+                  {browseExportFilterSummary().map((row) => (
+                    <li key={row.label}>
+                      <span className="brx-status-report-filters__k">{row.label}</span>
+                      <span className="brx-status-report-filters__v">{row.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="brx-status-report-stage-summary" aria-label="Stage breakdown">
+                <h3 className="brx-status-report-stage-summary__title">
+                  Stage breakdown <span>({statusReportRows.length} vehicles)</span>
+                </h3>
+                <div className="brx-status-report-stage-grid">
+                  {statusReportStageSummary.map((item) => (
+                    <div key={item.stage} className="brx-status-report-stage-card">
+                      <span className="brx-status-report-stage-card__n">{item.count}</span>
+                      <span className="brx-status-report-stage-card__stage">
+                        {item.stage} · {item.stage_label}
+                      </span>
+                      <span className="brx-status-report-stage-card__pipe">{item.pipeline_group}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section className="brx-status-report-detail">
+                <h3 className="brx-status-report-stage-summary__title">Vehicle list</h3>
+              </section>
               <div className="brx-status-report-scroll">
                 <table className="brx-status-report-table">
                   <thead>
