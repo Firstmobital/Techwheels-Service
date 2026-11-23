@@ -50,6 +50,7 @@ import {
   isBillingQueueActive,
   isDeliveryReady,
   hasBillingAmountOnCard,
+  isBillingRecordedForWaiver,
   isBillingStage15Done,
   isBillingStage15DoneForQueues,
   isBillingStage16Done,
@@ -2664,7 +2665,7 @@ export default function BodyshopRepairPage() {
   const canWaivePreBillingStages = useMemo(() => {
     if (!selected || !isPreBillingWaiveAdmin) return false
     if (selected.overall_status !== 'active') return false
-    if (!isBillingStage15Done(selected) && !hasBillingAmountOnCard(selected)) return false
+    if (!isBillingRecordedForWaiver(selected) && !hasBillingAmountOnCard(selected)) return false
     if (selected.pre_billing_stages_waived_at) return false
     if (!projectionPendingLoaded) return false
     const pending = projectionPendingStagesByCard[selected.id] ?? []
@@ -2673,8 +2674,8 @@ export default function BodyshopRepairPage() {
 
   const preBillingWaiveHint = useMemo(() => {
     if (!selected || !isPreBillingWaiveAdmin || selected.pre_billing_stages_waived_at) return null
-    if (!(isBillingStage15Done(selected) || hasBillingAmountOnCard(selected))) {
-      return 'Admin waiver needs a billed amount on this card.'
+    if (!isBillingRecordedForWaiver(selected) && !hasBillingAmountOnCard(selected)) {
+      return 'Admin waiver needs billing recorded on this card (amount may be ₹0).'
     }
     if (!projectionPendingLoaded) return 'Loading stage queue…'
     const pending = projectionPendingStagesByCard[selected.id] ?? []

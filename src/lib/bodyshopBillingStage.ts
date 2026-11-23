@@ -32,6 +32,14 @@ export function hasBillingAmountOnCard(card: Pick<BillingCard, 'billed_amount'>)
   return Number.isFinite(amt) && amt > 0
 }
 
+/** Billing entered for admin pre-billing waiver (invoice may be ₹0). Matches DB RPC. */
+export function isBillingRecordedForWaiver(
+  card: Pick<BillingCard, 'parts_entry_status' | 'billed_amount'>,
+): boolean {
+  if (card.billed_amount != null) return true
+  return norm(card.parts_entry_status) === 'billed'
+}
+
 export function isBillingStage16Done(card: Pick<BillingCard, 'do_status' | 'do_amount'>): boolean {
   return norm(card.do_status) === 'received' && card.do_amount != null
 }
@@ -88,7 +96,7 @@ export function isBillingStage15DoneForQueues(
   card: Pick<BillingCardWithWaiver, 'parts_entry_status' | 'billed_amount' | 'pre_billing_stages_waived_at'>,
 ): boolean {
   if (isBillingStage15Done(card)) return true
-  return isPreBillingStagesWaived(card) && hasBillingAmountOnCard(card)
+  return isPreBillingStagesWaived(card) && isBillingRecordedForWaiver(card)
 }
 
 export function isBillingQueueActive(
@@ -113,7 +121,7 @@ export function resolveBodyshopCardDisplayStage(
   const ptr = Math.max(1, Math.min(18, pointerStage))
   const billingLed =
     ptr >= 15
-    || (isPreBillingStagesWaived(card) && (hasBillingAmountOnCard(card) || hasAnyBillingData(card)))
+    || (isPreBillingStagesWaived(card) && (isBillingRecordedForWaiver(card) || hasAnyBillingData(card)))
   if (!billingLed) return ptr
   return deriveBillingDisplayStage(card, Math.max(ptr, 15))
 }
@@ -127,7 +135,7 @@ export function deriveBillingDisplayStage(card: BillingCard, stage: number): num
   if (isDeliveryReady(card)) return 17
   if (isStage18PaymentActive(card)) return 18
   if (isBillingStage15Done(card)) return 16
-  if (isPreBillingStagesWaived(card as BillingCardWithWaiver) && hasBillingAmountOnCard(card)) {
+  if (isPreBillingStagesWaived(card as BillingCardWithWaiver) && isBillingRecordedForWaiver(card)) {
     // DMS/historical import: billed amount present but formal billing flag may still be pending — show Billing (15).
     if (norm(card.parts_entry_status) !== 'billed' && !isBillingStage16Done(card)) return 15
     return 16

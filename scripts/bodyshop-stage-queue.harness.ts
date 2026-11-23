@@ -7,6 +7,8 @@ import assert from 'node:assert/strict'
 import {
   deriveBillingDisplayStage,
   hasAnyBillingData,
+  hasBillingAmountOnCard,
+  isBillingRecordedForWaiver,
   isBillingStage15Done,
   isBillingStage16Done,
   isBillingQueueActive,
@@ -55,6 +57,13 @@ for (const [dp, cp] of [['received', 'pending'], ['partial', 'pending'], ['pendi
 // billed, DO not received -> DO Status (16)
 const billedOnly = card(true, false, 'pending', 'pending')
 assert.equal(isBillingStage15Done(billedOnly), true)
+
+const zeroInvoiceBilled = {
+  parts_entry_status: 'billed',
+  billed_amount: 0,
+}
+assert.equal(isBillingRecordedForWaiver(zeroInvoiceBilled), true)
+assert.equal(hasBillingAmountOnCard(zeroInvoiceBilled), false)
 assert.equal(isBillingStage16Done(billedOnly), false)
 assert.equal(deriveBillingDisplayStage(billedOnly, 15), 16)
 
