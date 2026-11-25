@@ -127,6 +127,7 @@
       "status": "pending",
       "reviewer": null,
       "files": [
+        "scripts/bodyshop-floor-pipeline.harness.ts",
         "scripts/invoice-revenue.harness.ts",
         "scripts/payroll-cost-summary.harness.ts"
       ],
@@ -134,7 +135,67 @@
         "docs/STRUCTURE_GUIDE.md (JS/TS test helpers and tooling -> scripts/)"
       ],
       "outcome": null,
-      "note": "Placement is correct per the structure guide. The classifier in scripts/repo_change_impact.mjs maps only .mjs, .sh, .js, .py under scripts/, so the four existing scripts/*.harness.ts files are also unmapped. Extending the classifier is a separate change."
+      "note": "Placement is correct per the structure guide. The classifier in scripts/repo_change_impact.mjs maps only .mjs, .sh, .js, .py under scripts/, so the four existing scripts/*.harness.ts files are also unmapped. Extending the classifier is a separate change. The third file is a remote-only file that appears because of the unpushed-diff comparison."
+    },
+    {
+      "category": "repository_authority",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        ".instructions.md",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
+        "docs/shared/reference/catalog/task_library/generic/DATABASE_CHANGE_TASK_CONTRACT.md",
+        "docs/shared/reference/catalog/task_library/generic/FEATURE_IMPLEMENTATION_TASK_CONTRACT.md",
+        "docs/shared/reference/catalog/task_library/generic/IMPLEMENTATION_PLAN_TASK_CONTRACT.md"
+      ],
+      "authority_checked": [
+        ".instructions.md Section 11 item 6",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
+      ],
+      "outcome": null,
+      "note": "The operating contract (.instructions.md Section 11) and its task-library pointers changed in f2d5f485; independent review pending."
+    },
+    {
+      "category": "automation_script",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "scripts/publish_readiness_check.mjs"
+      ],
+      "authority_checked": [
+        ".instructions.md Section 11 item 6",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
+      ],
+      "outcome": null,
+      "note": "Export and direct-run guard only; gate output verified identical before and after on the same working tree (self-check). Independent review pending."
+    },
+    {
+      "category": "validation_script",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "scripts/repo_health_audit.mjs"
+      ],
+      "authority_checked": [
+        ".instructions.md Section 11 item 6",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
+      ],
+      "outcome": null,
+      "note": "Advisory ledger-coverage check added; self-check on isolated fixtures. Independent review pending."
+    },
+    {
+      "category": "generated_artifact",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "supabase/backups/full_metadata.sql",
+        "supabase/evidence/authoritative_metadata_manifest.json"
+      ],
+      "authority_checked": [
+        "docs/shared/reference/DATABASE_TRUTH.md"
+      ],
+      "outcome": null,
+      "note": "Two user-run metadata refreshes (98016773, 0c61add8) verified against their manifest hashes and as schema-equivalent; independent review pending."
     }
   ],
   "generated_artifacts": [
@@ -182,5 +243,6 @@
       "path": "docs/shared/reference/CURRENT_STATE.md",
       "reason": "Describes the 2026-06-18 snapshot; none of the changes here are applied or released, so the current-state truth is unchanged until release."
     }
-  ]
+  ],
+  "how_to_measure": "Run `node scripts/repo_change_impact.mjs --range origin/main..HEAD` and then `npm run publish:ready`. Plain `npm run docs:impact` on a clean working tree analyses no files and `publish:ready` then reports READY without examining the unpushed commits; that result is not a readiness proof."
 }

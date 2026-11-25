@@ -330,13 +330,15 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 6. Independent review is required before publication (change-impact check). None has been done; a self-check is not independent review.
 7. `npm run build` fails at `HEAD` and on `origin/main` because `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, which `bodyshopSettlement.ts` does not export. This is unrelated and pre-existing; the files changed here compile.
 
-### Publication blockers (as reported by `npm run publish:ready`, with origin)
+### Publication blockers (measured with `node scripts/repo_change_impact.mjs --range origin/main..HEAD` then `npm run publish:ready`, with origin)
+Plain `npm run docs:impact` on a clean working tree analyses no files, and `publish:ready` then prints READY without looking at the unpushed commits; that is not a readiness proof. Measured on 2026-11-25 against the 12-commit local stack: NOT READY.
+
 | Blocker | Origin | Authority and action |
 |---|---|---|
-| Independent review required for application code, database truth and unmapped files | Repository rule applied to this change set | `repo_change_impact.mjs` and the disposition `reviews`; not performed; a self-check is not independent review |
+| Independent review required for application code, automation script, database truth, repository authority (`.instructions.md`), validation script, unmapped files and the two committed metadata refreshes | Repository rule applied to this change set | `repo_change_impact.mjs` and the disposition `reviews` (all pending); not performed; a self-check is not independent review |
 | Ledger rows DBL-0101 and DBL-0102 are PROPOSED, not VERIFIED, so the four migration and check files block | Introduced here, correctly | Ledger rules 3 and 7; they stay PROPOSED until governed deployment and recorded check output |
-| No disposition entry matching the change set | Existing mechanism | `docs/shared/evidence/publication_readiness_disposition.json` updated (documentation record; reviews remain pending) |
-| Two new harness files reported unmapped | Pre-existing classifier gap: the four existing `scripts/*.harness.ts` files are also unmapped because the classifier maps only `.mjs`, `.sh`, `.js`, `.py` under `scripts/` | Placement is correct per `docs/STRUCTURE_GUIDE.md` ("JS/TS test helpers and tooling -> scripts/"). Remaining action: extend the classifier pattern in `scripts/repo_change_impact.mjs` (not done: validator change out of scope) |
+| Disposition entry did not match the change set | Existing mechanism | `docs/shared/evidence/publication_readiness_disposition.json` updated; the mismatch blocker cleared when measured; reviews remain pending; refresh after remote integration |
+| Three harness files reported unmapped (two new, plus a remote-only one that appears because of the unpushed-diff comparison) | Pre-existing classifier gap: the four existing `scripts/*.harness.ts` files are also unmapped because the classifier maps only `.mjs`, `.sh`, `.js`, `.py` under `scripts/` | Placement is correct per `docs/STRUCTURE_GUIDE.md` ("JS/TS test helpers and tooling -> scripts/"). Remaining action: extend the classifier pattern in `scripts/repo_change_impact.mjs` (not done: validator change out of scope) |
 | `npm run build` fails | Pre-existing at `HEAD` and `origin/main`: `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, not exported by `bodyshopSettlement.ts` | Unrelated; not repaired here |
 | Repo-wide lint reports 1,590 errors | Pre-existing; none in files changed here (changed files linted separately) | Unrelated |
 | Remote divergence: local 12 ahead, 1 behind | Remote commit `91deea70` (Bodyshop floor, unrelated); a trial merge was clean | Needs the existing `publish:safe` rebase; the disposition must be refreshed after it because the change set changes |
