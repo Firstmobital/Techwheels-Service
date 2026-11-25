@@ -265,7 +265,7 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | 3.6 | ACCOUNTS-002 | Implemented-local (same migration) | EV-052 |
 | 4.1 | ACCOUNTS-002 | Implemented-local: `canonicalReportBranch` with an explicit Unmapped bucket, used by the new report and payroll cost. Existing reports unchanged | EV-053, EV-056 |
 | 4.2 | ACCOUNTS-002 | Implemented-local: read-only Cost Summary tab | EV-056 |
-| 4.3 | ACCOUNTS-002 | Partly done: optional catalogue fields on `ReportDefinition`, filled for the new report; the 10 unregistered reports are not registered (untested) | — |
+| 4.3 | ACCOUNTS-002 | Partly done: catalogue defaults module `reportCatalogue.ts` gives all 39 registered reports an owner, sources, date basis and verification state (harness passes); the 10 unregistered reports are not registered (PD-26) | EV-062 |
 | 4.4 | BUSY-001 | Owned elsewhere: no separate authorization found; pending | — |
 | 4.5 | ACCOUNTS-002 | Partly done: internal invoice-grain versus job-card-grain comparison in the new report. Comparison to Busy: Blocked (no extract, tolerance or sign-off) | EV-053 |
 | 4.6 | ACCOUNTS-002 | Implemented-local: lineage and source mapping updated | Lineage CSV |
@@ -288,7 +288,7 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | PD-14 revenue | Invoice-level net with actual GST, cancelled apart, flagged invoices, headline equals detail, comparison with the existing method (function level) | Page render not run; not reconciled to Busy; same-day invoices that an import replaced are not counted (PD-24); existing reports still use the flat 18% | PD-11, PD-24 |
 | PD-15 finance access | Database-level read and write control on revenue, invoice and warranty tables; module-gated RPCs | No UI-level separation of finance and operational report rights; production role mapping not done; not applied anywhere governed | PD-21 |
 | PD-17 branch isolation | Assigned-branch and explicit all-branch scope in the policies | **Not fully satisfied.** The platform-wide administrator bypass remains and every administrator automatically receives every active module, including `finance_all_branches`. All-branch finance access is therefore not explicit for administrators. Behaviour not changed in this work | PD-22 |
-| PD-18 invoice identity | Evidence gathered; replaced invoices preserved by trigger (no irreversible loss); identical re-import and amendment log nothing | Replacement is still not blocked; both same-day invoices are not counted in totals; identity not resolved | PD-24 |
+| PD-18 invoice identity | Evidence gathered; replaced invoices preserved by trigger (no irreversible loss); identical re-import and amendment log nothing | Replacement is still not blocked; both same-day invoices are not counted in totals; identity not resolved | PD-24 (DEFERRED by user 2026-11-25) |
 | PD-19 bank fields | Bank columns unreadable to app users; RPC read and write paths; callers changed | Settings and SA Tracker read paths and service-role edge functions were not individually approved; page level not run; must be deployed together with the migration | PD-25, PD-21 |
 | PD-20 financial year | Inventory and feasibility only | Neither option implemented or authorized | PD-20 |
 | Payroll reporting | Read-only Cost Summary; employer cost shown as not available | UI not run; employer cost data does not exist | none |
@@ -307,7 +307,7 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | Payroll loader | `payroll` view | Yes: payroll workflows are approved | Supported |
 | Settings employee list and export | `employees` view | Existing module right, preserved; not named in the approval | Unresolved (PD-25) |
 | SA Tracker payout export | `sa_tracker` view | Existing behaviour, preserved; not named in the approval | Unresolved (PD-25) |
-| Administrator | `is_admin()` | Existing platform authority | Subject to PD-22 |
+| Administrator | `is_admin()` | Existing platform authority; the designated account `admin@firstmobital.com` holding the Admin role has an approved unrestricted exception (verified EV-061); other administrators deferred, unchanged | PD-22 |
 | Earnings-report edge functions | service role | Unchanged; recipients and content not audited | Unresolved (PD-25) |
 
 ### Completion levels
@@ -354,14 +354,23 @@ Plain `npm run docs:impact` on a clean working tree analyses no files, and `publ
 | Real Busy import verification | BUSY-001 task 3.2 | Open in BUSY-001 | Blocked; PD-11 |
 
 ### Web–mobile parity (task 2.5)
-Impact: new web report ID and a visible notice at the report row cap. The mobile app keeps its own `reportQueries.ts` and report list. Mobile status: tracked separately; no mobile Finance report is required for this change. Owner: Engineering owner. Follow-up: decide whether the mobile report list should show the row-cap notice. Reason not done in the same change: no figure changes and no mobile counterpart screen for the new report.
+Impact: new web report ID and a visible notice at the report row cap. The mobile app keeps its own `reportQueries.ts` and report list. Mobile status: tracked separately; no mobile Finance report is required for this change. Owner: Engineering owner. Follow-up: decide whether the mobile report list should show the row-cap notice. Reason not done in the same change: no figure changes and no mobile counterpart screen for the new report. **Assessment 2026-11-25:** the mobile `reportQueries.ts` has the same 5,000-row cap without a notice (gap recorded, not changed); mobile has no invoice-revenue or payroll-cost report; mobile does not read employee bank columns (only service-role edge functions do); mobile DMS import writes `psf_revenue_dms` under the same import policy.
 
 ### Financial-year design (tasks 5.1 to 5.3, for separate approval)
 **Inventory.** The year `26-27` is fixed in: `ACCOUNTS_VOUCHER_FY` and the receipt-number pattern in `src/lib/api/accounts.ts`; the Busy series `PV-S 26-27` and `EV-S 26-27` in `src/lib/busy/eligibility.ts`; the function `accounts_mechanical_next_voucher_no` (cutoff 2026-09-02, sequences `accounts_mechanical_voucher_rapp_2627_seq` and `..._japp_2627_seq`); `accounts_mechanical_reconcile_japp_sequence`; the CHECK constraints `accounts_mechanical_payment_lines_voucher_check` and `bodyshop_settlement_lines_voucher_check`; and the complaint ticket function. Issued numbers are immutable by trigger and unique by index. The Sales series list is not available.
 **Options.** (A) Annual controlled change set before 2027-04-01: new sequences, function, constraints and constants for 27-28. (B) Automatic: derive the year from the document date in IST, keep one counter row per series and year, and replace the pinned CHECK patterns with a generic pattern.
-**Feasibility checked on the scratch database (not committed):** the derived label gave 25-26, 26-27, 26-27, 27-28 for 2026-03-31, 2026-04-01, 2027-03-31, 2027-04-01; with 8 parallel sessions issuing 160 numbers across two years, all 160 were distinct and each year's counter ended at 80. Counter rows give gap-free numbers for committed transactions; sequences can skip numbers on rollback.
+**Finalized automatic design (proposal for separate approval; nothing implemented).**
+1. *Year rule:* financial year label = April–March of the **document date** in IST (`fy_label(date)`), e.g. 2027-03-31 → `26-27`, 2027-04-01 → `27-28`. A timestamp is converted to an IST date first (20:00 UTC on 2027-03-31 is 2027-04-01 IST → `27-28`; the UTC date would wrongly give `26-27`).
+2. *Counters:* one row per (series, FY) in a counter table, advanced with `INSERT … ON CONFLICT DO UPDATE … RETURNING` inside the issuing transaction. Rolled-back transactions release their number (no gaps for committed numbers); sequences were rejected because they leave gaps on rollback.
+3. *Number format:* `RApp/YY-YY/nnnn`, `JApp/YY-YY/nnnn` unchanged; the pinned CHECK patterns `^RApp/26-27/…` become `^(RApp|JApp)/[0-9]{2}-[0-9]{2}/[0-9]{4}$` (existing numbers stay valid, malformed ones stay rejected).
+4. *Existing identifiers:* on introduction the counter for (series, `26-27`) is seeded from the current maximum issued number (or the sequence's last value), so numbering continues without reuse; issued numbers are never rewritten.
+5. *Back-dated documents:* the year follows the document date, not the issue date, so a 2027-03-31 document keyed after rollover continues the `26-27` series while a 2027-04-01 document starts `27-28/0001`. Whether Finance accepts issuing into a closed year, or wants a period-lock block, is PD-10/PD-20 and part of the approval.
+6. *Scope of the later change (if approved):* the voucher function, both pinned CHECKs, the reconcile function, `ACCOUNTS_VOUCHER_FY` and receipt pattern in `accounts.ts`, the Busy series helper (`PV-S`/`EV-S YY-YY`) in `eligibility.ts`, the hard-coded `2627` in the complaint-ticket function, and every reader of the two sequences. Busy series for each new year are still created by the accountant.
+7. *Rollback of the change:* keep the old function and sequences until the first post-rollover issue is verified; the counter table is additive.
+
+**Isolated feasibility (2026-11-25, scratch PostgreSQL 17, synthetic data, not committed; EV-060).** Boundaries: 2026-03-31 → 25-26, 2026-04-01 → 26-27, 2027-03-31 → 26-27, 2027-04-01 → 27-28, 2028-04-01 → 28-29; IST/UTC timestamp case as above. Compatibility: counters seeded at 123 and 7 continued as `RApp/26-27/0124` and `JApp/26-27/0008`. Rollover: `RApp/27-28/0001` and `0002` while a back-dated 2027-03-31 document took `RApp/26-27/0125`. Historical (25-26) and future (28-29) years start at 0001 independently. Counter isolation by series and year confirmed. Rollback: after a rolled-back issue the next number was the same one (no gap). Parallel: 8 sessions × 20 issues in one series and year gave 160 distinct numbers, `0001`–`0160`, none missing. Uniqueness: enforced by a primary key on the issued number. Not tested: the real function, the reconcile function, Busy import, production data.
 **Considerations.** Busy needs the new series created by the accountant either way. Option B removes the yearly code change but touches the voucher function, both CHECK constraints, the reconcile function, the Busy series helper and every reader of the old sequences, and needs the series scheme (PD-02, PD-03, PD-16) settled first. Option A is smaller and is enough for 2027.
-**Agent recommendation (not a user decision and not an approval):** option A for 2027, because it is smaller, is needed once a year, and option B would still need the Busy series created by the accountant. Checklist if approved: new sequences, function, constraints, constants; dry run on staging; Accounting sign-off. B remains an option for later. **Neither option is authorized and nothing has been changed.** Approval needed: which option, the Sales series list, and Accounting sign-off. Target completion 2027-03-15 (A). Decision record: PD-20 in the decision log §G.
+**Comparison with the annual alternative (option A).** A needs one controlled change set before 2027-04-01 each year (new sequences, function, CHECKs, constants, Busy series) and a person to remember it; a missed date mis-numbers or rejects receipts. B removes the yearly code change and the date risk, at the cost of a larger one-time change (touch list above), a counter table replacing sequences, and a decision on back-dated documents. Both need the Busy series created by the accountant and PD-02/03/16. The agent's earlier preference for A is withdrawn as a default: B is now the finalized design under review, A remains the fallback. **Neither is authorized or implemented.** Approval needed: Accounting owner and Engineering owner (PD-20).
 
 ## Implementation Tasks
 
@@ -449,7 +458,7 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ✅ 3.6 | Branch scope model | Eng | 2026-11-25 | 2026-11-25 | Isolated; production mapping is a release prerequisite
 ✅ 4.1 | Branch attribution with Unmapped | Eng | 2026-11-25 | 2026-11-25 | New report and payroll cost
 ✅ 4.2 | Payroll cost summary | Eng | 2026-11-25 | 2026-11-25 | Employer cost not available
-🔄 4.3 | Report catalogue fields | Eng | 2026-11-25 | - | Fields added; 10 unregistered reports not decided
+🔄 4.3 | Report catalogue fields | Eng | 2026-11-25 | - | 39 registered reports catalogued in code; 10 unregistered await PD-26
 ⏳ 4.4 | busy_export_runs | Eng (BUSY-001) | - | - | Owned by BUSY-001; no separate authorization
 ❌ 4.5 | Reconciliation to Busy | Finance head | - | - | Internal comparison done; Busy part blocked (PD-11)
 ✅ 4.6 | Lineage and mapping | Eng | 2026-11-25 | 2026-11-25 | Lineage CSV
@@ -473,11 +482,11 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 | PD-20 financial-year option (A annual change set, B automatic) and approval to implement | Accounting owner + Engineering owner | Tasks 5.2, 5.3; ACCOUNTS-001 and BUSY-001 numbering |
 | PD-02, PD-03, PD-16 voucher series and Sales series list | Finance head / CA, Accounting owner | Financial year; collision check |
 | PD-11 Busy reconciliation extract, tolerance, sign-off role | Finance head | Task 4.5 (Busy part) |
-| PD-21 role mapping: who holds `finance_all_branches`, report-module split | Finance head + Engineering owner | Release of DBL-0101; task 3.3 |
-| PD-22 platform admin bypass and default module grants versus the "no automatic all-branch for administrators" rule (PD-17 is not fully satisfied until decided) | Finance head + Engineering owner | PD-17 compliance; release of DBL-0101 |
-| PD-23 advisor names excluded in `ReportsPage` | Business owner | Task 2.4 |
+| PD-21 role mapping: who holds `finance_all_branches`, report-module split | Finance head + Engineering owner | Release of DBL-0101; task 3.3 (DEFERRED by user 2026-11-25) |
+| PD-22 (designated administrator approved; other administrators deferred) platform admin bypass and default module grants versus the "no automatic all-branch for administrators" rule (PD-17 is not fully satisfied until decided) | Finance head + Engineering owner | PD-17 compliance; release of DBL-0101 |
+| PD-23 advisor names excluded in `ReportsPage` | Business owner | Task 2.4 (DEFERRED by user 2026-11-25) |
 | PD-24 invoice key redesign (a material change) | Finance head + Import owner | Beyond DBL-0102 |
-| PD-25 bank-field read paths for Settings, SA Tracker and edge functions | Finance head + HR owner | Task 3.5 exception |
+| PD-25 bank-field read paths for Settings, SA Tracker and edge functions | Finance head + HR owner | Task 3.5 exception (DEFERRED by user 2026-11-25) |
 | PD-13/07 expense or manual revenue register | Finance head | Excluded (6.1) |
 | Publication, deployment, independent review | User and repository review process | Everything above |
 

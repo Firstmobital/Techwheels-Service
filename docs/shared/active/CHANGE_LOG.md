@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (ACCOUNTS-002 continued implementation and publication validation corrections)
+
+- Date: 2026-11-25
+- Change summary: Corrected publication validation (outgoing set is merge-base..HEAD; working-tree impact reports no longer accepted for unpushed scope; range reports must match the current HEAD and merge-base SHAs and file set; behind/diverged and uncommitted-plus-unpushed states block; `scripts/*.harness.ts` classified as automation scripts) with a 14-scenario isolated-git harness (`npm run test:publish-readiness`). Added report catalogue defaults (`src/pages/reports/reportCatalogue.ts`) and a harness. Recorded the designated-administrator exception and deferrals (PD-21, PD-23, PD-24, PD-25), PD-26, and the finalized automatic financial-year design (design only, not implemented). Added unapproved dependency proposals to BUSY-001 and ACCOUNTS-001.
+- Impacted files: `scripts/publish_readiness_check.mjs`, `scripts/repo_change_impact.mjs`, `scripts/publish-readiness.harness.mjs`, `scripts/report-catalogue.harness.ts`, `package.json`, `src/pages/reports/index.ts`, `src/pages/reports/reportCatalogue.ts`, ACCOUNTS-002 plan and evidence, BUSY-001 and ACCOUNTS-001 plans, `ADMIN_BYPASS_RLS_GOVERNANCE.md`, publication readiness disposition.
+- Business logic change: No (report metadata only; validation tooling corrected).
+- Function-level contract change: No
+- RBAC/RLS change: No (administrator exception documented, existing behaviour preserved)
+- Data/schema change: No
+- Docs updated by: ACCOUNTS-002 continued implementation.
+
 ## 2026-11-25 (ACCOUNTS-002 documentation reconciliation)
 
 - Date: 2026-11-25

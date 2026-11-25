@@ -103,6 +103,7 @@ The open decisions that follow from the approvals are in section G (not repeated
 None of these is decided by this plan or by the agent. "Blocks" says what cannot finish until the user decides: local completion, financial accuracy, or production release. Activity IDs refer to the plan's Activity Tracker.
 
 ### PD-20 Financial-year implementation approach
+- **Status (latest user decision):** neither automatic nor annual implementation is authorized. The automatic design is finalized for separate approval in the plan section "Financial-year design" (isolated feasibility 2026-11-25, EV-060). The agent recommendation below is superseded for design purposes: the automatic design is now the proposal under review; the annual change set remains the fallback.
 - **Current behaviour:** receipts and vouchers are `RApp/JApp 26-27` and Busy series `PV-S/EV-S 26-27`; the year is fixed in code, the voucher function, two sequences, two CHECK constraints, the reconcile function and the complaint ticket function. A 2027-05-01 receipt still gets `RApp/26-27` (observed on the isolated database).
 - **Evidence:** EV-045, EV-055; inventory in the plan (Financial-year design).
 - **Options:** (A) annual controlled change set before 2027-04-01; (B) automatic derivation from the document date with per-year counters.
@@ -138,6 +139,7 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Approval needed:** Finance head.
 
 ### PD-21 Finance role assignments and UI permission separation
+- **Status (latest user decision): DEFERRED.** Keep the database-level Finance authorization (DBL-0101); no new production role assignments; UI permission separation not started. Prerequisites to document before reopening: read-only production list of role/module assignments and employee links; named users for `finance_all_branches`; a decision on splitting the `reports` module.
 - **Current behaviour:** DBL-0101 limits revenue and warranty rows to users with a reading module and a matching dealer-code link, or the module `finance_all_branches`. Users without links see no rows. The Reports module is still one right for all report categories.
 - **Evidence:** test matrix §4 access matrix (isolated); plan release prerequisites.
 - **Options:** (a) map links and grant `finance_all_branches` to named users before apply; (b) also split `reports` into finance and operational rights in the UI.
@@ -150,6 +152,7 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Approval needed:** Finance head and Engineering owner.
 
 ### PD-22 Administrator bypass and default module assignments
+- **Status (latest user decision):** the designated administrator account `admin@firstmobital.com`, while it holds the Admin role, keeps unrestricted application-level admin access across modules and branches (**approved exception**). Other administrators are **DEFERRED**: their access is unchanged and not narrowed. Implemented by existing mechanisms only: the existing Admin-role bypass (`is_admin()`, `admin_unrestricted_all_ops_v1`, default module grants) is preserved; no email-based or client-side authorization was added and a caller-supplied email claim is never trusted. Verified on the isolated database (EV-061): the designated account with the Admin role reads and writes all finance tables and the bank RPCs; the same email in a JWT claim presented by a non-admin user id, an unauthenticated caller and a module-less user are denied. PD-17's rule about not extending all-branch access to every administrator remains unresolved for administrators other than the designated account.
 - **Current behaviour:** (1) every table has the platform policy `admin_unrestricted_all_ops_v1`, and the event trigger `trg_auto_admin_bypass_policy_on_ddl` adds it to new tables, so every administrator can read and change every row regardless of branch; (2) the triggers `trg_grant_active_module_to_admins_after_insert/update` and `trg_grant_admin_all_active_modules_after_insert/update` give every active administrator every active module, so a new module such as `finance_all_branches` is granted to all administrators automatically.
 - **Conflict with the approval:** PD-17 says all-branch finance access must be explicitly authorized and must not be given automatically to every administrator. This is not satisfied while (1) and (2) stand. DBL-0101 leaves both untouched.
 - **Evidence:** snapshot objects named above; isolated runtime (the seeded administrator received `finance_all_branches` when the module was created); `ADMIN_BYPASS_RLS_GOVERNANCE.md`.
@@ -162,6 +165,7 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Approval needed:** Finance head and Engineering owner.
 
 ### PD-23 Hard-coded advisor exclusions
+- **Status (latest user decision): DEFERRED.** The hard-coded behaviour is kept; task 2.4 stays blocked.
 - **Current behaviour:** `ReportsPage.tsx` removes a fixed list of names from the advisor filter options.
 - **Evidence:** EV-022; task 2.4 Blocked.
 - **Options:** keep; remove; move to a setting or an inactive flag on the employee record.
@@ -173,6 +177,7 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Approval needed:** Business owner.
 
 ### PD-24 Material invoice identity redesign
+- **Status (latest user decision): DEFERRED.** The interim DBL-0102 preservation safeguard stays; no key, trigger, mirror or Busy change; the completeness limitation remains open.
 - **Current behaviour:** one row per location, portal, job card and invoice date. A second invoice for the same job card and date replaces the first in a later batch (DBL-0102 preserves the replaced row but does not add it back to totals) or fails a single batch.
 - **Evidence:** EV-046, EV-052, EV-054 (private local dump, aggregates only: 27 of 2,649 job-card and date groups in parts uploads have more than one invoice number).
 - **Options:** (a) keep the key plus the preservation table, and report the replaced invoices to Finance; (b) widen the key with the invoice number; (c) both, with a backfill from the preserved rows.
@@ -184,6 +189,7 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Approval needed:** Finance head and Import owner.
 
 ### PD-25 Authorized read paths for employee bank fields
+- **Status (latest user decision): DEFERRED.** Current protection and read paths (Settings, SA Tracker, service-role edge functions) are preserved; no new restrictions or expansion.
 - **Current behaviour:** after DBL-0101, bank fields can be read by `payroll` view, `employees` view (Settings), `sa_tracker` view (SA Tracker export) and administrators through `get_employee_bank_details`, and by service-role edge functions that build earnings reports (unchanged). Writes: administrators only (`set_employee_bank_details`, existing row policy); payroll users also through the existing definer functions.
 - **Support in the approved scope:** the approval names payroll workflows. Payroll is supported. The Settings (employees) and SA Tracker paths are existing behaviours preserved to avoid breaking them; they were not individually approved. The edge functions' recipients and content were not audited.
 - **Options:** (a) keep all four paths; (b) limit to payroll and administrator and give Settings and SA Tracker a masked view; (c) limit to payroll and administrator only.
@@ -193,3 +199,15 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Recommendation:** (b) after HR confirms the need.
 - **Blocks:** nothing locally; the exception should be settled before production release.
 - **Approval needed:** Finance head and HR owner.
+
+### PD-26 Registration of the ten unregistered Performance reports
+- **Current behaviour:** ten report components under `src/pages/reports/performance/` (including `jc-invoice-reconciliation`) are not in the registry, so they are unreachable (G-06). The registered 39 reports now all resolve to catalogue metadata through `reportCatalogue.ts`; the ten are not catalogued in code.
+- **Evidence:** EV-035; `scripts/report-catalogue.harness.ts` output (EV-062).
+- **Options:** register all or some (adds navigation and a category); retire; leave as is.
+- **Business impact:** registering exposes reports that were never reviewed for access or accuracy; leaving them hides existing analyses.
+- **Technical impact:** small registry change plus the same gate as other reports.
+- **Activities:** 4.3 (ST-15 stays open for these ten).
+- **Recommendation:** none without a business answer.
+- **Blocks:** ST-15 full closure only.
+- **Approval needed:** Business owner and Engineering owner.
+

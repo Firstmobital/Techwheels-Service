@@ -89,6 +89,15 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050, DBL-0083). Inspected C
 
 ---
 
+## Proposed dependency from ACCOUNTS-002 (task 4.4) — NOT APPROVED, not started
+
+ACCOUNTS-002 (finance reporting) lists task 4.4 as owned here. Proposal only; no scope here changes until this plan's owner approves it.
+- **What:** a `busy_export_runs` log written only on an explicit workbook download (period, branch, who, when, file hash, row counts), a "period already exported" warning with the earlier run id, and an import-batch log.
+- **Why:** re-exporting a period can be imported into Busy twice and nothing records exports (ACCOUNTS-002 gap G-08; tests ST-07, ST-18).
+- **Constraints:** no automatic writes on page load; no ledger or posting queue; no change to Busy voucher series; any new table needs a DB ledger row and a paired SQL check.
+- **Depends on:** PD-02/03/16 (series evidence) for any change touching voucher series; PD-20 financial-year decision for `PV-S`/`EV-S` year labels.
+- **Evidence:** `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md` (G-08, PD-11, PD-20).
+
 ## Related Documentation
 
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`

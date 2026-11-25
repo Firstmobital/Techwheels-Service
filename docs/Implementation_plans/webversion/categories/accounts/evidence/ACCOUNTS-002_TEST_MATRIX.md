@@ -157,7 +157,7 @@ Note: payroll view and reports users without branch links see no rows, which is 
 | ST-12 period filter | NOT RUN | — | — |
 | ST-13 payroll cost | PASS (logic level); UI NOT RUN | Gross 50,500.50, deductions 2,250.25, net 48,250.25 on F2 (X and Y); employer cost reported as not available | EV-056 |
 | ST-14 payroll lock/recompute | STATIC EVIDENCE ONLY | Unchanged | — |
-| ST-15 catalogue | FAILED (partial) | Optional catalogue fields added and filled for the new report only; 10 unregistered reports undecided | — |
+| ST-15 catalogue | FAILED (partial) | Registered reports: all 39 now resolve to owner, sources, date basis and verification state through `reportCatalogue.ts` (harness PASS, EV-062). Still open: the 10 unregistered reports (PD-26); owners are proposals to confirm | EV-062 |
 | ST-16 lineage | STATIC EVIDENCE ONLY | Lineage CSV extended | — |
 | ST-17 regression snapshot | NOT RUN | — | — |
 | ST-18 audit events | NOT RUN | Export log is BUSY-001 task 4.4 | — |
@@ -165,7 +165,7 @@ Note: payroll view and reports users without branch links see no rows, which is 
 | ST-20 no second source | PASS | No expense or manual revenue register added | — |
 | ST-21 Busy reconciliation | BLOCKED | No approved extract, tolerance or sign-off | — |
 | ST-22 cross-system references | BLOCKED | Sales series list unavailable | — |
-| ST-23 financial year | FAILED (not implemented by design) | Design feasibility passed on scratch (160 distinct numbers under 8 parallel sessions, two years); implementation not approved | EV-055 |
+| ST-23 financial year | FAILED (not implemented by design) | Design feasibility passed on scratch (160 distinct numbers under 8 parallel sessions; extended 2026-11-25 to boundary, IST, compatibility, back-dated, rollback and counter-isolation cases, EV-060); implementation not approved | EV-055 |
 | ST-24 employee bank fields | PASS (isolated) | See matrix | EV-052 |
 | ST-25 branch isolation | PASS (isolated) | See matrix | EV-052 |
 | ST-26 module-gated RPCs | PASS | Unchanged plus new RPC gating | EV-052 |
@@ -195,4 +195,16 @@ Counts above were re-checked against the table rows on 2026-11-25: 15 PASS, 2 FA
 - **Lint:** ESLint on the changed files reports no errors (pre-existing warnings only). Repo-wide `npm run lint` reports 1,590 pre-existing errors, none in changed files.
 - **Documentation validators:** `npm run docs:validate` passes (89 active plans); the health audit reports 0 broken links, the same 6 pre-existing advisory findings, and ledger coverage 0 unmatched of 2 prospective migrations.
 - **Not performed:** page-level checks of the new report, the Cost Summary tab, Settings, SA Tracker and payroll; mobile import and payroll earnings regression; staging verification; production role and Auth verification (signup, confirmation, API exposure); real Busy import; independent review.
+
+## 7. Addendum — continued implementation (2026-11-25, later session)
+Status counts in §4 are unchanged (ST-15 and ST-23 remain FAILED by scope: partial catalogue, FY not implemented). New evidence:
+
+| Check | Result | Evidence |
+|---|---|---|
+| Publication-readiness corrections: 14 scenarios in isolated git repositories (`npm run test:publish-readiness`) | 14/14 PASS on the corrected scripts; 8 of 14 FAIL on the previous scripts (original defect reproduced) | EV-063 |
+| Designated administrator exception (`admin@firstmobital.com` with Admin role) on the isolated database | Full read/write on finance tables and bank RPCs; same email claim from a non-admin user id, anonymous and module-less users denied; other administrators unchanged | EV-061 |
+| Named npm harness commands (`npx tsx …`) | NOT RUN: `tsx` is not installed and was not downloaded. Equivalent run with Node 24 native TypeScript stripping plus a local resolver: invoice-revenue OK (22,000.00), payroll-cost-summary OK (net 48,250.25), bodyshop-stage-queue OK, bodyshop-floor-pipeline exit 0, floor-work-facet-count OK | EV-064 |
+| `npm run build` | Still FAILS at HEAD on `BodyshopRepairPage` importing `isBillingRecordedForWaiver` (pre-existing, unrelated Bodyshop code, not modified) | EV-057 |
+| Report catalogue harness | 39 registered reports complete; 10 unregistered noted | EV-062 |
+| FY automatic design feasibility (extended) | PASS on scratch; not the real function | EV-060 |
 

@@ -415,6 +415,14 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 ---
 
+## Proposed dependency from ACCOUNTS-002 (task 4.7) — NOT APPROVED, not started
+
+ACCOUNTS-002 lists task 4.7 as owned here. Proposal only; no change is authorized by this note.
+- **What:** the Accounts page swallows payment-line load errors (`.catch(() => [])`), which can show lower received totals without any warning. Show a visible warning that names the failed source and mark totals incomplete.
+- **Why:** ACCOUNTS-002 gap G-09, test ST-03 (static evidence only; not run in a browser).
+- **Constraints:** no change to receipt numbering, vouchers, payment RPCs or Busy export; no new writes.
+- **Related:** voucher numbering and financial-year handling stay under PD-20 (ACCOUNTS-002 plan, Financial-year design).
+
 ## Related Documentation
 
 - `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md`
