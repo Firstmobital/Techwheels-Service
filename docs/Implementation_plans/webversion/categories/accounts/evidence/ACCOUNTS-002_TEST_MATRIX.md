@@ -41,8 +41,12 @@ All tests run only on a **disposable Supabase/Postgres instance restored from th
 | ST-21 | AT-021 | CAP-020 | Compare to an approved Busy control extract with tolerance | MATCH/EXPLAINED with sign-off by named role | finance | High |
 | ST-22 | AT-022 | CAP-021 | Insert vouchers concurrently across RApp/JApp; compare series inventory with Sales/Busy | No duplicates within Service; no overlap with Sales series | accounts | High |
 | ST-23 | rollover | CAP-021 | Set date to 2027-04-01 equivalent in the disposable DB and create receipts | New FY series issued; old numbers unchanged; Busy series names match approved list | accounts | High |
+| ST-24 | AT-017 | CAP-016 | As a user with no module, select `bank_name`, `account_number`, `ifsc` from `employee_master` | Denied or empty; payroll screens still load for payroll users | outsider, payroll | High |
+| ST-25 | AT-006 | CAP-016 | As a Tonk-branch user, read finance rows of another branch | Per PD-17: denied by policy, or the application-scope decision is recorded and tested at the UI | branch user | High |
+| ST-26 | AT-017 | CAP-016 | Call `list_accounts_*` and `payroll_finalize_month` without the module right | Denied with a clear error | outsider | Medium |
+| ST-27 | AT-017 | CAP-016 | As `anon`, read finance tables | No rows | anon | High |
 
-## 2. Results of the completed audit (static)
+## 2. Results of the first audit pass (static, audit time)
 
 Date: 2026-11-25. Revision `e7877341` + audit-time worktree snapshot `7809bd2a…` (committed afterwards as `98016773`). **No runtime check was run**: no environment was proven isolated with synthetic data (EV-042). Nothing was opened in production. Statuses: PASS / FAIL / NOT_RUN / STATIC_ONLY / BLOCKED. "Defect indicated" means code or policy text shows the requirement is not met; it is not an observed run.
 
@@ -77,3 +81,44 @@ PASS 1 (ST-20) · FAIL 1 (ST-15) · STATIC_ONLY 11 · NOT_RUN 7 · BLOCKED 3 (ST
 
 ### 2.2 Independent items not blocked by others
 ST-01..ST-07, ST-09, ST-11..ST-14, ST-17 only need the disposable environment; ST-19, ST-21, ST-22 need Finance/Sales inputs.
+
+## 3. Implementation-readiness verification: isolated runtime (second pass, 2026-11-25 IST)
+
+**Environment (EV-043).** A scratch PostgreSQL 17.7 cluster on loopback only, restored from the committed schema snapshot (sha256 `694ac198…8636`, commit `0c61add8`). Four extensions were unavailable (pgtap, pg_net, pg_cron, supabase_vault), so the pgTAP helper grants and the cron/net objects failed to restore; every table, policy and function used below loaded. Synthetic users, modules, revenue rows (fixture F1), payroll rows. No edge functions, no network integrations, no production data or credentials. The cluster and its data were destroyed after the run. This is **not production**: hosted Auth settings, production permission assignments and real data volumes remain unverified (EV-050).
+
+**Access matrix** (rows = operation attempted inside a rolled-back transaction; numbers = rows affected or returned):
+
+| Table / operation | no module | reports view | accounts | payroll view |
+|---|---|---|---|---|
+| `psf_revenue_dms` select / update / delete / insert | 4 / 4 / 1 / 1 | same | same | same |
+| `job_card_closed_data` select / update / delete / insert | 2 / 2 / 1 / 1 | same | same | same |
+| `service_invoice_data` select / update / delete / insert | 1 / 1 / 0 / 1 | same | same | same |
+| `warranty_claim_settlement_report_data` select / update (insert tested as no-module user) | 1 / 1 (insert allowed) | 1 / 1 | 1 / 1 | 1 / 1 |
+| `payroll_entries` select | 0 | 0 | 0 | 1 |
+| `payroll_entries` update / delete / insert | 0 / 0 / denied | same | same | same |
+| `list_accounts_mechanical_cases`, `list_accounts_bodyshop_cases` | denied | denied | allowed | denied |
+| `payroll_finalize_month` | denied | denied | denied | denied (admin allowed) |
+| Unauthenticated (`anon`) read of `psf_revenue_dms` / `job_card_closed_data` | 0 rows / permission denied | | | |
+
+| ID | Status | Observed result (isolated) | Evidence |
+|---|---|---|---|
+| ST-01 page-load writes | PASS (RPC level) | After the Accounts list RPCs as the accounts user, voucher sequences, `audit_logs` count and revenue row count were unchanged. Page-level load of `/busy`, `/reports`, `/payroll` NOT_RUN | EV-043 |
+| ST-04 revenue formula | FAIL (function level) | Repository `parseRevenueExcludingGst` run in Node on the F1 totals: 10,000 + 4,449 + 6,890 = **21,339**; correct 22,000. KPI end-to-end NOT_RUN | EV-047 |
+| ST-07 duplicates/retries | FAIL (partial) | Identical import retry: one row (idempotent). Two invoices for one job card and date: same batch fails; separate batches: the later invoice **replaces** the earlier (3,000 expected, 2,000 stored). Busy export duplicates NOT_RUN (no export log exists) | EV-046 |
+| ST-09 table access | FAIL | See matrix: a signed-in user with no module can read, change and delete revenue rows | EV-044 |
+| ST-13 payroll formula | PASS (formula level) | `computePayrollAmounts` gave 28,250.25 and 20,000.00; total 48,250.25. Cost view not built | EV-047 |
+| ST-23 FY rollover | FAIL | `accounts_mechanical_next_voucher_no('cash','2027-05-01')` returned `RApp/26-27/0002`; before 2026-09-02 it returns NULL; the voucher CHECK constraint pins `26-27` | EV-045 |
+| ST-24 employee bank fields | FAIL | Synthetic `bank_name`, `account_number`, `ifsc` in `employee_master` were readable by a user with no module | EV-049 |
+| ST-25 DB-level branch isolation | FAIL | 0 public policies mention branch; a Tonk-branch user read Sitapura and Ajmer Road rows | EV-048 |
+| ST-26 module-gated RPCs | PASS | Accounts list RPCs and `payroll_finalize_month` enforced module rights as shown | EV-044 |
+| ST-27 anonymous access | PASS | `anon` got 0 rows from `psf_revenue_dms` and permission denied on `job_card_closed_data` (table grants exist but policies are `TO authenticated`) | EV-044 |
+
+New tests added by this pass:
+- **ST-24** `employee_master` bank fields are not readable without a payroll right (AT-017).
+- **ST-25** Branch scope is enforced in the database for finance tables, or the decision to rely on application scope is recorded (AT-006; PD-17).
+- **ST-26** Module-gated RPCs reject users without the right (AT-017).
+- **ST-27** An unauthenticated caller reads no finance row (AT-017).
+
+### 3.1 Combined status after the second pass (27 tests)
+PASS 5 (ST-01 RPC level, ST-13 formula, ST-20, ST-26, ST-27) · FAIL 7 (ST-04, ST-07, ST-09, ST-15, ST-23, ST-24, ST-25) · STATIC_ONLY 6 (ST-02, ST-03, ST-05, ST-14, ST-16, ST-18) · NOT_RUN 6 (ST-06, ST-08, ST-10, ST-11, ST-12, ST-17) · BLOCKED 3 (ST-19, ST-21, ST-22). FAIL means the current behaviour does not meet the requirement; it is a verified gap that the plan addresses, not a defect introduced by this plan.
+

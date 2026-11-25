@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (ACCOUNTS-002 readiness verification)
+
+- Date: 2026-11-25
+- Change summary: Documentation-only. Completed implementation-readiness verification for ACCOUNTS-002 using an isolated scratch PostgreSQL restored from the committed schema snapshot with synthetic data, plus execution of the repository's revenue and payroll functions on synthetic inputs. Added the readiness matrix, scope statement, finance decision package (PD-17 to PD-20, options and recommendations), runtime findings G-13 to G-17 and new tests ST-24 to ST-27. The plan stays Proposed with implementation NS awaiting explicit approval.
+- Impacted files: ACCOUNTS-002 plan and its evidence files (test matrix, decision log, fit-gap, lineage, evidence index), web INDEX and tracker row text.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No (gaps verified, not changed)
+- Data/schema change: No (no production access; scratch database destroyed)
+- Docs updated by: ACCOUNTS-002 readiness verification.
+
 ## 2026-11-25 (autonomous workstream completion and database governance closure)
 
 - Date: 2026-11-25

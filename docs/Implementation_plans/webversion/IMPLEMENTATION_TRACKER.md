@@ -17,7 +17,7 @@ Legend:
 | Plan ID | Category | Title | Status | Owner | Source File | Last Updated |
 |---|---|---|---|---|---|---|
 | ACCOUNTS-001 | accounts | Mechanical + Bodyshop Accounts desk | IP | Accounts + Platform Team | docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md | 2026-09-19 |
-| ACCOUNTS-002 | accounts | Finance reporting: expenses, revenue, reports (audit done; implementation pending approval) | NS | Accounts + Platform Team | docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md | 2026-11-25 |
+| ACCOUNTS-002 | accounts | Finance reporting: expenses, revenue, reports (audit and readiness verification done; implementation NS, pending approval) | NS | Accounts + Platform Team | docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md | 2026-11-25 |
 | CHAT-001 | chat | Advisor–customer vehicle chat (web inbox + customer screen) | IP | Web + Mobile + Platform | docs/Implementation_plans/webversion/categories/chat/active/CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md | 2026-09-25 |
 | BODYSHOP-FLOW | bodyshop | Bodyshop module flow | IP | Bodyshop Team | docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md | 2026-06-18 |
 | BODYSHOP-QUEUE-001 | bodyshop | Canonical stage worklist backend | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md | 2026-06-20 |

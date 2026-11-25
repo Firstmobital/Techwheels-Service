@@ -5,7 +5,7 @@
 **Last Updated:** 2026-11-25  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team (approvers: Finance head, Accounting owner, Engineering owner)  
-**Status:** Proposed. Audit complete (static only). Implementation not started; awaiting approval.  
+**Status:** Proposed. Audit and implementation-readiness verification complete (static plus isolated runtime). Implementation not started (NS); awaiting explicit user approval.  
 **Platform:** webversion  
 **Category:** accounts  
 **Routes touched (if approved):** `/reports`, `/accounts`, `/busy`, `/payroll`  
@@ -44,9 +44,9 @@ Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts
 
 | Track | State | Evidence |
 |---|---|---|
-| **Audit (completed work)** | Done, static only | [baseline and current state](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md), [fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv), [source mapping](../evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv), [lineage](../evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv), [reports catalogue](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv), [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md), [evidence index](../evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv) |
+| **Audit and readiness verification (completed work)** | Done (static, then isolated runtime) | [baseline and current state](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md), [fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv), [source mapping](../evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv), [lineage](../evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv), [reports catalogue](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv), [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md), [evidence index](../evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv) |
 | **Implementation (pending)** | Not started; waits for approval and Finance decisions | Activity Tracker below |
-| Runtime verification | NOT_RUN (no isolated environment) | Test matrix section 2 |
+| Runtime verification | Isolated runtime done on synthetic data (second pass); production and hosted Auth settings BLOCKED | [Test matrix §3](../evidence/ACCOUNTS-002_TEST_MATRIX.md) |
 | Schema evidence limits | Committed and local snapshots agree on every cited `public` definition; neither proves production | [Audit baseline §3.2](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md) |
 
 ---
@@ -67,9 +67,15 @@ Key results; details and citations are in the evidence files above.
 | G-09 | Accounts swallows payment-line load errors | EV-036 |
 | G-10 | Three branch label systems; unknown employee codes fall back to Sitapura | EV-009, 038 |
 | G-11/12 | No expense capability; rate settings are not effective-dated | EV-034, 041 |
-| OK | List RPCs for Accounts/Recovery/Settlement are STABLE and write-free; payroll month finalization works; settlement corrections are append-only | EV-032, 023, 024 |
+| G-13 | Runtime: a signed-in user with no module can read, change and delete rows of `psf_revenue_dms` and `job_card_closed_data` (and read/change `service_invoice_data` and `warranty_*`) | EV-044 |
+| G-14 | Runtime: employee bank fields in `employee_master` are readable without any module; the payroll loader reads them directly | EV-049 |
+| G-15 | Runtime: no public policy references branch; a Tonk user read other branches' revenue rows | EV-048 |
+| G-16 | Runtime: two invoices for one job card and date overwrite each other across import batches (and fail within one batch) | EV-046 |
+| G-17 | Runtime: a 2027-05-01 receipt still gets `RApp/26-27`; the voucher CHECK constraints and the complaint-ticket function also pin the year | EV-045 |
+| OK | Verified at runtime on synthetic data: Accounts list RPCs and payroll finalize enforce module rights; `payroll_entries` is protected; `anon` reads no revenue rows; list RPCs cause no writes; payroll formula observed 28,250.25 / 20,000 | EV-044, 047 |
+| OK (static) | Payroll month finalization, settlement corrections append-only | EV-023, 024 |
 
-Audit test results (static): PASS 1 · FAIL 1 · STATIC_ONLY 11 · NOT_RUN 7 · BLOCKED 3. Four static rows indicate defects (ST-02, ST-03, ST-04, ST-09). No runtime check has been run.
+Test results after the second pass (27 tests, see [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md) §3.1): PASS 5 · FAIL 7 · STATIC_ONLY 6 · NOT_RUN 6 · BLOCKED 3. The 7 FAIL rows are verified gaps in current behaviour that this plan addresses (ST-04, ST-07, ST-09, ST-15, ST-23, ST-24, ST-25).
 
 ---
 
@@ -179,13 +185,58 @@ Busy remains the book of record (A). Control totals, tolerances and sign-off rol
 
 ---
 
+## Implementation-Readiness Verification (second pass, 2026-11-25 IST)
+
+**Method.** The committed schema snapshot was restored into a scratch PostgreSQL on loopback with synthetic users, modules and revenue/payroll rows, and the repository's own revenue and payroll functions were executed in Node on synthetic inputs (EV-043, 047). Nothing touched production. Limits: production permission assignments, hosted Auth settings (signup, confirmation, API exposure; EV-050), real data volumes and the real Busy import are not verified.
+
+### Finance capability map (reuse, extend, build)
+| Area | Existing capability (reuse) | Verified gap | Disposition | Owner plan |
+|---|---|---|---|---|
+| Revenue source | `psf_revenue_dms` invoice grain; `job_card_closed_data` JC grain | Formula 21,339 vs 22,000; same-JC/date overwrite; no status filter shown | EXTEND (CAP-009) | ACCOUNTS-002 |
+| Revenue access | Module routes, Accounts and payroll RPC checks | Table policies open to every signed-in user | EXTEND (CAP-016) | ACCOUNTS-002 |
+| Warranty | Eight warranty reports over `warranty_*` import tables | No finance-specific right; tables open to any signed-in user; amounts are read from imported row data (typed as strings in the report code) | EXTEND (CAP-016); value rules DEFER | ACCOUNTS-002 |
+| Expenses | None (no register); payroll cost via finalized `payroll_entries` | No management payroll cost view; bank fields exposed | EXTEND (CAP-008, CAP-016); register DEFER | ACCOUNTS-002 |
+| Busy export | `/busy` workbooks; parts invoice-key skip | No export log; real Busy import unverified | EXTEND (CAP-019) | BUSY-001 executes |
+| Receipts | `/accounts` RApp/JApp vouchers | FY pinned; load-error swallowed | EXTEND (CAP-021, CAP-015) | ACCOUNTS-001 executes |
+| Reports | 38 registered reports; drilldown | 5,000-row silent cap; no catalogue metadata; 10 unregistered; no reconciliation | EXTEND (CAP-012, 015, 020) | ACCOUNTS-002 |
+| Lineage | none | Documentation | BUILD (CAP-013) | ACCOUNTS-002 |
+
+### Scope
+- **In scope:** CAP-004, 005, 008, 009, 012, 013, 014, 015, 016, 017, 019, 020, 021 as listed in the tasks below.
+- **Out of scope:** an expense-entry register, a manual revenue register, shared-cost allocation, capitalisation, period-lock for non-payroll data, an in-app ledger or posting queue, any change to Sales systems.
+- **Deferred pending Finance:** CAP-001, 002, 003, 006, 007, 010, 011, 018 (PD-13, PD-07, PD-05, PD-08, PD-06, PD-10).
+- **Already established:** Busy is the book of record (assumption until PD-01), Service posts nothing to a ledger, existing voucher numbers are immutable, payroll lock stays as is.
+
+### Readiness matrix
+| Gate | Evidence and verification | Result | Remaining gap and dependency | Approval or access needed | Can proceed? |
+|---|---|---|---|---|---|
+| G1 Revenue permissions | Snapshot policies; isolated runtime matrix (EV-044) | ACTION REQUIRED | Replace open policies; caller inventory first (task 3.1) | PD-15 | Yes after PD-15 |
+| G2 Warranty permissions | Same matrix; no warranty module exists | ACTION REQUIRED | Needs a finance or warranty right | PD-15 | Yes after PD-15 |
+| G3 Revenue accuracy (formula) | Repository function executed: 21,339 vs 22,000 (EV-047) | ACTION REQUIRED | Slab-aware net and cancelled rule | PD-14 | Yes after PD-14 (build behind a label) |
+| G4 Revenue completeness | Isolated import test (EV-046): retry idempotent PASS; same-JC/date overwrite FAIL | ACTION REQUIRED | Whether the DMS issues such pairs is UNVERIFIED | PD-18; DMS export files | Task 2.7 waits for data |
+| G5 Report completeness | Catalogue (48 reports; 38 registered) | ACTION REQUIRED | Registry metadata; register or retire 10; reconciliation report | none beyond plan | Yes |
+| G6 Expense and payroll | Payroll formula observed correct (EV-047); finalize enforced (EV-044); no register by design | PASS for calculation; ACTION REQUIRED for bank-field exposure | Task 3.5 | PD-19 | Yes after PD-19 |
+| G7 Busy export controls | Static: invoice-key skip, series from DMS prefix; no export log; BUSY-001 task 3.2 shows no real import | ACTION REQUIRED; real import BLOCKED | Export log (4.4); Busy extract for reconciliation | PD-01, PD-11, Busy extract | Log yes; reconciliation blocked |
+| G8 Financial-year rollover | Runtime: 2027-05-01 gets 26-27; CHECK constraints pin it (EV-045) | ACTION REQUIRED (dated 2027-03-31) | Single change set per year | PD-20, PD-02/03 | Design yes; apply after decisions |
+| G9 Branch isolation | 0 branch policies; cross-branch read (EV-048) | ACTION REQUIRED (decision) | Choose scope model | PD-17 | After PD-15 |
+| G10 Database and RLS evidence | Committed snapshot restored and exercised (EV-043) | PASS (captured structure) | Not production | Read-only production check if wanted | n/a |
+| G11 Runtime verification | Isolated runtime done; page-level and production not run | PARTIAL; production BLOCKED (EV-050) | Hosted Auth settings, real roles | Read access to hosted settings | Planning yes |
+| G12 Viewing causes no writes | List RPCs, isolated runtime | PASS (RPC level) | Page-level run in staging | none | Yes |
+| G13 Module-gated RPCs | Isolated runtime | PASS | none | none | n/a |
+| G14 Finance decisions | Decision package in the decision log | ACTION REQUIRED | PD-14, PD-15 are start blockers | Finance head | Waits |
+
+Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` ordering check cannot fail because it sorts first; unregistered Performance reports; hard-coded advisor exclusion. TRACKED WORK: BUSY-001 task 3.2 (real Busy import), ACCOUNTS-001 open ledger items. ARCHITECTURE CANDIDATE: in-app ledger, generic cost allocation (not proposed). OBSERVATION: the DMS import function disables and re-enables a trigger with DDL on every batch.
+
+### Implementation-readiness recommendation
+**Ready for approval of Phases 1–3 and the non-blocked parts of Phase 4**, subject to PD-14 and PD-15 (essential) and PD-19 (security, should not wait long). Phase 5 (FY and series) can be designed now and applied after PD-02, PD-03, PD-20; it has a hard date of 2027-03-15 (A) for completion. Reconciliation to Busy (ST-21) is blocked until Finance supplies an approved extract. No implementation has started and none is authorized by this document.
+
 ## Implementation Tasks (pending)
 
 Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row traces to a fit-gap item ([fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv)) and a test ID ([test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md)). Phases 1–5 run in order unless noted; no task starts before plan approval.
 
 ### Phase 1 — Decisions and baseline (no code)
 - **1.1** Approve this plan. Gate for everything below.
-- **1.2** Finance decisions PD-01..PD-12 and PD-14..PD-15 (see Decisions). Items: CAP-001/002/003/006/007/010/011/018 (DEFER rows).
+- **1.2** Finance decisions PD-01..PD-20 (see Decisions; start blockers PD-14 and PD-15). Items: CAP-001/002/003/006/007/010/011/018 (DEFER rows).
 - **1.3** Obtain Sales voucher series list, company GSTIN holder, and an approved Busy control extract (PD-16, PD-11).
 - **1.4** Provision a disposable database restored from the schema snapshot with synthetic fixtures F1–F4; integrations disabled.
 - **1.5** Run and record baseline tests ST-01..ST-07, ST-17 (before any code change). CAP-004.
@@ -197,12 +248,15 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 - **2.4** Replace hard-coded advisor exclusion with a flag or setting (CAP-016; ST-17).
 - **2.5** Web–Mobile Parity declaration in the PR; confirm no mobile counterpart (CONTRIBUTING.md).
 - **2.6** Drilldown equals headline (CAP-014; ST-06).
+- **2.7** After PD-18: confirm from DMS exports whether one job card can have two invoices on one date; if so, add the smallest fix (flag at import, or widen the key with the invoice number) with a regression test on the Busy and voucher triggers (CAP-009; ST-07).
 
 ### Phase 3 — Access hardening (migration)
 - **3.1** Inventory every direct caller of the revenue tables (web, mobile import, edge functions, triggers). CAP-016.
 - **3.2** Migration + paired `supabase/sql_checks` replacing `USING (true)` policies; DB ledger row; metadata refresh; staged first.
 - **3.3** Split `reports` right into finance vs operational (parts/warranty) (PD-15).
-- **3.4** Regression ST-09, ST-10 on the disposable database and staging.
+- **3.4** Regression ST-09, ST-10, ST-26, ST-27 on the disposable database and staging.
+- **3.5** After PD-19: restrict `employee_master` bank fields to payroll users (payroll-gated RPC or column privileges) and update the payroll loader in the same change (CAP-016; ST-24).
+- **3.6** After PD-17: apply the chosen branch-scope model to the finance tables and test with a branch user (CAP-016; ST-25).
 
 ### Phase 4 — Reporting controls
 - **4.1** Shared branch/department map with an "unmapped" bucket (CAP-005; ST-11, ST-12).
@@ -215,7 +269,7 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 
 ### Phase 5 — References and financial-year rollover
 - **5.1** Series inventory across Busy, Sales and Service; decision PD-02/PD-03 (CAP-021; ST-22).
-- **5.2** Single config for FY and series prefixes; FY 27-28 sequences created before 2027-04-01 (A: target 2027-03-15); issued numbers untouched (ST-23).
+- **5.2** One yearly change set: FY 27-28 sequences, the voucher function, the payment-line and settlement-line CHECK constraints, code constants (`accounts.ts`, `eligibility.ts`) and, with its owner, the complaint-ticket function; created before 2027-04-01 (A: target 2027-03-15); issued numbers untouched (ST-23; PD-20).
 - **5.3** Dry-run in the disposable database and sign-off by the Accounting owner.
 
 ### Phase 6 — Conditional (not planned)
@@ -236,12 +290,14 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ✅ A.5 | Acceptance tests ST-01..ST-23 and static results | Eng | 2026-11-25 | 2026-11-25 | Test matrix
 ✅ A.6 | Decision log and Sales-fit review | Eng | 2026-11-25 | 2026-11-25 | Decision log
 ✅ A.7 | Promotion to governed docs, index and tracker | Eng | 2026-11-25 | 2026-11-25 | This plan
+✅ A.8 | Readiness verification: isolated runtime (access matrix, voucher FY, import, formulas) | Eng | 2026-11-25 | 2026-11-25 | Test matrix §3
+✅ A.9 | Finance decision package and readiness matrix | Eng | 2026-11-25 | 2026-11-25 | Decision log §E; this plan
 ```
 
 ### B. Pending implementation
 ```
 ⏳ 1.1 | Plan approval | Owner | - | - | Gate
-⏳ 1.2 | Finance decisions | Finance head / Accounting owner | - | - | PD-01..PD-15
+⏳ 1.2 | Finance decisions | Finance head / Accounting owner | - | - | PD-01..PD-20 (start blockers: PD-14, PD-15)
 ❌ 1.3 | Sales series list, Busy control extract | Accounting owner | - | - | Blocks ST-21, ST-22
 ⏳ 1.4 | Disposable DB + fixtures F1-F4 | Eng | - | - | Blocks all runtime tests
 ⏳ 1.5 | Baseline run ST-01..07, 17 | Eng | - | - | After 1.4
@@ -251,10 +307,13 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ⏳ 2.4 | Remove name-based exclusion | Eng | - | - | CAP-016
 ⏳ 2.5 | Parity declaration | Eng | - | - | CONTRIBUTING.md
 ⏳ 2.6 | Drilldown = headline | Eng | - | - | CAP-014
+⏳ 2.7 | Same JC/date multi-invoice handling | Eng + Import owner | - | - | Needs PD-18 and DMS export evidence
 ⏳ 3.1 | Caller inventory | Eng | - | - | CAP-016
 ⏳ 3.2 | Policy migration + sql_checks + ledger | Eng | - | - | Staging first
 ⏳ 3.3 | Reports rights split | Eng + Finance head | - | - | PD-15
-⏳ 3.4 | Access regression | Eng | - | - | ST-09, ST-10
+⏳ 3.4 | Access regression | Eng | - | - | ST-09, ST-10, ST-26, ST-27
+⏳ 3.5 | Restrict employee bank fields | Eng + HR owner | - | - | PD-19, ST-24
+⏳ 3.6 | Branch scope model | Eng + Finance head | - | - | PD-17, ST-25
 ⏳ 4.1 | Branch/department map | Eng | - | - | CAP-005
 ⏳ 4.2 | Payroll cost view | Eng | - | - | CAP-008
 ⏳ 4.3 | Report metadata + dormant reports | Eng | - | - | CAP-012/020
@@ -272,13 +331,17 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 
 ## Decisions Requiring Approval
 
-Full table with options and impacts: [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md) section B (PD-01..PD-16). Decisions on tax, legal, posting policy and period close belong to the Finance head or Accounting owner; none is made by this plan.
+Full table with options and impacts: [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md) section B (PD-01..PD-20); the evidence-based decision package with options, consequences and recommendations is section E. Decisions on tax, legal, posting policy and period close belong to the Finance head or Accounting owner; none is made by this plan.
 
 | Decision | Approver | Blocks |
 |---|---|---|
 | Approve this plan and phases | Owner of Service | Phase 1 |
 | PD-14 revenue basis and GST-slab rule; cancelled treatment | Finance head | Phase 2 labels (task 2.3) |
-| PD-15 access split | Finance head + Engineering owner | Phase 3 (task 3.3) |
+| PD-15 access split | Finance head + Engineering owner | Phase 3 (task 3.3); also needed before Phase 2 start |
+| PD-17 branch isolation | Finance head + Engineering owner | Task 3.6 |
+| PD-18 same-JC/date invoices | Finance head + Import owner | Task 2.7 |
+| PD-19 employee bank fields | Finance head + HR owner | Task 3.5 |
+| PD-20 FY rollover mechanics | Accounting owner + Engineering owner | Phase 5 |
 | PD-01/02/03/16 Busy role, series, FY | Finance head / CA, Accounting owner | Phase 5 |
 | PD-11 reconciliation controls and sign-off | Finance head | ST-21 |
 | PD-13/07 need for any expense or manual revenue register | Finance head | Phase 6 |
@@ -306,18 +369,20 @@ Tightening RLS may break importers or mobile paths that rely on open writes (mit
 
 ## Latest Evidence (retention: latest two)
 
-1. 2026-11-25 IST, static audit at `e7877341`: test matrix section 2 (PASS 1, FAIL 1, STATIC_ONLY 11, NOT_RUN 7, BLOCKED 3).
-2. None yet. First runtime run is task 1.5; compare against evidence 1 when it exists.
+1. 2026-11-25 IST, static audit at `e7877341`: test matrix §2 (PASS 1, FAIL 1, STATIC_ONLY 11, NOT_RUN 7, BLOCKED 3).
+2. 2026-11-25 IST, isolated runtime second pass: test matrix §3 (combined 27 tests: PASS 5, FAIL 7, STATIC_ONLY 6, NOT_RUN 6, BLOCKED 3). Comparison with evidence 1: of the four static "defect indicated" rows, ST-04 and ST-09 are now observed failures (ST-02 and ST-03 remain static); ST-07 and ST-23 also fail at runtime; five new runtime findings were added (G-13 to G-17); no earlier static concern was disproved.
+
+Task 1.5 (baseline run on a maintained disposable environment) remains pending; the second pass used a throwaway scratch database.
 
 ## Next Actions
 
-1. Owner approves or revises this plan (task 1.1).
-2. Finance head answers PD-13, PD-14, PD-15, PD-16 first; they unblock Phases 2, 3 and 5.
-3. Provision the disposable database (task 1.4) and record baseline tests (task 1.5).
+1. **Approval gate:** the owner approves, revises or rejects this plan (task 1.1). Implementation stays NS until then.
+2. Finance head answers PD-14 and PD-15 (start blockers), then PD-19, PD-17, PD-18.
+3. On approval: provision the maintained disposable database (task 1.4) and record baseline tests (task 1.5), then start Phase 2.
 
 ## Communication and Sign-Off
 
-Approval: Owner of Service. Finance sign-off: Finance head / Accounting owner. Engineering sign-off: Engineering owner. Sign-offs are recorded here when given; none exists yet.
+Approval: Owner of Service (explicit, required before any implementation task starts; publication and deployment need separate authorization per `.instructions.md` Section 11). Finance sign-off: Finance head / Accounting owner. Engineering sign-off: Engineering owner. Sign-offs are recorded here when given; none exists yet.
 
 ## Related Documentation
 

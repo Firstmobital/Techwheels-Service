@@ -13,6 +13,7 @@ Decisions on tax, legal, posting policy and period close belong to the Finance h
 | DL-04 | Did not read `local_folder/backups/full_database.sql` | Contains customer/financial rows; structural questions answered from the snapshot |
 | DL-05 | Handoff prompt layout differs from the assignment; the assignment's file layout was followed | Assignment governs |
 | DL-06 | 2026-11-25: audit promoted as plan ACCOUNTS-002 (new plan, not an amendment) | No existing plan owns revenue reporting/report access; ACCOUNTS-001 and BUSY-001 keep their scope and receive pointers |
+| DL-07 | 2026-11-25 second pass: implementation-readiness verification run in an isolated scratch PostgreSQL restored from the committed snapshot with synthetic data (EV-043); no production access was used | Strongest evidence available without production access; hosted Auth settings and real data remain BLOCKED (EV-050) |
 
 ## B. Pending business decisions (with Service impact)
 | ID | Handoff ref | Decision | Options | Proposed approver | Work that can proceed | Work that waits |
@@ -33,6 +34,10 @@ Decisions on tax, legal, posting policy and period close belong to the Finance h
 | PD-14 | new | Which revenue basis is finance-grade: invoice grain (`psf_revenue_dms`) or JC grain? Is GST-5 parts treatment per slab acceptable? | recommend invoice grain | Finance head | — | CAP-009 label change |
 | PD-15 | new | Report access split (finance vs operational) and who may read DMS revenue rows | | Finance head + Engineering owner | — | CAP-016 policy rewrite |
 | PD-16 | new | Obtain Sales voucher series list and company GSTIN holder of record | | Accounting owner | — | CAP-021 collision check |
+| PD-17 | new | Branch isolation: should finance tables be scoped to the user's branch in the database, or is application-level filtering enough? | (a) keep application scope; (b) module right only, no branch policy; (c) branch policy using `users.branch` | Finance head + Engineering owner | Phase 3 module-right policies | Any branch policy (needs PD-15 first) |
+| PD-18 | new | Can the DMS issue more than one invoice for one job card on one date? (Import key replaces the earlier invoice) | (a) confirm never and document; (b) add invoice number to the key; (c) reject or flag duplicates at import | Finance head + Import owner | Evidence gathering from DMS exports | Task 2.7, invoice-grain totals |
+| PD-19 | new | Restrict `employee_master` bank fields to payroll users | (a) payroll-gated RPC; (b) column privileges; (c) move fields to a payroll table | Finance head + HR owner | Payroll loader change | Task 3.5 |
+| PD-20 | new | Financial-year rollover mechanics | (a) per-year migration checklist; (b) parameterized FY configuration | Accounting owner + Engineering owner | PD-02, PD-03 | Phase 5 |
 
 ## C. Sales-handoff recommendations that do not fit Service
 | Handoff item | Why not applied |
@@ -48,3 +53,28 @@ Decisions on tax, legal, posting policy and period close belong to the Finance h
 
 ## D. Notes on the handoff package
 `SERVICE_AGENT_PROMPT.md` asks for deliverable names that differ from this assignment; the proposal templates (fit-gap, mapping, acceptance tests) were usable as is. The package assumes registers exist; Service has none for expenses/revenue, so most Expenses rows resolve to DEFER.
+
+## E. Decision package (second pass, evidence-based)
+
+Each decision lists why it is needed, the evidence, options with consequences, a recommendation where evidence supports one, and the risk of proceeding without it. Nothing here is decided by this plan.
+
+**PD-14 Finance revenue basis, GST treatment and cancelled invoices.** *Why:* the report formula assumes 18% on everything. *Evidence:* observed 21,339 vs 22,000 on F1 (EV-047); Busy handles 5% and 18% slabs (EV-010). *Options:* (a) invoice-grain `psf_revenue_dms` with per-slab net; (b) keep job-card grain with a corrected divisor; (c) leave as is and label it. *Consequences:* (a) matches the Busy export and shows cancelled separately but needs slab data for parts invoices; (b) is smaller but cannot be reconciled to invoices; (c) keeps a known understatement. *Recommendation:* (a), with the old figure shown beside it for one release. *Risk without it:* parts invoiced at 5% GST stay understated (3% on the synthetic fixture) and revenue cannot be reconciled to Busy.
+
+**PD-15 Access model for finance data.** *Why:* every signed-in user can change revenue tables (EV-044). *Options:* (a) finance module right for read, writes only through import and accounts functions; (b) split `reports` into finance and operational rights; (c) both. *Consequences:* (a) closes the write gap with the least UI change; (b) also needs role assignments for each user; (c) is the end state. *Recommendation:* (a) first, (b) after role mapping. *Dependencies:* caller inventory (task 3.1) for the DMS importer, mobile import, payroll earnings and triggers. *Risk without it:* any signed-in account can alter or delete revenue rows.
+
+**PD-17 Branch isolation.** *Evidence:* no public policy references branch; a Tonk user read other branches (EV-048). *Options:* (a) accept application-level filtering; (b) database branch policies from `users.branch`; (c) none until PD-15 lands. *Consequences:* (b) can hide data from multi-branch managers unless an all-branch right exists. *Recommendation:* (c) then (a) unless Finance requires per-branch confidentiality. *Risk without it:* a branch user can read all branches by calling the API directly.
+
+**PD-18 Same job card, same date, more than one invoice.** *Evidence:* later invoice overwrites the earlier one in separate batches and fails in one batch (EV-046). *Options:* (a) confirm the DMS never does this; (b) widen the unique key with the invoice number; (c) flag at import. *Consequences:* (b) touches the voucher trigger, the job-card mirror and the Busy export key; (c) is smaller. *Recommendation:* first check DMS exports for such pairs (read-only, needs the export files), then (c) if any exist. *Risk without it:* silent under-reporting of revenue for affected jobs.
+
+**PD-19 Employee bank details.** *Evidence:* readable without a module (EV-049); the payroll page reads them directly. *Options:* (a) payroll-gated RPC; (b) column privileges; (c) separate payroll table. *Recommendation:* (a), changing the payroll loader in the same change. *Risk without it:* any signed-in user can read employee bank details.
+
+**PD-20 Financial-year rollover.** *Evidence:* FY 26-27 in the voucher function, sequence names, CHECK constraints, code constants and the complaint ticket function (EV-045). *Options:* (a) a per-year change set (new sequences, constraints, function, constants) done before 2027-04-01; (b) a configuration table. *Recommendation:* (a), because it is needed once a year and keeps issued numbers untouched; add the checklist to the plan. *Risk without it:* receipts after 2027-03-31 are numbered as 26-27 or rejected by the CHECK constraint.
+
+**PD-01/02/03/16 Busy role, posting authority and series.** *Evidence:* Service issues RApp/JApp and PV-S/EV-S series; BUSY-001 notes the real Busy import has not been verified (task 3.2 pending). *Options:* as in section B. *Recommendation:* keep Busy as the book of record (assumption) and get the Sales series list before any series change. *Risk without it:* possible duplicate references on the shared registration.
+
+**PD-11 Reconciliation controls.** Needs an approved Busy extract, tolerance and sign-off role. *Risk without it:* the Busy match test (ST-21) stays blocked.
+
+**PD-13/07 Expense or manual revenue register.** *Evidence:* none exists and no distinct need is shown (EV-034). *Recommendation:* do not build; Finance lists any non-DMS income or workshop expense that Busy cannot hold.
+
+**Essential blockers for implementation start:** approval of the plan, PD-14, PD-15. **Can be decided later:** PD-17, PD-18, PD-19 (but PD-19 is a security fix and should not wait long), PD-20 (before 2027-03-15), PD-01/02/03/11/16.
+
