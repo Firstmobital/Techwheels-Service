@@ -196,6 +196,18 @@
       "path": "docs/shared/evidence/repo_change_impact_report.json",
       "generator_command": "npm run docs:impact",
       "note": "Run during validation; output restored and not committed."
+    },
+    {
+      "path": "supabase/backups/full_metadata.sql",
+      "generator_command": "npm run db:backup:metadata",
+      "regenerated_at_utc": "2026-11-25T07:35:36.000Z",
+      "note": "Run by the user (commits 98016773, 0c61add8); not hand-edited. Verified by repo_health_audit: sha256 matches the manifest, no drift."
+    },
+    {
+      "path": "supabase/evidence/authoritative_metadata_manifest.json",
+      "generator_command": "npm run db:backup:metadata",
+      "regenerated_at_utc": "2026-11-25T07:35:36.000Z",
+      "note": "Companion manifest of the same user-run refresh; hash matches full_metadata.sql."
     }
   ],
   "deferred_db_changes": [],
@@ -227,5 +239,15 @@
       "reason": "Describes the 2026-06-18 snapshot; none of the changes here are applied or released, so the current-state truth is unchanged until release."
     }
   ],
-  "how_to_measure": "Run `node scripts/repo_change_impact.mjs --range origin/main..HEAD` and then `npm run publish:ready`. Plain `npm run docs:impact` on a clean working tree analyses no files and `publish:ready` then reports READY without examining the unpushed commits; that result is not a readiness proof."
+  "how_to_measure": "Run `node scripts/repo_change_impact.mjs --range origin/main..HEAD` and then `npm run publish:ready`. Plain `npm run docs:impact` on a clean working tree analyses no files and `publish:ready` then reports READY without examining the unpushed commits; that result is not a readiness proof.",
+  "agent_review_2026-11-25": {
+    "kind": "Fresh-context AI reviewer, read-only, not a human reviewer; did not read sql_checks or harness files. Recorded as input, not as completed independent review.",
+    "outcome": "Changes requested; no review category marked completed.",
+    "open_findings": [
+      "MAJOR (DBL-0101, unapplied): finance_my_location_keys maps dealer codes via psf_fallback_location(), which knows only 500A840, 3000840 and 3001440; Tonk/Shahpura or other-code users would see no finance rows after apply. Needs a business mapping decision before apply.",
+      "MAJOR: invoice revenue report labels source 'read completely' although RLS may filter rows for branch-scoped users once DBL-0101 is applied.",
+      "MAJOR (pre-existing exposure, not a regression): bank columns remain directly writable by any user whose employee_master RLS allows updates; consider column-level REVOKE UPDATE or a trigger.",
+      "MINOR: finance_data_can_import accepts job_cards view; payroll fetch throws if bank RPC errors (Attendance/Incentive tabs); capRows warns at exactly 5,000 rows; legacyNetPaise rounds to rupees; Settings CSV bank fallback is non-atomic; readiness SHA check loops if the impact report is committed before publish:ready; resolveRange does not accept three-dot ranges."
+    ]
+  }
 }
