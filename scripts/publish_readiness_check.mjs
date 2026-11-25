@@ -76,11 +76,34 @@ function getGitChanges() {
     .sort()
 }
 
-function getUnpushedCommitFiles() {
+function gitOut(cmd) {
+  return execSync(`git ${cmd}`, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+}
+
+// Publication state: where HEAD sits relative to its upstream. The outgoing set is
+// always merge-base..HEAD, so remote-only commits of a diverged upstream never count.
+function getPublicationState() {
   try {
-    const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { cwd: ROOT, encoding: 'utf8' }).trim()
-    if (!upstream) return []
-    const raw = execSync(`git diff --name-only ${upstream}..HEAD --`, { cwd: ROOT, encoding: 'utf8' })
+    const upstream = gitOut('rev-parse --abbrev-ref --symbolic-full-name @{u}')
+    if (!upstream) return { upstream: null }
+    const [behind, ahead] = gitOut(`rev-list --left-right --count ${upstream}...HEAD`).split(/\s+/).map(Number)
+    return {
+      upstream,
+      ahead,
+      behind,
+      head_sha: gitOut('rev-parse HEAD'),
+      merge_base_sha: gitOut(`merge-base ${upstream} HEAD`),
+    }
+  } catch {
+    return { upstream: null }
+  }
+}
+
+function getUnpushedCommitFiles() {
+  const state = getPublicationState()
+  if (!state.upstream) return []
+  try {
+    const raw = gitOut(`diff --name-only ${state.merge_base_sha}..HEAD --`)
     return raw.split('\n').filter((line) => line.length > 0).sort()
   } catch {
     return []
@@ -156,13 +179,13 @@ function resolveReadinessScope(workingTreeFiles, unpushedCommitFiles, dispositio
 }
 
 function impactModeAccepted(mode, readinessScope) {
-  if (mode === 'pending_working_tree_changes') return true
+  if (mode === 'pending_working_tree_changes') return readinessScope === 'working tree'
   if (readinessScope === 'published baseline') return mode === 'incoming_commit_range'
   return readinessScope === 'unpushed commits' && mode === 'incoming_commit_range'
 }
 
 function skipImpactFileSetComparison(readinessScope) {
-  return readinessScope === 'unpushed commits' || readinessScope === 'published baseline'
+  return readinessScope === 'published baseline'
 }
 
 function fingerprintChangeSet(files) {
@@ -354,6 +377,46 @@ async function main() {
   const dispositionReady =
     dispositionMatchesChangeSet(disposition, comparableReadinessFiles) ||
     dispositionCoversFollowOnChangeSet(disposition, comparableReadinessFiles, impact)
+
+  const pubState = getPublicationState()
+  if (pubState.upstream && pubState.behind > 0) {
+    add(
+      blockers,
+      'BLOCKER',
+      'publication_state',
+      `Local branch is ${pubState.behind} commit(s) behind ${pubState.upstream}${pubState.ahead > 0 ? ` and ${pubState.ahead} ahead (diverged)` : ''}.`,
+      'Integrate upstream (git-safe-publish.sh uses pull --rebase), then regenerate range-mode impact and rerun `npm run publish:ready`. Only merge-base..HEAD is assessed as outgoing.',
+      pubState,
+    )
+  }
+  {
+    const substantiveTree = comparableImpactFiles(workingTreeFiles).filter(
+      (file) => !PUBLICATION_PIPELINE_ARTIFACTS.has(file) && !READINESS_DISPOSITION_EVIDENCE.has(file),
+    )
+    if (pubState.upstream && pubState.ahead > 0 && substantiveTree.length > 0) {
+      add(
+        blockers,
+        'BLOCKER',
+        'publication_state',
+        'Uncommitted working-tree changes coexist with unpushed commits; the outgoing set cannot be assessed as one change set.',
+        'Commit or stash the working-tree changes, then regenerate range-mode impact and rerun `npm run publish:ready`.',
+        { uncommitted_files: substantiveTree },
+      )
+    }
+  }
+  if (readinessScope === 'unpushed commits' && !impact.__read_error && impact.mode === 'incoming_commit_range') {
+    const resolved = impact.commit_range_resolved
+    if (!resolved || resolved.head_sha !== pubState.head_sha || resolved.merge_base_sha !== pubState.merge_base_sha) {
+      add(
+        blockers,
+        'BLOCKER',
+        'impact',
+        'Impact report was not generated for the current HEAD and merge-base (stale or missing resolved SHAs).',
+        'Run `node scripts/repo_change_impact.mjs --range "<upstream>..HEAD"` and rerun `npm run publish:ready`.',
+        { report: resolved || null, current: { head_sha: pubState.head_sha, merge_base_sha: pubState.merge_base_sha } },
+      )
+    }
+  }
 
   if (impact.__read_error) {
     add(blockers, 'BLOCKER', 'impact', `Cannot read ${rel(IMPACT_REPORT_PATH)}: ${impact.__read_error}`, 'Run `npm run docs:impact` and inspect the generated report.')
