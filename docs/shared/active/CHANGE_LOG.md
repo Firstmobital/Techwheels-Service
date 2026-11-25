@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (shared governance and publication validation sync)
+
+- Date: 2026-11-25
+- Change summary: Brought the completed, workstream-independent governance and validation to `main`: Autonomous Workstream Completion and temporary integration-branch rules (`.instructions.md` Section 11, Transaction Framework), plan creation is not implementation approval (task contracts), post-rebaseline database governance (DATABASE_TRUTH, DB_CHANGE_PROTOCOL, DB_TRUTH_PROTOCOL, ledger policy, update template), corrected publication validation (merge-base outgoing set, strict range evidence, one database blocker per ledger row, TypeScript harness classification, ledger-coverage health check) with its fixture harness, and two behaviour-preserving build corrections (`isBillingRecordedForWaiver` re-export; type narrowing in `BodyshopFloorPage`).
+- Impacted files: see the commit; no application features, migrations, permissions or Finance reports.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: governance synchronization.
+
 ## 2026-10-01
 
 - Date: 2026-10-01

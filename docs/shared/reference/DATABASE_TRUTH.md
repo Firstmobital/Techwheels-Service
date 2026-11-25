@@ -1,6 +1,6 @@
 # Database Truth (Authoritative)
 
-Last Updated: 2026-09-30
+Last Updated: 2026-11-25
 Status: Mandatory — this file is the top-level entry point for "which database file do I trust?" for every human and AI agent working in this repo.
 Classification: state = truth, scope = shared, intent = reference. (Moved here 2026-06-29 from `docs/database-truth.md` per `docs/STRUCTURE_GUIDE.md` Section 2.1 — docs root is reserved for governance anchors only; this is shared reference content, same category as `DB_TRUTH_PROTOCOL.md` and `DB_CHANGE_PROTOCOL.md` in this folder.)
 
@@ -68,7 +68,7 @@ Before giving any recommendation, implementation plan, diagnosis, or code change
 
 1. Read `supabase/evidence/authoritative_metadata_manifest.json` from the current repository state and treat its `created_at_utc`, `sha256`, and `size_bytes` as the machine-generated freshness/integrity evidence for `supabase/backups/full_metadata.sql`.
 2. Inspect the relevant definitions in `supabase/backups/full_metadata.sql` itself. Do not rely on a dump seen in an earlier chat, memory, migration presence alone, or prose summaries of schema state.
-3. If repository evidence shows a production schema change occurred after the manifest timestamp and a fresh metadata dump has not yet captured it, treat the dump as potentially stale and resolve current operational truth using `docs/shared/reference/DB_TRUTH_PROTOCOL.md` (latest dump + verified post-dump promotions) before advising.
+3. If repository evidence shows a production schema change occurred after the manifest timestamp and a fresh metadata dump has not yet captured it, treat the dump as potentially stale and treat the snapshot as authoritative for what it contains and treat only ledger rows in `docs/shared/reference/DB_CHANGE_LEDGER.md` (APPLIED/VERIFIED, with their migration files) as post-snapshot execution evidence, labelled unverified until the next refresh. See "Evidence Terms and Post-Rebaseline Change Lifecycle" below.
 4. If freshness cannot be established from the current repository state, state that limitation explicitly and do not present schema-dependent assumptions as fact.
 5. A locally regenerated dump is not visible to repository-based AI/MCP inspection until the refreshed `full_metadata.sql` and generated manifest are committed/pushed to the repository state being inspected.
 
@@ -77,7 +77,7 @@ Before giving any recommendation, implementation plan, diagnosis, or code change
 3. **Never invent database objects.** Do not assume a table, column, type, enum, constraint, index, view, materialized view, function/RPC, trigger, policy, grant, or extension exists (or has a particular shape) unless it is actually present in `full_metadata.sql` or `full_database.sql`. If it is not in either file, say so explicitly instead of guessing.
 4. Do not infer row-level security or policy behavior from application code alone — verify against `CREATE POLICY` / `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` statements in `full_metadata.sql`.
 5. If a dump and a doc disagree, the dump wins (this mirrors the existing rule in `docs/shared/reference/DB_TRUTH_PROTOCOL.md`).
-6. For DB changes in progress (proposed/applied/verified but not yet captured in a fresh dump), use the composite truth described in `docs/shared/reference/DB_TRUTH_PROTOCOL.md`: latest dump + promoted migrations listed in `supabase/evidence/post_dump_verified_promotions.md`.
+6. For DB changes in progress (proposed/applied/verified but not yet captured in a fresh metadata snapshot), the snapshot stays the only structural truth. Use the matching `DB_CHANGE_LEDGER.md` rows and migration files as post-snapshot execution evidence, never as proof of current structure. The promotion window `supabase/evidence/post_dump_verified_promotions.md` is historical and tied to the full-database dump (see "Evidence Terms").
 7. Regenerate dumps with the scripts below rather than hand-editing dump files. Hand edits will be silently overwritten on the next regeneration and are never authoritative.
 
 ## Conflict Rule
@@ -143,8 +143,9 @@ Key facts:
 
 2. **`supabase/migrations/` contains only:**
    - `20260929152000_production_schema_baseline.sql` — the canonical baseline (stays here
-     permanently; unlike incremental migrations, it is NOT moved to exec_success_migrations)
-   - Future incremental migrations created AFTER the baseline
+     permanently)
+   - Incremental migrations created AFTER the baseline. They also stay here after execution;
+     they are not moved to `exec_success_migrations/`, which holds pre-baseline history only.
 
 3. **SQL Editor is not the normal path for schema changes.**
    Normal flow: create migration → review → validate → explicitly authorize apply
@@ -162,11 +163,37 @@ Key facts:
    They must not re-enter the active migration execution path. Git history and the
    preservation tag `database-rebaseline-pre-cutover-2026-09-29` are the archive.
 
+## Evidence Terms and Post-Rebaseline Change Lifecycle
+
+*Added 2026-11-25. This section defines each artifact once; other database docs refer here instead of redefining.*
+
+| Term | Artifact | What it is, and what it is not |
+|---|---|---|
+| Authoritative metadata snapshot | `supabase/backups/full_metadata.sql` | The only proof of captured schema structure (primary tier). It shows structure at its dump time; it does not show who changed what, or whether a change was verified. |
+| Metadata manifest | `supabase/evidence/authoritative_metadata_manifest.json` | Identity and freshness of the snapshot (`created_at_utc`, `sha256`, `size_bytes`). Read it for current identity; do not copy current values into prose. Written by `scripts/backup-metadata.sh`. |
+| Full-database dump | `local_folder/backups/full_database.sql` (+ `chunks/` mirror) | Secondary tier: row data, seed/lookup data. Not the schema authority. |
+| Full-database manifest | `supabase/evidence/authoritative_dump_manifest.json` | Identity and freshness of the full-database dump. Written by `scripts/backup-full-db.sh`. |
+| Migration history | `supabase/migrations/` (+ `supabase/sql_checks/`) and remote migration tracking | What was authored and in what order. Files stay in place after execution. It never proves current state. |
+| Applied-environment evidence | `DB_CHANGE_LEDGER.md` Applied Env and Validation Evidence cells | A recorded assertion by an operator or author about where and when a change was applied. It is post-snapshot execution evidence, **not** proof of current database structure. |
+| Practical verification evidence | Recorded `sql_checks` output, UAT result | Needed before a ledger row is VERIFIED. A check file existing is not a verification result. |
+| Historical post-dump promotions | `supabase/evidence/post_dump_verified_promotions.md`, `execution_promotion_log.md`, `supabase/exec_success_migrations/`, `scripts/promote_verified_migration.sh` | The pre-2026-09-29 workflow, tied to the **full-database dump** (its window baseline is the full-database manifest). Preserved as historical evidence. Not used for post-rebaseline migrations. `scripts/backup-metadata.sh` never touches it. |
+
+Post-rebaseline change lifecycle (one path, used by `DB_CHANGE_PROTOCOL.md`):
+1. Plan item and ledger row (PROPOSED), one row per approved change set.
+2. Migration and paired `sql_checks` in `supabase/migrations/` and `supabase/sql_checks/`; they stay there after execution.
+3. Review and explicit authorization, then apply by an operator.
+4. Ledger row APPLIED with environment, time and operator.
+5. Run the checks and record the output; only then VERIFIED.
+6. Refresh the snapshot with `npm run db:backup:metadata`; commit `full_metadata.sql` and its manifest together.
+7. Optionally cite the snapshot commit in the ledger row as capture evidence. Capture does not change the status and does not replace steps 4 and 5.
+
+Between steps 3 and 6, a change is **post-snapshot execution evidence** only. Treat any structural claim about it as unverified until the refreshed snapshot contains it.
+
 ## Related Process Docs (Operational Detail, Not Authority)
 
 These remain valid for their specific workflows; they defer to this file for "which file is truth":
 
-- `docs/shared/reference/DB_TRUTH_PROTOCOL.md` — composite-truth rules between dump refreshes.
+- `docs/shared/reference/DB_TRUTH_PROTOCOL.md` — operational rules for dump refreshes; its promotion workflow is historical and tied to the full-database dump.
 - `docs/shared/reference/DB_CHANGE_PROTOCOL.md` — required workflow for proposing/applying/verifying schema changes.
 - `docs/shared/reference/DB_CHANGE_LEDGER.md` — change log of schema/RLS/function/view/index changes.
 - `supabase/evidence/authoritative_dump_manifest.json` / `authoritative_metadata_manifest.json` — sha256/size/timestamp evidence for the two dumps, written automatically by the regeneration scripts.

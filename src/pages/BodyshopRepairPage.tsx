@@ -51,7 +51,6 @@ import {
   isDeliveryReady,
   hasBillingAmountOnCard,
   isBillingRecordedForWaiver,
-  isBillingStage15Done,
   isBillingStage15DoneForQueues,
   isBillingStage16Done,
   isPreBillingStagesWaived,

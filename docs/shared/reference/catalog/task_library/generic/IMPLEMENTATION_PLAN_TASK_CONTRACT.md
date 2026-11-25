@@ -30,7 +30,8 @@ Create a new implementation plan only when no existing active plan already owns 
 3. Create the plan file under `categories/<category>/active/` using the naming rules in `STRUCTURE_GUIDE.md` Section 4, filled in from `docs/shared/reference/catalog/IMPLEMENTATION_PLAN_TEMPLATE.md` with complete, non-placeholder content.
 4. Apply the retention standard from `STRUCTURE_GUIDE.md` Section 28 from the first write (current status tracker, phased structure, per-item status clarity, next actions only).
 5. Update that platform's `INDEX.md` and `IMPLEMENTATION_TRACKER.md` in the same change; update `docs/Implementation_plans/INDEX.md` if this is a new top-level entry.
-6. Run the Repository Lifecycle Protocol Self-Heal Check (`docs/shared/reference/SYNC_PROTOCOL.md`) before finishing.
+6. Leave the plan's implementation status `NS` until the user approves it; creating or committing a plan is not implementation approval (`.instructions.md` Section 11, item 2).
+7. Run the Repository Lifecycle Protocol Self-Heal Check (`docs/shared/reference/SYNC_PROTOCOL.md`) before finishing.
 
 ## Expected Outputs
 

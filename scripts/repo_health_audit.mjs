@@ -19,6 +19,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
+import { findLedgerRowsForFile } from './publish_readiness_check.mjs'
 
 const ROOT = process.cwd()
 const REPORT_PATH = path.resolve(ROOT, 'docs/shared/evidence/repo_health_audit_report.json')
@@ -315,6 +316,77 @@ async function checkPromotionGaps() {
 }
 
 // ---------------------------------------------------------------------------
+// Check 8: database ledger coverage for migrations (advisory)
+// ---------------------------------------------------------------------------
+// Uses the same matching rule as scripts/publish_readiness_check.mjs
+// (findLedgerRowsForFile). The prospective boundary is read from the ledger's
+// own "Prospective ledger boundary" rule so the authority stays single.
+// Migrations after the boundary without a ledger row are issues; migrations at
+// or before it are historical coverage and are reported, not counted as issues.
+
+const LEDGER_PATH = path.resolve(ROOT, 'docs/shared/reference/DB_CHANGE_LEDGER.md')
+const MIGRATIONS_DIR = path.resolve(ROOT, 'supabase/migrations')
+const LEDGER_BOUNDARY_RE = /Prospective ledger boundary:\s*`(\d{14})`/
+const LEDGER_HISTORY_RE = /Historical inventory at adoption:\s*`(\d+)` files, `(\d+)` unmatched/
+
+async function checkLedgerCoverage() {
+  const result = {
+    checked: false,
+    boundary: null,
+    prospective_migrations: 0,
+    prospective_unmatched: [],
+    historical_migrations: 0,
+    historical_unmatched_count: 0,
+    historical_recorded: null,
+    historical_growth: [],
+    detail: null,
+  }
+  let ledgerText
+  let files
+  try {
+    ledgerText = await fs.readFile(LEDGER_PATH, 'utf8')
+    files = (await fs.readdir(MIGRATIONS_DIR)).filter((name) => /^\d{14}_.+\.sql$/.test(name) && !/_checks\.sql$/.test(name)).sort()
+  } catch {
+    result.detail = 'DB_CHANGE_LEDGER.md or supabase/migrations not found - skipped.'
+    return result
+  }
+  const match = LEDGER_BOUNDARY_RE.exec(ledgerText)
+  if (!match) {
+    result.detail = 'No "Prospective ledger boundary: `<14 digits>`" rule found in DB_CHANGE_LEDGER.md - skipped.'
+    return result
+  }
+  result.checked = true
+  result.boundary = match[1]
+  const history = LEDGER_HISTORY_RE.exec(ledgerText)
+  if (history) result.historical_recorded = { files: Number(history[1]), unmatched: Number(history[2]) }
+  const historicalUnmatchedNames = []
+  for (const name of files) {
+    const unmatched = findLedgerRowsForFile(ledgerText, name).length === 0
+    if (name.slice(0, 14) > result.boundary) {
+      result.prospective_migrations += 1
+      if (unmatched) result.prospective_unmatched.push(name)
+    } else {
+      result.historical_migrations += 1
+      if (unmatched) {
+        result.historical_unmatched_count += 1
+        historicalUnmatchedNames.push(name)
+      }
+    }
+  }
+  // Out-of-order additions at or below the boundary: more historical files or more
+  // unmatched historical files than the ledger recorded at adoption.
+  if (
+    result.historical_recorded &&
+    (result.historical_migrations > result.historical_recorded.files ||
+      result.historical_unmatched_count > result.historical_recorded.unmatched)
+  ) {
+    result.historical_growth = historicalUnmatchedNames.slice(-3)
+  }
+  result.detail = 'Historical unmatched migrations are informational only (no back-fill; unmatched does not mean unverified or failed).'
+  return result
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -328,6 +400,7 @@ async function main() {
   const dbHierarchyFlags = await checkDbHierarchyContradictions(governanceDocs)
   const generatedArtifactDrift = await checkGeneratedArtifactDrift()
   const promotionGaps = await checkPromotionGaps()
+  const ledgerCoverage = await checkLedgerCoverage()
 
   const totalIssues =
     brokenLinks.length +
@@ -335,7 +408,9 @@ async function main() {
     vendorAiFiles.length +
     dbHierarchyFlags.length +
     (generatedArtifactDrift.drifted ? 1 : 0) +
-    promotionGaps.length
+    promotionGaps.length +
+    ledgerCoverage.prospective_unmatched.length +
+    (ledgerCoverage.historical_growth.length > 0 ? 1 : 0)
 
   const report = {
     generated_at_utc: new Date().toISOString(),
@@ -348,6 +423,7 @@ async function main() {
       db_hierarchy_contradiction_flags: dbHierarchyFlags,
       generated_artifact_drift: generatedArtifactDrift,
       promotion_gaps_best_effort: promotionGaps,
+      ledger_coverage: ledgerCoverage,
     },
     total_issues: totalIssues,
   }
@@ -363,6 +439,14 @@ async function main() {
   console.log(`- DB hierarchy contradiction flags: ${dbHierarchyFlags.length}`)
   console.log(`- Generated artifact drift: ${generatedArtifactDrift.drifted ? 'YES' : 'no'} (${generatedArtifactDrift.checked ? 'checked' : 'skipped'})`)
   console.log(`- Promotion gaps (best-effort): ${promotionGaps.length}`)
+  console.log(
+    ledgerCoverage.checked
+      ? `- DB ledger coverage after boundary ${ledgerCoverage.boundary}: ${ledgerCoverage.prospective_unmatched.length} unmatched of ${ledgerCoverage.prospective_migrations}; historical unmatched (informational): ${ledgerCoverage.historical_unmatched_count} of ${ledgerCoverage.historical_migrations} migration files at or before the boundary`
+      : `- DB ledger coverage: skipped (${ledgerCoverage.detail})`,
+  )
+  if (ledgerCoverage.historical_growth.length > 0) {
+    console.log(`  ! Historical inventory grew beyond the ledger's recorded baseline (out-of-order migration?). Latest unmatched: ${ledgerCoverage.historical_growth.join(', ')}`)
+  }
   console.log(`Full report: ${rel(REPORT_PATH)}`)
 
   if (totalIssues > 0) {

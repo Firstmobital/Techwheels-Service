@@ -395,7 +395,7 @@ v1 action sets: `service_ready_at`, `service_ready_by`, `phase = 'drop'`, `drop_
 - [ ] **Task 1.6:** Add max-photo trigger guard (20 per task/stage).
 - [ ] **Task 1.7:** Seed `public.modules` row for `vehicle_pickup`.
 - [ ] **Task 1.8:** Extend `delete_reception_entry_cascade()` to clean up pickup task dependents + storage paths.
-- [ ] **Task 1.9:** Add SQL checks file under `supabase/exec_success_migrations/sql_check/`.
+- [ ] **Task 1.9:** Add SQL checks file under `supabase/sql_checks/` (post-rebaseline location; see `docs/shared/reference/DB_CHANGE_PROTOCOL.md`).
 
 ### Phase 2: API Layer
 
@@ -487,7 +487,7 @@ v1 action sets: `service_ready_at`, `service_ready_by`, `phase = 'drop'`, `drop_
 | File | Purpose |
 |------|---------|
 | `supabase/migrations/YYYYMMDD_vehicle_pickup_module.sql` | Schema, triggers, RLS, module seed |
-| `supabase/exec_success_migrations/sql_check/YYYYMMDD_vehicle_pickup_checks.sql` | Post-migration verification |
+| `supabase/sql_checks/YYYYMMDDHHMMSS_vehicle_pickup_checks.sql` | Post-migration verification |
 | `src/lib/api/vehiclePickup.ts` | Typed API layer |
 | `src/pages/VehiclePickupPage.tsx` | Coordinator web UI |
 | `mobile/src/app/(tabs)/vehicle-pickup.tsx` | Driver task list |

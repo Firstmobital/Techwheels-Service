@@ -26,8 +26,8 @@ Propose, apply, and verify a database schema/RLS/function/view/index change thro
 
 1. Verify current object state against `full_metadata.sql` (schema questions) or `full_database.sql`/its chunks (data/cross-check questions) before proposing anything — never assume a table/column/policy/function exists or has a given shape.
 2. Follow `docs/shared/reference/DB_CHANGE_PROTOCOL.md`'s propose/apply/verify workflow for the change.
-3. Add or update a row in `docs/shared/reference/DB_CHANGE_LEDGER.md` for the change.
-4. Apply the migration through the repository's existing migration mechanism (`supabase/migrations/`); move successful migrations per the existing convention (`supabase/exec_success_migrations/`) — do not invent a new migration path.
+3. Add or update a row in `docs/shared/reference/DB_CHANGE_LEDGER.md` for the approved change set (one row per change set; separate rows when migrations are in different lifecycle states).
+4. Apply the migration through the repository's existing migration mechanism (`supabase/migrations/`). The migration and its paired checks stay in `supabase/migrations/` and `supabase/sql_checks/` after execution; do not move them to `supabase/exec_success_migrations/` (historical) and do not invent a new migration path.
 5. After the change is applied and verified, refresh the truth files only via the existing generator scripts: `scripts/backup-metadata.sh` (schema) or `scripts/backup-full-db.sh` (full dump + chunks) — never hand-edit `full_metadata.sql`, `full_database.sql`, or the chunk parts.
 6. Run the Repository Lifecycle Protocol Self-Heal Check (`docs/shared/reference/SYNC_PROTOCOL.md`) before finishing.
 

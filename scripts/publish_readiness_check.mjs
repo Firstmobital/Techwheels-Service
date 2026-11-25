@@ -16,6 +16,7 @@ import { execSync } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
 const ROOT = process.cwd()
 const IMPACT_REPORT_PATH = path.resolve(ROOT, 'docs/shared/evidence/repo_change_impact_report.json')
@@ -75,11 +76,34 @@ function getGitChanges() {
     .sort()
 }
 
-function getUnpushedCommitFiles() {
+function gitOut(cmd) {
+  return execSync(`git ${cmd}`, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+}
+
+// Publication state: where HEAD sits relative to its upstream. The outgoing set is
+// always merge-base..HEAD, so remote-only commits of a diverged upstream never count.
+function getPublicationState() {
   try {
-    const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { cwd: ROOT, encoding: 'utf8' }).trim()
-    if (!upstream) return []
-    const raw = execSync(`git diff --name-only ${upstream}..HEAD --`, { cwd: ROOT, encoding: 'utf8' })
+    const upstream = gitOut('rev-parse --abbrev-ref --symbolic-full-name @{u}')
+    if (!upstream) return { upstream: null }
+    const [behind, ahead] = gitOut(`rev-list --left-right --count ${upstream}...HEAD`).split(/\s+/).map(Number)
+    return {
+      upstream,
+      ahead,
+      behind,
+      head_sha: gitOut('rev-parse HEAD'),
+      merge_base_sha: gitOut(`merge-base ${upstream} HEAD`),
+    }
+  } catch {
+    return { upstream: null }
+  }
+}
+
+function getUnpushedCommitFiles() {
+  const state = getPublicationState()
+  if (!state.upstream) return []
+  try {
+    const raw = gitOut(`diff --name-only ${state.merge_base_sha}..HEAD --`)
     return raw.split('\n').filter((line) => line.length > 0).sort()
   } catch {
     return []
@@ -155,13 +179,13 @@ function resolveReadinessScope(workingTreeFiles, unpushedCommitFiles, dispositio
 }
 
 function impactModeAccepted(mode, readinessScope) {
-  if (mode === 'pending_working_tree_changes') return true
+  if (mode === 'pending_working_tree_changes') return readinessScope === 'working tree'
   if (readinessScope === 'published baseline') return mode === 'incoming_commit_range'
   return readinessScope === 'unpushed commits' && mode === 'incoming_commit_range'
 }
 
 function skipImpactFileSetComparison(readinessScope) {
-  return readinessScope === 'unpushed commits' || readinessScope === 'published baseline'
+  return readinessScope === 'published baseline'
 }
 
 function fingerprintChangeSet(files) {
@@ -177,7 +201,8 @@ function timestampPrefix(filePath) {
   return match ? match[1] : null
 }
 
-function findLedgerRowsForFile(ledgerText, filePath) {
+// Exported so scripts/repo_health_audit.mjs reuses the exact ledger matching rule.
+export function findLedgerRowsForFile(ledgerText, filePath) {
   const fileName = path.basename(filePath)
   const prefix = timestampPrefix(filePath)
 
@@ -211,6 +236,10 @@ function generatedArtifactConfirmed(disposition, filePath) {
   return (disposition.generated_artifacts || []).some(
     (entry) => entry.path === filePath && entry.generator_command && entry.regenerated_at_utc,
   )
+}
+
+function ledgerRowId(row) {
+  return String(row).split('|').map((c) => c.trim()).find((c) => /^DBL-\d+/.test(c)) || '(unidentified row)'
 }
 
 function dbChangeDeferred(disposition, filePath) {
@@ -353,6 +382,46 @@ async function main() {
     dispositionMatchesChangeSet(disposition, comparableReadinessFiles) ||
     dispositionCoversFollowOnChangeSet(disposition, comparableReadinessFiles, impact)
 
+  const pubState = getPublicationState()
+  if (pubState.upstream && pubState.behind > 0) {
+    add(
+      blockers,
+      'BLOCKER',
+      'publication_state',
+      `Local branch is ${pubState.behind} commit(s) behind ${pubState.upstream}${pubState.ahead > 0 ? ` and ${pubState.ahead} ahead (diverged)` : ''}.`,
+      'Integrate upstream (git-safe-publish.sh uses pull --rebase), then regenerate range-mode impact and rerun `npm run publish:ready`. Only merge-base..HEAD is assessed as outgoing.',
+      pubState,
+    )
+  }
+  {
+    const substantiveTree = comparableImpactFiles(workingTreeFiles).filter(
+      (file) => !PUBLICATION_PIPELINE_ARTIFACTS.has(file) && !READINESS_DISPOSITION_EVIDENCE.has(file),
+    )
+    if (pubState.upstream && pubState.ahead > 0 && substantiveTree.length > 0) {
+      add(
+        blockers,
+        'BLOCKER',
+        'publication_state',
+        'Uncommitted working-tree changes coexist with unpushed commits; the outgoing set cannot be assessed as one change set.',
+        'Commit or stash the working-tree changes, then regenerate range-mode impact and rerun `npm run publish:ready`.',
+        { uncommitted_files: substantiveTree },
+      )
+    }
+  }
+  if (readinessScope === 'unpushed commits' && !impact.__read_error && impact.mode === 'incoming_commit_range') {
+    const resolved = impact.commit_range_resolved
+    if (!resolved || resolved.head_sha !== pubState.head_sha || resolved.merge_base_sha !== pubState.merge_base_sha) {
+      add(
+        blockers,
+        'BLOCKER',
+        'impact',
+        'Impact report was not generated for the current HEAD and merge-base (stale or missing resolved SHAs).',
+        'Run `node scripts/repo_change_impact.mjs --range "<upstream>..HEAD"` and rerun `npm run publish:ready`.',
+        { report: resolved || null, current: { head_sha: pubState.head_sha, merge_base_sha: pubState.merge_base_sha } },
+      )
+    }
+  }
+
   if (impact.__read_error) {
     add(blockers, 'BLOCKER', 'impact', `Cannot read ${rel(IMPACT_REPORT_PATH)}: ${impact.__read_error}`, 'Run `npm run docs:impact` and inspect the generated report.')
   } else if (!impactModeAccepted(impact.mode, readinessScope)) {
@@ -491,14 +560,22 @@ async function main() {
       for (const row of rows) {
         const status = extractLedgerStatus(row)
         if (!['VERIFIED', 'DROPPED', 'ROLLED_BACK'].includes(status)) {
+          // One blocker per ledger row (a change set's migration and check files share one row).
+          const existing = blockers.find((b) => b.area === 'database' && b.evidence === row)
+          if (existing) {
+            existing.files.push(filePath)
+            existing.message = `DB ledger row ${ledgerRowId(row)} (${existing.files.length} referenced file(s): ${existing.files.join(', ')}) is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`
+            continue
+          }
           add(
             blockers,
             'BLOCKER',
             'database',
-            `DB ledger row for ${filePath} is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`,
+            `DB ledger row ${ledgerRowId(row)} (1 referenced file(s): ${filePath}) is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`,
             'Complete DB_CHANGE_PROTOCOL.md operator/reviewer evidence or explicitly defer publication of this DB change.',
             row,
           )
+          blockers[blockers.length - 1].files = [filePath]
         }
       }
       obligations.database.push({ file: filePath, ledger_rows_found: rows.length })
@@ -597,7 +674,10 @@ async function main() {
   process.exitCode = ready ? 0 : 1
 }
 
-main().catch((error) => {
-  console.error(error?.message || error)
-  process.exitCode = 1
-})
+// Run only when executed directly (npm run publish:ready), not when imported for findLedgerRowsForFile.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error?.message || error)
+    process.exitCode = 1
+  })
+}
