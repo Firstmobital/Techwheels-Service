@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (database governance alignment)
+
+- Date: 2026-11-25
+- Change summary: Aligned database governance with the post-rebaseline operating model. Migrations stay in `supabase/migrations/` after execution; the promotion window, `execution_promotion_log.md`, `exec_success_migrations/` and `promote_verified_migration.sh` are marked historical and tied to the full-database dump (artifacts preserved). Evidence terms and one change lifecycle defined in `DATABASE_TRUTH.md`. Ledger policy: one row per approved change set with a prospective boundary (`20261123120000`), historical coverage recorded (88 of 104 post-baseline migrations unmatched at audit time, no back-fill), stale header corrected, DBL-0098/0099/0100 snapshot representation recorded without changing statuses. The repo health audit gained an advisory ledger-coverage check that reuses the publish-readiness matching rule.
+- Impacted files: `DATABASE_TRUTH.md`, `DB_CHANGE_PROTOCOL.md`, `DB_TRUTH_PROTOCOL.md`, `DB_CHANGE_LEDGER.md`, `DATABASE_CHANGE_TASK_CONTRACT.md`, `UPDATE_TEMPLATE.md`, `scripts/repo_health_audit.mjs`, `scripts/publish_readiness_check.mjs` (export + direct-run guard only).
+- Business logic change: No
+- Function-level contract change: Advisory health audit gains `checks.ledger_coverage`; `publish_readiness_check.mjs` exports `findLedgerRowsForFile` and runs `main()` only when executed directly. Gate behavior unchanged (verified by identical output before/after).
+- RBAC/RLS change: No
+- Data/schema change: No (no database access; no backup script changed)
+- Docs updated by: database governance reconciliation.
+
 ## 2026-11-25
 
 - Date: 2026-11-25

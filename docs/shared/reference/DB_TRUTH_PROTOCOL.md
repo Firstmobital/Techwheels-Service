@@ -1,12 +1,14 @@
 # DB Truth Protocol (No Drift)
 
-Last Updated: 2026-06-29
+Last Updated: 2026-11-25
 
 ## Objective
 
 Keep schema understanding aligned with production reality between dump refreshes and prevent migration-state drift.
 
 This file covers the operational rules for staying in sync between dump refreshes. For the canonical Database Authority Hierarchy (which file is primary, which is secondary, why chunks exist, AI-agent inspection rules), see `docs/shared/reference/DATABASE_TRUTH.md` — that file is authoritative if anything below conflicts with it.
+
+> **Status note (2026-11-25):** the promotion workflow in this file (moving migrations to `exec_success_migrations/`, the post-dump promotion window and `scripts/promote_verified_migration.sh`) is **historical**: it applied before the 2026-09-29 rebaseline and is tied to the **full-database dump**. Its artifacts are preserved. The current lifecycle is in `docs/shared/reference/DATABASE_TRUTH.md` ("Evidence Terms and Post-Rebaseline Change Lifecycle") and `docs/shared/reference/DB_CHANGE_PROTOCOL.md`. `scripts/backup-metadata.sh` does not reset or read the promotion window.
 
 ## Authority Model
 
@@ -19,13 +21,9 @@ This file covers the operational rules for staying in sync between dump refreshe
 3. If direct file reads of full_database.sql are blocked due to size limits, use exact mirror chunks:
 - local_folder/backups/chunks/full_database.sql.part_*
 
-4. Between dump refreshes, use composite operational truth:
-- authoritative dump snapshots (metadata + full database)
-- plus migrations/checks already executed and verified, then promoted to:
-	- supabase/exec_success_migrations/sql
-	- supabase/exec_success_migrations/sql_check
+4. Between metadata snapshot refreshes, the snapshot remains the only structural truth. Changes applied after it are post-snapshot execution evidence (ledger rows + migration files), not structural proof. *(Historical, before 2026-09-29: composite truth = latest dump + migrations promoted to `supabase/exec_success_migrations/sql` and `sql_check`.)*
 
-5. When a fresh dump is created, authority collapses back to the new dump snapshot as primary truth.
+5. When a fresh metadata snapshot is created (`npm run db:backup:metadata`), authority collapses back to that snapshot as primary schema truth.
 
 ## Automation Assets
 
@@ -36,16 +34,16 @@ This file covers the operational rules for staying in sync between dump refreshe
 - scripts/backup-full-db.sh
 - (scripts/refresh_authoritative_dump.sh still works — it now just calls scripts/backup-full-db.sh for backward compatibility)
 
-3. Verified migration promotion automation:
+3. Verified migration promotion automation (historical, pre-2026-09-29; preserved, not used for post-rebaseline migrations):
 - scripts/promote_verified_migration.sh
 
 4. Evidence files maintained automatically:
-- supabase/evidence/authoritative_metadata_manifest.json
-- supabase/evidence/authoritative_dump_manifest.json
-- supabase/evidence/post_dump_verified_promotions.md
-- supabase/evidence/execution_promotion_log.md
+- supabase/evidence/authoritative_metadata_manifest.json (written by `scripts/backup-metadata.sh`; identity of the metadata snapshot)
+- supabase/evidence/authoritative_dump_manifest.json (written by `scripts/backup-full-db.sh`; identity of the full-database dump)
+- supabase/evidence/post_dump_verified_promotions.md (historical window, reset only by `scripts/backup-full-db.sh`; its baseline is the full-database manifest)
+- supabase/evidence/execution_promotion_log.md (historical; appended only by `scripts/promote_verified_migration.sh`)
 
-## Promotion Rule (Executed + Verified)
+## Historical Promotion Rule (Executed + Verified; pre-2026-09-29, not used post-rebaseline)
 
 After user shares successful SQL-check results:
 
@@ -82,21 +80,30 @@ scripts/backup-full-db.sh    # local_folder/backups/full_database.sql + chunks
 3. Never downgrade authority to older dumps.
 4. If dump and docs conflict, dump wins.
 
-## Operational Checklist
+## Operational Checklist (post-rebaseline)
+
+1. Apply the authorized migration (operator).
+2. Run the paired SQL checks and record the output in the ledger.
+3. Set the ledger status only as far as the recorded evidence supports (APPLIED, then VERIFIED).
+4. Refresh the snapshot with `npm run db:backup:metadata` and commit `full_metadata.sql` with its manifest.
+5. Keep the migration and checks in `supabase/migrations/` and `supabase/sql_checks/`.
+
+## Historical Operational Checklist (pre-2026-09-29)
 
 1. Apply migration in SQL editor.
 2. Run SQL checks and verify pass.
 3. Promote files to exec_success_migrations.
 4. Log evidence.
-5. Continue using composite truth until next dump refresh.
+5. Continue using composite truth until next dump refresh. *(Historical.)*
 
 ## Decision Rules
 
-1. If migration executed+verified and no new dump yet:
-- trust model = latest dump + promoted files listed in post_dump_verified_promotions.md
+1. If a migration was applied after the latest metadata snapshot and no new snapshot exists:
+- trust model = latest snapshot for structure; the matching ledger row and migration file are post-snapshot execution evidence only
+- *(Historical, pre-2026-09-29: latest dump + promoted files listed in post_dump_verified_promotions.md)*
 
-2. If dump is created later:
-- scripts/backup-full-db.sh resets post_dump_verified_promotions.md window
+2. If a full-database dump is created later:
+- scripts/backup-full-db.sh resets post_dump_verified_promotions.md window (a metadata refresh does not)
 - new dump manifest becomes the baseline truth
 - subsequent promotions become the new post-dump delta set
 

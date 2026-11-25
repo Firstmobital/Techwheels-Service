@@ -46,8 +46,10 @@ Use this template in every feature/fix/change set.
 - [ ] Added/updated row in `docs/shared/reference/DB_CHANGE_LEDGER.md`
 - [ ] Followed `docs/shared/reference/DB_CHANGE_PROTOCOL.md` workflow
 - [ ] Migration execution evidence captured (env + timestamp + validation)
-- [ ] If execution successful, moved SQL file from `supabase/migrations/` to `supabase/exec_success_migrations/`
-- [ ] Authority checked against `local_folder/backups/full_database.sql`
+- [ ] Migration and paired checks left in `supabase/migrations/` and `supabase/sql_checks/` (not moved; `supabase/exec_success_migrations/` is historical)
+- [ ] Check output recorded in the ledger; status not above the recorded evidence
+- [ ] Metadata snapshot refreshed with `npm run db:backup:metadata` and committed with its manifest
+- [ ] Schema authority checked against `supabase/backups/full_metadata.sql` (row-data questions: `local_folder/backups/full_database.sql`)
 
 ## Notes
 

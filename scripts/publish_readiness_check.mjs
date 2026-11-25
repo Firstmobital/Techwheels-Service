@@ -16,6 +16,7 @@ import { execSync } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
 const ROOT = process.cwd()
 const IMPACT_REPORT_PATH = path.resolve(ROOT, 'docs/shared/evidence/repo_change_impact_report.json')
@@ -177,7 +178,8 @@ function timestampPrefix(filePath) {
   return match ? match[1] : null
 }
 
-function findLedgerRowsForFile(ledgerText, filePath) {
+// Exported so scripts/repo_health_audit.mjs reuses the exact ledger matching rule.
+export function findLedgerRowsForFile(ledgerText, filePath) {
   const fileName = path.basename(filePath)
   const prefix = timestampPrefix(filePath)
 
@@ -597,7 +599,10 @@ async function main() {
   process.exitCode = ready ? 0 : 1
 }
 
-main().catch((error) => {
-  console.error(error?.message || error)
-  process.exitCode = 1
-})
+// Run only when executed directly (npm run publish:ready), not when imported for findLedgerRowsForFile.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error?.message || error)
+    process.exitCode = 1
+  })
+}
