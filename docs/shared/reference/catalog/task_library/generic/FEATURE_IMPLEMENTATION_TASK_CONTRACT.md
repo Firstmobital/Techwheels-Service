@@ -26,7 +26,7 @@ Implement a new application feature (or a net-new capability inside an existing 
 
 ## Execution
 
-1. Classify the request using `.instructions.md` Section 2.
+1. Classify the request using `.instructions.md` Section 2, and confirm implementation is authorized: where a tracked plan owns the work, it must be user-approved before code starts (`.instructions.md` Section 11, item 2).
 2. Search for an existing owner (plan, module doc, or prior implementation) before writing code or docs (`.instructions.md` Sections 4-5).
 3. Implement the code change in the correct surface (`src/` web, `mobile/src/` mobile).
 4. Apply the `SYNC_PROTOCOL.md` Required Update Workflow: impact matrix check, `CURRENT_STATE.md` snapshot fields, one `CHANGE_LOG.md` entry, handbook/`README.md` sections if architecture/behavior changed, DB ledger row if schema changed.

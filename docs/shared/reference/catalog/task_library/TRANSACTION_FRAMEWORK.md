@@ -41,6 +41,10 @@ Stages 5 and 6 are always the mechanisms named above, for every row below — th
 | Release | None — Stages 1-4 are already complete | A Release transaction exists to carry one or more already-completed transactions to publication together. It begins at Stage 5. |
 | Hotfix | [Bug Fix contract](generic/BUG_FIX_TASK_CONTRACT.md), expedited | Same contract and the same Stage 5 mechanism as any other type. "Expedited" means a compressed timeline, not a skipped stage — Validation and Publication both still run before anything reaches `origin/main`. |
 
+## Autonomy and Approval Gates
+
+How agents carry a workstream through these stages without per-step prompts, what requires explicit user approval (implementation of a plan, publication, deployment) and when to stop are defined once in `.instructions.md` Section 11. This framework does not restate them.
+
 ## Vendor Neutrality
 
 This framework, like the contracts it sequences, contains no vendor- or tool-specific wording. It describes what the repository expects from a transaction, regardless of who or what executes it.
