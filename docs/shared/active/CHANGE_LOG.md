@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (ACCOUNTS-002 implementation, local)
+
+- Date: 2026-11-25
+- Change summary: Approved phased implementation of ACCOUNTS-002 (local, verified on an isolated scratch database with synthetic data; nothing applied to any governed environment, published or deployed). Added migrations `20261125140000` (finance and warranty table access by module and branch, explicit `finance_all_branches` right, employee bank-field protection with two RPCs) and `20261125141000` (preserve invoices replaced by an import), both PROPOSED as DBL-0101 and DBL-0102. Application: invoice-level revenue with actual GST and a Finance report, a report row-cap notice, `canonicalReportBranch` with an Unmapped bucket, a read-only payroll Cost Summary tab, and employee bank loaders moved to the gated RPC. Financial-year handling is design only. Activities owned by ACCOUNTS-001 and BUSY-001 are not implemented.
+- Impacted files: see ACCOUNTS-002 evidence EV-051, EV-053, EV-056; `src/lib/api/employeeBank.ts`, `payroll.ts`, `SettingsPage.tsx`, `SATrackerPage.tsx`, `reportQueries.ts`, `ReportsPage.tsx`, `branches.ts`; ledger DBL-0101, DBL-0102.
+- Business logic change: Yes: new invoice-level revenue basis (additive report; existing reports unchanged); report row-cap notice.
+- Function-level contract change: Yes: `employee_master` bank columns are no longer selectable; read them with `get_employee_bank_details`, write them with `set_employee_bank_details` (admin) once DBL-0101 is applied.
+- RBAC/RLS change: Proposed only (DBL-0101, DBL-0102); release prerequisites listed in the plan.
+- Data/schema change: Proposed only; no database was changed.
+- Docs updated by: ACCOUNTS-002 implementation.
+
 ## 2026-11-25 (ACCOUNTS-002 readiness verification)
 
 - Date: 2026-11-25

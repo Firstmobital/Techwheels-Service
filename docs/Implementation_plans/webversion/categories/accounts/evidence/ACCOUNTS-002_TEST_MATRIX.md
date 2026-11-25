@@ -122,3 +122,55 @@ New tests added by this pass:
 ### 3.1 Combined status after the second pass (27 tests)
 PASS 5 (ST-01 RPC level, ST-13 formula, ST-20, ST-26, ST-27) · FAIL 7 (ST-04, ST-07, ST-09, ST-15, ST-23, ST-24, ST-25) · STATIC_ONLY 6 (ST-02, ST-03, ST-05, ST-14, ST-16, ST-18) · NOT_RUN 6 (ST-06, ST-08, ST-10, ST-11, ST-12, ST-17) · BLOCKED 3 (ST-19, ST-21, ST-22). FAIL means the current behaviour does not meet the requirement; it is a verified gap that the plan addresses, not a defect introduced by this plan.
 
+## 4. Implementation verification (2026-11-25 IST)
+
+**Environment.** The same isolated scratch PostgreSQL (loopback, synthetic data, destroyed afterwards) with migrations `20261125140000` and `20261125141000` applied; unit-level execution of the repository's TypeScript functions in Node (transpiled with the repository's TypeScript compiler, because `npx tsx` was not installed). Nothing here is production, and no migration is applied to any governed environment. `npm run build` fails at `HEAD` for an unrelated pre-existing reason (see the plan). `tsc` reports no error in changed files; ESLint on changed files is clean.
+
+**Access matrix after DBL-0101** (rolled-back transactions; rows returned or affected):
+
+| Test | anon | no module | reports, no branch link | single-branch (Sitapura) | multi-branch | all-branch finance | importer (Sitapura) | technician (Sitapura) | payroll view | admin |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `psf_revenue_dms` select (4 rows: 3 Sitapura, 1 Ajmer Road) | 0 | 0 | 0 | 3 | 4 | 4 | 3 | 3 | 0 | 4 |
+| insert Sitapura row / insert Ajmer row | denied | denied | denied | denied | denied | denied | 1 / denied | denied | denied | 1 / 1 |
+| update / delete | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 / 0 | 0 / 0 | 0 / 0 | 4 / 4 |
+| `job_card_closed_data` select | denied | 0 | 0 | 1 | 2 | 2 | 1 | 1 | 0 | 2 |
+| `service_invoice_data`, warranty claim select | denied | 0 | 0 | 1 | 1 | 1 | 1 | 1 | 0 | 1 |
+| employee bank columns select | denied | denied | denied | denied | denied | denied | denied | denied | denied | denied |
+| `get_employee_bank_details()` | denied | denied | denied | denied | denied | denied | denied | denied (HR employees and payroll view: allowed) | allowed | allowed |
+| `set_employee_bank_details()` | denied | denied | denied | denied | denied | denied | denied | denied | denied | allowed |
+
+Note: payroll view and reports users without branch links see no rows, which is the release prerequisite in the plan. The Settings upsert that read the excluded bank columns failed after the column restriction (admin included) and was replaced by `set_employee_bank_details`; admin literal updates and inserts still work.
+
+| ID | Status | Observed result | Evidence |
+|---|---|---|---|
+| ST-01 page-load writes | PASS (RPC level) | Unchanged from §3 | EV-043 |
+| ST-02 row cap visible | PASS (logic level); UI NOT RUN | Notice raised at 5,000 rows and not at 4,999 (repository `capRows` executed); new loaders read to completion or throw | EV-053 |
+| ST-03 failed source visible | STATIC EVIDENCE ONLY | New loaders throw on failure; Accounts page part is task 4.7 (ACCOUNTS-001) | — |
+| ST-04 revenue formula | PASS (function level) | Verified net 22,000.00 on F1; existing method gives 21,339 on the same verified invoices | EV-053 |
+| ST-05 status/date basis | PASS (function level) | Cancelled by status or by cancellation date shown apart and excluded from net | EV-053 |
+| ST-06 detail equals headline | PASS (function level) | Headline net equals the sum of verified detail rows and the branch totals; UI render NOT RUN | EV-053 |
+| ST-07 duplicates/retries | PASS (import safeguard); Busy export duplicates NOT RUN | Identical retry: 0 conflicts. Same invoice amended: 0. Different invoice for the same job card and date: 1 conflict preserving the replaced invoice | EV-052 |
+| ST-08 job card vs invoice | PASS (function level) | `reconcileGrains` lists differences for review; Busy comparison blocked (ST-21) | EV-053 |
+| ST-09 table access | PASS (isolated) | See matrix | EV-052 |
+| ST-10 regression, pages | NOT RUN | Page-level run of importers, mobile import, payroll earnings and reports needs a staging environment | — |
+| ST-11 branch map | PASS (logic level) | Unmapped bucket kept; totals equal sum of groups in the cost summary test | EV-056 |
+| ST-12 period filter | NOT RUN | — | — |
+| ST-13 payroll cost | PASS (logic level); UI NOT RUN | Gross 50,500.50, deductions 2,250.25, net 48,250.25 on F2 (X and Y); employer cost reported as not available | EV-056 |
+| ST-14 payroll lock/recompute | STATIC EVIDENCE ONLY | Unchanged | — |
+| ST-15 catalogue | FAILED (partial) | Optional catalogue fields added and filled for the new report only; 10 unregistered reports undecided | — |
+| ST-16 lineage | STATIC EVIDENCE ONLY | Lineage CSV extended | — |
+| ST-17 regression snapshot | NOT RUN | — | — |
+| ST-18 audit events | NOT RUN | Export log is BUSY-001 task 4.4 | — |
+| ST-19 period lock | BLOCKED | PD-10 | — |
+| ST-20 no second source | PASS | No expense or manual revenue register added | — |
+| ST-21 Busy reconciliation | BLOCKED | No approved extract, tolerance or sign-off | — |
+| ST-22 cross-system references | BLOCKED | Sales series list unavailable | — |
+| ST-23 financial year | FAILED (not implemented by design) | Design feasibility passed on scratch (160 distinct numbers under 8 parallel sessions, two years); implementation not approved | EV-055 |
+| ST-24 employee bank fields | PASS (isolated) | See matrix | EV-052 |
+| ST-25 branch isolation | PASS (isolated) | See matrix | EV-052 |
+| ST-26 module-gated RPCs | PASS | Unchanged plus new RPC gating | EV-052 |
+| ST-27 anonymous access | PASS | `anon` reads no finance row | EV-052 |
+
+### 4.1 Combined status (27 tests)
+PASS 15 · FAILED 2 (ST-15, ST-23) · STATIC EVIDENCE ONLY 3 (ST-03, ST-14, ST-16) · NOT RUN 4 (ST-10, ST-12, ST-17, ST-18) · BLOCKED 3 (ST-19, ST-21, ST-22). Real-data coverage of the revenue classification (aggregate only): 98.17% verified, 1.65% cancelled, 0.18% needing tax detail on the local dump; on the verified set the corrected net differs from the existing method by 0.002%, because almost all parts are charged at 18% in that data. The 3% gap on fixture F1 is synthetic.
+

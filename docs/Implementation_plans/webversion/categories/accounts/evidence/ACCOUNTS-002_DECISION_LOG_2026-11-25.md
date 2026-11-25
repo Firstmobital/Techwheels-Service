@@ -78,3 +78,27 @@ Each decision lists why it is needed, the evidence, options with consequences, a
 
 **Essential blockers for implementation start:** approval of the plan, PD-14, PD-15. **Can be decided later:** PD-17, PD-18, PD-19 (but PD-19 is a security fix and should not wait long), PD-20 (before 2027-03-15), PD-01/02/03/11/16.
 
+## F. Decisions recorded on 2026-11-25 (user approval) and new open decisions
+
+Approved by the user (conditional phased implementation):
+| ID | Approved decision |
+|---|---|
+| PD-14 | Invoice-level revenue with the GST actually charged; no universal 18% divisor on mixed invoices; gross, GST and net kept apart; cancelled apart; missing or unreliable tax information flagged, never guessed; existing-versus-corrected comparison; headline reconciles to detail |
+| PD-15 | Dedicated finance access with controlled write paths; server-side and database enforcement; operational callers inventoried first |
+| PD-17 | Assigned-branch access with explicit all-branch access; not granted automatically to every administrator or every Sitapura employee; enforced below the application |
+| PD-18 | Inspect DMS evidence first; prevent silent overwrite; ambiguous identity flagged, not discarded. A material key redesign needs separate approval |
+| PD-19 | Protect bank name, account number and IFSC; keep authorized payroll workflows |
+| PD-20 | Evaluate automatic financial-year handling; design only; no implementation |
+| Payroll | Gross earnings, deductions, net payable and employer cost kept apart; employer cost shown only where data exists; read-only |
+| Busy | Busy stays the accounting authority; no in-app ledger; obtain reconciliation evidence; do not claim Busy import verified |
+
+Evidence gathered for PD-18 (local full-database dump of 2026-10-02, aggregates only; no identifiers or amounts recorded): in the parts uploads, 27 of 2,649 job-card and invoice-date groups had more than one distinct invoice number, and 55 of 2,619 job cards had more than one invoice overall. So same-day multiple invoices occur at the DMS level. Because the revenue table keeps one row per job card and date, an overwritten invoice cannot be counted from that table after the fact. In the same dump, 10,981 invoice rows each had labour plus spares equal to the total, and parts tax present on all rows; for rows with spares, 97.8% implied an 18% parts rate and 0.27% fell outside 5%-18% (flagged). 98.17% of invoices classify as verified, 1.65% as cancelled and 0.18% as needing tax detail.
+
+New open decisions:
+| ID | Decision | Options | Proposed approver | Why it matters |
+|---|---|---|---|---|
+| PD-21 | Role mapping and report-module split | (a) grant `finance_all_branches` and dealer-code links to named users before apply; (b) also split `reports` into finance and operational rights in the UI | Finance head + Engineering owner | Without links and the all-branch right, reading modules (including payroll operators) see no rows after DBL-0101 |
+| PD-22 | Platform admin bypass | (a) keep the existing platform-wide admin bypass (current); (b) remove it on finance tables (conflicts with the admin-bypass governance and its auto-created policy) | Finance head + Engineering owner | Approved text says administrators must not get automatic all-branch finance access; the bypass gives them access anyway. New admin users also receive every module by default, including `finance_all_branches` |
+| PD-23 | Hard-coded excluded advisor names in `ReportsPage` | keep; remove; move to a setting | Business owner | No authority says who these advisors are; left unchanged |
+| PD-24 | Invoice key redesign | (a) keep key plus audit table; (b) add invoice number to the key (touches voucher trigger, job-card mirror, Busy export key) | Finance head + Import owner | 27 same-day groups exist in parts uploads; DBL-0102 preserves replaced invoices but does not count both in totals |
+

@@ -5,7 +5,7 @@
 **Last Updated:** 2026-11-25  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team (approvers: Finance head, Accounting owner, Engineering owner)  
-**Status:** Proposed. Audit and implementation-readiness verification complete (static plus isolated runtime). Implementation not started (NS); awaiting explicit user approval.  
+**Status:** In Progress. The user approved conditional phased implementation on 2026-11-25. Approved activities are implemented locally and verified on an isolated scratch database with synthetic data. Database migrations are PROPOSED, not applied to any governed environment. Nothing is published or deployed. Activities owned by ACCOUNTS-001 and BUSY-001, financial-year implementation and any invoice-key redesign remain pending or unapproved.  
 **Platform:** webversion  
 **Category:** accounts  
 **Routes touched (if approved):** `/reports`, `/accounts`, `/busy`, `/payroll`  
@@ -23,6 +23,7 @@ Service already holds DMS invoice revenue, exports sales and receipt vouchers to
 
 Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts, payroll), **management reporting** (`/reports` and proposed read-only views), **formal accounting** (Busy). Service posts nothing to a ledger.
 
+**Implementation status (2026-11-25):** conditional phased implementation approved; local implementation in progress, not published (see Implementation Record).  
 **Fit-gap totals (21 handoff requirements):** REUSE 2 · CONFIGURE 0 · EXTEND 10 · BUILD 1 · DEFER 8.  
 **Risk Level:** MEDIUM (access hardening and revenue arithmetic change visible behaviour)  
 **Estimated Duration:** about 6–9 working days of engineering after decisions, in 5 phases; Phase 4 has a hard date (before 2027-04-01)  
@@ -45,7 +46,7 @@ Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts
 | Track | State | Evidence |
 |---|---|---|
 | **Audit and readiness verification (completed work)** | Done (static, then isolated runtime) | [baseline and current state](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md), [fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv), [source mapping](../evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv), [lineage](../evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv), [reports catalogue](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv), [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md), [evidence index](../evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv) |
-| **Implementation (pending)** | Not started; waits for approval and Finance decisions | Activity Tracker below |
+| **Implementation** | In progress (local). Approved security, accuracy and reporting activities implemented and verified on an isolated database; release prerequisites, owner-plan activities and unapproved items pending | Implementation Record and Activity Tracker below |
 | Runtime verification | Isolated runtime done on synthetic data (second pass); production and hosted Auth settings BLOCKED | [Test matrix §3](../evidence/ACCOUNTS-002_TEST_MATRIX.md) |
 | Schema evidence limits | Committed and local snapshots agree on every cited `public` definition; neither proves production | [Audit baseline §3.2](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md) |
 
@@ -230,7 +231,69 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 ### Implementation-readiness recommendation
 **Ready for approval of Phases 1–3 and the non-blocked parts of Phase 4**, subject to PD-14 and PD-15 (essential) and PD-19 (security, should not wait long). Phase 5 (FY and series) can be designed now and applied after PD-02, PD-03, PD-20; it has a hard date of 2027-03-15 (A) for completion. Reconciliation to Busy (ST-21) is blocked until Finance supplies an approved extract. No implementation has started and none is authorized by this document.
 
-## Implementation Tasks (pending)
+## Approved Decisions and Implementation Record (2026-11-25 IST)
+
+**Approval.** On 2026-11-25 the user gave explicit conditional approval for phased implementation of ACCOUNTS-002, with the decisions below. Approval does not cover financial-year implementation, a material invoice-key redesign, voucher-series changes, activities owned by ACCOUNTS-001 or BUSY-001, expense or manual revenue registers, production changes, publication or deployment. Status vocabulary: Implemented-local (code or migration in the repository, checked on an isolated database or by unit-level execution), Pending, Blocked, Owned elsewhere, Not approved.
+
+### Approved decisions
+| Decision | Approved | Implemented as |
+|---|---|---|
+| PD-14 revenue | Invoice-level revenue with the GST actually charged; cancelled apart; no guessing | `src/lib/revenue/invoiceRevenue.ts`, report "Invoice Revenue (Finance basis)" |
+| PD-15 access | Dedicated Finance access, controlled write paths | Migration `20261125140000` (DBL-0101, PROPOSED) |
+| PD-17 branch | Assigned branches plus explicit all-branch right | Same migration: dealer-code scope and module `finance_all_branches` |
+| PD-18 invoice identity | Inspect DMS evidence; prevent silent overwrite | Evidence below; migration `20261125141000` (DBL-0102, PROPOSED); key redesign not done |
+| PD-19 bank fields | Protect bank name, account number, IFSC | Same migration plus `employeeBank.ts` and three callers |
+| PD-20 financial year | Evaluate automatic handling; design only | Design section below; nothing implemented |
+| Payroll reporting | Gross, deductions, net payable and employer cost kept apart | "Cost Summary" tab; employer cost shown as not available |
+| Busy | Busy stays the accounting authority; get reconciliation evidence | No Busy extract available; blocked |
+
+### Activity status
+| ID | Owning plan | Status | Evidence |
+|---|---|---|---|
+| 1.1, 1.2 | ACCOUNTS-002 | Implemented-local (approval and decisions recorded here and in the decision log) | Decision log §F |
+| 1.3 | ACCOUNTS-002 | Partly done: DMS evidence from the local full-database dump (aggregates only). Busy extract and Sales series list unavailable: Blocked | EV-054 |
+| 1.4, 1.5 | ACCOUNTS-002 | Implemented-local: scratch database from the committed snapshot; baseline findings from the second pass reused, not re-run before the change. A maintained disposable environment is still pending | EV-043 |
+| 2.1 | ACCOUNTS-002 (Accounts page part: ACCOUNTS-001) | Implemented-local: report loaders raise a visible notice at the 5,000-row cap; new loaders read to completion or fail | Test matrix §4 |
+| 2.2, 2.3, 2.6 | ACCOUNTS-002 | Implemented-local: invoice-level net, GST, cancelled apart, flagged invoices, headline equals detail | EV-053 |
+| 2.4 | ACCOUNTS-002 | Blocked: no business authority identifies the hard-coded advisor names; left unchanged (PD-23) | — |
+| 2.5 | ACCOUNTS-002 | Done: web-mobile assessment below | — |
+| 2.7 | ACCOUNTS-002 | Implemented-local: replaced invoices preserved by trigger; key redesign Not approved | EV-052 |
+| 3.1 | ACCOUNTS-002 | Implemented-local: caller inventory in the audit baseline §4 | Baseline §4 |
+| 3.2, 3.4 | ACCOUNTS-002 | Implemented-local, verified on the isolated database; not applied anywhere else | EV-052 |
+| 3.3 | ACCOUNTS-002 | Partly done: separation at the database layer (reading modules, explicit all-branch right). No new report-module split in the UI until roles are mapped (PD-21) | — |
+| 3.5 | ACCOUNTS-002 | Implemented-local (migration, RPCs, three callers) | EV-052 |
+| 3.6 | ACCOUNTS-002 | Implemented-local (same migration) | EV-052 |
+| 4.1 | ACCOUNTS-002 | Implemented-local: `canonicalReportBranch` with an explicit Unmapped bucket, used by the new report and payroll cost. Existing reports unchanged | EV-053, EV-056 |
+| 4.2 | ACCOUNTS-002 | Implemented-local: read-only Cost Summary tab | EV-056 |
+| 4.3 | ACCOUNTS-002 | Partly done: optional catalogue fields on `ReportDefinition`, filled for the new report; the 10 unregistered reports are not registered (untested) | — |
+| 4.4 | BUSY-001 | Owned elsewhere: no separate authorization found; pending | — |
+| 4.5 | ACCOUNTS-002 | Partly done: internal invoice-grain versus job-card-grain comparison in the new report. Comparison to Busy: Blocked (no extract, tolerance or sign-off) | EV-053 |
+| 4.6 | ACCOUNTS-002 | Implemented-local: lineage and source mapping updated | Lineage CSV |
+| 4.7 | ACCOUNTS-001 | Owned elsewhere: pending | — |
+| 5.1 | ACCOUNTS-002 | Implemented-local: financial-year inventory below | — |
+| 5.2, 5.3 | ACCOUNTS-002 | Design only. Implementation Not approved; Accounting sign-off pending | EV-055 |
+| 6.1 | — | Excluded | — |
+
+### Release prerequisites (before any migration is applied to a governed environment)
+1. Every legitimate user needs active `user_employee_links` with a dealer code for their branches. Without them, users with a reading module see no rows.
+2. Head-office, Finance and payroll operators need the module `finance_all_branches`. Payroll earnings read `job_card_closed_data`; an operator without it would compute variable earnings from no rows.
+3. Importers need matching scope or the all-branch right. Imports from other branches are denied.
+4. Take a read-only list of current role assignments and grant the above before apply. Production assignments are not invented here.
+5. Deploy the bank-field migration and the application callers (`employeeBank.ts`, payroll loader, Settings, SA Tracker) together: the old application breaks once the bank columns are restricted, and the new application breaks until the RPCs exist. Run the paired SQL checks and the access matrix on staging; refresh the metadata snapshot after apply; update ledger statuses with actual evidence.
+6. Independent review is required before publication (change-impact check). None has been done; a self-check is not independent review.
+7. `npm run build` fails at `HEAD` and on `origin/main` because `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, which `bodyshopSettlement.ts` does not export. This is unrelated and pre-existing; the files changed here compile.
+
+### Web–mobile parity (task 2.5)
+Impact: new web report ID and a visible notice at the report row cap. The mobile app keeps its own `reportQueries.ts` and report list. Mobile status: tracked separately; no mobile Finance report is required for this change. Owner: Engineering owner. Follow-up: decide whether the mobile report list should show the row-cap notice. Reason not done in the same change: no figure changes and no mobile counterpart screen for the new report.
+
+### Financial-year design (tasks 5.1 to 5.3, for separate approval)
+**Inventory.** The year `26-27` is fixed in: `ACCOUNTS_VOUCHER_FY` and the receipt-number pattern in `src/lib/api/accounts.ts`; the Busy series `PV-S 26-27` and `EV-S 26-27` in `src/lib/busy/eligibility.ts`; the function `accounts_mechanical_next_voucher_no` (cutoff 2026-09-02, sequences `accounts_mechanical_voucher_rapp_2627_seq` and `..._japp_2627_seq`); `accounts_mechanical_reconcile_japp_sequence`; the CHECK constraints `accounts_mechanical_payment_lines_voucher_check` and `bodyshop_settlement_lines_voucher_check`; and the complaint ticket function. Issued numbers are immutable by trigger and unique by index. The Sales series list is not available.
+**Options.** (A) Annual controlled change set before 2027-04-01: new sequences, function, constraints and constants for 27-28. (B) Automatic: derive the year from the document date in IST, keep one counter row per series and year, and replace the pinned CHECK patterns with a generic pattern.
+**Feasibility checked on the scratch database (not committed):** the derived label gave 25-26, 26-27, 26-27, 27-28 for 2026-03-31, 2026-04-01, 2027-03-31, 2027-04-01; with 8 parallel sessions issuing 160 numbers across two years, all 160 were distinct and each year's counter ended at 80. Counter rows give gap-free numbers for committed transactions; sequences can skip numbers on rollback.
+**Considerations.** Busy needs the new series created by the accountant either way. Option B removes the yearly code change but touches the voucher function, both CHECK constraints, the reconcile function, the Busy series helper and every reader of the old sequences, and needs the series scheme (PD-02, PD-03, PD-16) settled first. Option A is smaller and is enough for 2027.
+**Recommendation.** Option A for 2027 (checklist: new sequences, function, constraints, constants; dry run on staging; Accounting sign-off); keep B as an optional later change. **Approval needed:** which option, the Sales series list, and Accounting sign-off. Target completion 2027-03-15 (A).
+
+## Implementation Tasks
 
 Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row traces to a fit-gap item ([fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv)) and a test ID ([test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md)). Phases 1–5 run in order unless noted; no task starts before plan approval.
 
@@ -294,60 +357,58 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ✅ A.9 | Finance decision package and readiness matrix | Eng | 2026-11-25 | 2026-11-25 | Decision log §E; this plan
 ```
 
-### B. Pending implementation
+### B. Implementation (status as of 2026-11-25; local only, nothing published)
 ```
-⏳ 1.1 | Plan approval | Owner | - | - | Gate
-⏳ 1.2 | Finance decisions | Finance head / Accounting owner | - | - | PD-01..PD-20 (start blockers: PD-14, PD-15)
-❌ 1.3 | Sales series list, Busy control extract | Accounting owner | - | - | Blocks ST-21, ST-22
-⏳ 1.4 | Disposable DB + fixtures F1-F4 | Eng | - | - | Blocks all runtime tests
-⏳ 1.5 | Baseline run ST-01..07, 17 | Eng | - | - | After 1.4
-⏳ 2.1 | Truncation/failure visibility | Eng | - | - | CAP-015
-⏳ 2.2 | Revenue arithmetic | Eng | - | - | CAP-009
-⏳ 2.3 | Cancelled-invoice rule | Eng | - | - | Needs PD-14
-⏳ 2.4 | Remove name-based exclusion | Eng | - | - | CAP-016
-⏳ 2.5 | Parity declaration | Eng | - | - | CONTRIBUTING.md
-⏳ 2.6 | Drilldown = headline | Eng | - | - | CAP-014
-⏳ 2.7 | Same JC/date multi-invoice handling | Eng + Import owner | - | - | Needs PD-18 and DMS export evidence
-⏳ 3.1 | Caller inventory | Eng | - | - | CAP-016
-⏳ 3.2 | Policy migration + sql_checks + ledger | Eng | - | - | Staging first
-⏳ 3.3 | Reports rights split | Eng + Finance head | - | - | PD-15
-⏳ 3.4 | Access regression | Eng | - | - | ST-09, ST-10, ST-26, ST-27
-⏳ 3.5 | Restrict employee bank fields | Eng + HR owner | - | - | PD-19, ST-24
-⏳ 3.6 | Branch scope model | Eng + Finance head | - | - | PD-17, ST-25
-⏳ 4.1 | Branch/department map | Eng | - | - | CAP-005
-⏳ 4.2 | Payroll cost view | Eng | - | - | CAP-008
-⏳ 4.3 | Report metadata + dormant reports | Eng | - | - | CAP-012/020
-⏳ 4.4 | busy_export_runs | Eng (BUSY-001) | - | - | CAP-017/019
-⏳ 4.5 | Reconciliation report | Eng | - | - | CAP-020
-⏳ 4.6 | Lineage docs | Eng + Finance head | - | - | CAP-013
-⏳ 4.7 | Accounts load-error warning | Eng (ACCOUNTS-001) | - | - | CAP-015
-⏳ 5.1 | Series inventory + decision | Accounting owner | - | - | PD-02/03
-⏳ 5.2 | FY/series config + FY27-28 | Eng | - | - | Before 2027-04-01
-⏳ 5.3 | Dry-run and sign-off | Eng + Accounting owner | - | - | ST-22, ST-23
-⏳ 6.1 | Conditional expense / manual revenue register (not planned) | Finance head | - | - | Only if PD-07/PD-13 show a need; needs plan amendment
+✅ 1.1 | Implementation approval recorded | Owner | 2026-11-25 | 2026-11-25 | Conditional approval; scope above
+✅ 1.2 | Approved decisions recorded; unresolved listed | Eng | 2026-11-25 | 2026-11-25 | Decision log §F
+🔄 1.3 | Collect inputs | Accounting owner | 2026-11-25 | - | DMS evidence done; Busy extract and Sales series list missing
+✅ 1.4 | Isolated scratch database and fixtures | Eng | 2026-11-25 | 2026-11-25 | A maintained environment is still pending
+✅ 1.5 | Baseline | Eng | 2026-11-25 | 2026-11-25 | Second-pass findings reused, not re-run
+✅ 2.1 | Report completeness notice | Eng | 2026-11-25 | 2026-11-25 | Accounts part is 4.7 (ACCOUNTS-001)
+✅ 2.2 | Invoice-level revenue with real GST | Eng | 2026-11-25 | 2026-11-25 | invoiceRevenue.ts; ST-04
+✅ 2.3 | Cancelled invoices apart | Eng | 2026-11-25 | 2026-11-25 | ST-05
+❌ 2.4 | Advisor exclusion | Business owner | - | - | No authority names these advisors (PD-23)
+✅ 2.5 | Web-mobile parity assessment | Eng | 2026-11-25 | 2026-11-25 | Tracked separately
+✅ 2.6 | Detail equals headline | Eng | 2026-11-25 | 2026-11-25 | ST-06
+✅ 2.7 | Replaced invoices preserved | Eng | 2026-11-25 | 2026-11-25 | DBL-0102 PROPOSED; key redesign not approved
+✅ 3.1 | Caller inventory | Eng | 2026-11-25 | 2026-11-25 | Baseline §4
+✅ 3.2 | Access policies and checks | Eng | 2026-11-25 | 2026-11-25 | DBL-0101 PROPOSED; isolated only
+🔄 3.3 | Finance versus operational separation | Eng + Finance head | 2026-11-25 | - | Database layer done; UI split waits for role mapping (PD-21)
+✅ 3.4 | Access regression | Eng | 2026-11-25 | 2026-11-25 | Isolated; page-level not run
+✅ 3.5 | Employee bank fields | Eng | 2026-11-25 | 2026-11-25 | Migration and three callers
+✅ 3.6 | Branch scope model | Eng | 2026-11-25 | 2026-11-25 | Isolated; production mapping is a release prerequisite
+✅ 4.1 | Branch attribution with Unmapped | Eng | 2026-11-25 | 2026-11-25 | New report and payroll cost
+✅ 4.2 | Payroll cost summary | Eng | 2026-11-25 | 2026-11-25 | Employer cost not available
+🔄 4.3 | Report catalogue fields | Eng | 2026-11-25 | - | Fields added; 10 unregistered reports not decided
+⏳ 4.4 | busy_export_runs | Eng (BUSY-001) | - | - | Owned by BUSY-001; no separate authorization
+❌ 4.5 | Reconciliation to Busy | Finance head | - | - | Internal comparison done; Busy part blocked (PD-11)
+✅ 4.6 | Lineage and mapping | Eng | 2026-11-25 | 2026-11-25 | Lineage CSV
+⏳ 4.7 | Accounts load-error warning | Eng (ACCOUNTS-001) | - | - | Owned by ACCOUNTS-001
+✅ 5.1 | Financial-year inventory | Eng | 2026-11-25 | 2026-11-25 | Design section
+🔄 5.2 | Financial-year design | Eng + Accounting owner | 2026-11-25 | - | Design done; implementation not approved
+🔄 5.3 | Feasibility and sign-off | Eng + Accounting owner | 2026-11-25 | - | Feasibility done; sign-off pending
+➖ 6.1 | Expense / manual revenue register | - | - | - | Excluded
 ```
 
 ---
 
 ## Decisions Requiring Approval
 
-Full table with options and impacts: [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md) section B (PD-01..PD-20); the evidence-based decision package with options, consequences and recommendations is section E. Decisions on tax, legal, posting policy and period close belong to the Finance head or Accounting owner; none is made by this plan.
+**Decided by the user on 2026-11-25** (recorded in the Implementation Record and decision log §F): PD-14, PD-15, PD-17, PD-18 (safeguard only), PD-19, payroll reporting, Busy as the accounting authority, and PD-20 as design-only. Do not ask again.
 
-| Decision | Approver | Blocks |
+**Still open** (options and recommendations in the [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md) sections B, E and F):
+
+| Decision | Approver | Affects |
 |---|---|---|
-| Approve this plan and phases | Owner of Service | Phase 1 |
-| PD-14 revenue basis and GST-slab rule; cancelled treatment | Finance head | Phase 2 labels (task 2.3) |
-| PD-15 access split | Finance head + Engineering owner | Phase 3 (task 3.3); also needed before Phase 2 start |
-| PD-17 branch isolation | Finance head + Engineering owner | Task 3.6 |
-| PD-18 same-JC/date invoices | Finance head + Import owner | Task 2.7 |
-| PD-19 employee bank fields | Finance head + HR owner | Task 3.5 |
-| PD-20 FY rollover mechanics | Accounting owner + Engineering owner | Phase 5 |
-| PD-01/02/03/16 Busy role, series, FY | Finance head / CA, Accounting owner | Phase 5 |
-| PD-11 reconciliation controls and sign-off | Finance head | ST-21 |
-| PD-13/07 need for any expense or manual revenue register | Finance head | Phase 6 |
-| PD-05, PD-08, PD-10 | Finance head / Accounting owner | CAP-006/007/018 (deferred) |
-
-What can proceed before decisions: Phases 1.4–1.5, 2.1, 2.2 (labelled), 2.4–2.6, 3.1, 4.1–4.3, 4.6. What waits: 2.3 (PD-14), 3.3 (PD-15), 4.5 control match and 5.x (PD-02/03/11/16), any Phase 6 (PD-07/13).
+| PD-20 financial-year option (A annual change set, B automatic) and approval to implement | Accounting owner + Engineering owner | Tasks 5.2, 5.3; ACCOUNTS-001 and BUSY-001 numbering |
+| PD-02, PD-03, PD-16 voucher series and Sales series list | Finance head / CA, Accounting owner | Financial year; collision check |
+| PD-11 Busy reconciliation extract, tolerance, sign-off role | Finance head | Task 4.5 (Busy part) |
+| PD-21 role mapping: who holds `finance_all_branches`, report-module split | Finance head + Engineering owner | Release of DBL-0101; task 3.3 |
+| PD-22 platform admin bypass versus the "no automatic all-branch for administrators" rule | Finance head + Engineering owner | Policy design |
+| PD-23 advisor names excluded in `ReportsPage` | Business owner | Task 2.4 |
+| PD-24 invoice key redesign (a material change) | Finance head + Import owner | Beyond DBL-0102 |
+| PD-13/07 expense or manual revenue register | Finance head | Excluded (6.1) |
+| Publication, deployment, independent review | User and repository review process | Everything above |
 
 ---
 
@@ -369,16 +430,14 @@ Tightening RLS may break importers or mobile paths that rely on open writes (mit
 
 ## Latest Evidence (retention: latest two)
 
-1. 2026-11-25 IST, static audit at `e7877341`: test matrix §2 (PASS 1, FAIL 1, STATIC_ONLY 11, NOT_RUN 7, BLOCKED 3).
-2. 2026-11-25 IST, isolated runtime second pass: test matrix §3 (combined 27 tests: PASS 5, FAIL 7, STATIC_ONLY 6, NOT_RUN 6, BLOCKED 3). Comparison with evidence 1: of the four static "defect indicated" rows, ST-04 and ST-09 are now observed failures (ST-02 and ST-03 remain static); ST-07 and ST-23 also fail at runtime; five new runtime findings were added (G-13 to G-17); no earlier static concern was disproved.
-
-Task 1.5 (baseline run on a maintained disposable environment) remains pending; the second pass used a throwaway scratch database.
+1. 2026-11-25 IST, isolated runtime second pass: test matrix §3 (27 tests: PASS 5, FAIL 7, STATIC_ONLY 6, NOT_RUN 6, BLOCKED 3).
+2. 2026-11-25 IST, implementation verification: test matrix §4 (27 tests: PASS 15, FAILED 2, STATIC EVIDENCE ONLY 3, NOT RUN 4, BLOCKED 3). Comparison with evidence 1: the security failures (ST-09, ST-24, ST-25) now pass on the isolated database after DBL-0101; ST-04 passes at function level; ST-07 passes for the safeguard. Still failing: ST-15 (catalogue incomplete) and ST-23 (financial year, not approved). Nothing is verified in production.
 
 ## Next Actions
 
-1. **Approval gate:** the owner approves, revises or rejects this plan (task 1.1). Implementation stays NS until then.
-2. Finance head answers PD-14 and PD-15 (start blockers), then PD-19, PD-17, PD-18.
-3. On approval: provision the maintained disposable database (task 1.4) and record baseline tests (task 1.5), then start Phase 2.
+1. User: review the release prerequisites, then decide PD-21 to PD-24 and the financial-year option; supply the Busy extract and Sales series list.
+2. Engineering: obtain independent review before any publication; map production roles; run the paired SQL checks and access matrix on staging before applying DBL-0101 and DBL-0102.
+3. Owners: BUSY-001 (4.4) and ACCOUNTS-001 (4.7) decide whether to take their activities.
 
 ## Communication and Sign-Off
 
