@@ -331,6 +331,7 @@ export async function applyDmsInvoiceAndAlignPayer(input: {
 
 export {
   bothPaymentsReceived,
+  isBillingRecordedForWaiver,
   isBillingStage15Done,
   isBillingStage16Done,
   hasBillingAmountOnCard,
