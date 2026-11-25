@@ -20,6 +20,10 @@ import {
   calendarDaysSince,
   floorAgeLabel,
 } from '../src/lib/bodyshopFloorAge.ts'
+import {
+  DEFAULT_BODYSHOP_FLOOR_EDP,
+  shouldAutoAssignDefaultEdpAfterRi,
+} from '../src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts'
 
 type Row = Record<string, unknown>
 
@@ -234,6 +238,14 @@ check('floor flow — QC active then RI after pass then EDP after RI', () => {
     riStatus: 'completed',
   })
   assert.equal(afterRi.find((s) => s.id === 'EDP')?.state, 'active')
+})
+
+check('default EDP auto-assign — only when slot empty', () => {
+  assert.equal(shouldAutoAssignDefaultEdpAfterRi(null), true)
+  assert.equal(shouldAutoAssignDefaultEdpAfterRi({ employee_code: '' }), true)
+  assert.equal(shouldAutoAssignDefaultEdpAfterRi({ employee_code: 'EDS1_500A840' }), false)
+  assert.equal(shouldAutoAssignDefaultEdpAfterRi({ employee_code: 'NOT_REQUIRED' }), false)
+  assert.equal(DEFAULT_BODYSHOP_FLOOR_EDP.employee_code, 'EDS1_500A840')
 })
 
 check('floor flow — EDP active after RI even when EDP not assigned yet', () => {
