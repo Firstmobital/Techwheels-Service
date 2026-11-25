@@ -2133,7 +2133,7 @@ export default function BodyshopFloorPage() {
 
       let edpAutoAssigned = false
       if (riCompleted) {
-        edpAutoAssigned = await autoAssignDefaultEdpAfterRiComplete(car, k, committed.repairCardId)
+        edpAutoAssigned = await autoAssignDefaultEdpAfterRiComplete(car, k, Number(result.data?.id ?? repairCardId))
       }
 
       showToast(
