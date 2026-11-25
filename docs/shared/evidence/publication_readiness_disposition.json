@@ -1,62 +1,186 @@
 {
-  "generated_at_utc": "2026-07-03T08:00:00.000Z",
-  "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5 publish-readiness proof",
+  "generated_at_utc": "2026-11-25T10:24:01.000Z",
+  "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5; .instructions.md Section 11",
+  "status_note": "Documentation record for the local stack as of 2026-11-25 (ACCOUNTS-002 and database governance commits). NOT a completed review: every review below is pending. The change set also contains seven files that exist only on origin/main (commit 91deea70, unrelated Bodyshop floor work) because the local branch is one commit behind; refresh this file after the remote is integrated through publish:safe.",
   "change_set_files": [
-    "docs/Implementation_plans/retention_validation_report.json",
+    ".instructions.md",
+    "docs/Implementation_plans/IMPLEMENTATION_TRACKER.md",
+    "docs/Implementation_plans/webversion/IMPLEMENTATION_TRACKER.md",
+    "docs/Implementation_plans/webversion/INDEX.md",
+    "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md",
+    "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv",
+    "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_TEST_MATRIX.md",
+    "docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md",
+    "docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md",
     "docs/shared/active/CHANGE_LOG.md",
     "docs/shared/evidence/publication_readiness_disposition.json",
-    "docs/shared/evidence/repo_health_audit_report.json",
-    "src/pages/SATrackerPage.tsx"
+    "docs/shared/reference/DATABASE_TRUTH.md",
+    "docs/shared/reference/DB_CHANGE_LEDGER.md",
+    "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
+    "docs/shared/reference/DB_TRUTH_PROTOCOL.md",
+    "docs/shared/reference/catalog/UPDATE_TEMPLATE.md",
+    "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
+    "docs/shared/reference/catalog/task_library/generic/DATABASE_CHANGE_TASK_CONTRACT.md",
+    "docs/shared/reference/catalog/task_library/generic/FEATURE_IMPLEMENTATION_TASK_CONTRACT.md",
+    "docs/shared/reference/catalog/task_library/generic/IMPLEMENTATION_PLAN_TASK_CONTRACT.md",
+    "docs/web/modules/complaints/reference/COMPLAINTS_TEST_EXECUTION_GUIDE.md",
+    "mobile/src/app/(tabs)/bodyshop-floor.tsx",
+    "mobile/src/lib/api/bodyshopFloorWorkAssignments.ts",
+    "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
+    "package.json",
+    "scripts/bodyshop-floor-pipeline.harness.ts",
+    "scripts/invoice-revenue.harness.ts",
+    "scripts/payroll-cost-summary.harness.ts",
+    "scripts/publish_readiness_check.mjs",
+    "scripts/repo_health_audit.mjs",
+    "src/lib/api/bodyshopFloorWorkAssignments.ts",
+    "src/lib/api/employeeBank.ts",
+    "src/lib/api/payroll.ts",
+    "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
+    "src/lib/branches.ts",
+    "src/lib/payroll/costSummary.ts",
+    "src/lib/reportQueries.ts",
+    "src/lib/revenue/invoiceRevenue.ts",
+    "src/lib/revenue/invoiceRevenueSource.ts",
+    "src/pages/BodyshopFloorPage.tsx",
+    "src/pages/PayrollPage.tsx",
+    "src/pages/ReportsPage.tsx",
+    "src/pages/SATrackerPage.tsx",
+    "src/pages/SettingsPage.tsx",
+    "src/pages/payroll/PayrollCostTab.tsx",
+    "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
+    "src/pages/reports/revenue/index.ts",
+    "src/pages/reports/types.ts",
+    "supabase/backups/full_metadata.sql",
+    "supabase/evidence/authoritative_metadata_manifest.json",
+    "supabase/migrations/20261125140000_finance_data_access_hardening.sql",
+    "supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql",
+    "supabase/sql_checks/20261125140000_finance_data_access_hardening_checks.sql",
+    "supabase/sql_checks/20261125141000_psf_invoice_overwrite_audit_checks.sql"
   ],
   "reviews": [
     {
       "category": "application_code",
-      "status": "completed",
-      "reviewer": "Claude (Cowork) — SA formula audit + outgoing local-change review 2026-07-03",
-      "files": ["src/pages/SATrackerPage.tsx"],
-      "authority_checked": [
-        ".instructions.md Section 2 item 1",
-        "docs/DOCS_IMPACT_MATRIX.md",
-        "docs/shared/README.md",
-        "docs/shared/reference/CURRENT_STATE.md"
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "mobile/src/app/(tabs)/bodyshop-floor.tsx",
+        "mobile/src/lib/api/bodyshopFloorWorkAssignments.ts",
+        "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
+        "src/lib/api/bodyshopFloorWorkAssignments.ts",
+        "src/lib/api/employeeBank.ts",
+        "src/lib/api/payroll.ts",
+        "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
+        "src/lib/branches.ts",
+        "src/lib/payroll/costSummary.ts",
+        "src/lib/reportQueries.ts",
+        "src/lib/revenue/invoiceRevenue.ts",
+        "src/lib/revenue/invoiceRevenueSource.ts",
+        "src/pages/BodyshopFloorPage.tsx",
+        "src/pages/PayrollPage.tsx",
+        "src/pages/ReportsPage.tsx",
+        "src/pages/SATrackerPage.tsx",
+        "src/pages/SettingsPage.tsx",
+        "src/pages/payroll/PayrollCostTab.tsx",
+        "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
+        "src/pages/reports/revenue/index.ts",
+        "src/pages/reports/types.ts"
       ],
-      "outcome": "Approved. Three change sets applied to SATrackerPage.tsx: (1) Added client-side 📅 Range: date fine-filter matching /technician. (2) Fixed SA earnings formula — calculateSAIncome now divides by 1.18 before applying SA%; fixes stats-bar tile, sort key, and display sub-label. (3) Applied per-SA EV/PV rate differentiation — all income call sites (saCards, dayCards, JC detail rows, stats tile, yesterday report) now look up each SA's fuel_type from employee_master and apply evSharePercent for EV SAs, saSharePercent for PV; both rates controlled by existing Earnings % settings. buildSAWAText updated to show PV/EV rates. Stats tile and sub-label updated to show both percentages. No new routes, module keys, DB tables, or RBAC changes. No mobile surface affected. CURRENT_STATE.md unchanged. TypeScript: tsc --noEmit clean."
+      "authority_checked": [
+        ".instructions.md Section 11 item 6",
+        "docs/DOCS_IMPACT_MATRIX.md",
+        "CONTRIBUTING.md (Web-Mobile Parity)"
+      ],
+      "outcome": null,
+      "note": "Independent review required before publication; not performed. The author's own checks are listed in ACCOUNTS-002_TEST_MATRIX.md section 6 and are self-checks."
+    },
+    {
+      "category": "database_schema_truth",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "docs/shared/reference/DB_CHANGE_LEDGER.md",
+        "supabase/backups/full_metadata.sql",
+        "supabase/evidence/authoritative_metadata_manifest.json",
+        "supabase/migrations/20261125140000_finance_data_access_hardening.sql",
+        "supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql",
+        "supabase/sql_checks/20261125140000_finance_data_access_hardening_checks.sql",
+        "supabase/sql_checks/20261125141000_psf_invoice_overwrite_audit_checks.sql"
+      ],
+      "authority_checked": [
+        "docs/shared/reference/DATABASE_TRUTH.md",
+        "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
+        "docs/shared/reference/DB_CHANGE_LEDGER.md"
+      ],
+      "outcome": null,
+      "note": "DBL-0101 and DBL-0102 are PROPOSED. Not applied to any governed environment. Independent review and governed deployment evidence pending."
+    },
+    {
+      "category": "unknown_unmapped",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "scripts/invoice-revenue.harness.ts",
+        "scripts/payroll-cost-summary.harness.ts"
+      ],
+      "authority_checked": [
+        "docs/STRUCTURE_GUIDE.md (JS/TS test helpers and tooling -> scripts/)"
+      ],
+      "outcome": null,
+      "note": "Placement is correct per the structure guide. The classifier in scripts/repo_change_impact.mjs maps only .mjs, .sh, .js, .py under scripts/, so the four existing scripts/*.harness.ts files are also unmapped. Extending the classifier is a separate change."
     }
   ],
   "generated_artifacts": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
       "generator_command": "npm run docs:validate:plans",
-      "regenerated_at_utc": "2026-07-03T05:03:05.000Z"
+      "note": "Run during validation; output restored and not committed (unrelated churn)."
     },
     {
       "path": "docs/shared/evidence/repo_health_audit_report.json",
       "generator_command": "npm run docs:validate:health",
-      "regenerated_at_utc": "2026-07-03T05:03:05.000Z"
+      "note": "Run during validation; output restored and not committed (unrelated churn)."
     },
     {
       "path": "docs/shared/evidence/repo_change_impact_report.json",
       "generator_command": "npm run docs:impact",
-      "regenerated_at_utc": "2026-07-03T05:03:05.070Z"
+      "note": "Run during validation; output restored and not committed."
     }
   ],
   "deferred_db_changes": [],
+  "deferred_db_changes_note": "Nothing is deferred from publication: the application callers in f573fae4 need DBL-0101 to be applied in the same release, so the migrations must not be published or applied separately.",
   "health_findings_routed": [
     {
-      "finding": "promotion_gaps_best_effort Webredesign tracker",
-      "disposition": "No repository update needed — pre-existing advisory false positive documented in docs/shared/evidence/WAVE_1_STUB_CLEANUP_REPORT_2026-06-30.md"
+      "finding": "root_level_doc_violations (5) and promotion_gaps_best_effort (1)",
+      "disposition": "Pre-existing advisory findings, unchanged by this work; not routed here."
+    },
+    {
+      "finding": "build failure: BodyshopRepairPage.tsx imports isBillingRecordedForWaiver, not exported by bodyshopSettlement.ts",
+      "disposition": "Pre-existing at HEAD and origin/main; unrelated; not repaired."
     }
   ],
   "routing_actions": [
     {
-      "action": "no_update_needed",
-      "path": "docs/shared/reference/CURRENT_STATE.md",
-      "reason": "Change adds a UI filter only; no new routes, module keys, or DB tables introduced. CURRENT_STATE.md has no filter-level detail for any page — nothing to update."
+      "action": "updated",
+      "path": "docs/shared/active/CHANGE_LOG.md",
+      "reason": "Entries for each documented change set."
     },
     {
       "action": "updated",
-      "path": "docs/shared/active/CHANGE_LOG.md",
-      "reason": "DOCS_IMPACT_MATRIX.md application_code obligation: CHANGE_LOG.md entry required for all application code changes."
+      "path": "docs/shared/reference/DB_CHANGE_LEDGER.md",
+      "reason": "DBL-0101 and DBL-0102 added as PROPOSED with lifecycle stages recorded."
+    },
+    {
+      "action": "no_update_needed",
+      "path": "docs/shared/reference/CURRENT_STATE.md",
+      "reason": "Describes the 2026-06-18 snapshot; none of the changes here are applied or released, so the current-state truth is unchanged until release."
     }
   ]
 }
