@@ -45,6 +45,18 @@ Stages 5 and 6 are always the mechanisms named above, for every row below — th
 
 How agents carry a workstream through these stages without per-step prompts, what requires explicit user approval (implementation of a plan, publication, deployment) and when to stop are defined once in `.instructions.md` Section 11. This framework does not restate them.
 
+## Temporary Workstream Integration Branches
+
+`main` is the production publication branch: a push to `origin/main` deploys the web application automatically (Vercel Production), while database migrations and Edge Functions are applied manually. Stage 5 therefore publishes only work that is ready for production.
+
+A large, incomplete or release-dependent workstream may instead live on a temporary branch named `integration/<plan-id>` (for example `integration/accounts-002`). Pushing a non-`main` branch creates only a protected Preview deployment and does not touch Production. A workstream branch is a way to preserve and review work remotely; it is **not** implementation approval and **not** release approval.
+
+1. **Choose the branch before starting.** A production maintenance task or independent bug fix starts from an up-to-date `main` and must not be started from a branch holding unreleased workstream commits. Workstream tasks use their `integration/<plan-id>` branch.
+2. **Keep `main` free of unreleased work.** Do not merge or cherry-pick an integration branch (or parts of it, including validators, migrations or governance) into `main` until its plan's approval, validation, practical verification, independent review, database compatibility and Stage 5 requirements are satisfied. Governance that agents on `main` need is published separately and deliberately.
+3. **Synchronize downward.** When `main` advances, merge `origin/main` into each affected integration branch (history is preserved; no force-push), resolve routine conflicts by the existing authorities, escalate conflicts that need a business decision, and re-run applicable validation.
+4. **Publication safeguards are unchanged.** `npm run publish:ready` and `npm run publish:safe` still decide readiness; preserving a branch remotely never marks a plan production-ready.
+5. **Closure.** After the workstream is released and its history is preserved, the user may authorize deleting the branch. Never delete a branch holding unique unmerged work.
+
 ## Vendor Neutrality
 
 This framework, like the contracts it sequences, contains no vendor- or tool-specific wording. It describes what the repository expects from a transaction, regardless of who or what executes it.
