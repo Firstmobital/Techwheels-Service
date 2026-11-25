@@ -26,6 +26,11 @@ import {
 } from '../lib/bodyshopFloorWork/pipelineStageFilter'
 import { isBodyshopWorkerPipelineAssignRole } from '../lib/bodyshopFloorWork/workerPipelineAssignRoles'
 import {
+  buildDefaultEdpAssignmentFields,
+  DEFAULT_BODYSHOP_FLOOR_EDP,
+  shouldAutoAssignDefaultEdpAfterRi,
+} from '../lib/bodyshopFloorWork/defaultEdpAfterRi'
+import {
   filterBodyshopFloorInchargeCandidates,
   listBodyshopFloorInchargeEmployees,
   isFloorInchargeReassignmentBlocked,
@@ -2000,6 +2005,70 @@ export default function BodyshopFloorPage() {
     }
   }
 
+  async function autoAssignDefaultEdpAfterRiComplete(
+    car: AccidentCar,
+    k: string,
+    repairCardId: number,
+  ): Promise<boolean> {
+    if (!shouldAutoAssignDefaultEdpAfterRi(assignments[k]?.EDP)) return false
+    if (bsFloorStatus[k]?.completedAt) return false
+
+    const now = new Date().toISOString()
+    const { data: { user } } = await supabase.auth.getUser()
+    const roleMap = assignments[k]
+    let existingRowId = assignmentRawByJc[k]?.id ?? getRoleMapRowId(roleMap)
+    if (!existingRowId) {
+      const { data: found } = await supabase
+        .from('bodyshop_assignments')
+        .select('id')
+        .eq('is_active', true)
+        .ilike('job_card_number', k)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      existingRowId = found?.id ?? null
+    }
+
+    const resolvedDealerCode = resolveBodyshopAssignmentDealerCode({
+      dealer_code: car.dealer_code,
+      sa_employee_code: car.sa_employee_code,
+      branch: car.branch,
+    })
+    const payload: Record<string, unknown> = {
+      ...buildDefaultEdpAssignmentFields(now, user?.email ?? null),
+      dealer_code: resolvedDealerCode,
+    }
+
+    let result
+    if (existingRowId) {
+      result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existingRowId).select().single()
+    } else {
+      const insertPayload: Record<string, unknown> = {
+        ...payload,
+        job_card_number: k,
+        repair_card_id: repairCardId,
+      }
+      result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
+    }
+    if (result.error) throw result.error
+
+    const updatedRow = result.data as DBPrimaryAssignmentRow
+    setAssignmentRawByJc((prev) => ({ ...prev, [k]: updatedRow }))
+    const newRoleMap = mapRowToRoleMap(updatedRow)
+    setAssignments((prev) => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...newRoleMap } }))
+    setStageDrafts((prev) => ({
+      ...prev,
+      [k]: {
+        ...(prev[k] ?? {}),
+        EDP: {
+          work_status: newRoleMap.EDP?.work_status ?? 'work_inprocess',
+          remark: newRoleMap.EDP?.remark ?? '',
+        },
+      },
+    }))
+    return true
+  }
+
   async function saveRiDetails(car: AccidentCar) {
     const k = jcKey(car)
     // Read from draft (unsaved edits), fall back to committed state
@@ -2062,7 +2131,19 @@ export default function BodyshopFloorPage() {
       // Sync draft to match so no stale diff remains
       setRiDraftByJc((prev) => ({ ...prev, [k]: committed }))
 
-      showToast(riCompleted ? 'RI completed — moved to Billing' : 'RI details saved', 'success')
+      let edpAutoAssigned = false
+      if (riCompleted) {
+        edpAutoAssigned = await autoAssignDefaultEdpAfterRiComplete(car, k, committed.repairCardId)
+      }
+
+      showToast(
+        riCompleted
+          ? edpAutoAssigned
+            ? `RI completed — EDP: ${DEFAULT_BODYSHOP_FLOOR_EDP.employee_name}`
+            : 'RI completed — moved to Billing'
+          : 'RI details saved',
+        'success',
+      )
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save RI details', 'error')
     } finally {

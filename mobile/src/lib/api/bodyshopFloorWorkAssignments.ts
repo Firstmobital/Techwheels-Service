@@ -8,6 +8,7 @@ const PRIMARY_CODE_COLUMNS = [
   'painter_helper_employee_code',
   'technician_employee_code',
   'rubbing_employee_code',
+  'edp_employee_code',
 ] as const
 
 /** PostgREST `.or()` values with `_` / special chars must be double-quoted. */
