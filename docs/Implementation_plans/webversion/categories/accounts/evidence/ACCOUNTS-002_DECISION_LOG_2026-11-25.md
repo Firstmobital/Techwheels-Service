@@ -16,6 +16,8 @@ Decisions on tax, legal, posting policy and period close belong to the Finance h
 | DL-07 | 2026-11-25 second pass: implementation-readiness verification run in an isolated scratch PostgreSQL restored from the committed snapshot with synthetic data (EV-043); no production access was used | Strongest evidence available without production access; hosted Auth settings and real data remain BLOCKED (EV-050) |
 
 ## B. Pending business decisions (with Service impact)
+
+Status note (2026-11-25): PD-14, PD-15, PD-17, PD-18, PD-19 and PD-20 were answered by the user on 2026-11-25 (section F), with the exceptions and open follow-ups in section G. Section E is the pre-approval package and is kept as history. Section G is the single register of decisions that are still open.
 | ID | Handoff ref | Decision | Options | Proposed approver | Work that can proceed | Work that waits |
 |---|---|---|---|---|---|---|
 | PD-01 | OD-01 | Book of record and Busy cut-over | Busy only (assumed today); parallel run; in-app ledger | Finance head / CA | P1 fixes, P2 hardening, P3 read-only reports | Any Service posting, any ledger |
@@ -94,11 +96,100 @@ Approved by the user (conditional phased implementation):
 
 Evidence gathered for PD-18 (local full-database dump of 2026-10-02, aggregates only; no identifiers or amounts recorded): in the parts uploads, 27 of 2,649 job-card and invoice-date groups had more than one distinct invoice number, and 55 of 2,619 job cards had more than one invoice overall. So same-day multiple invoices occur at the DMS level. Because the revenue table keeps one row per job card and date, an overwritten invoice cannot be counted from that table after the fact. In the same dump, 10,981 invoice rows each had labour plus spares equal to the total, and parts tax present on all rows; for rows with spares, 97.8% implied an 18% parts rate and 0.27% fell outside 5%-18% (flagged). 98.17% of invoices classify as verified, 1.65% as cancelled and 0.18% as needing tax detail.
 
-New open decisions:
-| ID | Decision | Options | Proposed approver | Why it matters |
-|---|---|---|---|---|
-| PD-21 | Role mapping and report-module split | (a) grant `finance_all_branches` and dealer-code links to named users before apply; (b) also split `reports` into finance and operational rights in the UI | Finance head + Engineering owner | Without links and the all-branch right, reading modules (including payroll operators) see no rows after DBL-0101 |
-| PD-22 | Platform admin bypass | (a) keep the existing platform-wide admin bypass (current); (b) remove it on finance tables (conflicts with the admin-bypass governance and its auto-created policy) | Finance head + Engineering owner | Approved text says administrators must not get automatic all-branch finance access; the bypass gives them access anyway. New admin users also receive every module by default, including `finance_all_branches` |
-| PD-23 | Hard-coded excluded advisor names in `ReportsPage` | keep; remove; move to a setting | Business owner | No authority says who these advisors are; left unchanged |
-| PD-24 | Invoice key redesign | (a) keep key plus audit table; (b) add invoice number to the key (touches voucher trigger, job-card mirror, Busy export key) | Finance head + Import owner | 27 same-day groups exist in parts uploads; DBL-0102 preserves replaced invoices but does not count both in totals |
+The open decisions that follow from the approvals are in section G (not repeated here).
 
+## G. Outstanding decision register (consolidated 2026-11-25; the single record of open decisions)
+
+None of these is decided by this plan or by the agent. "Blocks" says what cannot finish until the user decides: local completion, financial accuracy, or production release. Activity IDs refer to the plan's Activity Tracker.
+
+### PD-20 Financial-year implementation approach
+- **Current behaviour:** receipts and vouchers are `RApp/JApp 26-27` and Busy series `PV-S/EV-S 26-27`; the year is fixed in code, the voucher function, two sequences, two CHECK constraints, the reconcile function and the complaint ticket function. A 2027-05-01 receipt still gets `RApp/26-27` (observed on the isolated database).
+- **Evidence:** EV-045, EV-055; inventory in the plan (Financial-year design).
+- **Options:** (A) annual controlled change set before 2027-04-01; (B) automatic derivation from the document date with per-year counters.
+- **Business impact:** receipts after 2027-03-31 are mis-numbered or rejected if neither is done; Busy needs the new series either way.
+- **Technical impact:** A touches function, constraints, sequences and constants for one year. B also replaces the reconcile function, the Busy series helper and every reader of the old sequences, and changes sequence gaps into counter rows.
+- **Activities:** 5.2, 5.3; ACCOUNTS-001 numbering; BUSY-001 series constants.
+- **Dependencies:** PD-02, PD-03, PD-16.
+- **Agent recommendation (not approval):** A for 2027, because it is smaller, is needed once a year and B does not remove the Busy series setup. B remains an option for later.
+- **Blocks:** production release after 2027-03-31 (date-driven). Not local completion.
+- **Approval needed:** Accounting owner and Engineering owner.
+
+### PD-02, PD-03, PD-16 Voucher series and Sales series evidence
+- **Current behaviour:** Service issues `RApp`, `JApp`, `PV-S`, `EV-S`. The Sales series list and the GSTIN holder of record are not available to this project.
+- **Evidence:** EV-008, EV-012, EV-013; plan section 10.
+- **Options:** prefix per system and department; central numbering; Busy-only numbering.
+- **Business impact:** possible duplicate references on one registration if series overlap.
+- **Technical impact:** series changes touch ACCOUNTS-001 and BUSY-001 code and the database function.
+- **Activities:** 5.1 (inventory done), 5.2, ST-22.
+- **Dependencies:** Sales series list from the Sales accounting work.
+- **Recommendation:** prefix per system; obtain the list before any change.
+- **Blocks:** the financial-year change and the collision check; not local completion of other activities.
+- **Approval needed:** Finance head / CA and Accounting owner.
+
+### PD-11 Busy reconciliation extract, tolerance and sign-off
+- **Current behaviour:** Service exports files to Busy; no Busy data is imported; BUSY-001 records that the real Busy import is not verified. The new report compares invoice grain with job-card grain only.
+- **Evidence:** BUSY-001 task 3.2; test matrix ST-08, ST-21.
+- **Options:** supply an approved extract for named months with a tolerance and a sign-off role; or decline reconciliation.
+- **Business impact:** without it the revenue figures are not reconciled to the accounting book.
+- **Technical impact:** a read-only comparison by invoice, no ledger.
+- **Activities:** 4.5 (Busy part), ST-21.
+- **Recommendation:** supply the extract and name the sign-off role.
+- **Blocks:** financial accuracy sign-off (external reconciliation); not local completion.
+- **Approval needed:** Finance head.
+
+### PD-21 Finance role assignments and UI permission separation
+- **Current behaviour:** DBL-0101 limits revenue and warranty rows to users with a reading module and a matching dealer-code link, or the module `finance_all_branches`. Users without links see no rows. The Reports module is still one right for all report categories.
+- **Evidence:** test matrix §4 access matrix (isolated); plan release prerequisites.
+- **Options:** (a) map links and grant `finance_all_branches` to named users before apply; (b) also split `reports` into finance and operational rights in the UI.
+- **Business impact:** staff without links or the right lose revenue figures; payroll operators would compute variable earnings from no rows.
+- **Technical impact:** (a) data and role work only; (b) route gating and report registry changes.
+- **Activities:** 3.3, 3.6, release of DBL-0101.
+- **Dependencies:** a read-only production list of current role assignments (not available).
+- **Recommendation:** (a) before release; (b) after (a).
+- **Blocks:** production release. UI-level separation (3.3) stays incomplete until (b).
+- **Approval needed:** Finance head and Engineering owner.
+
+### PD-22 Administrator bypass and default module assignments
+- **Current behaviour:** (1) every table has the platform policy `admin_unrestricted_all_ops_v1`, and the event trigger `trg_auto_admin_bypass_policy_on_ddl` adds it to new tables, so every administrator can read and change every row regardless of branch; (2) the triggers `trg_grant_active_module_to_admins_after_insert/update` and `trg_grant_admin_all_active_modules_after_insert/update` give every active administrator every active module, so a new module such as `finance_all_branches` is granted to all administrators automatically.
+- **Conflict with the approval:** PD-17 says all-branch finance access must be explicitly authorized and must not be given automatically to every administrator. This is not satisfied while (1) and (2) stand. DBL-0101 leaves both untouched.
+- **Evidence:** snapshot objects named above; isolated runtime (the seeded administrator received `finance_all_branches` when the module was created); `ADMIN_BYPASS_RLS_GOVERNANCE.md`.
+- **Options:** (a) accept and record: administrators are platform-wide by design; (b) exclude finance tables from the bypass and from the default module grant (changes the admin-bypass governance and the auto-created policy); (c) keep the bypass but remove `finance_all_branches` from the default grants so the right is explicit.
+- **Business impact:** (a) administrators see all branches' finance data; (b) and (c) need named administrators for consolidated Finance.
+- **Technical impact:** (b) touches the event trigger and the policy template; (c) touches two grant functions.
+- **Activities:** 3.2, 3.6; PD-17 compliance.
+- **Recommendation:** (c) as the smallest step toward the approved rule; (a) if Finance accepts platform-wide administrators.
+- **Blocks:** PD-17 compliance and production release. Not local completion.
+- **Approval needed:** Finance head and Engineering owner.
+
+### PD-23 Hard-coded advisor exclusions
+- **Current behaviour:** `ReportsPage.tsx` removes a fixed list of names from the advisor filter options.
+- **Evidence:** EV-022; task 2.4 Blocked.
+- **Options:** keep; remove; move to a setting or an inactive flag on the employee record.
+- **Business impact:** unknown until someone identifies the names; the list affects only the filter options.
+- **Technical impact:** small.
+- **Activities:** 2.4.
+- **Recommendation:** none without a business answer.
+- **Blocks:** nothing but task 2.4.
+- **Approval needed:** Business owner.
+
+### PD-24 Material invoice identity redesign
+- **Current behaviour:** one row per location, portal, job card and invoice date. A second invoice for the same job card and date replaces the first in a later batch (DBL-0102 preserves the replaced row but does not add it back to totals) or fails a single batch.
+- **Evidence:** EV-046, EV-052, EV-054 (private local dump, aggregates only: 27 of 2,649 job-card and date groups in parts uploads have more than one invoice number).
+- **Options:** (a) keep the key plus the preservation table, and report the replaced invoices to Finance; (b) widen the key with the invoice number; (c) both, with a backfill from the preserved rows.
+- **Business impact:** under (a) revenue totals can omit legitimate same-day invoices that were replaced; (b) fixes totals.
+- **Technical impact:** (b) touches the unique constraint, the voucher assignment trigger, the job-card mirror refresh and the Busy export key.
+- **Activities:** 2.7 (partial), revenue completeness.
+- **Recommendation:** (b), after a read-only check of how many psf rows were replaced, to be approved separately.
+- **Blocks:** financial accuracy (completeness). Not local completion; not release of the preservation safeguard.
+- **Approval needed:** Finance head and Import owner.
+
+### PD-25 Authorized read paths for employee bank fields
+- **Current behaviour:** after DBL-0101, bank fields can be read by `payroll` view, `employees` view (Settings), `sa_tracker` view (SA Tracker export) and administrators through `get_employee_bank_details`, and by service-role edge functions that build earnings reports (unchanged). Writes: administrators only (`set_employee_bank_details`, existing row policy); payroll users also through the existing definer functions.
+- **Support in the approved scope:** the approval names payroll workflows. Payroll is supported. The Settings (employees) and SA Tracker paths are existing behaviours preserved to avoid breaking them; they were not individually approved. The edge functions' recipients and content were not audited.
+- **Options:** (a) keep all four paths; (b) limit to payroll and administrator and give Settings and SA Tracker a masked view; (c) limit to payroll and administrator only.
+- **Business impact:** (b) and (c) change what HR and SA Tracker users can see or export.
+- **Technical impact:** change the RPC permission check and two screens.
+- **Activities:** 3.5.
+- **Recommendation:** (b) after HR confirms the need.
+- **Blocks:** nothing locally; the exception should be settled before production release.
+- **Approval needed:** Finance head and HR owner.

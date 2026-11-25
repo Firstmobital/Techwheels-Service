@@ -174,3 +174,25 @@ Note: payroll view and reports users without branch links see no rows, which is 
 ### 4.1 Combined status (27 tests)
 PASS 15 · FAILED 2 (ST-15, ST-23) · STATIC EVIDENCE ONLY 3 (ST-03, ST-14, ST-16) · NOT RUN 4 (ST-10, ST-12, ST-17, ST-18) · BLOCKED 3 (ST-19, ST-21, ST-22). Real-data coverage of the revenue classification (aggregate only): 98.17% verified, 1.65% cancelled, 0.18% needing tax detail on the local dump; on the verified set the corrected net differs from the existing method by 0.002%, because almost all parts are charged at 18% in that data. The 3% gap on fixture F1 is synthetic.
 
+### 4.2 Reading the two FAILED rows
+- **ST-23 financial year:** intentionally unimplemented scope. Implementation is not approved; only design and scratch feasibility exist. It is not an implementation defect.
+- **ST-15 catalogue:** partial implementation. Optional catalogue fields exist and are filled for the new report only; the 38 earlier registered reports and the 10 unregistered ones are not catalogued in the registry. The evidence CSV catalogues all 48. This is unfinished approved work (task 4.3), not a regression.
+Counts above were re-checked against the table rows on 2026-11-25: 15 PASS, 2 FAILED, 3 STATIC EVIDENCE ONLY, 4 NOT RUN, 3 BLOCKED = 27.
+
+## 5. Financial accuracy evidence (kept separate; none of it is measured production revenue loss)
+| Evidence | Value | Source and provenance | Limits |
+|---|---|---|---|
+| Synthetic fixture F1 | Existing method 21,339; corrected net 22,000 (difference 661) | Hand-calculated fixture; repository function executed in Node (`parseRevenueExcludingGst`, `summarizeInvoices`) | Invented amounts; shows the method, not a business loss |
+| Local-dump comparison on verified invoices | Corrected net differs from the existing method by about 0.002% | Private local full-database dump of 2026-10-02; aggregates computed locally, nothing stored | Not reproducible from the repository; one point in time; the same-grain invoices only |
+| Local-dump classification | 98.17% verified, 1.65% cancelled, 0.18% need tax detail (all 20 flagged for an implied parts rate outside 5% to 18%) | Same dump; 10,981 invoice rows | Same limits; tax-field meaning inferred from the data (total equals labour plus spares on every row; parts tax implies 18% for 97.8% of rows with spares) and not confirmed by the DMS owner |
+| Completeness | Replaced same-day invoices are preserved but not added to totals | EV-046, EV-052, EV-054 | Real count of replaced revenue rows unknown (needs the production table and DMS exports) |
+| Reconciliation to Busy | Not done | PD-11 | The report is not reconciled to Busy; only an internal invoice-grain versus job-card-grain comparison exists |
+
+## 6. Validation record and limitations
+- **Isolated database:** a scratch PostgreSQL 17 on loopback, restored from the committed schema snapshot; four extensions unavailable (pgtap, pg_net, pg_cron, supabase_vault); synthetic users and rows; destroyed afterwards; not a governed environment.
+- **Function-level execution (alternative harness command):** the named npm commands `npm run test:invoice-revenue` and `npm run test:payroll-cost` were **not executed** (they use `npx tsx`, which was not installed and would download it). Instead each harness and its library were transpiled with the repository's `typescript` package (`ts.transpileModule`, CommonJS) and run with Node through `node -e`; both printed OK. The row-cap helper was run the same way (4,999 rows: no notice; 5,000: notice).
+- **Type-check:** `npx tsc -p tsconfig.app.json --noEmit` reports only two pre-existing errors in `BodyshopRepairPage.tsx`; none in changed files. A full repository build is **not** claimed: `npm run build` fails at `HEAD` and `origin/main` for that unrelated reason.
+- **Lint:** ESLint on the changed files reports no errors (pre-existing warnings only). Repo-wide `npm run lint` reports 1,590 pre-existing errors, none in changed files.
+- **Documentation validators:** `npm run docs:validate` passes (89 active plans); the health audit reports 0 broken links, the same 6 pre-existing advisory findings, and ledger coverage 0 unmatched of 2 prospective migrations.
+- **Not performed:** page-level checks of the new report, the Cost Summary tab, Settings, SA Tracker and payroll; mobile import and payroll earnings regression; staging verification; production role and Auth verification (signup, confirmation, API exposure); real Busy import; independent review.
+

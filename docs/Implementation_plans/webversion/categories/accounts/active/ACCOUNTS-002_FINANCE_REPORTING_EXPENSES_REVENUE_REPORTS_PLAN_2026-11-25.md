@@ -274,6 +274,53 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | 5.2, 5.3 | ACCOUNTS-002 | Design only. Implementation Not approved; Accounting sign-off pending | EV-055 |
 | 6.1 | — | Excluded | — |
 
+### Implementation by commit
+| Commit | Content | Files | Activities | Checks run |
+|---|---|---|---|---|
+| `b52c1e83` | Two PROPOSED migrations, paired read-only checks, ledger rows DBL-0101 and DBL-0102 | `supabase/migrations/20261125140000_finance_data_access_hardening.sql`, `supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql`, `supabase/sql_checks/20261125140000_finance_data_access_hardening_checks.sql`, `supabase/sql_checks/20261125141000_psf_invoice_overwrite_audit_checks.sql`, `docs/shared/reference/DB_CHANGE_LEDGER.md` | 3.2, 3.4, 3.5, 3.6, 2.7 | Applied to a disposable scratch PostgreSQL only; paired checks and access matrix run there (test matrix §4) |
+| `f573fae4` | Bank-field callers moved to the gated RPCs | `src/lib/api/employeeBank.ts`, `src/lib/api/payroll.ts`, `src/pages/SettingsPage.tsx`, `src/pages/SATrackerPage.tsx` | 3.5 | `tsc` and ESLint on changed files; not run against a database with the RPCs (page level NOT RUN) |
+| `b1034ea9` | Invoice-level revenue and report, row-cap notice, branch helper, payroll Cost Summary, harnesses | `src/lib/revenue/invoiceRevenue.ts`, `src/lib/revenue/invoiceRevenueSource.ts`, `src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx`, `src/pages/reports/revenue/index.ts`, `src/pages/reports/types.ts`, `src/lib/reportQueries.ts`, `src/pages/ReportsPage.tsx`, `src/lib/branches.ts`, `src/lib/payroll/costSummary.ts`, `src/pages/payroll/PayrollCostTab.tsx`, `src/pages/PayrollPage.tsx`, `scripts/invoice-revenue.harness.ts`, `scripts/payroll-cost-summary.harness.ts`, `package.json` | 2.1, 2.2, 2.3, 2.6, 4.1, 4.2, 4.3 (partial), 4.5 (internal) | Function-level harness runs through the TypeScript compiler (named npm commands not executed); `tsc` and ESLint on changed files |
+| `e8a97700`, `321ed3fb` | Plan, decision log, test matrix, evidence CSVs, tracker, index, change log, caller inventory | ACCOUNTS-002 plan and evidence files, web tracker and index, `docs/shared/active/CHANGE_LOG.md` | 1.1, 1.2, 3.1, 4.6, 5.1 to 5.3 | `docs:validate`, `docs:validate:health` |
+
+### Approved decisions compared with the achieved implementation
+| Decision | Achieved locally (isolated verification only) | Not achieved or exception | Open record |
+|---|---|---|---|
+| PD-14 revenue | Invoice-level net with actual GST, cancelled apart, flagged invoices, headline equals detail, comparison with the existing method (function level) | Page render not run; not reconciled to Busy; same-day invoices that an import replaced are not counted (PD-24); existing reports still use the flat 18% | PD-11, PD-24 |
+| PD-15 finance access | Database-level read and write control on revenue, invoice and warranty tables; module-gated RPCs | No UI-level separation of finance and operational report rights; production role mapping not done; not applied anywhere governed | PD-21 |
+| PD-17 branch isolation | Assigned-branch and explicit all-branch scope in the policies | **Not fully satisfied.** The platform-wide administrator bypass remains and every administrator automatically receives every active module, including `finance_all_branches`. All-branch finance access is therefore not explicit for administrators. Behaviour not changed in this work | PD-22 |
+| PD-18 invoice identity | Evidence gathered; replaced invoices preserved by trigger (no irreversible loss); identical re-import and amendment log nothing | Replacement is still not blocked; both same-day invoices are not counted in totals; identity not resolved | PD-24 |
+| PD-19 bank fields | Bank columns unreadable to app users; RPC read and write paths; callers changed | Settings and SA Tracker read paths and service-role edge functions were not individually approved; page level not run; must be deployed together with the migration | PD-25, PD-21 |
+| PD-20 financial year | Inventory and feasibility only | Neither option implemented or authorized | PD-20 |
+| Payroll reporting | Read-only Cost Summary; employer cost shown as not available | UI not run; employer cost data does not exist | none |
+| Busy | No ledger, no new posting path | Reconciliation to Busy blocked; real Busy import unverified | PD-11 |
+
+### Invoice identity: what is and is not achieved
+- Preservation of replaced invoice records: achieved (DBL-0102 trigger writes the replaced row; verified on the isolated database only).
+- Prevention of silent overwrite: partly. The overwrite still happens, but it is no longer silent: the replaced row is kept and the Finance report states how many invoices were replaced in the period.
+- Inclusion of every legitimate invoice in revenue totals: not achieved. Totals use the current row only.
+- Complete invoice-identity resolution: not achieved; a key redesign is PD-24 and needs separate approval.
+- Evidence: in the parts uploads of a private local full-database dump (2026-10-02), 27 of 2,649 job-card and invoice-date groups had more than one distinct invoice number, and 55 of 2,619 job cards had more than one invoice overall. Method: a local script read the dump and counted groups; no identifiers, amounts or customer data were printed or stored. Limits: it covers parts uploads, not the revenue table (an overwritten revenue row cannot be seen there); it is a point-in-time dump; it cannot be reproduced from the repository.
+
+### Employee bank fields: authorized read paths
+| Path | Who | Supported by approved scope and existing authority | Status |
+|---|---|---|---|
+| Payroll loader | `payroll` view | Yes: payroll workflows are approved | Supported |
+| Settings employee list and export | `employees` view | Existing module right, preserved; not named in the approval | Unresolved (PD-25) |
+| SA Tracker payout export | `sa_tracker` view | Existing behaviour, preserved; not named in the approval | Unresolved (PD-25) |
+| Administrator | `is_admin()` | Existing platform authority | Subject to PD-22 |
+| Earnings-report edge functions | service role | Unchanged; recipients and content not audited | Unresolved (PD-25) |
+
+### Completion levels
+| Item | Authored | Committed | Isolated verification | Governed deployment | Production verification | Release complete |
+|---|---|---|---|---|---|---|
+| DBL-0101 access hardening | yes | yes (`b52c1e83`) | yes (access matrix, checks, re-run) | no | no | no |
+| DBL-0102 invoice preservation | yes | yes (`b52c1e83`) | yes | no | no | no |
+| Bank-field callers | yes | yes (`f573fae4`) | type-check and lint only | no | no | no |
+| Invoice revenue and report | yes | yes (`b1034ea9`) | function level; page not run | no | no | no |
+| Payroll Cost Summary | yes | yes (`b1034ea9`) | function level; page not run | no | no | no |
+| Row-cap notice | yes | yes (`b1034ea9`) | logic level; page not run | no | no | no |
+| Financial-year change | design only | design recorded | feasibility on scratch only | not authorized | no | no |
+
 ### Release prerequisites (before any migration is applied to a governed environment)
 1. Every legitimate user needs active `user_employee_links` with a dealer code for their branches. Without them, users with a reading module see no rows.
 2. Head-office, Finance and payroll operators need the module `finance_all_branches`. Payroll earnings read `job_card_closed_data`; an operator without it would compute variable earnings from no rows.
@@ -283,6 +330,27 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 6. Independent review is required before publication (change-impact check). None has been done; a self-check is not independent review.
 7. `npm run build` fails at `HEAD` and on `origin/main` because `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, which `bodyshopSettlement.ts` does not export. This is unrelated and pre-existing; the files changed here compile.
 
+### Publication blockers (as reported by `npm run publish:ready`, with origin)
+| Blocker | Origin | Authority and action |
+|---|---|---|
+| Independent review required for application code, database truth and unmapped files | Repository rule applied to this change set | `repo_change_impact.mjs` and the disposition `reviews`; not performed; a self-check is not independent review |
+| Ledger rows DBL-0101 and DBL-0102 are PROPOSED, not VERIFIED, so the four migration and check files block | Introduced here, correctly | Ledger rules 3 and 7; they stay PROPOSED until governed deployment and recorded check output |
+| No disposition entry matching the change set | Existing mechanism | `docs/shared/evidence/publication_readiness_disposition.json` updated (documentation record; reviews remain pending) |
+| Two new harness files reported unmapped | Pre-existing classifier gap: the four existing `scripts/*.harness.ts` files are also unmapped because the classifier maps only `.mjs`, `.sh`, `.js`, `.py` under `scripts/` | Placement is correct per `docs/STRUCTURE_GUIDE.md` ("JS/TS test helpers and tooling -> scripts/"). Remaining action: extend the classifier pattern in `scripts/repo_change_impact.mjs` (not done: validator change out of scope) |
+| `npm run build` fails | Pre-existing at `HEAD` and `origin/main`: `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, not exported by `bodyshopSettlement.ts` | Unrelated; not repaired here |
+| Repo-wide lint reports 1,590 errors | Pre-existing; none in files changed here (changed files linted separately) | Unrelated |
+| Remote divergence: local 12 ahead, 1 behind | Remote commit `91deea70` (Bodyshop floor, unrelated); a trial merge was clean | Needs the existing `publish:safe` rebase; the disposition must be refreshed after it because the change set changes |
+| Production role mapping, dealer-code links, administrator bypass (PD-21, PD-22), staging verification, coordinated database and application rollout, rollback plan | Release prerequisites above | See decision log §G |
+| Publication authorization | User | Not given |
+
+### Cross-plan dependencies
+| Item | Owner | Existing owning record | State |
+|---|---|---|---|
+| Busy export-run log and duplicate-period warning (task 4.4) | BUSY-001 | BUSY-001 has no such task today; its open item is task 3.2 (real Busy import). Adding the log needs an amendment to BUSY-001 | Pending; not implemented here |
+| Accounts payment-line load failure warning (task 4.7) | ACCOUNTS-001 | ACCOUNTS-001 has no such task today | Pending; not implemented here |
+| Financial-year numbering and vouchers | ACCOUNTS-001 (DBL-0057, 0058, 0059, 0074 voucher objects) and BUSY-001 (`eligibility.ts` series) | Both plans keep ownership; ACCOUNTS-002 holds the design only | Not approved |
+| Real Busy import verification | BUSY-001 task 3.2 | Open in BUSY-001 | Blocked; PD-11 |
+
 ### Web–mobile parity (task 2.5)
 Impact: new web report ID and a visible notice at the report row cap. The mobile app keeps its own `reportQueries.ts` and report list. Mobile status: tracked separately; no mobile Finance report is required for this change. Owner: Engineering owner. Follow-up: decide whether the mobile report list should show the row-cap notice. Reason not done in the same change: no figure changes and no mobile counterpart screen for the new report.
 
@@ -291,7 +359,7 @@ Impact: new web report ID and a visible notice at the report row cap. The mobile
 **Options.** (A) Annual controlled change set before 2027-04-01: new sequences, function, constraints and constants for 27-28. (B) Automatic: derive the year from the document date in IST, keep one counter row per series and year, and replace the pinned CHECK patterns with a generic pattern.
 **Feasibility checked on the scratch database (not committed):** the derived label gave 25-26, 26-27, 26-27, 27-28 for 2026-03-31, 2026-04-01, 2027-03-31, 2027-04-01; with 8 parallel sessions issuing 160 numbers across two years, all 160 were distinct and each year's counter ended at 80. Counter rows give gap-free numbers for committed transactions; sequences can skip numbers on rollback.
 **Considerations.** Busy needs the new series created by the accountant either way. Option B removes the yearly code change but touches the voucher function, both CHECK constraints, the reconcile function, the Busy series helper and every reader of the old sequences, and needs the series scheme (PD-02, PD-03, PD-16) settled first. Option A is smaller and is enough for 2027.
-**Recommendation.** Option A for 2027 (checklist: new sequences, function, constraints, constants; dry run on staging; Accounting sign-off); keep B as an optional later change. **Approval needed:** which option, the Sales series list, and Accounting sign-off. Target completion 2027-03-15 (A).
+**Agent recommendation (not a user decision and not an approval):** option A for 2027, because it is smaller, is needed once a year, and option B would still need the Busy series created by the accountant. Checklist if approved: new sequences, function, constraints, constants; dry run on staging; Accounting sign-off. B remains an option for later. **Neither option is authorized and nothing has been changed.** Approval needed: which option, the Sales series list, and Accounting sign-off. Target completion 2027-03-15 (A). Decision record: PD-20 in the decision log §G.
 
 ## Implementation Tasks
 
@@ -404,9 +472,10 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 | PD-02, PD-03, PD-16 voucher series and Sales series list | Finance head / CA, Accounting owner | Financial year; collision check |
 | PD-11 Busy reconciliation extract, tolerance, sign-off role | Finance head | Task 4.5 (Busy part) |
 | PD-21 role mapping: who holds `finance_all_branches`, report-module split | Finance head + Engineering owner | Release of DBL-0101; task 3.3 |
-| PD-22 platform admin bypass versus the "no automatic all-branch for administrators" rule | Finance head + Engineering owner | Policy design |
+| PD-22 platform admin bypass and default module grants versus the "no automatic all-branch for administrators" rule (PD-17 is not fully satisfied until decided) | Finance head + Engineering owner | PD-17 compliance; release of DBL-0101 |
 | PD-23 advisor names excluded in `ReportsPage` | Business owner | Task 2.4 |
 | PD-24 invoice key redesign (a material change) | Finance head + Import owner | Beyond DBL-0102 |
+| PD-25 bank-field read paths for Settings, SA Tracker and edge functions | Finance head + HR owner | Task 3.5 exception |
 | PD-13/07 expense or manual revenue register | Finance head | Excluded (6.1) |
 | Publication, deployment, independent review | User and repository review process | Everything above |
 

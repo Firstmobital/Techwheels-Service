@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (ACCOUNTS-002 documentation reconciliation)
+
+- Date: 2026-11-25
+- Change summary: Documentation only. Reconciled the ACCOUNTS-002 implementation record: implementation by commit, approved decisions compared with what was achieved (PD-17 recorded as not fully satisfied because of the platform administrator bypass and the default module grants; PD-18 preservation is not revenue completeness; PD-19 read paths), completion levels, publication blockers with their origin, cross-plan dependencies, consolidated decision register (PD-20, PD-02/03/16, PD-11, PD-21 to PD-25), financial accuracy evidence kept separate from synthetic figures, validation limits, and DBL-0101/0102 lifecycle stages. Added the change-set disposition record with every review pending. No application, database or migration behaviour changed.
+- Impacted files: ACCOUNTS-002 plan and evidence files, `docs/shared/reference/DB_CHANGE_LEDGER.md` (evidence text of DBL-0101 and DBL-0102 only), `docs/shared/evidence/publication_readiness_disposition.json`.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: ACCOUNTS-002 documentation reconciliation.
+
 ## 2026-11-25 (ACCOUNTS-002 implementation, local)
 
 - Date: 2026-11-25
