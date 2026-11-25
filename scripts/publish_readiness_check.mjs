@@ -238,6 +238,10 @@ function generatedArtifactConfirmed(disposition, filePath) {
   )
 }
 
+function ledgerRowId(row) {
+  return String(row).split('|').map((c) => c.trim()).find((c) => /^DBL-\d+/.test(c)) || '(unidentified row)'
+}
+
 function dbChangeDeferred(disposition, filePath) {
   return (disposition.deferred_db_changes || []).some(
     (entry) =>
@@ -556,14 +560,22 @@ async function main() {
       for (const row of rows) {
         const status = extractLedgerStatus(row)
         if (!['VERIFIED', 'DROPPED', 'ROLLED_BACK'].includes(status)) {
+          // One blocker per ledger row (a change set's migration and check files share one row).
+          const existing = blockers.find((b) => b.area === 'database' && b.evidence === row)
+          if (existing) {
+            existing.files.push(filePath)
+            existing.message = `DB ledger row ${ledgerRowId(row)} (${existing.files.length} referenced file(s): ${existing.files.join(', ')}) is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`
+            continue
+          }
           add(
             blockers,
             'BLOCKER',
             'database',
-            `DB ledger row for ${filePath} is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`,
+            `DB ledger row ${ledgerRowId(row)} (1 referenced file(s): ${filePath}) is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`,
             'Complete DB_CHANGE_PROTOCOL.md operator/reviewer evidence or explicitly defer publication of this DB change.',
             row,
           )
+          blockers[blockers.length - 1].files = [filePath]
         }
       }
       obligations.database.push({ file: filePath, ledger_rows_found: rows.length })
