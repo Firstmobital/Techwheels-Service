@@ -178,3 +178,17 @@ Existing owners checked before creating a new plan: ACCOUNTS-001 (`/accounts`, r
 - No runtime verification: all tests in the test matrix are STATIC_ONLY, NOT_RUN or BLOCKED except ST-15 (FAIL) and ST-20 (PASS, grep-based).
 - Row data, production settings, scheduled jobs and edge-function secrets were not inspected.
 
+## 4. Caller inventory for the access hardening (task 3.1, 2026-11-25 IST)
+
+Code-only inventory of the repository at the time of the change. Production callers (scheduled jobs, external tools, direct API users) are not visible and are part of the release prerequisites.
+
+| Data | Direct callers (module) | Writers | Notes |
+|---|---|---|---|
+| `psf_revenue_dms` | Busy labour source `src/lib/busy/labourSource.ts` (busy); new Finance report (reports) | DMS import through `run_psf_revenue_dms_import_batch` (definer); triggers (definer) | The import page reads no table rows directly for this table |
+| `job_card_closed_data` | `reportQueries.ts` web and mobile (reports); `TechnicianPage` (technician); `SATrackerPage` (sa_tracker); `WAAgentPage` (wa_agent); `BodyshopTrackerPage` (bodyshop_tracker); payroll `variableEarnings.ts` (payroll); `bodyshopMonthlyEarnings.ts` web and mobile; `ImportPage` (job_cards); `customer.ts` and `CustomerPortalPage` (customer lookups, run as anon today and already denied) | `ImportPage`; triggers; edge functions with the service role | Edge functions `wa-webhook`, `wa-post-service-feedback`, `technician-daily-earnings-report` use the service role and are unaffected |
+| `service_invoice_data` | `reportQueries.ts` web and mobile (reports) | `ImportPage` dynamic table import | |
+| `warranty_*` | `src/lib/warranty/jsonExtraction.ts` and `WarrantyOverviewReport` (reports) | `ImportPage` (`WARRANTY_REPORT_TABLES`); edge function `warranty-spl-labour-sync` (service role) for labour and SPL tables | `warranty_labour_data` and `warranty_spl_codes_data` are keyed by dealer code, the others by branch and location |
+| `employee_master` bank fields | `payroll.ts` loader; `SettingsPage` list; `SATrackerPage` list; edge functions `technician-daily-earnings-report` and `_shared/earningsReportCommon` (service role) | `SettingsPage` upsert, insert, update; `SalaryTypeTab` update; definer RPCs `payroll_save_salary_type_master`, `payroll_create_salary_type_employee`; row writes are admin-only by existing policy | Mobile reads no bank field |
+
+Legacy flat-18% sites (not extended; the invoice-level library is the authority for invoice revenue): seven revenue reports, three labour-revenue reports, one performance report, two sites in `reportQueries.ts`, `TechnicianPage`, `BodyshopTrackerPage`, `SATrackerPage`, `earningsFormulas.ts` and `bodyshopEarnings.ts` (incentive formulas are separate business rules) and the mobile copies.
+
