@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-11-25T10:24:01.000Z",
+  "generated_at_utc": "2026-11-25T14:00:00.000Z",
   "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5; .instructions.md Section 11",
-  "status_note": "Documentation record for the local stack as of 2026-11-25 (ACCOUNTS-002 and database governance commits). NOT a completed review: every review below is pending. The change set also contains seven files that exist only on origin/main (commit 91deea70, unrelated Bodyshop floor work) because the local branch is one commit behind; refresh this file after the remote is integrated through publish:safe.",
+  "status_note": "Documentation record for the local stack as of 2026-11-25 (ACCOUNTS-002, database governance and publication validation corrections). NOT a completed review: every review below is pending. The outgoing set is now computed as merge-base..HEAD, so files that exist only on origin/main (unrelated Bodyshop floor work, one commit ahead of this branch) are no longer included. The branch is still behind origin/main by one commit; integrate it through publish:safe, then refresh this file.",
   "change_set_files": [
     ".instructions.md",
     "docs/Implementation_plans/IMPLEMENTATION_TRACKER.md",
@@ -18,6 +18,7 @@
     "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv",
     "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_TEST_MATRIX.md",
     "docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md",
+    "docs/Implementation_plans/webversion/categories/rbac/evidence/runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md",
     "docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md",
     "docs/shared/active/CHANGE_LOG.md",
     "docs/shared/evidence/publication_readiness_disposition.json",
@@ -31,30 +32,28 @@
     "docs/shared/reference/catalog/task_library/generic/FEATURE_IMPLEMENTATION_TASK_CONTRACT.md",
     "docs/shared/reference/catalog/task_library/generic/IMPLEMENTATION_PLAN_TASK_CONTRACT.md",
     "docs/web/modules/complaints/reference/COMPLAINTS_TEST_EXECUTION_GUIDE.md",
-    "mobile/src/app/(tabs)/bodyshop-floor.tsx",
-    "mobile/src/lib/api/bodyshopFloorWorkAssignments.ts",
-    "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
     "package.json",
-    "scripts/bodyshop-floor-pipeline.harness.ts",
     "scripts/invoice-revenue.harness.ts",
     "scripts/payroll-cost-summary.harness.ts",
+    "scripts/publish-readiness.harness.mjs",
     "scripts/publish_readiness_check.mjs",
+    "scripts/repo_change_impact.mjs",
     "scripts/repo_health_audit.mjs",
-    "src/lib/api/bodyshopFloorWorkAssignments.ts",
+    "scripts/report-catalogue.harness.ts",
     "src/lib/api/employeeBank.ts",
     "src/lib/api/payroll.ts",
-    "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
     "src/lib/branches.ts",
     "src/lib/payroll/costSummary.ts",
     "src/lib/reportQueries.ts",
     "src/lib/revenue/invoiceRevenue.ts",
     "src/lib/revenue/invoiceRevenueSource.ts",
-    "src/pages/BodyshopFloorPage.tsx",
     "src/pages/PayrollPage.tsx",
     "src/pages/ReportsPage.tsx",
     "src/pages/SATrackerPage.tsx",
     "src/pages/SettingsPage.tsx",
     "src/pages/payroll/PayrollCostTab.tsx",
+    "src/pages/reports/index.ts",
+    "src/pages/reports/reportCatalogue.ts",
     "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
     "src/pages/reports/revenue/index.ts",
     "src/pages/reports/types.ts",
@@ -71,24 +70,20 @@
       "status": "pending",
       "reviewer": null,
       "files": [
-        "mobile/src/app/(tabs)/bodyshop-floor.tsx",
-        "mobile/src/lib/api/bodyshopFloorWorkAssignments.ts",
-        "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
-        "src/lib/api/bodyshopFloorWorkAssignments.ts",
         "src/lib/api/employeeBank.ts",
         "src/lib/api/payroll.ts",
-        "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
         "src/lib/branches.ts",
         "src/lib/payroll/costSummary.ts",
         "src/lib/reportQueries.ts",
         "src/lib/revenue/invoiceRevenue.ts",
         "src/lib/revenue/invoiceRevenueSource.ts",
-        "src/pages/BodyshopFloorPage.tsx",
         "src/pages/PayrollPage.tsx",
         "src/pages/ReportsPage.tsx",
         "src/pages/SATrackerPage.tsx",
         "src/pages/SettingsPage.tsx",
         "src/pages/payroll/PayrollCostTab.tsx",
+        "src/pages/reports/index.ts",
+        "src/pages/reports/reportCatalogue.ts",
         "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
         "src/pages/reports/revenue/index.ts",
         "src/pages/reports/types.ts"
@@ -102,13 +97,32 @@
       "note": "Independent review required before publication; not performed. The author's own checks are listed in ACCOUNTS-002_TEST_MATRIX.md section 6 and are self-checks."
     },
     {
+      "category": "automation_script",
+      "status": "pending",
+      "reviewer": null,
+      "files": [
+        "scripts/invoice-revenue.harness.ts",
+        "scripts/payroll-cost-summary.harness.ts",
+        "scripts/publish-readiness.harness.mjs",
+        "scripts/publish_readiness_check.mjs",
+        "scripts/repo_change_impact.mjs",
+        "scripts/report-catalogue.harness.ts"
+      ],
+      "authority_checked": [
+        ".instructions.md Section 11 item 6",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
+      ],
+      "outcome": null,
+      "note": "Includes the corrected publication validation (merge-base outgoing set, strict range evidence, TS harness classification; scripts/publish-readiness.harness.mjs 14/14 pass, 8 of 14 fail on the previous scripts) and TS test harnesses. Self-checks only; independent review pending."
+    },
+    {
       "category": "database_schema_truth",
       "status": "pending",
       "reviewer": null,
       "files": [
         "docs/shared/reference/DB_CHANGE_LEDGER.md",
-        "supabase/backups/full_metadata.sql",
-        "supabase/evidence/authoritative_metadata_manifest.json",
+        "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
+        "docs/shared/reference/DB_TRUTH_PROTOCOL.md",
         "supabase/migrations/20261125140000_finance_data_access_hardening.sql",
         "supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql",
         "supabase/sql_checks/20261125140000_finance_data_access_hardening_checks.sql",
@@ -123,19 +137,18 @@
       "note": "DBL-0101 and DBL-0102 are PROPOSED. Not applied to any governed environment. Independent review and governed deployment evidence pending."
     },
     {
-      "category": "unknown_unmapped",
+      "category": "generated_artifact",
       "status": "pending",
       "reviewer": null,
       "files": [
-        "scripts/bodyshop-floor-pipeline.harness.ts",
-        "scripts/invoice-revenue.harness.ts",
-        "scripts/payroll-cost-summary.harness.ts"
+        "supabase/backups/full_metadata.sql",
+        "supabase/evidence/authoritative_metadata_manifest.json"
       ],
       "authority_checked": [
-        "docs/STRUCTURE_GUIDE.md (JS/TS test helpers and tooling -> scripts/)"
+        "docs/shared/reference/DATABASE_TRUTH.md"
       ],
       "outcome": null,
-      "note": "Placement is correct per the structure guide. The classifier in scripts/repo_change_impact.mjs maps only .mjs, .sh, .js, .py under scripts/, so the four existing scripts/*.harness.ts files are also unmapped. Extending the classifier is a separate change. The third file is a remote-only file that appears because of the unpushed-diff comparison."
+      "note": "Two user-run metadata refreshes (98016773, 0c61add8) verified against their manifest hashes and as schema-equivalent; independent review pending."
     },
     {
       "category": "repository_authority",
@@ -143,10 +156,8 @@
       "reviewer": null,
       "files": [
         ".instructions.md",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
-        "docs/shared/reference/catalog/task_library/generic/DATABASE_CHANGE_TASK_CONTRACT.md",
-        "docs/shared/reference/catalog/task_library/generic/FEATURE_IMPLEMENTATION_TASK_CONTRACT.md",
-        "docs/shared/reference/catalog/task_library/generic/IMPLEMENTATION_PLAN_TASK_CONTRACT.md"
+        "docs/shared/reference/DATABASE_TRUTH.md",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "authority_checked": [
         ".instructions.md Section 11 item 6",
@@ -154,20 +165,6 @@
       ],
       "outcome": null,
       "note": "The operating contract (.instructions.md Section 11) and its task-library pointers changed in f2d5f485; independent review pending."
-    },
-    {
-      "category": "automation_script",
-      "status": "pending",
-      "reviewer": null,
-      "files": [
-        "scripts/publish_readiness_check.mjs"
-      ],
-      "authority_checked": [
-        ".instructions.md Section 11 item 6",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "outcome": null,
-      "note": "Export and direct-run guard only; gate output verified identical before and after on the same working tree (self-check). Independent review pending."
     },
     {
       "category": "validation_script",
@@ -181,21 +178,7 @@
         "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "outcome": null,
-      "note": "Advisory ledger-coverage check added; self-check on isolated fixtures. Independent review pending."
-    },
-    {
-      "category": "generated_artifact",
-      "status": "pending",
-      "reviewer": null,
-      "files": [
-        "supabase/backups/full_metadata.sql",
-        "supabase/evidence/authoritative_metadata_manifest.json"
-      ],
-      "authority_checked": [
-        "docs/shared/reference/DATABASE_TRUTH.md"
-      ],
-      "outcome": null,
-      "note": "Two user-run metadata refreshes (98016773, 0c61add8) verified against their manifest hashes and as schema-equivalent; independent review pending."
+      "note": "Advisory ledger-coverage check plus corrected publication readiness assessment; self-check on isolated fixtures. Independent review pending."
     }
   ],
   "generated_artifacts": [
