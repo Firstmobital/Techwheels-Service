@@ -379,7 +379,7 @@ SELECT COUNT(*) as tickets_created FROM complaint_tickets
 --
 -- Estimated time: 45 minutes for full manual verification
 -- Automation: pgTAP can automate these tests once installed
--- Next: Document results and move migration to exec_success_migrations/
+-- Next: Document results (record check output in the DB ledger row); the migration stays in supabase/migrations/ (see docs/shared/reference/DATABASE_TRUTH.md)
 --
 -- ============================================================================
 

@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25 (autonomous workstream completion and database governance closure)
+
+- Date: 2026-11-25
+- Change summary: Added `.instructions.md` Section 11 (Autonomous Workstream Completion: autonomous execution, planning authorization distinct from implementation approval, decision boundaries, safe commits, publication separation, existing independent-review requirements, vendor neutrality, stop rule) with one-line pointers in the transaction framework and two task contracts. Closed remaining database-governance review points: removed two active instructions that still told agents to use `exec_success_migrations/` (complaints test guide; VEHICLE-PICKUP-001 task 1.9 and file table), clarified the 88-of-104 / 88-of-105 historical populations, and added a recorded historical inventory (105 files, 88 unmatched) to the ledger boundary rule so the advisory health audit detects out-of-order migrations added at or below the boundary.
+- Impacted files: `.instructions.md`, `docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md`, `FEATURE_IMPLEMENTATION_TASK_CONTRACT.md`, `IMPLEMENTATION_PLAN_TASK_CONTRACT.md`, `DB_CHANGE_LEDGER.md`, `scripts/repo_health_audit.mjs`, the complaints test guide, the VEHICLE-PICKUP-001 plan.
+- Business logic change: No
+- Function-level contract change: Health audit `checks.ledger_coverage` gains `historical_recorded` and `historical_growth`; advisory only.
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: autonomous workstream governance and database governance closure.
+
 ## 2026-11-25 (database governance alignment)
 
 - Date: 2026-11-25
