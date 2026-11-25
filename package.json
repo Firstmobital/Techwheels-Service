@@ -32,6 +32,7 @@
     "test:bodyshop-pipeline": "npx tsx scripts/bodyshop-floor-pipeline.harness.ts",
     "test:floor-work-facets": "npx tsx scripts/floor-work-facet-count.harness.ts",
     "test:publish-readiness": "node scripts/publish-readiness.harness.mjs",
+    "test:report-catalogue": "npx tsx scripts/report-catalogue.harness.ts",
     "test:invoice-revenue": "npx tsx scripts/invoice-revenue.harness.ts",
     "test:payroll-cost": "npx tsx scripts/payroll-cost-summary.harness.ts",
     "test:customer-portal": "npm --prefix ./mobile run test -- src/lib/api/customerPortalQueryLog.test.ts src/lib/customer/customerDocumentsCache.test.ts src/lib/api/customerPortal.api.test.ts src/lib/customer/mechanicalServiceType.test.ts"
