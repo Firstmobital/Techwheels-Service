@@ -5,6 +5,7 @@ import AdvanceManagementTab from './payroll/AdvanceManagementTab'
 import PayrollProcessingTab from './payroll/PayrollProcessingTab'
 import SalarySlipReportTab from './payroll/SalarySlipReportTab'
 import SalaryTypeTab from './payroll/SalaryTypeTab'
+import PayrollCostTab from './payroll/PayrollCostTab'
 import { checkPayrollPermissions } from '../lib/api/payroll'
 import { formatPayrollMonth } from '../lib/payroll/calculations'
 import { PayrollSecurityIndicator, PayrollSecurityProvider } from './payroll/PayrollSecurityGate'
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'processing', label: 'Payroll Processing' },
   { id: 'slip', label: 'Salary Slip Report' },
   { id: 'salary-type', label: 'Salary Type' },
+  { id: 'cost', label: 'Cost Summary' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -27,6 +29,7 @@ const TAB_DESCRIPTIONS: Record<TabId, string> = {
   processing: 'Recompute, review, and finalize monthly payroll. Locked months preserve historical snapshots.',
   slip: 'Generate individual salary slips and consolidated payroll reports from finalized data.',
   'salary-type': 'Manage employee department, branch, base salary, salary type, bank details, and active status.',
+  cost: 'Read-only: gross earnings, employee deductions, net salary payable and employer cost, kept separate. Provisional until the month is finalized.',
 }
 
 export default function PayrollPage() {
@@ -125,6 +128,9 @@ export default function PayrollPage() {
         )}
         {activeTab === 'slip' && (
           <SalarySlipReportTab payrollMonth={payrollMonth} monthInput={monthInput} onMonthChange={handleMonthChange} />
+        )}
+        {activeTab === 'cost' && (
+          <PayrollCostTab payrollMonth={payrollMonth} monthInput={monthInput} onMonthChange={handleMonthChange} />
         )}
         {activeTab === 'salary-type' && (
           <SalaryTypeTab canModify={permissions.canModify} isAdmin={permissions.isAdmin} />

@@ -28,6 +28,7 @@ export type ReportId =
   | 'net-price-final-revenue-variance'
   | 'end-to-end-job-lifecycle'
   | 'daily-revenue'
+  | 'invoice-revenue-finance'
   | 'category-wise-revenue'
   | 'monthly-trend-revenue'
   | 'labour-spares-mix'
@@ -97,6 +98,11 @@ export interface ReportDefinition {
   description: string
   cardHint: string
   group?: string
+  /** Catalogue metadata (ACCOUNTS-002, 4.3). Optional while existing reports are being catalogued; see the reports catalogue evidence. */
+  owner?: string
+  sources?: string[]
+  dateBasis?: string
+  verification?: string
   Component: ComponentType<ReportViewProps>
 }
 

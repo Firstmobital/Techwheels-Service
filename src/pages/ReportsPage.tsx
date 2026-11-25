@@ -9,6 +9,8 @@ import {
   getLabourKpiSummary,
   getManpowerWiseFilterOptions,
   getServiceTypeCounts,
+  REPORT_LOAD_NOTICE_EVENT,
+  type ReportLoadNotice,
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
 import {
@@ -71,6 +73,7 @@ export default function ReportsPage() {
     totalVasCount: 0,
   })
   const [headerStatsLoading, setHeaderStatsLoading] = useState(true)
+  const [rowCapNotice, setRowCapNotice] = useState<number | null>(null)
 
   const resolvedCategoryId = useMemo<ReportCategoryId>(() => {
     return isCategoryId(params.categoryId) ? params.categoryId : DEFAULT_CATEGORY_ID
@@ -89,6 +92,19 @@ export default function ReportsPage() {
   }, [params.reportId, resolvedCategoryId])
 
   const activeReport = selectedReport ?? reportsInCategory[0] ?? null
+
+  // Loaders raise a notice when they stop at the row cap; show it so totals are never silently partial (ACCOUNTS-002 2.1).
+  useEffect(() => {
+    setRowCapNotice(null)
+  }, [activeReport?.id, branch, fuelType, datePreset, customFrom, customTo, dateFieldType, serviceTypeFilter, parentProductLineFilter, serviceAdvisorFilter])
+  useEffect(() => {
+    const onNotice = (event: Event) => {
+      const detail = (event as CustomEvent<ReportLoadNotice>).detail
+      if (detail?.kind === 'row_cap') setRowCapNotice(detail.limit)
+    }
+    window.addEventListener(REPORT_LOAD_NOTICE_EVENT, onNotice)
+    return () => window.removeEventListener(REPORT_LOAD_NOTICE_EVENT, onNotice)
+  }, [])
   const [grnFolderOpen, setGrnFolderOpen] = useState(
     () => ['grn-sitapura-ev', 'grn-sitapura-pv', 'grn-ajmer-pv'].includes(params.reportId ?? '')
   )
@@ -592,6 +608,11 @@ export default function ReportsPage() {
           </div>
         ) : (
           <>
+            {rowCapNotice !== null && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                This report loaded the maximum of {rowCapNotice.toLocaleString('en-IN')} rows. Rows beyond that were not loaded, so totals and counts may be incomplete. Narrow the period or branch and run it again.
+              </div>
+            )}
             {activeReport ? (
               <activeReport.Component
                 branch={effectiveBranchFilter}
