@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-25
+
+- Date: 2026-11-25
+- Change summary: Documentation-only promotion of the Service finance-reporting audit (expenses, revenue, reports) into the governed plan ACCOUNTS-002 and its accounts evidence files. The audit is static only; no runtime check was run and no implementation has started. Registered in the web plans index and tracker; cross-reference lines added to ACCOUNTS-001 and BUSY-001.
+- Impacted files: `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_*`, `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_*`, web `INDEX.md` and `IMPLEMENTATION_TRACKER.md`, root tracker last-sync date, ACCOUNTS-001 and BUSY-001 plan headers.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No (access hardening is proposed in ACCOUNTS-002 Phase 3, not applied)
+- Data/schema change: No
+- Docs updated by: ACCOUNTS-002 audit promotion.
+
 ## 2026-10-01
 
 - Date: 2026-10-01

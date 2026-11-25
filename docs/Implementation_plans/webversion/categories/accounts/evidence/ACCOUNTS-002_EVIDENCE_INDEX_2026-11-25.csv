@@ -1,0 +1,43 @@
+evidence_id,description,citation_pinned_e7877341,source_layer,status
+EV-001,Repo agent contract (no AGENTS.md/CLAUDE.md exist; .instructions.md is the single contract),.instructions.md:1-60,repo,CONFIRMED
+EV-002,README pointers to contract + DB authority,README.md:3-9,repo,CONFIRMED
+EV-003,Database authority hierarchy and freshness gate,"docs/shared/reference/DATABASE_TRUTH.md:9-30,65-72",repo,CONFIRMED
+EV-004,"Snapshot manifest at HEAD (sha256 0e036266…7b0b, created 2026-11-24T05:59:19Z); a 2026-11-25 refresh (sha256 7809bd2a…5027) was uncommitted at audit time and committed afterwards as 98016773",supabase/evidence/authoritative_metadata_manifest.json:1-8,snapshot,CONFIRMED
+EV-005,"Snapshot header at HEAD: dumped 2026-11-24 11:28:04 IST, PostgreSQL 17.6",supabase/backups/full_metadata.sql:1-10,snapshot,CONFIRMED
+EV-006,Route-to-module map: reports/busy/accounts/payroll/bodyshop-recovery,src/App.tsx:160-189,repo,CONFIRMED
+EV-007,"Busy workbook export page (labour+parts -> sales vouchers, party accounts)",src/pages/BusyAccountingPage.tsx:1-120,repo,CONFIRMED
+EV-008,Hard-coded Busy voucher series PV-S 26-27 / EV-S 26-27 derived from DMS invoice prefix,"src/lib/busy/eligibility.ts:3-6,78-83",repo,CONFIRMED
+EV-009,Busy branch resolved from sr_assigned_to employee codes; any other code falls back to Sitapura,src/lib/busy/branch.ts:12-33,repo,CONFIRMED
+EV-010,"Busy money rounding (paise, GST-inclusive 5%/18%, nearest-rupee round-off)",src/lib/busy/money.ts:1-76,repo,CONFIRMED
+EV-011,Parts import partitions by portal|invoice|date; skips existing invoices,"src/lib/busy/partsPersist.ts:24-26,49-80",repo,CONFIRMED
+EV-012,"Accounts voucher cutoff 2026-09-02, FY 26-27, payment-mode to Busy Account DR","src/lib/api/accounts.ts:19-20,277-290,1306-1311",repo,CONFIRMED
+EV-013,DB function issuing RApp/JApp/26-27 voucher numbers from sequences,supabase/backups/full_metadata.sql:2264-2292,snapshot,CONFIRMED
+EV-014,accounts_mechanical_invoices / payment_lines tables and RLS,"supabase/backups/full_metadata.sql:33517,33635,51959-51982",snapshot,CONFIRMED
+EV-015,"psf_revenue_dms (DMS invoice grain) table, unique key, RLS select/insert/update/delete = true","supabase/backups/full_metadata.sql:38800,44668,56009-56033",snapshot,CONFIRMED
+EV-016,Triggers on psf_revenue_dms: voucher assignment and job_card_closed mirror refresh,"supabase/backups/full_metadata.sql:49985,50033",snapshot,CONFIRMED
+EV-017,job_card_closed_data (JC grain) table and open RLS (authenticated true for select/insert/update/delete),"supabase/backups/full_metadata.sql:37248,48904,54848-54880",snapshot,CONFIRMED
+EV-018,service_invoice_data table and open RLS,"supabase/backups/full_metadata.sql:39263,55232,55376,55520",snapshot,CONFIRMED
+EV-019,Report row cap MAX_REPORT_FETCH_ROWS=5000; loop breaks without flag,"src/lib/reportQueries.ts:541,880-892",repo,CONFIRMED
+EV-020,Ex-GST revenue = Math.round(gross/1.18) per row,src/lib/reportQueries.ts:1854-1859,repo,CONFIRMED
+EV-021,Monthly revenue KPI and service-type revenue formulas,"src/lib/reportQueries.ts:1293-1363,1483-1518",repo,CONFIRMED
+EV-022,Reports page: name-based advisor exclusion; invoice_date forced for revenue categories,"src/pages/ReportsPage.tsx:32-36,139-141",repo,CONFIRMED
+EV-023,"Payroll amounts formula, finalize RPC, payroll tables","src/lib/payroll/calculations.ts:10-14,133-150; src/lib/api/payroll.ts:510-530; supabase/backups/full_metadata.sql:20043,38187,38250",repo+snapshot,CONFIRMED
+EV-024,"Bodyshop settlement lines (append-only, reversal, write-off, voucher immutability)","supabase/backups/full_metadata.sql:34677,34761,24132,29394,49969",snapshot,CONFIRMED
+EV-025,Warranty report tables with open RLS (authenticated true),"supabase/backups/full_metadata.sql:41327,55128-55560",snapshot,CONFIRMED
+EV-026,audit_logs table; select admin-only; insert actor-or-admin,"supabase/backups/full_metadata.sql:34021,53381-53396",snapshot,CONFIRMED
+EV-027,psf_revenue_dms import via run_psf_revenue_dms_import_batch (upsert counts),"src/pages/ImportPage.tsx:2017-2040; supabase/backups/full_metadata.sql:24838,24860",repo+snapshot,CONFIRMED
+EV-028,"Web-mobile parity policy, CI parity guard",CONTRIBUTING.md:7-35; .github/workflows/web-mobile-parity-guard.yml,repo,CONFIRMED
+EV-029,"Sales handoff package (private input, not stored in this repository): README, MANIFEST, assignment prompt, proposal, templates, OD-01..OD-12",private input (local only),external,CONFIRMED (reference only)
+EV-030,Busy labour fetch pages 1000 rows until exhausted (no cap),"src/lib/busy/labourSource.ts:7,85-110",repo,CONFIRMED
+EV-031,Company GSTIN not stored in repo (receipt profile null),src/lib/accounts/receiptCompanyProfile.ts:4-9,repo,CONFIRMED
+EV-032,"Accounts list RPCs are STABLE, check accounts_can_access(), contain no writes",supabase/backups/full_metadata.sql:15831-15977,snapshot,CONFIRMED
+EV-033,Payroll variable earnings read job-card/revenue sources (shared dependency),"src/lib/payroll/variableEarnings.ts:1-60,216",repo,CONFIRMED
+EV-034,"No expense table, view or UI exists (0 matches for ""expense"" in snapshot and app pages)",supabase/backups/full_metadata.sql (grep); src/ (grep),snapshot+repo,CONFIRMED (absence)
+EV-035,Report registry omits the Performance category (10 components unreachable),src/pages/reports/index.ts:7-24; src/pages/reports/performance/index.ts:13-19,repo,CONFIRMED
+EV-036,Accounts page swallows payment-line load errors (.catch -> []),src/pages/AccountsPage.tsx:350-356,repo,CONFIRMED
+EV-037,Accounts payment delete RPC writes audit_logs,supabase/backups/full_metadata.sql:10322,snapshot,CONFIRMED
+EV-038,Branch label sets: report options vs Busy branches,src/lib/branches.ts:1-60; src/lib/busy/branch.ts:1-12,repo,CONFIRMED
+EV-039,Busy insurance/parts-account masters (admin write) and hard-coded insurer GSTIN seed,"src/lib/busy/insuranceMaster.ts:17-40; supabase/backups/full_metadata.sql:45933,54062-54078",repo+snapshot,CONFIRMED
+EV-040,Local HEAD equals remote main (git ls-remote),git ls-remote origin refs/heads/main,git,CONFIRMED
+EV-041,Earnings settings tables are key/value without effective dating,"supabase/backups/full_metadata.sql:35765,39098",snapshot,CONFIRMED
+EV-042,Runtime environment: none provisioned/proven isolated in this session,n/a,runtime,BLOCKED
