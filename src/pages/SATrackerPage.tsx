@@ -11,6 +11,7 @@ import { sendSAEarningsTestEmail } from '../lib/api/email'
 import { getBlockedDisbursementCodesForRange } from '../lib/payroll/disbursementGuard'
 import { SA_TRACKER_ALLOWED_SERVICE_TYPES, isSaTrackerAllowedServiceType } from '../lib/payroll/earningsFormulas'
 import { supabase } from '../lib/supabase'
+import { fetchEmployeeBankDetails, withBankDetails, type EmployeeBankDetails } from '../lib/api/employeeBank'
 import * as XLSX from 'xlsx'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -757,7 +758,7 @@ export default function SATrackerPage() {
       while (true) {
         const { data, error: err } = await supabase
           .from('employee_master')
-          .select('employee_code, employee_name, department, fuel_type, bank_name, account_number, ifsc')
+          .select('employee_code, employee_name, department, fuel_type')
           .not('employee_name', 'is', null)
           .order('employee_code', { ascending: true })
           .range(from, from + QUERY_PAGE_SIZE - 1)
@@ -773,7 +774,14 @@ export default function SATrackerPage() {
         from += QUERY_PAGE_SIZE
       }
 
-      setSaEmployees(allEmployees)
+      // Bank fields are not selectable from employee_master (ACCOUNTS-002 PD-19); optional here.
+      let bank = new Map<string, EmployeeBankDetails>()
+      try {
+        bank = await fetchEmployeeBankDetails()
+      } catch (bankError) {
+        console.warn('employee bank details unavailable:', bankError instanceof Error ? bankError.message : bankError)
+      }
+      setSaEmployees(withBankDetails(allEmployees, bank) as SaEmployee[])
     } catch (e) {
       console.error('loadEmployees error:', e)
     }

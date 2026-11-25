@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { fetchEmployeeBankDetails, withBankDetails } from './employeeBank'
 import {
   computePayrollAmounts,
   hasGenuinePayrollMonthActivity,
@@ -30,10 +31,13 @@ import type {
 export async function fetchPayrollEmployees(): Promise<PayrollEmployee[]> {
   const res = await supabase
     .from('employee_master')
-    .select('id, employee_code, employee_name, department, location, role, bank_name, account_number, ifsc, is_active')
+    .select('id, employee_code, employee_name, department, location, role, is_active')
     .order('employee_name')
   if (res.error) throw new Error(res.error.message)
-  return ((res.data ?? []) as PayrollEmployee[]).map((row) => ({
+  // Bank fields are not selectable from employee_master; payroll users read them through the gated RPC.
+  const bank = await fetchEmployeeBankDetails()
+  const rows = withBankDetails((res.data ?? []) as Array<Omit<PayrollEmployee, 'bank_name' | 'account_number' | 'ifsc'>>, bank)
+  return (rows as PayrollEmployee[]).map((row) => ({
     ...row,
     is_active: row.is_active !== false,
   }))
