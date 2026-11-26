@@ -34,6 +34,16 @@
         "supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql"
       ],
       "reviewed_content_sha256": "6ac6fbca7335fbaece106f6e0a455cfedc3a0513da0920832c2d1a3676bb5ce9"
+    },
+    {
+      "category": "accounts_003_high_risk",
+      "status": "user_approved",
+      "reviewer": "Repository owner (user), chat instructions 2026-11-26; entry written by Claude Code at the user's request",
+      "outcome": "User instructed: 'impliment in production safeply push to main & apply migration as per gorvernence'; after auto mode blocked recording this approval and the agent set out the manual steps, the user replied 'do urself'. User approval, not an independent review; the agent that wrote the change only self-checked it. Migration applied and verified (DBL-0103). Access-gating changes (src/App.tsx, src/pages/ReportsPage.tsx, src/pages/reports/index.ts) are not matched by the path rule; database RLS enforces access. Open: signed-in production UI verification and reconciliation to Daily Revenue.",
+      "files": [
+        "supabase/migrations/20261126120000_pnl_report.sql"
+      ],
+      "reviewed_content_sha256": "8542d3abc0de14c104a15f712325b072cc9083a1814009494b85355c9f3f84ef"
     }
   ],
   "validation_evidence": [
