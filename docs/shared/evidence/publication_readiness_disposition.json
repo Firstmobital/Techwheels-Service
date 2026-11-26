@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-26T02:14:55.008Z",
+  "generated_at_utc": "2026-11-26T02:17:08.412Z",
   "authority": "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md (Review and Approval by Risk); .instructions.md Section 11",
   "status_note": "Consolidated main publication. No independent human review was performed for any item. High-risk files are covered by the user's explicit approval, which was given for the consolidated work as a whole and is not a line-by-line review. Publishing applies no migration; DBL-0101 and DBL-0102 stay PROPOSED.",
   "reviews": [
@@ -27,13 +27,13 @@
         "supabase/migrations/20261125140000_finance_data_access_hardening.sql",
         "supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql"
       ],
-      "reviewed_content_sha256": "387c5529e4e3d2bf50cb921f21dff51eb1236774d23b5595f9806880e46ca0b2"
+      "reviewed_content_sha256": "9db2945f6f229db67d09b9ce50ea59540bc72fc3f5dec88e063c863f3c14e56d"
     }
   ],
   "validation_evidence": [
     "npm run build: pass",
     "scripts/*.harness.ts: 7/7 pass (Node 24 type stripping)",
-    "npm run test:publish-readiness: 32/32",
+    "npm run test:publish-readiness: 33/33",
     "npm run docs:validate: pass",
     "production read-only probe: PGRST202 for missing bank RPC, PGRST205 for missing conflicts table, invoice report columns present",
     "mobile tsc: no new errors against ba49fac2; mobile bundle export not completed"
