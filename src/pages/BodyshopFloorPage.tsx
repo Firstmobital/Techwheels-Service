@@ -2010,7 +2010,7 @@ export default function BodyshopFloorPage() {
     k: string,
     repairCardId: number,
   ): Promise<boolean> {
-    if (!shouldAutoAssignDefaultEdpAfterRi(assignments[k]?.EDP)) return false
+    if (!shouldAutoAssignDefaultEdpAfterRi(assignments[k]?.EDP, car.branch)) return false
     if (bsFloorStatus[k]?.completedAt) return false
 
     const now = new Date().toISOString()

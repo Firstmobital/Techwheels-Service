@@ -994,7 +994,7 @@ function BodyshopFloorScreenInner() {
 
   async function autoAssignDefaultEdpAfterRiComplete(car: FloorCar, k: string): Promise<boolean> {
     const edpSlot = assignments[k]?.EDP
-    if (!shouldAutoAssignDefaultEdpAfterRi(edpSlot)) return false
+    if (!shouldAutoAssignDefaultEdpAfterRi(edpSlot, car.branch)) return false
     if (bsFloorStatus[k]?.completedAt) return false
 
     const now = new Date().toISOString()

@@ -24,6 +24,7 @@ import {
   DEFAULT_BODYSHOP_FLOOR_EDP,
   shouldAutoAssignDefaultEdpAfterRi,
 } from '../src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts'
+import { shouldAutoAssignDefaultEdpAfterRi as mobileShouldAutoAssignDefaultEdpAfterRi } from '../mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi'
 
 type Row = Record<string, unknown>
 
@@ -241,10 +242,22 @@ check('floor flow — QC active then RI after pass then EDP after RI', () => {
 })
 
 check('default EDP auto-assign — only when slot empty', () => {
-  assert.equal(shouldAutoAssignDefaultEdpAfterRi(null), true)
-  assert.equal(shouldAutoAssignDefaultEdpAfterRi({ employee_code: '' }), true)
-  assert.equal(shouldAutoAssignDefaultEdpAfterRi({ employee_code: 'EDS1_500A840' }), false)
-  assert.equal(shouldAutoAssignDefaultEdpAfterRi({ employee_code: 'NOT_REQUIRED' }), false)
+  for (const decide of [shouldAutoAssignDefaultEdpAfterRi, mobileShouldAutoAssignDefaultEdpAfterRi]) {
+    // Sitapura, empty slot: assign
+    for (const branch of ['Sitapura', 'Sitapura PV', 'Sitapura EV', ' sitapura ']) {
+      assert.equal(decide(null, branch), true, branch)
+      assert.equal(decide({ employee_code: '' }, branch), true, branch)
+    }
+    // Sitapura, existing or manual assignment: preserve
+    assert.equal(decide({ employee_code: 'EDS1_500A840' }, 'Sitapura'), false)
+    assert.equal(decide({ employee_code: 'OTHER_EDP' }, 'Sitapura'), false)
+    assert.equal(decide({ employee_code: 'NOT_REQUIRED' }, 'Sitapura'), false)
+    // other, missing or ambiguous branch: never assign
+    for (const branch of ['Ajmer Road', 'Ajmer Road PV', 'Tonk', 'Shahpura', 'Mansarovar', 'Sitapura / Tonk', 'Sitapura (PV+EV)', '500A840', '3000840', 'UNKNOWN', '', '   ', null, undefined]) {
+      assert.equal(decide(null, branch), false, String(branch))
+      assert.equal(decide({ employee_code: '' }, branch), false, String(branch))
+    }
+  }
   assert.equal(DEFAULT_BODYSHOP_FLOOR_EDP.employee_code, 'EDS1_500A840')
 })
 
