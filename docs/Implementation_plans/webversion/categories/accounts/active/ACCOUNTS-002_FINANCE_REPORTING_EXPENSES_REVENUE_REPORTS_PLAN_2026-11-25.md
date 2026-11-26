@@ -2,10 +2,10 @@
 
 **Plan ID:** ACCOUNTS-002  
 **Created:** 2026-11-25  
-**Last Updated:** 2026-11-25  
+**Last Updated:** 2026-11-26  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team (approvers: Finance head, Accounting owner, Engineering owner)  
-**Status:** In Progress. The user approved conditional phased implementation on 2026-11-25. Approved activities are implemented locally and verified on an isolated scratch database with synthetic data. Database migrations are PROPOSED, not applied to any governed environment. Nothing is published or deployed. Activities owned by ACCOUNTS-001 and BUSY-001, financial-year implementation and any invoice-key redesign remain pending or unapproved.  
+**Status:** In Progress (`IP`). The user approved conditional phased implementation on 2026-11-25. Approved application work is on `main` (consolidation merge `31fd5b0a`; web publication `779fb2f4`). That is not plan completion, signed-in production verification, or database execution. Database migrations DBL-0101 and DBL-0102 remain PROPOSED and unapplied. Activities owned by ACCOUNTS-001 and BUSY-001, financial-year implementation and any invoice-key redesign remain pending or unapproved. The temporary `integration/accounts-002` branch is integrated; it is not required for ongoing development.  
 **Platform:** webversion  
 **Category:** accounts  
 **Routes touched (if approved):** `/reports`, `/accounts`, `/busy`, `/payroll`  
@@ -23,7 +23,7 @@ Service already holds DMS invoice revenue, exports sales and receipt vouchers to
 
 Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts, payroll), **management reporting** (`/reports` and proposed read-only views), **formal accounting** (Busy). Service posts nothing to a ledger.
 
-**Implementation status (2026-11-25):** conditional phased implementation approved; local implementation in progress, not published (see Implementation Record).  
+**Implementation status (2026-11-26):** conditional phased implementation approved; application source published on `main` with production-schema fallbacks; database change sets not applied; signed-in workflows not verified (see Consolidation and release status and Implementation Record).  
 **Fit-gap totals (21 handoff requirements):** REUSE 2 · CONFIGURE 0 · EXTEND 10 · BUILD 1 · DEFER 8.  
 **Risk Level:** MEDIUM (access hardening and revenue arithmetic change visible behaviour)  
 **Estimated Duration:** about 6–9 working days of engineering after decisions, in 5 phases; Phase 4 has a hard date (before 2027-04-01)  
@@ -46,8 +46,8 @@ Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts
 | Track | State | Evidence |
 |---|---|---|
 | **Audit and readiness verification (completed work)** | Done (static, then isolated runtime) | [baseline and current state](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md), [fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv), [source mapping](../evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv), [lineage](../evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv), [reports catalogue](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv), [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md), [evidence index](../evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv) |
-| **Implementation** | In progress (local). Approved security, accuracy and reporting activities implemented and verified on an isolated database; release prerequisites, owner-plan activities and unapproved items pending | Implementation Record and Activity Tracker below |
-| Runtime verification | Isolated runtime done on synthetic data (second pass); production and hosted Auth settings BLOCKED | [Test matrix §3](../evidence/ACCOUNTS-002_TEST_MATRIX.md) |
+| **Implementation** | In progress on `main`. Approved security, accuracy and reporting activities implemented; isolated-database verification done; web source published; migrations PROPOSED; release prerequisites, owner-plan activities and unapproved items pending | Consolidation and release status; Implementation Record |
+| Runtime verification | Isolated runtime done on synthetic data (second pass); read-only production API probes recorded 2026-11-26; signed-in page workflows and hosted Auth settings not verified | [Test matrix §3](../evidence/ACCOUNTS-002_TEST_MATRIX.md) |
 | Schema evidence limits | Committed and local snapshots agree on every cited `public` definition; neither proves production | [Audit baseline §3.2](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md) |
 
 ---
@@ -315,10 +315,10 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 |---|---|---|---|---|---|---|
 | DBL-0101 access hardening | yes | yes (`b52c1e83`) | yes (access matrix, checks, re-run) | no | no | no |
 | DBL-0102 invoice preservation | yes | yes (`b52c1e83`) | yes | no | no | no |
-| Bank-field callers | yes | yes (`f573fae4`) | type-check and lint only | no | no | no |
-| Invoice revenue and report | yes | yes (`b1034ea9`) | function level; page not run | no | no | no |
-| Payroll Cost Summary | yes | yes (`b1034ea9`) | function level; page not run | no | no | no |
-| Row-cap notice | yes | yes (`b1034ea9`) | logic level; page not run | no | no | no |
+| Bank-field callers | yes | yes (`f573fae4`) | type-check and lint only | web source on `main` (`779fb2f4`); RPC fallback on current DB | signed-in pages not run | no |
+| Invoice revenue and report | yes | yes (`b1034ea9`) | function level; page not run | web source on `main` | signed-in workflows not run | no |
+| Payroll Cost Summary | yes | yes (`b1034ea9`) | function level; page not run | web source on `main` | signed-in workflows not run | no |
+| Row-cap notice | yes | yes (`b1034ea9`) | logic level; page not run | web source on `main` | signed-in workflows not run | no |
 | Financial-year change | design only | design recorded | feasibility on scratch only | not authorized | no | no |
 
 ### Release prerequisites (before any migration is applied to a governed environment)
@@ -327,11 +327,13 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 3. Importers need matching scope or the all-branch right. Imports from other branches are denied.
 4. Take a read-only list of current role assignments and grant the above before apply. Production assignments are not invented here.
 5. Deploy the bank-field migration and the application callers (`employeeBank.ts`, payroll loader, Settings, SA Tracker) together: the old application breaks once the bank columns are restricted, and the new application breaks until the RPCs exist. Run the paired SQL checks and the access matrix on staging; refresh the metadata snapshot after apply; update ledger statuses with actual evidence.
-6. Independent review is required before publication (change-impact check). None has been done; a self-check is not independent review.
-7. `npm run build` fails at `HEAD` and on `origin/main` because `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, which `bodyshopSettlement.ts` does not export. This is unrelated and pre-existing; the files changed here compile.
+6. Before applying DBL-0101 on a governed database: resolve the tracked findings in **Consolidation and release status** (dealer-code mapping, banking-path decisions, role mapping, staging verification). Publication of application source used risk-based approval on 2026-11-26 (`user_approved` in the disposition; not independent human review).
+7. The pre-consolidation `npm run build` failure from a missing `isBillingRecordedForWaiver` export was fixed on the governance branch before merge (`bodyshopSettlement.ts` re-export).
 
-### Publication blockers (measured with `node scripts/repo_change_impact.mjs --range origin/main..HEAD` then `npm run publish:ready`, with origin)
-Plain `npm run docs:impact` on a clean working tree analyses no files, and `publish:ready` then prints READY without looking at the unpushed commits; that is not a readiness proof. Measured on 2026-11-25 against the 12-commit local stack: NOT READY.
+### Publication blockers (historical snapshot, 2026-11-25 pre-consolidation)
+Superseded for source publication by main-centered, risk-based governance (2026-11-26 consolidation; see **Consolidation and release status** and `docs/shared/evidence/publication_readiness_disposition.json`). Retained as audit evidence only.
+
+Plain `npm run docs:impact` on a clean working tree analyses no files, and `publish:ready` then prints READY without looking at the unpushed commits; that is not a readiness proof. Measured on 2026-11-25 against the 12-commit local stack on `integration/accounts-002`: NOT READY.
 
 | Blocker | Origin | Authority and action |
 |---|---|---|
@@ -339,11 +341,11 @@ Plain `npm run docs:impact` on a clean working tree analyses no files, and `publ
 | Ledger rows DBL-0101 and DBL-0102 are PROPOSED, not VERIFIED, so the four migration and check files block | Introduced here, correctly | Ledger rules 3 and 7; they stay PROPOSED until governed deployment and recorded check output |
 | Disposition entry did not match the change set | Existing mechanism | `docs/shared/evidence/publication_readiness_disposition.json` updated; the mismatch blocker cleared when measured; reviews remain pending; refresh after remote integration |
 | Three harness files reported unmapped (two new, plus a remote-only one that appears because of the unpushed-diff comparison) | Pre-existing classifier gap: the four existing `scripts/*.harness.ts` files are also unmapped because the classifier maps only `.mjs`, `.sh`, `.js`, `.py` under `scripts/` | Placement is correct per `docs/STRUCTURE_GUIDE.md` ("JS/TS test helpers and tooling -> scripts/"). Remaining action: extend the classifier pattern in `scripts/repo_change_impact.mjs` (not done: validator change out of scope) |
-| `npm run build` fails | Pre-existing at `HEAD` and `origin/main`: `BodyshopRepairPage.tsx` imports `isBillingRecordedForWaiver`, not exported by `bodyshopSettlement.ts` | Unrelated; not repaired here |
+| `npm run build` fails | Pre-existing on 2026-11-25 `origin/main`: missing `isBillingRecordedForWaiver` export | Fixed before consolidation merge on the governance branch |
 | Repo-wide lint reports 1,590 errors | Pre-existing; none in files changed here (changed files linted separately) | Unrelated |
-| Remote divergence: local 12 ahead, 1 behind | Remote commit `91deea70` (Bodyshop floor, unrelated); a trial merge was clean | Needs the existing `publish:safe` rebase; the disposition must be refreshed after it because the change set changes |
-| Production role mapping, dealer-code links, administrator bypass (PD-21, PD-22), staging verification, coordinated database and application rollout, rollback plan | Release prerequisites above | See decision log §G |
-| Publication authorization | User | Not given |
+| Remote divergence: local 12 ahead, 1 behind | Remote commit `91deea70` (Bodyshop floor, unrelated); a trial merge was clean | Resolved by consolidation merge `31fd5b0a` and subsequent `publish:safe` on `main` |
+| Production role mapping, dealer-code links, administrator bypass (PD-21, PD-22), staging verification, coordinated database and application rollout, rollback plan | Release prerequisites above | Still open before DBL-0101 apply; see decision log §G |
+| Publication authorization | User | Given 2026-11-26 for consolidated `main` publication (approval, not review) |
 
 ### Cross-plan dependencies
 | Item | Owner | Existing owning record | State |
@@ -445,7 +447,7 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ✅ A.9 | Finance decision package and readiness matrix | Eng | 2026-11-25 | 2026-11-25 | Decision log §E; this plan
 ```
 
-### B. Implementation (status as of 2026-11-25; local only, nothing published)
+### B. Implementation (status as of 2026-11-26; on `main`, web source published; migrations not applied)
 ```
 ✅ 1.1 | Implementation approval recorded | Owner | 2026-11-25 | 2026-11-25 | Conditional approval; scope above
 ✅ 1.2 | Approved decisions recorded; unresolved listed | Eng | 2026-11-25 | 2026-11-25 | Decision log §F
@@ -497,7 +499,8 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 | PD-24 invoice key redesign (a material change) | Finance head + Import owner | Beyond DBL-0102 |
 | PD-25 bank-field read paths for Settings, SA Tracker and edge functions | Finance head + HR owner | Task 3.5 exception (DEFERRED by user 2026-11-25) |
 | PD-13/07 expense or manual revenue register | Finance head | Excluded (6.1) |
-| Publication, deployment, independent review | User and repository review process | Everything above |
+| Publication of application source | User (given 2026-11-26) | Does not authorize database apply or plan completion |
+| Database deployment, independent review before DBL-0101 | User, Finance and repository review process | Migrations and governed rollout |
 
 ---
 
@@ -520,17 +523,18 @@ Tightening RLS may break importers or mobile paths that rely on open writes (mit
 ## Latest Evidence (retention: latest two)
 
 1. 2026-11-25 IST, isolated runtime second pass: test matrix §3 (27 tests: PASS 5, FAIL 7, STATIC_ONLY 6, NOT_RUN 6, BLOCKED 3).
-2. 2026-11-25 IST, implementation verification: test matrix §4 (27 tests: PASS 15, FAILED 2, STATIC EVIDENCE ONLY 3, NOT RUN 4, BLOCKED 3). Comparison with evidence 1: the security failures (ST-09, ST-24, ST-25) now pass on the isolated database after DBL-0101; ST-04 passes at function level; ST-07 passes for the safeguard. Still failing: ST-15 (catalogue incomplete) and ST-23 (financial year, not approved). Nothing is verified in production.
+2. 2026-11-25 IST, implementation verification: test matrix §4 (27 tests: PASS 15, FAILED 2, STATIC EVIDENCE ONLY 3, NOT RUN 4, BLOCKED 3). Comparison with evidence 1: the security failures (ST-09, ST-24, ST-25) now pass on the isolated database after DBL-0101; ST-04 passes at function level; ST-07 passes for the safeguard. Still failing: ST-15 (catalogue incomplete) and ST-23 (financial year, not approved). Signed-in production workflows were not verified.
+3. 2026-11-26, consolidation: application source on `main` at `779fb2f4`; read-only production probes (missing bank RPC, missing conflicts table, invoice report columns present) recorded in **Consolidation and release status**.
 
 ## Next Actions
 
 1. User: review the release prerequisites, then decide PD-21 to PD-24 and the financial-year option; supply the Busy extract and Sales series list.
-2. Engineering: obtain independent review before any publication; map production roles; run the paired SQL checks and access matrix on staging before applying DBL-0101 and DBL-0102.
+2. Engineering: map production roles; run signed-in spot-checks (payroll banking, Settings employees, SA Tracker export, invoice revenue report, existing authorized workflows); run the paired SQL checks and access matrix on staging before applying DBL-0101 and DBL-0102.
 3. Owners: BUSY-001 (4.4) and ACCOUNTS-001 (4.7) decide whether to take their activities.
 
 ## Communication and Sign-Off
 
-Approval: Owner of Service (explicit, required before any implementation task starts; publication and deployment need separate authorization per `.instructions.md` Section 11). Finance sign-off: Finance head / Accounting owner. Engineering sign-off: Engineering owner. Sign-offs are recorded here when given; none exists yet.
+Conditional implementation approval: recorded 2026-11-25 (decision log §F). Application source publication on `main`: user authorization 2026-11-26 (disposition `user_approved`; not independent human review). Database apply and Finance or Engineering sign-off for DBL-0101: not given. Finance sign-off: Finance head / Accounting owner. Engineering sign-off: Engineering owner.
 
 ## Related Documentation
 
