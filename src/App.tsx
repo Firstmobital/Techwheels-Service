@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import ImportPage from './pages/ImportPage'
 import DashboardPage from './pages/DashboardPage'
 import ReportsPage from './pages/ReportsPage.tsx'
-import { REPORT_CATEGORIES } from './pages/reports'
+import { visibleReportCategories } from './pages/reports'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
@@ -614,7 +614,7 @@ function TopNav({
         {hasMenu && open === item.to && (
           <div className="menu menu--left">
             <div className="menu__label">Reports categories</div>
-            {REPORT_CATEGORIES.map((category, idx) => (
+            {visibleReportCategories(allowedModules).map((category, idx) => (
               <button
                 key={category.id}
                 type="button"
@@ -1534,7 +1534,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   path="/reports/:categoryId"
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reports']}>
-                      <ReportsPage />
+                      <ReportsPage allowedModules={allowedModules} />
                     </RequireAccess>
                   )}
                 />
@@ -1542,7 +1542,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   path="/reports/:categoryId/:reportId"
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reports']}>
-                      <ReportsPage />
+                      <ReportsPage allowedModules={allowedModules} />
                     </RequireAccess>
                   )}
                 />

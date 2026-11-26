@@ -9,6 +9,7 @@ interface ReportFiltersPanelProps {
   fuelType: 'ALL' | 'PV' | 'EV'
   onFuelTypeChange: (value: 'ALL' | 'PV' | 'EV') => void
   disableFuelType?: boolean
+  showFuelTypeFilter?: boolean
   showServiceTypeFilter?: boolean
   showManpowerFilters?: boolean
   serviceTypeFilter?: string[]
@@ -54,6 +55,7 @@ export default function ReportFiltersPanel({
   fuelType,
   onFuelTypeChange,
   disableFuelType = false,
+  showFuelTypeFilter = true,
   showServiceTypeFilter = false,
   showManpowerFilters = false,
   serviceTypeFilter = [],
@@ -164,19 +166,21 @@ export default function ReportFiltersPanel({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-          Fuel Type
-          <select
-            value={fuelType}
-            onChange={(event) => onFuelTypeChange(event.target.value as 'ALL' | 'PV' | 'EV')}
-            disabled={disableFuelType}
-            className="rounded border border-gray-300 px-2 py-2 text-sm disabled:cursor-not-allowed disabled:bg-gray-100"
-          >
-            <option value="ALL">All</option>
-            <option value="PV">PV</option>
-            <option value="EV">EV</option>
-          </select>
-        </label>
+        {showFuelTypeFilter && (
+          <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Fuel Type
+            <select
+              value={fuelType}
+              onChange={(event) => onFuelTypeChange(event.target.value as 'ALL' | 'PV' | 'EV')}
+              disabled={disableFuelType}
+              className="rounded border border-gray-300 px-2 py-2 text-sm disabled:cursor-not-allowed disabled:bg-gray-100"
+            >
+              <option value="ALL">All</option>
+              <option value="PV">PV</option>
+              <option value="EV">EV</option>
+            </select>
+          </label>
+        )}
 
         {showDateFieldTypeFilter ? (
           <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">

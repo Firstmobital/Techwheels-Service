@@ -3,6 +3,7 @@ import type { BranchFilter, DateRangeFilter } from '../../lib/reportQueries'
 
 export type ReportCategoryId =
   | 'dashboard'
+  | 'pnl'
   | 'labour-revenue'
   | 'performance'
   | 'revenue'
@@ -11,6 +12,8 @@ export type ReportCategoryId =
   | 'master-data'
 export type ReportId =
   | 'dashboard-labour-revenue'
+  | 'pnl-statement'
+  | 'pnl-expenses'
   | 'dashboard-parts'
   | 'job-card-details'
   | 'service-type-labour-revenue'

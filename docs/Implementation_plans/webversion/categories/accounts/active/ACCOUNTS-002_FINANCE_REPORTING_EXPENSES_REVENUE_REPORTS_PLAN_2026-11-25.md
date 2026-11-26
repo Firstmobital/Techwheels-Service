@@ -137,7 +137,7 @@ Assumptions are marked (A). Items trace to fit-gap rows (CAP-nnn) and evidence I
 | Row-level drilldown reports (Job Card Details; not-invoiced reports) | EV-035 | CAP-014 REUSE |
 | `audit_logs`, module rights (`has_module_view/modify`) | EV-026, EV-006 | Governance building blocks |
 
-**There is no workshop expense capability and no manual revenue register in Service (EV-034). The plan does not add either.**
+**There is no workshop expense capability and no manual revenue register in Service (EV-034). The plan does not add either.** (2026-11-26: a monthly expense register and management P&L were later requested by the user and are planned separately in [ACCOUNTS-003](ACCOUNTS-003_PROFIT_AND_LOSS_REPORT_PLAN_2026-11-26.md).)
 
 ### 2. What needs to change (EXTEND)
 | Phase | Item | Change (smallest) | Fit-gap | Evidence |

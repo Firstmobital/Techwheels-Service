@@ -36,6 +36,12 @@ export const REPORT_CATALOGUE_DEFAULTS: Record<string, ReportCatalogueEntry> = {
     dateBasis: 'invoice_date (forced)',
     verification: 'Static review only (ACCOUNTS-002 audit); not run',
   },
+  pnl: {
+    owner: 'Owner / Finance head (to confirm)',
+    sources: ['job_card_closed_data', 'pnl_expenses', 'pnl_expense_heads', 'pnl_settings', 'payroll_entries (totals via pnl_payroll_cost)'],
+    dateBasis: 'invoice_date (forced); expenses by calendar month',
+    verification: 'ACCOUNTS-003 harness, scratch-database checks and build 2026-11-26; production figures not yet verified',
+  },
   performance: {
     owner: OPS,
     sources: ['job_card_closed_data', 'service_vas_jc_data', 'service_invoice_data', 'vehicle odometer fields'],

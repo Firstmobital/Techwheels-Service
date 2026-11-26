@@ -14,7 +14,7 @@ import {
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
 import {
-  REPORT_CATEGORIES,
+  visibleReportCategories,
   getReportById,
   getReportsByCategory,
   isCategoryId,
@@ -48,7 +48,7 @@ function getTodayDateInputValue(): string {
   return `${year}-${month}-${day}`
 }
 
-export default function ReportsPage() {
+export default function ReportsPage({ allowedModules }: { allowedModules: ReadonlySet<string> }) {
   const navigate = useNavigate()
   const params = useParams<{ categoryId?: string; reportId?: string }>()
 
@@ -75,9 +75,12 @@ export default function ReportsPage() {
   const [headerStatsLoading, setHeaderStatsLoading] = useState(true)
   const [rowCapNotice, setRowCapNotice] = useState<number | null>(null)
 
+  const categories = useMemo(() => visibleReportCategories(allowedModules), [allowedModules])
+  const isHiddenCategory = isCategoryId(params.categoryId) && !categories.some((c) => c.id === params.categoryId)
+
   const resolvedCategoryId = useMemo<ReportCategoryId>(() => {
-    return isCategoryId(params.categoryId) ? params.categoryId : DEFAULT_CATEGORY_ID
-  }, [params.categoryId])
+    return isCategoryId(params.categoryId) && !isHiddenCategory ? params.categoryId : DEFAULT_CATEGORY_ID
+  }, [params.categoryId, isHiddenCategory])
 
   const reportsInCategory = useMemo(
     () => getReportsByCategory(resolvedCategoryId),
@@ -130,7 +133,12 @@ export default function ReportsPage() {
     branch === 'ALL' ||
     (resolvedCategoryId === 'warranty' && branch === 'Ajmer Road')
 
+  const isPnlCategory = resolvedCategoryId === 'pnl'
+
   const effectiveBranchFilter = useMemo<BranchFilter>(() => {
+    // Expenses are kept per branch, not per fuel type.
+    if (resolvedCategoryId === 'pnl') return branch
+
     if (resolvedCategoryId === 'warranty' && fuelType !== 'ALL') {
       if (branch === 'ALL') {
         return `ALL_${fuelType}`
@@ -153,7 +161,7 @@ export default function ReportsPage() {
   }, [branch, fuelType, resolvedCategoryId])
 
   const forceInvoiceDateFilter =
-    resolvedCategoryId === 'dashboard' || resolvedCategoryId === 'labour-revenue' || resolvedCategoryId === 'revenue'
+    resolvedCategoryId === 'dashboard' || resolvedCategoryId === 'labour-revenue' || resolvedCategoryId === 'revenue' || isPnlCategory
 
   const effectiveDateFieldType = useMemo<DateFieldType>(() => {
     if (forceInvoiceDateFilter) {
@@ -184,7 +192,7 @@ export default function ReportsPage() {
   }, [customFrom, customTo, datePreset])
 
   useEffect(() => {
-    if (!isCategoryId(params.categoryId)) {
+    if (!isCategoryId(params.categoryId) || isHiddenCategory) {
       navigate(`/reports/${DEFAULT_CATEGORY_ID}`, { replace: true })
       return
     }
@@ -211,7 +219,7 @@ export default function ReportsPage() {
         navigate(`/reports/${params.categoryId}/${firstReport.id}`, { replace: true })
       }
     }
-  }, [navigate, params.categoryId, params.reportId, reportsInCategory])
+  }, [navigate, params.categoryId, params.reportId, reportsInCategory, isHiddenCategory])
 
   useEffect(() => {
     let active = true
@@ -402,7 +410,7 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {!isMasterDataCategory && resolvedCategoryId !== 'parts' &&
+        {!isMasterDataCategory && !isPnlCategory && resolvedCategoryId !== 'parts' &&
           (headerStatsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {Array.from({ length: 4 }).map((_, idx) => (
@@ -447,7 +455,7 @@ export default function ReportsPage() {
         {!isMasterDataCategory && (
           <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
-              {REPORT_CATEGORIES.map((category) => {
+              {categories.map((category) => {
                 const isActive = resolvedCategoryId === category.id
                 return (
                   <button
@@ -573,12 +581,13 @@ export default function ReportsPage() {
           </section>
         )}
 
-        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && (
+        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && activeReport?.id !== 'pnl-expenses' && (
           <ReportFiltersPanel
             branch={branch}
             onBranchChange={setBranch}
             branchOptions={branchOptions}
             branchError={null}
+            showFuelTypeFilter={!isPnlCategory}
             fuelType={fuelType}
             onFuelTypeChange={setFuelType}
             disableFuelType={!canApplyFuelTypeFilter}
