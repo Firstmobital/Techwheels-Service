@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-10-07T05:58:42.296Z",
-  "scanned_files": 83,
+  "generated_at_utc": "2026-11-26T05:00:29.698Z",
+  "scanned_files": 89,
   "violations": 0,
   "scanned": [
     {
@@ -100,6 +100,22 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-017_CHECKLIST.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-017_CUSTOMER_SESSION_TERMS_RESILIENCE_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/mobileversion/categories/auth/active/PHASES.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -149,6 +165,14 @@
     },
     {
       "file": "docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-015_MECHANICAL_CUSTOMER_SCREENS_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-016_CUSTOMER_BOOKING_ENTRY_ONBOARDING_PLAN.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
@@ -228,6 +252,14 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -276,7 +308,23 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-STAGE-002_STAGE_POINTER_AND_QUEUE_REALIGNMENT_PLAN_2026-11-16.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/SECURITY-ANON-001_ANON_EXECUTABLE_DEFINER_FUNCTIONS_PLAN_2026-11-16.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

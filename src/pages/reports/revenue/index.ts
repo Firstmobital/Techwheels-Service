@@ -11,7 +11,8 @@ import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 export const REVENUE_CATEGORY: ReportCategoryDefinition = {
   id: 'revenue',
   label: 'Revenue Reports',
-  description: 'Daily, categorical, and trend-based revenue insights.',
+  description:
+    'Operational job-card revenue (estimated ex-GST) and trends. Use Invoice Revenue (Finance basis) for finance-grade invoice totals with actual GST.',
 }
 
 export const REVENUE_REPORTS: ReportDefinition[] = [

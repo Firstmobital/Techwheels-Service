@@ -265,7 +265,7 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | 3.6 | ACCOUNTS-002 | Implemented-local (same migration) | EV-052 |
 | 4.1 | ACCOUNTS-002 | Implemented-local: `canonicalReportBranch` with an explicit Unmapped bucket, used by the new report and payroll cost. Existing reports unchanged | EV-053, EV-056 |
 | 4.2 | ACCOUNTS-002 | Implemented-local: read-only Cost Summary tab | EV-056 |
-| 4.3 | ACCOUNTS-002 | Partly done: catalogue defaults module `reportCatalogue.ts` gives all 39 registered reports an owner, sources, date basis and verification state (harness passes); the 10 unregistered reports are not registered (PD-26) | EV-062 |
+| 4.3 | ACCOUNTS-002 | Done (app): 49 registered reports (39 + 10 Performance, PD-26 2026-11-26); catalogue defaults in `reportCatalogue.ts`; harness PASS | EV-062, EV-063 |
 | 4.4 | BUSY-001 | Owned elsewhere: no separate authorization found; pending | — |
 | 4.5 | ACCOUNTS-002 | Partly done: internal invoice-grain versus job-card-grain comparison in the new report. Comparison to Busy: Blocked (no extract, tolerance or sign-off) | EV-053 |
 | 4.6 | ACCOUNTS-002 | Implemented-local: lineage and source mapping updated | Lineage CSV |
@@ -469,7 +469,7 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ✅ 3.6 | Branch scope model | Eng | 2026-11-25 | 2026-11-25 | Isolated; production mapping is a release prerequisite
 ✅ 4.1 | Branch attribution with Unmapped | Eng | 2026-11-25 | 2026-11-25 | New report and payroll cost
 ✅ 4.2 | Payroll cost summary | Eng | 2026-11-25 | 2026-11-25 | Employer cost not available
-🔄 4.3 | Report catalogue fields | Eng | 2026-11-25 | - | 39 registered reports catalogued in code; 10 unregistered await PD-26
+✅ 4.3 | Report catalogue fields | Eng | 2026-11-25 | 2026-11-26 | 49 registered reports (PD-26); Performance category wired
 ⏳ 4.4 | busy_export_runs | Eng (BUSY-001) | - | - | Owned by BUSY-001; no separate authorization
 ❌ 4.5 | Reconciliation to Busy | Finance head | - | - | Internal comparison done; Busy part blocked (PD-11)
 ✅ 4.6 | Lineage and mapping | Eng | 2026-11-25 | 2026-11-25 | Lineage CSV

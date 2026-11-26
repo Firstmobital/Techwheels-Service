@@ -410,6 +410,11 @@ export default function ReportsPage() {
               ))}
             </div>
           ) : (
+            <div className="space-y-2">
+            <p className="text-xs text-gray-500">
+              Headline revenue uses closed job-card amounts with an estimated 18% GST split (operational measure).
+              For finance-grade invoice totals with actual GST, open Revenue Reports → Invoice Revenue (Finance basis).
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="rounded-xl border border-gray-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm">
                 <p className="text-sm text-gray-600">Job Cards This Month</p>
@@ -435,6 +440,7 @@ export default function ReportsPage() {
                   {headerStats.totalVasCount.toLocaleString('en-IN')}
                 </p>
               </div>
+            </div>
             </div>
           ))}
 

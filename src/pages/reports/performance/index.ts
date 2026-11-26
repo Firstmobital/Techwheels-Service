@@ -71,6 +71,10 @@ export const PERFORMANCE_REPORTS: ReportDefinition[] = [
     label: 'JC-to-Invoice Reconciliation Report',
     description: 'Match coverage, missing invoice rate, and value variance across JC and invoice data.',
     cardHint: 'Best for finance data control and process reconciliation monitoring.',
+    owner: 'Finance head / Engineering owner',
+    sources: ['job_card_closed_data', 'service_invoice_data'],
+    dateBasis: 'invoice_date (forced)',
+    verification: 'ACCOUNTS-002 PD-26; operational JC–invoice control (not BUSY-signed)',
     Component: JcInvoiceReconciliationReport,
   },
   {

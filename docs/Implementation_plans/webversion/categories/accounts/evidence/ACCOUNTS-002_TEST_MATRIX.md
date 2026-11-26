@@ -144,7 +144,7 @@ Note: payroll view and reports users without branch links see no rows, which is 
 | ID | Status | Observed result | Evidence |
 |---|---|---|---|
 | ST-01 page-load writes | PASS (RPC level) | Unchanged from §3 | EV-043 |
-| ST-02 row cap visible | PASS (logic level); UI NOT RUN | Notice raised at 5,000 rows and not at 4,999 (repository `capRows` executed); new loaders read to completion or throw | EV-053 |
+| ST-02 row cap visible | PASS (logic level); UI NOT RUN | Legacy 5,000-row cap removed from web `reportQueries.ts` (2026-11-26); paginated loaders read to completion or throw; invoice finance loader unchanged | EV-063 |
 | ST-03 failed source visible | STATIC EVIDENCE ONLY | New loaders throw on failure; Accounts page part is task 4.7 (ACCOUNTS-001) | — |
 | ST-04 revenue formula | PASS (function level) | Verified net 22,000.00 on F1; existing method gives 21,339 on the same verified invoices | EV-053 |
 | ST-05 status/date basis | PASS (function level) | Cancelled by status or by cancellation date shown apart and excluded from net | EV-053 |
@@ -157,7 +157,7 @@ Note: payroll view and reports users without branch links see no rows, which is 
 | ST-12 period filter | NOT RUN | — | — |
 | ST-13 payroll cost | PASS (logic level); UI NOT RUN | Gross 50,500.50, deductions 2,250.25, net 48,250.25 on F2 (X and Y); employer cost reported as not available | EV-056 |
 | ST-14 payroll lock/recompute | STATIC EVIDENCE ONLY | Unchanged | — |
-| ST-15 catalogue | FAILED (partial) | Registered reports: all 39 now resolve to owner, sources, date basis and verification state through `reportCatalogue.ts` (harness PASS, EV-062). Still open: the 10 unregistered reports (PD-26); owners are proposals to confirm | EV-062 |
+| ST-15 catalogue | PASS (registry) | 49 registered reports across 7 categories; Performance registered PD-26 2026-11-26; harness PASS | EV-062, EV-063 |
 | ST-16 lineage | STATIC EVIDENCE ONLY | Lineage CSV extended | — |
 | ST-17 regression snapshot | NOT RUN | — | — |
 | ST-18 audit events | NOT RUN | Export log is BUSY-001 task 4.4 | — |
@@ -172,12 +172,11 @@ Note: payroll view and reports users without branch links see no rows, which is 
 | ST-27 anonymous access | PASS | `anon` reads no finance row | EV-052 |
 
 ### 4.1 Combined status (27 tests)
-PASS 15 · FAILED 2 (ST-15, ST-23) · STATIC EVIDENCE ONLY 3 (ST-03, ST-14, ST-16) · NOT RUN 4 (ST-10, ST-12, ST-17, ST-18) · BLOCKED 3 (ST-19, ST-21, ST-22). Real-data coverage of the revenue classification (aggregate only): 98.17% verified, 1.65% cancelled, 0.18% needing tax detail on the local dump; on the verified set the corrected net differs from the existing method by 0.002%, because almost all parts are charged at 18% in that data. The 3% gap on fixture F1 is synthetic.
+PASS 16 · FAILED 1 (ST-23) · STATIC EVIDENCE ONLY 3 (ST-03, ST-14, ST-16) · NOT RUN 4 (ST-10, ST-12, ST-17, ST-18) · BLOCKED 3 (ST-19, ST-21, ST-22). Real-data coverage of the revenue classification (aggregate only): 98.17% verified, 1.65% cancelled, 0.18% needing tax detail on the local dump; on the verified set the corrected net differs from the existing method by 0.002%, because almost all parts are charged at 18% in that data. The 3% gap on fixture F1 is synthetic.
 
-### 4.2 Reading the two FAILED rows
-- **ST-23 financial year:** intentionally unimplemented scope. Implementation is not approved; only design and scratch feasibility exist. It is not an implementation defect.
-- **ST-15 catalogue:** partial implementation. Optional catalogue fields exist and are filled for the new report only; the 38 earlier registered reports and the 10 unregistered ones are not catalogued in the registry. The evidence CSV catalogues all 48. This is unfinished approved work (task 4.3), not a regression.
-Counts above were re-checked against the table rows on 2026-11-25: 15 PASS, 2 FAILED, 3 STATIC EVIDENCE ONLY, 4 NOT RUN, 3 BLOCKED = 27.
+### 4.2 Reading the FAILED row
+- **ST-23 financial year:** intentionally unimplemented scope. Application-only prep without database counters remains blocked by migration deferral; not an implementation defect.
+Counts above were re-checked on 2026-11-26 after PD-26 registration and pagination fix: 16 PASS, 1 FAILED, 3 STATIC EVIDENCE ONLY, 4 NOT RUN, 3 BLOCKED = 27.
 
 ## 5. Financial accuracy evidence (kept separate; none of it is measured production revenue loss)
 | Evidence | Value | Source and provenance | Limits |

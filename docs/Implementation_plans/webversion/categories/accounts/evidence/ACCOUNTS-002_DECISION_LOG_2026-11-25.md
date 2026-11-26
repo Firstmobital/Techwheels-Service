@@ -98,6 +98,22 @@ Evidence gathered for PD-18 (local full-database dump of 2026-10-02, aggregates 
 
 The open decisions that follow from the approvals are in section G (not repeated here).
 
+## G1. User approvals recorded 2026-11-26 (implementation batch)
+
+| ID | Decision |
+|---|---|
+| PD-26 | Register useful Performance reports (all ten audited, operational, non-duplicate). |
+| PD-25 | Retain existing employee banking read paths; no new restrictions. |
+| PD-21/22 | Complete application-level branch mapping; preserve designated admin exception; DBL-0101 deferred. |
+| PD-24 | Prepare invoice-identity redesign for separate approval only; no key/trigger implementation. |
+| PD-20 | Automatic FY design may proceed at application layer only where compatible with current DB; all migration work deferred. |
+| Pagination / revenue | Unify financial vs operational labeling; remove silent 5k web cap; do not change JC report grain. |
+| Publication | Safe compatible web publication on `main` authorized; no DB apply, no mobile OTA. |
+
+**PD-24 design summary (approval-ready, not implemented):** authoritative identity = DMS invoice number within dealer scope; same job card + date may hold multiple invoices (EVidence EV-054); re-import updates the active row but DBL-0102 preserves replaced rows for audit; financial totals must count every non-cancelled invoice row, not only the surviving key; implementation requires unique-key change, voucher trigger, JC mirror, Busy export key, importer parity (web + mobile), backfill from `invoice_overwrite_audit` where present, migration + rollback playbook. Blocked until PD-24 implementation approval.
+
+**PD-11 Busy evidence still required:** approved Busy extract for named months (invoice/voucher ids, branch, gross/net/GST, cancellation flag), tolerance (amount and count), sign-off role, and series alignment check against Service export — no fabrication.
+
 ## G. Outstanding decision register (consolidated 2026-11-25; the single record of open decisions)
 
 None of these is decided by this plan or by the agent. "Blocks" says what cannot finish until the user decides: local completion, financial accuracy, or production release. Activity IDs refer to the plan's Activity Tracker.
@@ -201,13 +217,9 @@ None of these is decided by this plan or by the agent. "Blocks" says what cannot
 - **Approval needed:** Finance head and HR owner.
 
 ### PD-26 Registration of the ten unregistered Performance reports
-- **Current behaviour:** ten report components under `src/pages/reports/performance/` (including `jc-invoice-reconciliation`) are not in the registry, so they are unreachable (G-06). The registered 39 reports now all resolve to catalogue metadata through `reportCatalogue.ts`; the ten are not catalogued in code.
-- **Evidence:** EV-035; `scripts/report-catalogue.harness.ts` output (EV-062).
-- **Options:** register all or some (adds navigation and a category); retire; leave as is.
-- **Business impact:** registering exposes reports that were never reviewed for access or accuracy; leaving them hides existing analyses.
-- **Technical impact:** small registry change plus the same gate as other reports.
-- **Activities:** 4.3 (ST-15 stays open for these ten).
-- **Recommendation:** none without a business answer.
-- **Blocks:** ST-15 full closure only.
-- **Approval needed:** Business owner and Engineering owner.
+- **Status (user 2026-11-26): APPROVED AND IMPLEMENTED.** All ten operational Performance reports are registered (non-duplicate with existing Revenue/Labour catalogue entries). Navigation: Reports → Performance Reports → individual report cards; routes `/reports/performance/<report-id>`.
+- **Audit (2026-11-26):** each report uses existing `reportQueries` loaders (operational JC/VAS/invoice grain; not finance-grade DMS revenue except JC–invoice reconciliation control view). None require new database objects. Overlap: `vas-job-performance` complements (does not replace) Labour → VAS Revenue Report; `net-price-final-revenue-variance` is operational estimate vs realized, distinct from Invoice Revenue (Finance basis).
+- **Evidence:** EV-035; report-catalogue harness (49 registered reports, 7 categories); production build PASS.
+- **Activities:** 4.3 / ST-15 catalogue closure for Performance category (DBL-0101 branch RLS still deferred).
+- **Approval needed:** satisfied by user implementation authorization 2026-11-26.
 

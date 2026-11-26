@@ -2,6 +2,7 @@ import { DASHBOARD_CATEGORY, DASHBOARD_REPORTS } from './dashboard'
 import { LABOUR_REVENUE_CATEGORY, LABOUR_REVENUE_REPORTS } from './labour-revenue'
 import { MASTER_DATA_CATEGORY, MASTER_DATA_REPORTS } from './master-data'
 import { PARTS_CATEGORY, PARTS_REPORTS } from './parts'
+import { PERFORMANCE_CATEGORY, PERFORMANCE_REPORTS } from './performance'
 import { REVENUE_CATEGORY, REVENUE_REPORTS } from './revenue'
 import { WARRANTY_CATEGORY, WARRANTY_REPORTS } from './warranty'
 import { withCatalogueDefaults } from './reportCatalogue'
@@ -11,6 +12,7 @@ export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
   DASHBOARD_CATEGORY,
   LABOUR_REVENUE_CATEGORY,
   REVENUE_CATEGORY,
+  PERFORMANCE_CATEGORY,
   PARTS_CATEGORY,
   WARRANTY_CATEGORY,
   MASTER_DATA_CATEGORY,
@@ -20,6 +22,7 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
   ...DASHBOARD_REPORTS,
   ...LABOUR_REVENUE_REPORTS,
   ...REVENUE_REPORTS,
+  ...PERFORMANCE_REPORTS,
   ...PARTS_REPORTS,
   ...WARRANTY_REPORTS,
   ...MASTER_DATA_REPORTS,

@@ -111,7 +111,7 @@ export default function InvoiceRevenueFinanceReport({ branch, dateFilter }: Repo
         </div>
         <p className={`mt-3 text-xs ${reconciles ? 'text-emerald-700' : 'text-red-700'}`}>
           {reconciles
-            ? `Reconciled: headline net equals the sum of ${summary.verifiedCount.toLocaleString('en-IN')} verified detail rows and the branch totals. Source read completely (${load.pages} page(s)).`
+            ? `Reconciled: headline net equals the sum of ${summary.verifiedCount.toLocaleString('en-IN')} verified detail rows and the branch totals. All invoice rows for the selected date range and branch filter were loaded (${load.pages} page(s)); row visibility still follows your access permissions.`
             : 'Reconciliation FAILED: headline, detail rows and branch totals disagree. Do not use these figures.'}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -538,7 +538,6 @@ function normalizeJobCardNumber(raw: unknown): string | null {
 }
 
 const QUERY_PAGE_SIZE = 1000
-const MAX_REPORT_FETCH_ROWS = 5000
 
 /** Window event raised when a report loader reaches its row cap, so the page can warn that totals may be incomplete. */
 export const REPORT_LOAD_NOTICE_EVENT = 'report-load-notice'
@@ -548,15 +547,53 @@ export interface ReportLoadNotice {
   limit: number
 }
 
-function noteRowCap(): void {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent<ReportLoadNotice>(REPORT_LOAD_NOTICE_EVENT, { detail: { kind: 'row_cap', limit: MAX_REPORT_FETCH_ROWS } }))
-}
+async function fetchAllServiceInvoiceRows(
+  selectColumns: string,
+  branch: BranchFilter,
+  bounds: { from: string; toExclusive: string } | null,
+): Promise<Record<string, unknown>[]> {
+  const selectWithCursorColumns = appendSelectColumns(selectColumns, ['id'])
+  const allRows: Record<string, unknown>[] = []
+  let cursorInvoiceDate: string | null = null
+  let cursorId: number | null = null
 
-/** Returns at most the cap and raises the notice when the cap was reached (rows beyond it are not loaded). */
-function capRows<T>(rows: T[]): T[] {
-  if (rows.length >= MAX_REPORT_FETCH_ROWS) noteRowCap()
-  return rows.slice(0, MAX_REPORT_FETCH_ROWS)
+  while (true) {
+    let query = supabase
+      .from('service_invoice_data')
+      .select(selectWithCursorColumns)
+      .order('invoice_date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
+
+    query = applyBranchFilterToQuery(query, branch)
+
+    if (bounds) {
+      const fromDate = bounds.from.slice(0, 10)
+      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
+      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
+    }
+
+    if (cursorInvoiceDate && cursorId !== null) {
+      query = query.or(`invoice_date.lt.${cursorInvoiceDate},and(invoice_date.eq.${cursorInvoiceDate},id.lt.${cursorId})`)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+
+    const lastRow = batch[batch.length - 1] as { invoice_date?: unknown; id?: unknown }
+    cursorInvoiceDate = lastRow.invoice_date == null ? null : String(lastRow.invoice_date)
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+
+    if (!cursorInvoiceDate || cursorId === null) break
+  }
+
+  return allRows
 }
 
 interface JobCardClosedFetchFilters {
@@ -903,11 +940,6 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
       break
     }
 
-    if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
-      noteRowCap()
-      break
-    }
-
     const lastRow = batch[batch.length - 1] as { created_at?: unknown; id?: unknown }
     cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
     const parsedId = Number(lastRow.id)
@@ -988,11 +1020,6 @@ async function fetchAllJobCardClosedRows(
     allRows.push(...batch)
 
     if (batch.length < QUERY_PAGE_SIZE) {
-      break
-    }
-
-    if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
-      noteRowCap()
       break
     }
 
@@ -1872,6 +1899,7 @@ function parseRevenue(value: unknown): number {
   return Math.round(value_to_return)
 }
 
+/** Operational job-card revenue estimate (assumes 18% GST when invoice tax detail is unavailable). Not finance-grade invoice revenue. */
 function parseRevenueExcludingGst(value: unknown): number {
   const gross = parseRevenue(value)
   if (gross === 0) return 0
@@ -1923,11 +1951,8 @@ export async function getBranchLabourRevenueComparison(
     return []
   }
 
-  const invoiceDateField =
-    invoiceDateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
   const fuelSelection = parseFuelSelectionFromBranch(branch)
   const fuelColumn = fuelSelection ? await getJobCardFuelColumn() : null
-  const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : branch
   const employeeFuelByCode = new Map<string, string>()
 
   const loadEmployeeFuelTypes = async (codes: string[]): Promise<void> => {
@@ -1967,39 +1992,20 @@ export async function getBranchLabourRevenueComparison(
   }
 
   const fetchWindowRows = async (bounds: { from: string; toExclusive: string }): Promise<Record<string, unknown>[]> => {
-    let query = supabase
-      .from('job_card_closed_data')
-      .select('branch, final_labour_amount, job_card_number, employee_code')
-      .limit(MAX_REPORT_FETCH_ROWS)
+    const windowEnd = new Date(bounds.toExclusive)
+    windowEnd.setDate(windowEnd.getDate() - 1)
+    let batch = await fetchAllJobCardClosedRows('branch, final_labour_amount, job_card_number, employee_code', {
+      branch,
+      dateFilter: {
+        ...invoiceDateFilter,
+        preset: 'custom',
+        customFrom: bounds.from.slice(0, 10),
+        customTo: windowEnd.toISOString().slice(0, 10),
+      },
+      serviceType: serviceTypeFilter,
+    })
 
-    query = applyJobCardClosedScopeFilterToQuery(query, queryBranch)
-
-      if (fuelSelection && fuelColumn) {
-        query = query.eq(fuelColumn, fuelSelection)
-      }
-
-      query = applyDateFilterToQuery(query, bounds, {
-        closedDateField: 'closed_date_time',
-        invoiceDateField,
-      })
-
-      if (Array.isArray(serviceTypeFilter)) {
-        if (serviceTypeFilter.length > 0) {
-          query = query.in('sr_type', serviceTypeFilter)
-        }
-      } else if (serviceTypeFilter !== 'ALL') {
-        query = query.eq('sr_type', serviceTypeFilter)
-      }
-
-    const { data, error } = await query
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    let batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-
-      // Fallback for schemas without dedicated fuel column.
+      // Fallback for schemas without dedicated fuel column (when fuel cannot be filtered in SQL).
       if (fuelSelection && !fuelColumn) {
         const employeeCodes = new Set<string>()
         for (const row of batch) {
@@ -2024,7 +2030,7 @@ export async function getBranchLabourRevenueComparison(
         })
       }
 
-    return capRows(batch)
+    return batch
   }
 
   const [selectedData, previousData] = await Promise.all([
@@ -2628,30 +2634,10 @@ export async function getVasJobPerformance(
   dateFilter: DateRangeFilter,
   groupBy: VasPerformanceGroupBy,
 ): Promise<VasJobPerformanceRow[]> {
-  const allRows: Record<string, unknown>[] = []
-  const bounds = getDateRangeBounds(dateFilter)
-
-  let query = supabase
-    .from('service_vas_jc_data')
-    .select(`${groupBy}, job_status, job_value, net_price, discount, billing_hours`)
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    if (bounds) {
-      query = applyDateFilterToQuery(query, bounds, {
-        closedDateField: 'jc_closed_date_time',
-      })
-    }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...capRows(batch))
+  const allRows = await fetchAllVasRowsWithoutFuelFilter(
+    `${groupBy}, job_status, job_value, net_price, discount, billing_hours`,
+    { branch, dateFilter },
+  )
 
   interface WorkingPerformanceRow {
     dimension: string
@@ -2732,30 +2718,10 @@ export async function getVasJobPerformanceDashboard(
   dateFilter: DateRangeFilter,
   topComplaintLimit = 10,
 ): Promise<VasJobPerformanceDashboard> {
-  const allRows: Record<string, unknown>[] = []
-  const bounds = getDateRangeBounds(dateFilter)
-
-  let query = supabase
-    .from('service_vas_jc_data')
-    .select('job_status, complaint_code, job_value, net_price, discount')
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    if (bounds) {
-      query = applyDateFilterToQuery(query, bounds, {
-        closedDateField: 'jc_closed_date_time',
-      })
-    }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...capRows(batch))
+  const allRows = await fetchAllVasRowsWithoutFuelFilter('job_status, complaint_code, job_value, net_price, discount', {
+    branch,
+    dateFilter,
+  })
 
   interface ComplaintWorkingRow {
     complaintCode: string
@@ -2867,30 +2833,10 @@ export async function getVasBillingHoursEfficiency(
   dateFilter: DateRangeFilter,
   groupBy: VasBillingHoursGroupBy,
 ): Promise<VasBillingHoursEfficiencyRow[]> {
-  const allRows: Record<string, unknown>[] = []
-  const bounds = getDateRangeBounds(dateFilter)
-
-  let query = supabase
-    .from('service_vas_jc_data')
-    .select(`${groupBy}, billing_hours, job_value, net_price, discount`)
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    if (bounds) {
-      query = applyDateFilterToQuery(query, bounds, {
-        closedDateField: 'jc_closed_date_time',
-      })
-    }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...capRows(batch))
+  const allRows = await fetchAllVasRowsWithoutFuelFilter(`${groupBy}, billing_hours, job_value, net_price, discount`, {
+    branch,
+    dateFilter,
+  })
 
   interface WorkingBillingHoursRow {
     dimension: string
@@ -3714,19 +3660,13 @@ export async function getServiceDueList(
     return Number.isFinite(parsed) ? parsed : null
   }
 
-  let query = supabase
-    .from('job_card_closed_data')
-    .select(
-      'vehicle_registration_number, chassis_number, parent_product_line, account_phone_number, kms_run, last_service_km, last_service_date, closed_date_time',
-    )
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-  query = applyJobCardClosedScopeFilterToQuery(query, branch)
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-
-  const allRows = capRows(((data as Record<string, unknown>[] | null) ?? []))
+  const allRows = await fetchAllJobCardClosedRows(
+    'vehicle_registration_number, chassis_number, parent_product_line, account_phone_number, kms_run, last_service_km, last_service_date, closed_date_time',
+    {
+      branch,
+      dateFilter: { preset: 'custom', customFrom: '2000-01-01', customTo: '2099-12-31' },
+    },
+  )
 
   interface WorkingDueRow {
     vrn: string
@@ -3949,30 +3889,8 @@ export async function getInvoiceValueDistribution(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<InvoiceValueDistributionReport> {
-  const allRows: Record<string, unknown>[] = []
   const bounds = getDateRangeBounds(dateFilter)
-
-  let query = supabase
-    .from('service_invoice_data')
-    .select('branch, invoice_date, final_consolidated_invoice_amount')
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    if (bounds) {
-      const fromDate = bounds.from.slice(0, 10)
-      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
-      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
-    }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...capRows(batch))
+  const allRows = await fetchAllServiceInvoiceRows('branch, invoice_date, final_consolidated_invoice_amount', branch, bounds)
 
   const bandTemplate: Array<{ key: InvoiceValueBandRow['bandKey']; label: string; min: number; maxExclusive: number | null }> = [
     { key: 'under-1000', label: 'Under Rs. 1,000', min: 0, maxExclusive: 1000 },
@@ -4114,30 +4032,12 @@ export async function getInvoiceDailyTrend(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<InvoiceDailyTrendRow[]> {
-  const allRows: Record<string, unknown>[] = []
   const bounds = getDateRangeBounds(dateFilter)
-
-  let query = supabase
-    .from('service_invoice_data')
-    .select('invoice_date, invoice_number, order_number, final_labour_invoice_amount, final_spares_invoice_amount, final_consolidated_invoice_amount')
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    if (bounds) {
-      const fromDate = bounds.from.slice(0, 10)
-      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
-      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
-    }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...capRows(batch))
+  const allRows = await fetchAllServiceInvoiceRows(
+    'invoice_date, invoice_number, order_number, final_labour_invoice_amount, final_spares_invoice_amount, final_consolidated_invoice_amount',
+    branch,
+    bounds,
+  )
 
   interface WorkingInvoiceDailyRow {
     date: string
@@ -4252,26 +4152,11 @@ export async function getJcInvoiceReconciliation(
     dateFilter,
   })
 
-  let query = supabase
-    .from('service_invoice_data')
-    .select('order_number, final_consolidated_invoice_amount, branch, invoice_date')
-    .limit(MAX_REPORT_FETCH_ROWS)
-
-  query = applyBranchFilterToQuery(query, branch)
-
-    if (bounds) {
-      const fromDate = bounds.from.slice(0, 10)
-      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
-      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
-    }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const invoiceRows = capRows(((data as unknown as Record<string, unknown>[] | null) ?? []))
+  const invoiceRows = await fetchAllServiceInvoiceRows(
+    'order_number, final_consolidated_invoice_amount, branch, invoice_date',
+    branch,
+    bounds,
+  )
 
   interface WorkingInvoiceRow {
     amount: number
@@ -5071,11 +4956,17 @@ async function fetchAllPartsOrderRows(
 ): Promise<PartsOrderRecord[]> {
   const allRows: PartsOrderRecord[] = []
   const bounds = dateFilter ? getDateRangeBounds(dateFilter) : null
+  const selectWithCursorColumns = appendSelectColumns(selectColumns, ['id', 'order_date'])
+  let cursorOrderDate: string | null = null
+  let cursorId: number | null = null
 
-  let query = supabase
-    .from('service_parts_order_data')
-    .select(selectColumns)
-    .limit(MAX_REPORT_FETCH_ROWS)
+  while (true) {
+    let query = supabase
+      .from('service_parts_order_data')
+      .select(selectWithCursorColumns)
+      .order('order_date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
 
     query = applyBranchFilterToQuery(query, branch)
 
@@ -5083,31 +4974,63 @@ async function fetchAllPartsOrderRows(
       query = query.gte('order_date', bounds.from.slice(0, 10)).lt('order_date', bounds.toExclusive.slice(0, 10))
     }
 
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
+    if (cursorOrderDate && cursorId !== null) {
+      query = query.or(`order_date.lt.${cursorOrderDate},and(order_date.eq.${cursorOrderDate},id.lt.${cursorId})`)
+    }
 
-  const batch = (data as unknown as PartsOrderRecord[] | null) ?? []
-  allRows.push(...capRows(batch))
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as unknown as PartsOrderRecord[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+
+    const lastRow = batch[batch.length - 1] as { order_date?: unknown; id?: unknown }
+    cursorOrderDate = lastRow.order_date ? String(lastRow.order_date) : null
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+    if (!cursorOrderDate || cursorId === null) break
+  }
 
   return allRows
 }
 
 async function fetchLatestPartsStockByPart(branch: BranchFilter): Promise<Map<string, PartsStockRecord>> {
   const rows: PartsStockRecord[] = []
+  let cursorSnapshotDate: string | null = null
+  let cursorId: number | null = null
 
-  let query = supabase
-    .from('service_parts_stock_snapshot_data')
-    .select('part_number, part_description, snapshot_date, on_hand_quantity')
-    .order('snapshot_date', { ascending: false })
-    .limit(MAX_REPORT_FETCH_ROWS)
+  while (true) {
+    let query = supabase
+      .from('service_parts_stock_snapshot_data')
+      .select('part_number, part_description, snapshot_date, on_hand_quantity, id')
+      .order('snapshot_date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
 
-  query = applyBranchFilterToQuery(query, branch)
+    query = applyBranchFilterToQuery(query, branch)
 
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
+    if (cursorSnapshotDate && cursorId !== null) {
+      query = query.or(
+        `snapshot_date.lt.${cursorSnapshotDate},and(snapshot_date.eq.${cursorSnapshotDate},id.lt.${cursorId})`,
+      )
+    }
 
-  const batch = (data as PartsStockRecord[] | null) ?? []
-  rows.push(...capRows(batch))
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as PartsStockRecord[] | null) ?? []
+    rows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+
+    const lastRow = batch[batch.length - 1] as { snapshot_date?: unknown; id?: unknown }
+    cursorSnapshotDate = lastRow.snapshot_date ? String(lastRow.snapshot_date) : null
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+    if (!cursorSnapshotDate || cursorId === null) break
+  }
 
   const latestByPart = new Map<string, PartsStockRecord>()
 

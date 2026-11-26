@@ -36,6 +36,12 @@ export const REPORT_CATALOGUE_DEFAULTS: Record<string, ReportCatalogueEntry> = {
     dateBasis: 'invoice_date (forced)',
     verification: 'Static review only (ACCOUNTS-002 audit); not run',
   },
+  performance: {
+    owner: OPS,
+    sources: ['job_card_closed_data', 'service_vas_jc_data', 'service_invoice_data', 'vehicle odometer fields'],
+    dateBasis: 'varies (closed / invoice / service-due snapshot)',
+    verification: 'Registered PD-26 2026-11-26; harness + build',
+  },
   parts: {
     owner: OPS,
     sources: ['service_parts_consumption/order/stock_snapshot_data', 'GRN and back-order tables'],

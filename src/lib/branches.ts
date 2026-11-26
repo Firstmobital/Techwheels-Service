@@ -6,6 +6,15 @@ export const REPORT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura', 'Tonk', 'Shahpur
 
 const SITAPURA_BRANCH_ALIASES = ['Sitapura', 'Sitapura PV', 'Sitapura EV'] as const
 const AJMER_BRANCH_ALIASES = ['Ajmer Road', 'Ajmer Road PV', 'Ajmer Road EV'] as const
+const TONK_BRANCH_ALIASES = ['Tonk'] as const
+const SHAHPURA_BRANCH_ALIASES = ['Shahpura'] as const
+
+/** Read-only mirror of production `psf_fallback_location` (DBL-0101 deferred). */
+const EMPLOYEE_CODE_BRANCH_HINTS: ReadonlyArray<{ pattern: string; branch: (typeof REPORT_BRANCH_OPTIONS)[number] }> = [
+	{ pattern: '500A840', branch: 'Sitapura' },
+	{ pattern: '3000840', branch: 'Sitapura' },
+	{ pattern: '3001440', branch: 'Ajmer Road' },
+]
 
 export function normalizeBranchLabel(raw: unknown): string {
 	if (raw === null || raw === undefined) return ''
@@ -32,7 +41,24 @@ export function branchAliases(branch: string): string[] {
 		return [...AJMER_BRANCH_ALIASES]
 	}
 
+	if (lower === 'tonk') {
+		return [...TONK_BRANCH_ALIASES]
+	}
+
+	if (lower === 'shahpura') {
+		return [...SHAHPURA_BRANCH_ALIASES]
+	}
+
 	return [normalized]
+}
+
+export function inferBranchFromEmployeeCode(employeeCode: unknown): string | null {
+	const normalized = normalizeBranchLabel(employeeCode).toUpperCase()
+	if (!normalized) return null
+	for (const hint of EMPLOYEE_CODE_BRANCH_HINTS) {
+		if (normalized.includes(hint.pattern)) return hint.branch
+	}
+	return null
 }
 
 export function matchesBranchSelection(rawBranch: unknown, selectedBranch: 'ALL' | string): boolean {
@@ -68,6 +94,8 @@ export const UNMAPPED_BRANCH = 'Unmapped'
  */
 export function canonicalReportBranch(...rawLabels: unknown[]): string {
 	for (const raw of rawLabels) {
+		const fromCode = inferBranchFromEmployeeCode(raw)
+		if (fromCode) return fromCode
 		const label = normalizeBranchLabel(raw)
 		if (!label) continue
 		for (const option of REPORT_BRANCH_OPTIONS) {
