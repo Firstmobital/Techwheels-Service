@@ -1,8 +1,8 @@
 /** Profit & Loss data access (ACCOUNTS-003). RLS and `pnl_payroll_cost` enforce the `pnl_report` module. */
 import { supabase } from '../supabase'
-import type { ExpenseEntry, ExpenseHead, PayrollCostRow, PnlSettings, RevenueBasis } from '../pnl/pnl'
+import type { ExpenseHead, PayrollCostRow, PnlSettings, RecurringExpense, RevenueBasis } from '../pnl/pnl'
 
-export const PNL_NOT_SET_UP = 'The Profit & Loss database objects are not installed yet (migration 20261126120000).'
+export const PNL_NOT_SET_UP = 'The Profit & Loss database objects are not installed yet (migrations 20261126120000 and 20261126150000).'
 
 function fail(error: { message: string; code?: string }): never {
   if (error.code === 'PGRST205' || error.code === 'PGRST202' || error.code === '42P01') throw new Error(PNL_NOT_SET_UP)
@@ -46,43 +46,121 @@ export async function addExpenseHead(name: string, category: string): Promise<vo
   if (error) fail(error.code === '23505' ? { message: 'An expense head with this name already exists.' } : error)
 }
 
-/** Months are `YYYY-MM`, inclusive. */
-export async function getExpenses(fromMonth: string, toMonth: string): Promise<ExpenseEntry[]> {
-  const out: ExpenseEntry[] = []
+export interface ExpenseEntryRow {
+  id: number
+  month: string
+  branch: string
+  headId: number
+  amount: number
+  note: string | null
+  recurringId: number | null
+  status: 'active' | 'cancelled'
+  cancelReason: string | null
+}
+
+const ENTRY_COLUMNS = 'id, expense_month, branch, head_id, amount, note, recurring_id, status, cancel_reason'
+
+/** Months are `YYYY-MM`, inclusive. Cancelled entries are returned only when asked for. */
+export async function getExpenses(fromMonth: string, toMonth: string, includeCancelled = false): Promise<ExpenseEntryRow[]> {
+  const out: ExpenseEntryRow[] = []
   const pageSize = 1000
   for (let start = 0; ; start += pageSize) {
-    const { data, error } = await supabase
-      .from('pnl_expenses')
-      .select('expense_month, branch, head_id, amount')
+    let query = supabase
+      .from('pnl_expense_entries')
+      .select(ENTRY_COLUMNS)
       .gte('expense_month', `${fromMonth}-01`)
       .lte('expense_month', `${toMonth}-01`)
-      .order('id')
-      .range(start, start + pageSize - 1)
+    if (!includeCancelled) query = query.eq('status', 'active')
+    const { data, error } = await query.order('id').range(start, start + pageSize - 1)
     if (error) fail(error)
     for (const r of data ?? []) {
-      out.push({ month: String(r.expense_month).slice(0, 7), branch: String(r.branch), headId: Number(r.head_id), amount: Number(r.amount) })
+      out.push({
+        id: Number(r.id), month: String(r.expense_month).slice(0, 7), branch: String(r.branch), headId: Number(r.head_id),
+        amount: Number(r.amount), note: r.note as string | null, recurringId: r.recurring_id === null ? null : Number(r.recurring_id),
+        status: r.status as ExpenseEntryRow['status'], cancelReason: r.cancel_reason as string | null,
+      })
     }
     if ((data?.length ?? 0) < pageSize) return out
   }
 }
 
-export async function saveExpenses(
-  month: string,
-  upserts: Array<{ branch: string; headId: number; amount: number }>,
-  removals: Array<{ branch: string; headId: number }>,
-): Promise<void> {
-  const expense_month = `${month}-01`
-  if (upserts.length) {
-    const { error } = await supabase.from('pnl_expenses').upsert(
-      upserts.map((u) => ({ expense_month, branch: u.branch, head_id: u.headId, amount: u.amount })),
-      { onConflict: 'expense_month,branch,head_id' },
-    )
-    if (error) fail(error)
+export interface NewExpenseEntry {
+  month: string
+  branch: string
+  headId: number
+  amount: number
+  note?: string | null
+  recurringId?: number | null
+}
+
+/** Inserts all entries in one statement, so a rejected row saves none of them. */
+export async function addExpenseEntries(entries: NewExpenseEntry[]): Promise<void> {
+  const { error } = await supabase.from('pnl_expense_entries').insert(
+    entries.map((e) => ({
+      expense_month: `${e.month}-01`, branch: e.branch, head_id: e.headId, amount: e.amount,
+      note: e.note?.trim() || null, recurring_id: e.recurringId ?? null,
+    })),
+  )
+  if (error) fail(error.code === '23505' ? { message: 'This repeating expense is already confirmed for the month. Refresh to see it.' } : error)
+}
+
+async function updateEntry(id: number, patch: Record<string, unknown>): Promise<void> {
+  const { data, error } = await supabase.from('pnl_expense_entries').update(patch).eq('id', id).select('id')
+  if (error) fail(error)
+  if (!data?.length) throw new Error('Not saved: you do not have permission to change expenses.')
+}
+
+export const editExpenseEntry = (id: number, e: { month: string; branch: string; headId: number; amount: number; note: string }) =>
+  updateEntry(id, { expense_month: `${e.month}-01`, branch: e.branch, head_id: e.headId, amount: e.amount, note: e.note.trim() || null })
+
+export const cancelExpenseEntry = (id: number, reason: string) => updateEntry(id, { status: 'cancelled', cancel_reason: reason.trim() })
+
+export interface EntryChange {
+  action: string
+  changedAt: string
+  amount: number
+  month: string
+  branch: string
+  headId: number
+  note: string | null
+}
+
+export async function getEntryHistory(entryId: number): Promise<EntryChange[]> {
+  const { data, error } = await supabase.from('pnl_expense_entry_history').select('action, new_row, changed_at').eq('entry_id', entryId).order('id')
+  if (error) fail(error)
+  return (data ?? []).map((r) => {
+    const row = r.new_row as { amount: number; expense_month: string; branch: string; head_id: number; note: string | null }
+    return {
+      action: String(r.action), changedAt: String(r.changed_at), amount: Number(row.amount), month: row.expense_month.slice(0, 7),
+      branch: row.branch, headId: Number(row.head_id), note: row.note,
+    }
+  })
+}
+
+export async function getRecurringExpenses(): Promise<RecurringExpense[]> {
+  const { data, error } = await supabase
+    .from('pnl_recurring_expenses')
+    .select('id, head_id, branch, amount, amount_varies, start_month, end_month, note, is_active')
+    .order('id')
+  if (error) fail(error)
+  return (data ?? []).map((r) => ({
+    id: Number(r.id), headId: Number(r.head_id), branch: String(r.branch), amount: Number(r.amount), amountVaries: Boolean(r.amount_varies),
+    startMonth: String(r.start_month).slice(0, 7), endMonth: r.end_month ? String(r.end_month).slice(0, 7) : null,
+    note: r.note as string | null, isActive: Boolean(r.is_active),
+  }))
+}
+
+/** Creates a repeating expense, or updates it when `id` is given. Confirmed months are never changed by this. */
+export async function saveRecurringExpense(value: Omit<RecurringExpense, 'id'>, id?: number): Promise<void> {
+  const row = {
+    head_id: value.headId, branch: value.branch, amount: value.amount, amount_varies: value.amountVaries,
+    start_month: `${value.startMonth}-01`, end_month: value.endMonth ? `${value.endMonth}-01` : null,
+    note: value.note?.trim() || null, is_active: value.isActive,
   }
-  for (const r of removals) {
-    const { error } = await supabase.from('pnl_expenses').delete().eq('expense_month', expense_month).eq('branch', r.branch).eq('head_id', r.headId)
-    if (error) fail(error)
-  }
+  const table = supabase.from('pnl_recurring_expenses')
+  const { data, error } = id === undefined ? await table.insert(row).select('id') : await table.update(row).eq('id', id).select('id')
+  if (error) fail(error)
+  if (!data?.length) throw new Error('Not saved: you do not have permission to change repeating expenses.')
 }
 
 export async function getPayrollCost(from: string, to: string): Promise<PayrollCostRow[]> {

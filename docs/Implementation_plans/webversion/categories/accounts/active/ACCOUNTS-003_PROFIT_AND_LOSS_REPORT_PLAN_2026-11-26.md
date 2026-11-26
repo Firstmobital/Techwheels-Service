@@ -45,3 +45,25 @@ Revert the web commit. Database objects are additive; the drop statements are in
 - Payroll totals through the new RPC: August and September finalized, October draft, nothing for November. This replaces the older data-copy finding above. November salary shows as missing until Payroll has November entries or an amount is entered.
 - Platform automation granted `pnl_report` (view, modify, delete) to the 7 active admin accounts.
 - No expenses are entered yet.
+
+## Phase 1: easy expense posting (approved 2026-11-26: "Yes, build Phase 1")
+**Status:** built and tested locally; DBL-0104 PROPOSED; not applied, not published. The approval covers building; production apply and publication need their own authorization.
+
+| Topic | Design (replaces the monthly grid and "copy previous month" above) |
+|---|---|
+| Entries | `pnl_expense_entries`: month the cost belongs to, branch, type, amount, note. Several entries add up. Edit or cancel with a reason; never deleted. Each change is stored in `pnl_expense_entry_history` (database records who; the screen shows what and when) |
+| Repeating | `pnl_recurring_expenses`: fixed or changing amount, first and optional last month. Counts only after confirmation; once per month; salary excluded. Stopping or editing never changes confirmed months |
+| Salary | Order per branch: entered amount, then that month's Payroll, then, only when a month has no Payroll pay at all, the nearest earlier month within 3 months, labelled estimated and marking the figure provisional |
+| Pending | Unconfirmed repeats listed in Expenses and counted in the provisional warning; core types with nothing entered or repeating are listed (all branches together) |
+| Screens | *Expenses* (add, pending, entries, month summary) and *Repeating & Settings* (repeats, margins, expense types) |
+| Old grid | Rows are copied into entries; `pnl_expenses` becomes read-only (kept for rollback). Between migration and web release the old grid cannot save |
+
+Not in Phase 1: bill attachments, vendor and payment status, month lock, approval, Busy import.
+
+| Status | Task |
+|---|---|
+| ✅ | Migration `20261126150000_pnl_expense_entries.sql` and paired checks |
+| ✅ | Calculation, harness, screens; build and lint |
+| ✅ | Disposable PostgreSQL: 8/8 checks, carry-over, history, allow/deny cases. Screens exercised with sample data |
+| ⏳ | Authorize: apply migration, run checks, refresh snapshot, publish. Apply immediately before publishing; the web release depends on it |
+| ⏳ | Signed-in verification in production |

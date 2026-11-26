@@ -38,7 +38,7 @@ export const REPORT_CATALOGUE_DEFAULTS: Record<string, ReportCatalogueEntry> = {
   },
   pnl: {
     owner: 'Owner / Finance head (to confirm)',
-    sources: ['job_card_closed_data', 'pnl_expenses', 'pnl_expense_heads', 'pnl_settings', 'payroll_entries (totals via pnl_payroll_cost)'],
+    sources: ['job_card_closed_data', 'pnl_expense_entries', 'pnl_recurring_expenses', 'pnl_expense_heads', 'pnl_settings', 'payroll_entries (totals via pnl_payroll_cost)'],
     dateBasis: 'invoice_date (forced); expenses by calendar month',
     verification: 'ACCOUNTS-003 harness, scratch-database checks and build 2026-11-26; production figures not yet verified',
   },

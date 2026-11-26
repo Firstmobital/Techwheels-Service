@@ -1,5 +1,6 @@
 import PnlStatementReport from './PnlStatementReport'
-import PnlExpensesEditor from './PnlExpensesEditor'
+import PnlExpensesPage from './PnlExpensesPage'
+import PnlSetupPage from './PnlSetupPage'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
 export const PNL_CATEGORY: ReportCategoryDefinition = {
@@ -20,9 +21,17 @@ export const PNL_REPORTS: ReportDefinition[] = [
   {
     id: 'pnl-expenses',
     categoryId: 'pnl',
-    label: 'Expenses & Margins',
-    description: 'Monthly expense entry by branch, profit margins and expense heads.',
-    cardHint: 'Best for Accounts to maintain monthly costs.',
-    Component: PnlExpensesEditor,
+    label: 'Expenses',
+    description: 'Add expenses, confirm repeating costs and review the month.',
+    cardHint: 'Best for Accounts to record monthly costs.',
+    Component: PnlExpensesPage,
+  },
+  {
+    id: 'pnl-setup',
+    categoryId: 'pnl',
+    label: 'Repeating & Settings',
+    description: 'Repeating expenses, profit margins and expense types.',
+    cardHint: 'Best for one-time setup.',
+    Component: PnlSetupPage,
   },
 ]

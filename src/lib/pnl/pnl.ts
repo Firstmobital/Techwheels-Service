@@ -30,6 +30,49 @@ export interface ExpenseEntry {
   branch: string
   headId: number
   amount: number
+  recurringId?: number | null
+}
+export interface RecurringExpense {
+  id: number
+  headId: number
+  branch: string
+  amount: number
+  amountVaries: boolean
+  startMonth: string
+  endMonth: string | null
+  note: string | null
+  isActive: boolean
+}
+
+/** How far back a missing Payroll month may borrow its salary estimate from. */
+export const SALARY_ESTIMATE_LOOKBACK_MONTHS = 3
+
+export function addMonths(month: string, delta: number): string {
+  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + delta
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`
+}
+
+/**
+ * The month whose Payroll should be used for `month`: itself when Payroll has any pay for it, otherwise the nearest
+ * earlier month (within the lookback) as an estimate. Decided per month, so a branch that Payroll really pays nothing
+ * in a recorded month is not filled from an older one.
+ */
+export function salarySourceMonth(month: string, payroll: Map<string, { paise: number }>): { month: string; estimated: boolean } | null {
+  for (let back = 0; back <= SALARY_ESTIMATE_LOOKBACK_MONTHS; back += 1) {
+    const candidate = addMonths(month, -back)
+    for (const [key, value] of payroll) {
+      if (value.paise > 0 && key.startsWith(`${candidate}|`)) return { month: candidate, estimated: back > 0 }
+    }
+  }
+  return null
+}
+
+/** Repeating expenses due in `month` that have no active entry yet. */
+export function pendingRecurring(templates: RecurringExpense[], entries: ExpenseEntry[], month: string, branches: readonly string[]): RecurringExpense[] {
+  const done = new Set(entries.filter((e) => e.month === month && e.recurringId != null).map((e) => e.recurringId))
+  return templates.filter(
+    (t) => t.isActive && branches.includes(t.branch) && t.startMonth <= month && (t.endMonth === null || t.endMonth >= month) && !done.has(t.id),
+  )
 }
 export interface PayrollCostRow {
   month: string
@@ -67,7 +110,7 @@ export interface ExpenseLine {
   name: string
   category: string
   amountPaise: number
-  source: 'entered' | 'payroll' | 'mixed'
+  source: 'entered' | 'payroll' | 'estimate' | 'mixed'
 }
 
 export interface PnlResult extends PnlFigures {
@@ -125,8 +168,11 @@ export interface PnlInput {
   settings: PnlSettings
   revenue: RevenueDay[]
   heads: ExpenseHead[]
+  /** Active entries only; several entries for the same month, branch and head are added together. */
   expenses: ExpenseEntry[]
+  /** Should start SALARY_ESTIMATE_LOOKBACK_MONTHS before `from` so that missing months can be estimated. */
   payroll: PayrollCostRow[]
+  recurring?: RecurringExpense[]
 }
 
 const emptyFigures = (): PnlFigures => ({
@@ -140,7 +186,10 @@ export function computePnl(input: PnlInput): PnlResult {
   const slices = monthSlices(from, to)
   const payroll = payrollByMonthBranch(input.payroll)
   const entered = new Map<string, number>()
-  for (const e of input.expenses) entered.set(`${e.month}|${e.branch}|${e.headId}`, toPaise(e.amount))
+  for (const e of input.expenses) {
+    const key = `${e.month}|${e.branch}|${e.headId}`
+    entered.set(key, (entered.get(key) ?? 0) + toPaise(e.amount))
+  }
 
   const lines = new Map<number, ExpenseLine>()
   const warnings: string[] = []
@@ -165,10 +214,13 @@ export function computePnl(input: PnlInput): PnlResult {
     const factor = prorate ? slice.daysIncluded / slice.daysInMonth : 1
     const present = new Set<number>()
     const draftPayroll: string[] = []
+    const estimated: string[] = []
+    const salarySource = salarySourceMonth(slice.month, payroll)
     for (const head of heads) {
       let monthPaise = 0
       let fromEntry = false
       let fromPayroll = false
+      let fromEstimate = false
       for (const b of scope) {
         const manual = entered.get(`${slice.month}|${b}|${head.id}`)
         if (manual !== undefined) {
@@ -178,18 +230,24 @@ export function computePnl(input: PnlInput): PnlResult {
           present.add(head.id)
           continue
         }
-        const pay = head.code === 'salary' ? payroll.get(`${slice.month}|${b}`) : undefined
+        const pay = head.code === 'salary' && salarySource ? payroll.get(`${salarySource.month}|${b}`) : undefined
         if (pay && pay.paise > 0) {
           monthPaise += pay.paise
-          fromPayroll = true
           present.add(head.id)
-          if (!pay.finalized) draftPayroll.push(b)
+          if (salarySource?.estimated) {
+            fromEstimate = true
+            estimated.push(b)
+          } else {
+            fromPayroll = true
+            if (!pay.finalized) draftPayroll.push(b)
+          }
         }
       }
-      if (!fromEntry && !fromPayroll) continue
+      const kinds = [fromEntry && 'entered', fromPayroll && 'payroll', fromEstimate && 'estimate'].filter(Boolean) as ExpenseLine['source'][]
+      if (!kinds.length) continue
       const share = Math.round(monthPaise * factor)
       m.expensePaise += share
-      const source: ExpenseLine['source'] = fromEntry && fromPayroll ? 'mixed' : fromPayroll ? 'payroll' : 'entered'
+      const source: ExpenseLine['source'] = kinds.length > 1 ? 'mixed' : kinds[0]
       const line = lines.get(head.id)
       if (line) {
         line.amountPaise += share
@@ -201,6 +259,12 @@ export function computePnl(input: PnlInput): PnlResult {
     const missing = coreHeads.filter((h) => !present.has(h.id)).map((h) => h.name)
     if (missing.length) warnings.push(`${slice.month}: no amount for ${missing.join(', ')}. Profit is overstated if these apply.`)
     if (draftPayroll.length) warnings.push(`${slice.month}: salary for ${draftPayroll.join(', ')} comes from Payroll that is not finalized.`)
+
+    if (estimated.length && salarySource) {
+      warnings.push(`${slice.month}: salary for ${estimated.join(', ')} is estimated from ${salarySource.month} Payroll.`)
+    }
+    const pending = pendingRecurring(input.recurring ?? [], input.expenses, slice.month, scope)
+    if (pending.length) warnings.push(`${slice.month}: ${pending.length} repeating expense(s) not confirmed yet.`)
 
     m.netProfitPaise = m.grossProfitPaise - m.expensePaise
     months.push(m)

@@ -1,5 +1,5 @@
 /** Verifies Profit & Loss arithmetic (ACCOUNTS-003) on hand-calculated figures. Run: npm run test:pnl */
-import { computePnl, monthSlices, DEFAULT_PNL_SETTINGS, type ExpenseHead, type PnlInput } from '../src/lib/pnl/pnl.ts'
+import { computePnl, monthSlices, addMonths, pendingRecurring, DEFAULT_PNL_SETTINGS, type ExpenseHead, type PnlInput, type RecurringExpense } from '../src/lib/pnl/pnl.ts'
 
 let failures = 0
 function eq(name: string, actual: unknown, expected: unknown): void {
@@ -60,6 +60,36 @@ eq('reversed range', monthSlices('2026-11-02', '2026-11-01'), [])
 
 const two = computePnl({ ...base, from: '2026-10-01' })
 eq('month totals reconcile', two.months.reduce((s, m) => s + m.netProfitPaise, 0), two.netProfitPaise)
+
+const split = computePnl({ ...base, expenses: [
+  { month: '2026-11', branch: 'Sitapura', headId: 2, amount: 10000 },
+  { month: '2026-11', branch: 'Sitapura', headId: 2, amount: 20000 },
+  { month: '2026-11', branch: 'Common', headId: 3, amount: 3000 },
+] })
+eq('several entries in one cell are added', split.netProfitPaise, full.netProfitPaise)
+
+const octoberOnly = [
+  { month: '2026-10', branch: 'Sitapura', gross: 40000, status: 'draft' },
+  { month: '2026-10', branch: 'Jagatpura', gross: 5000, status: 'draft' },
+]
+const estimate = computePnl({ ...base, payroll: octoberOnly })
+eq('missing month estimated from previous', estimate.expensePaise, full.expensePaise)
+eq('estimate labelled', [estimate.lines.find((l) => l.headId === 1)?.source, estimate.warnings.length, estimate.warnings[0].includes('estimated from 2026-10')], ['estimate', 1, true])
+eq('real payroll replaces estimate', computePnl({ ...base, payroll: [...octoberOnly, ...base.payroll] }).lines.find((l) => l.headId === 1)?.source, 'payroll')
+eq('all-zero month still estimated', computePnl({ ...base, payroll: [...octoberOnly, { month: '2026-11', branch: 'Sitapura', gross: 0, status: 'draft' }] }).expensePaise, full.expensePaise)
+eq('recorded month does not borrow for an unpaid branch', computePnl({ ...base, branch: 'Tonk', payroll: [{ month: '2026-10', branch: 'Tonk', gross: 100, status: 'draft' }, ...base.payroll] }).expensePaise, 0)
+eq('no estimate beyond lookback', computePnl({ ...base, expenses: [], payroll: [{ month: '2026-07', branch: 'Sitapura', gross: 1000, status: 'finalized' }] }).expensePaise, 0)
+eq('entry beats estimate for its branch only', computePnl({ ...base, payroll: octoberOnly, expenses: [{ month: '2026-11', branch: 'Sitapura', headId: 1, amount: 100 }] }).expensePaise, 510000)
+eq('addMonths across years', [addMonths('2027-01', -3), addMonths('2026-12', 1)], ['2026-10', '2027-01'])
+
+const rent: RecurringExpense = { id: 9, headId: 2, branch: 'Sitapura', amount: 30000, amountVaries: false, startMonth: '2026-10', endMonth: '2026-12', note: null, isActive: true }
+eq('due and unconfirmed', pendingRecurring([rent], [], '2026-11', ['Sitapura']).length, 1)
+eq('confirmed is not pending', pendingRecurring([rent], [{ month: '2026-11', branch: 'Sitapura', headId: 2, amount: 30000, recurringId: 9 }], '2026-11', ['Sitapura']).length, 0)
+eq('outside period, other branch or stopped', [
+  pendingRecurring([rent], [], '2027-01', ['Sitapura']).length, pendingRecurring([rent], [], '2026-09', ['Sitapura']).length,
+  pendingRecurring([rent], [], '2026-11', ['Tonk']).length, pendingRecurring([{ ...rent, isActive: false }], [], '2026-11', ['Sitapura']).length,
+], [0, 0, 0, 0])
+eq('pending repeat makes figure provisional but is not counted', (() => { const r = computePnl({ ...base, recurring: [rent] }); return [r.expensePaise, r.warnings.length] })(), [full.expensePaise, 1])
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1) }
 console.log('OK: Profit & Loss arithmetic matches hand-calculated figures')

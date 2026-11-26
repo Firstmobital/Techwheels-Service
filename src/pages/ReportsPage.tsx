@@ -581,7 +581,7 @@ export default function ReportsPage({ allowedModules }: { allowedModules: Readon
           </section>
         )}
 
-        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && activeReport?.id !== 'pnl-expenses' && (
+        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && activeReport?.id !== 'pnl-expenses' && activeReport?.id !== 'pnl-setup' && (
           <ReportFiltersPanel
             branch={branch}
             onBranchChange={setBranch}
@@ -617,7 +617,7 @@ export default function ReportsPage({ allowedModules }: { allowedModules: Readon
           />
         )}
 
-        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && customDateError ? (
+        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && activeReport?.id !== 'pnl-expenses' && activeReport?.id !== 'pnl-setup' && customDateError ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700 shadow-sm">
             Fix the date range validation to view the selected report.
           </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getDailyRevenueReport, getDateRangeBounds, type DailyRevenueReport } from '../../../lib/reportQueries'
-import { getExpenseHeads, getExpenses, getPayrollCost, getPnlSettings } from '../../../lib/api/pnl'
-import { computePnl, type ExpenseEntry, type ExpenseHead, type PayrollCostRow, type PnlSettings } from '../../../lib/pnl/pnl'
+import { getExpenseHeads, getExpenses, getPayrollCost, getPnlSettings, getRecurringExpenses } from '../../../lib/api/pnl'
+import { addMonths, computePnl, SALARY_ESTIMATE_LOOKBACK_MONTHS, type ExpenseEntry, type ExpenseHead, type PayrollCostRow, type PnlSettings, type RecurringExpense } from '../../../lib/pnl/pnl'
 import { REPORT_BRANCH_OPTIONS } from '../../../lib/branches'
 import { exportToCSV } from '../../../lib/exportUtils'
 import type { ReportViewProps } from '../types'
@@ -14,9 +14,12 @@ interface LoadedData {
   heads: ExpenseHead[]
   expenses: ExpenseEntry[]
   payroll: PayrollCostRow[]
+  recurring: RecurringExpense[]
   revenue: DailyRevenueReport[]
   byBranch: Array<{ branch: string; revenue: DailyRevenueReport[] }>
 }
+
+const SOURCE_LABEL = { entered: '', payroll: ' (from Payroll)', estimate: ' (ESTIMATED from earlier Payroll)', mixed: ' (more than one source)' }
 
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -40,16 +43,17 @@ export default function PnlStatementReport({ branch, dateFilter }: ReportViewPro
       const to = localDate(lastDay)
       // Settings first: it fails fast with a clear message when access or setup is missing.
       const settings = await getPnlSettings()
-      const [heads, expenses, payroll, revenue, byBranch] = await Promise.all([
+      const [heads, expenses, payroll, recurring, revenue, byBranch] = await Promise.all([
         getExpenseHeads(),
         getExpenses(from.slice(0, 7), to.slice(0, 7)),
-        getPayrollCost(from, to),
+        getPayrollCost(`${addMonths(from.slice(0, 7), -SALARY_ESTIMATE_LOOKBACK_MONTHS)}-01`, to),
+        getRecurringExpenses(),
         getDailyRevenueReport(branch, dateFilter),
         branch === 'ALL'
           ? Promise.all(REPORT_BRANCH_OPTIONS.map(async (b) => ({ branch: b as string, revenue: await getDailyRevenueReport(b, dateFilter) })))
           : Promise.resolve([]),
       ])
-      return { from, to, settings, heads, expenses, payroll, revenue, byBranch }
+      return { from, to, settings, heads, expenses, payroll, recurring, revenue, byBranch }
     }
 
     load()
@@ -87,7 +91,7 @@ export default function PnlStatementReport({ branch, dateFilter }: ReportViewPro
     ...categories.flatMap((category) => [
       { label: category, paise: -result.lines.filter((l) => l.category === category).reduce((s, l) => s + l.amountPaise, 0), kind: 'head' as const },
       ...result.lines.filter((l) => l.category === category).map((l) => ({
-        label: `${l.name}${l.source === 'payroll' ? ' (from Payroll)' : l.source === 'mixed' ? ' (Payroll + entered)' : ''}`,
+        label: `${l.name}${SOURCE_LABEL[l.source]}`,
         paise: -l.amountPaise,
         kind: 'sub' as const,
       })),
@@ -152,7 +156,7 @@ export default function PnlStatementReport({ branch, dateFilter }: ReportViewPro
 
       {provisional && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <p className="font-semibold">This profit figure is provisional. Complete these in the “Expenses &amp; Margins” tab:</p>
+          <p className="font-semibold">This profit figure is provisional. Check these (use the “Expenses” tab):</p>
           <ul className="mt-1 list-disc pl-5">{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
         </div>
       )}

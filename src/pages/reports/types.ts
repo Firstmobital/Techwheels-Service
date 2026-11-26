@@ -14,6 +14,7 @@ export type ReportId =
   | 'dashboard-labour-revenue'
   | 'pnl-statement'
   | 'pnl-expenses'
+  | 'pnl-setup'
   | 'dashboard-parts'
   | 'job-card-details'
   | 'service-type-labour-revenue'
