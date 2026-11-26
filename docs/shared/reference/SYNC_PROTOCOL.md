@@ -144,13 +144,13 @@ For prompts/task contracts:
 
 For `scripts/git-safe-publish.sh` specifically, in addition to the above:
 
-Publication (when ready to commit/rebase/push): **`npm run publish:safe`** from the repository root. Do not bypass this script with manual git commit/push unless the script is proven unusable.
+Publication (when ready to commit/merge/push): **`npm run publish:safe`** from the repository root. Do not bypass this script with manual git commit/push unless the script is proven unusable.
 
 1. Do not push during the test unless explicitly instructed.
 2. Verify it auto-generates the outgoing local-change intake report (`scripts/repo_change_impact.mjs` default mode) before commit confirmation whenever local working-tree changes exist, prints the report path, and requires explicit confirmation before commit when the report raises review-sensitive findings (independent review, DB ledger/protocol expectations, generated artifact refresh/validation expectations, or unmapped files).
 3. Verify it stops on local impact-analysis failure before commit.
 4. Verify it stops on validation failure.
-5. Verify it stops when incoming commits are pulled during the rebase.
+5. Verify it stops when incoming commits are merged from origin/main.
 6. Verify it prints the required audit instruction (the `AUDIT_PROMPT` block).
 7. Verify it does not scan `local_folder/backups/` or its `chunks/` mirror.
 8. Verify it auto-generates the incoming-change intake report (`scripts/repo_change_impact.mjs --range`) before printing the audit instruction, and that a failure of that call does not change the exit-4 stop-before-push outcome.

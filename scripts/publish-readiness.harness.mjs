@@ -411,6 +411,21 @@ publishScenario(32, 'failing build blocks publication', (fx) => {
   untouched(fx, before)
 })
 
+publishScenario(33, 'local history with a conflict-resolved merge publishes without rewriting commits', (fx) => {
+  commit(fx.work, 'src/lib/format.ts', 'export const f = 1\n', 'base file')
+  sh(fx.work, 'switch', '-q', '-c', 'side')
+  commit(fx.work, 'src/lib/format.ts', 'export const f = 2\n', 'side edit')
+  sh(fx.work, 'switch', '-q', 'main')
+  commit(fx.work, 'src/lib/format.ts', 'export const f = 3\n', 'main edit')
+  spawnSync('git', ['merge', 'side'], { cwd: fx.work })
+  write(fx.work, 'src/lib/format.ts', 'export const f = 23\n')
+  sh(fx.work, 'add', '--', 'src/lib/format.ts')
+  sh(fx.work, 'commit', '-q', '-m', 'merge side')
+  const head = sh(fx.work, 'rev-parse', 'HEAD')
+  const r = publish(fx.work)
+  expect(r.code === 0 && remoteHead(fx) === head && sh(fx.work, 'rev-parse', 'HEAD') === head, tail(r))
+})
+
 let failed = 0
 for (const r of results) {
   if (!r.pass) failed++

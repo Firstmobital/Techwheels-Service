@@ -22,8 +22,8 @@ set -euo pipefail
 #   7. git add -A (validator reports are never staged), then unstage any DB paths deferred in
 #      publication_readiness_disposition.json, then commit.
 #   8. Record the local HEAD before pulling (for manual rollback reference).
-#   9. git pull --rebase origin main
-#  10. Detect whether that pull brought in new commits from origin/main.
+#   9. Merge origin/main only if it has new commits (never rebase)
+#  10. Detect whether origin/main had new commits.
 #  11. If new commits came in, automatically run a read-only incoming-change
 #      intake report (scripts/repo_change_impact.mjs --range) covering just
 #      those commits, then stop and print an audit prompt to run before
@@ -35,7 +35,7 @@ set -euo pipefail
 # Safety rules (enforced, not optional):
 #   - Never pushes if the pull brought in new commits from origin/main.
 #   - Never pushes if the blocking docs validator (npm run docs:validate) or the build (npm run build) fails.
-#   - Never pushes if the rebase produced conflicts.
+#   - Never rewrites local history; never pushes if merging origin/main produced conflicts.
 #   - Never commits if there are no changes.
 #   - Never commits regenerated validator reports; edits to them that existed before the run are kept.
 #   - Runs only on local main tracking origin/main; refuses otherwise before changing anything.
@@ -65,8 +65,8 @@ set -euo pipefail
 #   0  success (pushed), or a clean no-op (nothing to commit/push)
 #   1  precondition failed (not repo root, wrong branch) or user declined
 #   2  blocking validation failed (npm run docs:validate)
-#   3  rebase produced conflicts (push withheld, manual resolution required)
-#   4  pull brought in new commits from origin/main (push withheld, audit required)
+#   3  merge produced conflicts (push withheld, manual resolution required)
+#   4  origin/main had new commits, now merged (push withheld, audit required)
 #   5  .git/index.lock already exists (stale or live lock; see preflight check)
 #   6  local outgoing impact analysis failed before commit
 #   7  publish-readiness verification failed before push
@@ -380,7 +380,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 6: record local HEAD before pulling.
+# Step 6: record local HEAD before integrating.
 # ---------------------------------------------------------------------------
 prev_head="$(git rev-parse HEAD)"
 echo
@@ -388,7 +388,7 @@ echo "Previous local HEAD (save for manual rollback if ever needed): $prev_head"
 
 # ---------------------------------------------------------------------------
 # Step 7/8: fetch first so we can accurately detect new upstream commits,
-# then run the actual rebase pull as specified.
+# then merge only if there is something new.
 # ---------------------------------------------------------------------------
 echo
 echo "---- Checking origin/main before rebase ----"
@@ -397,23 +397,19 @@ new_commit_count="$(git rev-list --count "${prev_head}..origin/main")"
 
 reset_reports_to_head
 
-echo
-echo "---- git pull --rebase origin main ----"
-if git pull --rebase origin main; then
-  pull_exit_code=0
-else
-  pull_exit_code=$?
-fi
-
-if [[ "$pull_exit_code" -ne 0 ]]; then
-  echo >&2
-  echo "Error: git pull --rebase origin main failed (likely rebase conflicts)." >&2
-  echo "Repository left as-is for manual resolution. Nothing was pushed." >&2
-  echo "  1. Resolve conflicts (git status will show conflicted files)." >&2
-  echo "  2. git add <resolved files>" >&2
-  echo "  3. git rebase --continue   (or: git rebase --abort to give up and restore previous state)" >&2
-  echo "  4. Re-run this script once the rebase is clean." >&2
-  exit 3
+# Integrate only when origin/main has something new, and by merge: a rebase would replay (and can re-conflict
+# on) merge commits already in local history, and would rewrite the commits that were validated and approved.
+if [[ "$new_commit_count" -gt 0 ]]; then
+  echo
+  echo "---- git merge origin/main ----"
+  if ! git merge --no-edit origin/main; then
+    echo >&2
+    echo "Error: merging origin/main failed (likely conflicts). Nothing was pushed." >&2
+    echo "  1. Resolve conflicts (git status shows the files), then git add them and git commit" >&2
+    echo "     (or: git merge --abort to restore the previous state)." >&2
+    echo "  2. Re-run this script." >&2
+    exit 3
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -421,7 +417,7 @@ fi
 # ---------------------------------------------------------------------------
 if [[ "$new_commit_count" -gt 0 ]]; then
   echo
-  echo "== STOPPING: $new_commit_count new commit(s) were pulled from origin/main during rebase. =="
+  echo "== STOPPING: $new_commit_count new commit(s) from origin/main were merged. =="
 
   echo
   echo "---- Auto-generating incoming-change intake report (advisory, read-only) ----"
@@ -440,7 +436,7 @@ if [[ "$new_commit_count" -gt 0 ]]; then
   cat <<'AUDIT_PROMPT'
   --------------------------------------------------------------------------
   Review the commits just pulled from origin/main onto the local main
-  branch during the most recent rebase. An automated incoming-change intake
+  branch during the most recent merge. An automated incoming-change intake
   report covering exactly those commits was just generated at
   docs/shared/evidence/repo_change_impact_report.json (mode:
   "incoming_commit_range") — read it first; it lists the upstream commits,
