@@ -592,7 +592,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'verify' | 'floor' | 'qc' | 'billing'
-type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining' | 'Gaps & health'
+type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining' | 'Stuck (3+ Days)' | 'Gaps & health'
 
 type BrowseFilterSnapshot = {
   dateRange: DateRange
@@ -1018,8 +1018,73 @@ function advisorVerifiedDoc(card: object | null | undefined, key: string): boole
   return Boolean((card as Record<string, unknown>)[key])
 }
 
+const DOC_REJECTION_REASON_PRESETS = [
+  'Photo Blurred',
+  'Wrong Side Uploaded',
+  'Upload Original Copy',
+  'Expired Document',
+  'Name / Details Mismatch',
+] as const
+
+const REUSABLE_KYC_DOC_KEYS: Exclude<BodyshopDocKey, 'doc_claim_form' | 'doc_estimate' | 'doc_survey_approval' | 'doc_job_card' | 'job_card'>[] = [
+  'doc_rc',
+  'doc_rc_back',
+  'doc_dl',
+  'doc_dl_back',
+  'doc_aadhaar',
+  'doc_aadhaar_back',
+  'doc_pan',
+  'doc_kyc',
+  'doc_gst',
+  'doc_company_pan',
+  'doc_bank_detail',
+]
+
+function parseRejectedDocReasonMap(raw: string[] | null | undefined): Record<string, string | null> {
+  const map: Record<string, string | null> = {}
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const trimmed = String(item ?? '').trim()
+    if (!trimmed) continue
+    const idx = trimmed.indexOf('::')
+    if (idx > 0) {
+      const k = trimmed.slice(0, idx).trim()
+      const reason = trimmed.slice(idx + 2).trim()
+      if (k) map[k] = reason || null
+    } else {
+      map[trimmed] = map[trimmed] ?? null
+    }
+  }
+  return map
+}
+
 function rejectedDocKeys(card: { doc_rejected_keys?: string[] | null } | null | undefined): string[] {
-  return Array.isArray(card?.doc_rejected_keys) ? card.doc_rejected_keys : []
+  return Object.keys(parseRejectedDocReasonMap(card?.doc_rejected_keys))
+}
+
+function rejectedDocReason(card: { doc_rejected_keys?: string[] | null } | null | undefined, key: string): string | null {
+  return parseRejectedDocReasonMap(card?.doc_rejected_keys)[key] ?? null
+}
+
+function stripRejectedDocEntry(raw: string[] | null | undefined, docKey: string): string[] {
+  return (Array.isArray(raw) ? raw : []).filter((entry) => {
+    const s = String(entry ?? '').trim()
+    return s !== docKey && !s.startsWith(`${docKey}::`)
+  })
+}
+
+function upsertRejectedDocEntry(raw: string[] | null | undefined, docKey: string, reason?: string | null): string[] {
+  const rest = stripRejectedDocEntry(raw, docKey)
+  const cleanReason = String(reason ?? '').trim()
+  return [...rest, cleanReason ? `${docKey}::${cleanReason}` : docKey]
+}
+
+function isCardStuck3PlusDays(card: RepairCard): boolean {
+  if (card.overall_status !== 'active') return false
+  const refIso = card.updated_at || card.survay_info_updated_at || card.bodyshop_floor_since_at || card.received_at || card.created_at
+  if (!refIso) return false
+  const ms = new Date(refIso).getTime()
+  if (!Number.isFinite(ms)) return false
+  return (Date.now() - ms) >= 3 * 24 * 60 * 60 * 1000
 }
 
 const VERIFY_PIPELINE_DOCS: { k: BodyshopDocKey; label: string }[] = [
@@ -1239,6 +1304,8 @@ export default function BodyshopRepairPage() {
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [bodyshopDocsLoadError, setBodyshopDocsLoadError] = useState<string | null>(null)
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
+  const [rejectingDocKey, setRejectingDocKey] = useState<keyof RepairCard | null>(null)
+  const [reusingPrevKyc, setReusingPrevKyc] = useState(false)
   const pendingDocActionRef = useRef<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
@@ -3799,7 +3866,7 @@ export default function BodyshopRepairPage() {
 
       if (isLegacyBooleanDocKey(docKey)) {
         const hasDraftChanges = Object.keys(editPatch).length > 0
-        const nextRejected = rejectedDocKeys(selected).filter((item) => item !== docKey)
+        const nextRejected = stripRejectedDocEntry(selected.doc_rejected_keys, docKey)
         const nextApproved =
           action.mode === 'replace'
             ? wasAdvisorApproved
@@ -4640,7 +4707,7 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  async function saveDocDecision(key: keyof RepairCard, approved: boolean) {
+  async function saveDocDecision(key: keyof RepairCard, approved: boolean, reason?: string | null) {
     if (!selected) return
     const isCurrentlyApproved = advisorVerifiedDoc(selected, String(key))
     const isCurrentlyRejected = rejectedDocKeys(selected).includes(String(key))
@@ -4649,15 +4716,15 @@ export default function BodyshopRepairPage() {
       return
     }
     if (approved && isCurrentlyApproved && !isCurrentlyRejected) return
-    if (!approved && !isCurrentlyApproved && isCurrentlyRejected) return
     const nextRejected = approved
-      ? rejectedDocKeys(selected).filter((item) => item !== key)
-      : [...new Set([...rejectedDocKeys(selected), String(key)])]
+      ? stripRejectedDocEntry(selected.doc_rejected_keys, String(key))
+      : upsertRejectedDocEntry(selected.doc_rejected_keys, String(key), reason)
     const payload = {
       [key]: approved,
       doc_rejected_keys: nextRejected,
     } as Partial<RepairCard>
     setSelected((current) => (current ? { ...current, ...payload } : current))
+    setRejectingDocKey(null)
     setSaving(true)
     try {
       const updated = await updateRepairCard(selected.id, payload)
@@ -4669,7 +4736,11 @@ export default function BodyshopRepairPage() {
         delete next.doc_rejected_keys
         return next
       })
-      toast_(approved ? 'Approved. Customer can see this status.' : 'Rejected. Customer can upload again.')
+      toast_(
+        approved
+          ? 'Approved. Customer can see this status.'
+          : `Rejected${reason ? ` (${reason})` : ''}. Customer can upload again.`,
+      )
     } catch (error) {
       toast_(error?.message ?? 'Unable to save document decision', false)
     } finally {
@@ -4681,8 +4752,101 @@ export default function BodyshopRepairPage() {
     void saveDocDecision(key, true)
   }
 
-  function rejectDoc(key: keyof RepairCard) {
-    void saveDocDecision(key, false)
+  function rejectDoc(key: keyof RepairCard, reason?: string) {
+    if (reason) {
+      void saveDocDecision(key, false, reason)
+      return
+    }
+    setRejectingDocKey((prev) => (prev === key ? null : key))
+  }
+
+  async function handleReusePreviousKycDocuments() {
+    if (!selected) return
+    const regNo = String(selected.reg_number ?? selectedReception?.reg_number ?? '').trim().toUpperCase()
+    if (!regNo) {
+      toast_('Registration number is required to reuse KYC documents from a previous visit.', false)
+      return
+    }
+
+    setReusingPrevKyc(true)
+    try {
+      const { data: prevDocs, error: prevErr } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .select('id, dealer_code, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at')
+        .ilike('reg_number', regNo)
+        .neq('repair_card_id', selected.id)
+        .in('doc_key', REUSABLE_KYC_DOC_KEYS)
+        .order('uploaded_at', { ascending: false })
+
+      if (prevErr) throw prevErr
+
+      const latestByDocKey = new Map<string, Record<string, unknown>>()
+      for (const row of (prevDocs ?? []) as Array<Record<string, unknown>>) {
+        const dk = String(row.doc_key ?? '')
+        if (!dk || dk === 'doc_claim_form' || dk === 'doc_insurance') continue
+        if (bodyshopDocsByKey[dk as BodyshopDocKey]) continue
+        if (!latestByDocKey.has(dk)) {
+          latestByDocKey.set(dk, row)
+        }
+      }
+
+      if (latestByDocKey.size === 0) {
+        toast_('No previous KYC documents (RC, DL, Aadhaar, PAN) found for this vehicle (or already attached).', false)
+        return
+      }
+
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || 'reused-kyc'
+      const nowIso = new Date().toISOString()
+      const receptionEntryId = Number(selected.reception_entry_id)
+
+      const rowsToUpsert = Array.from(latestByDocKey.values()).map((src) => ({
+        dealer_code: String(src.dealer_code ?? 'TATA_DEFAULT'),
+        repair_card_id: selected.id,
+        reception_entry_id: Number.isFinite(receptionEntryId) && receptionEntryId > 0 ? receptionEntryId : null,
+        reg_number: regNo,
+        doc_key: String(src.doc_key),
+        storage_bucket: String(src.storage_bucket ?? AUTODOC_BUCKET),
+        storage_path: String(src.storage_path ?? ''),
+        file_name: (src.file_name as string | null) ?? null,
+        content_type: (src.content_type as string | null) ?? null,
+        file_size_bytes: (src.file_size_bytes as number | null) ?? null,
+        drive_url: (src.drive_url as string | null) ?? null,
+        drive_file_id: (src.drive_file_id as string | null) ?? null,
+        uploaded_by: actor,
+        uploaded_at: nowIso,
+      }))
+
+      const { data: upserted, error: upsertErr } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .upsert(rowsToUpsert, { onConflict: 'repair_card_id,doc_key' })
+        .select('id, repair_card_id, reception_entry_id, reg_number, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_by, uploaded_at, created_at, updated_at')
+
+      if (upsertErr) throw upsertErr
+
+      const nextDocMap = { ...bodyshopDocsByKey }
+      const flagPatch: Record<string, unknown> = {}
+      let nextRejected = Array.isArray(selected.doc_rejected_keys) ? [...selected.doc_rejected_keys] : []
+
+      for (const row of (upserted ?? []) as BodyshopRepairCardDocumentRow[]) {
+        nextDocMap[row.doc_key] = row
+        if (isLegacyBooleanDocKey(row.doc_key)) {
+          flagPatch[row.doc_key] = true
+          nextRejected = stripRejectedDocEntry(nextRejected, row.doc_key)
+        }
+      }
+      flagPatch.doc_rejected_keys = nextRejected
+
+      setBodyshopDocsByKey(nextDocMap)
+      const updated = await updateRepairCard(selected.id, flagPatch as Partial<RepairCard>)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      toast_(`Reused ${rowsToUpsert.length} KYC document(s) from previous visit (Claim Form excluded).`)
+    } catch (e) {
+      toast_(e instanceof Error ? e.message : 'Unable to reuse previous KYC documents', false)
+    } finally {
+      setReusingPrevKyc(false)
+    }
   }
 
   function patch(key: keyof RepairCard, val: RepairCard[keyof RepairCard]) {
@@ -5342,6 +5506,9 @@ export default function BodyshopRepairPage() {
     if (pipelineFilter === 'Customer remaining') {
       return baseFiltered.filter((card) => isCustomerRemainingPending(card))
     }
+    if (pipelineFilter === 'Stuck (3+ Days)') {
+      return baseFiltered.filter((card) => isCardStuck3PlusDays(card))
+    }
 
     const selectedGroup = STAGE_GROUPS.find((g) => g.label === pipelineFilter)
     if (!selectedGroup) return baseFiltered
@@ -5400,6 +5567,11 @@ export default function BodyshopRepairPage() {
 
   const customerRemainingCount = useMemo(
     () => advisorScopedCards.filter((c) => isCustomerRemainingPending(c)).length,
+    [advisorScopedCards],
+  )
+
+  const stuckCardsCount = useMemo(
+    () => advisorScopedCards.filter((c) => isCardStuck3PlusDays(c)).length,
     [advisorScopedCards],
   )
 
@@ -5979,6 +6151,17 @@ export default function BodyshopRepairPage() {
         >
           <span className="brx-pipe-pill__n">{customerRemainingCount}</span>
           <span className="brx-pipe-pill__l">Customer remaining<small>due or refund</small></span>
+        </button>
+        <button
+          type="button"
+          className={`brx-pipe-pill brx-pipe-pill--accounts ${pipelineFilter === 'Stuck (3+ Days)' ? 'is-active' : ''}`}
+          onClick={() => {
+            setPipelineFilter((prev) => prev === 'Stuck (3+ Days)' ? 'all' : 'Stuck (3+ Days)')
+            setStageFilter('all')
+          }}
+        >
+          <span className="brx-pipe-pill__n">{stuckCardsCount}</span>
+          <span className="brx-pipe-pill__l">Stuck / Delayed<small>3+ days no update</small></span>
         </button>
         <button
           type="button"
@@ -7633,13 +7816,25 @@ export default function BodyshopRepairPage() {
                           ) : (
                             <>
                               <div className="brx-docs-progress-wrap">
-                                <div className="brx-docs-progress-head">
+                                <div className="brx-docs-progress-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                                   <span className="brx-docs-progress-title">
                                     Mandatory Documents
                                   </span>
-                                  <span className={`brx-docs-progress-stat ${allMandatoryDone ? 'is-done' : 'is-pending'}`}>
-                                    {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn--soft"
+                                      style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 700 }}
+                                      disabled={reusingPrevKyc}
+                                      onClick={() => void handleReusePreviousKycDocuments()}
+                                      title="Copy approved RC, DL, Aadhaar, PAN, GST from a previous visit of this vehicle (Claim Form excluded)"
+                                    >
+                                      {reusingPrevKyc ? 'Checking previous visit...' : 'Reuse Previous KYC (Excl. Claim Form)'}
+                                    </button>
+                                    <span className={`brx-docs-progress-stat ${allMandatoryDone ? 'is-done' : 'is-pending'}`}>
+                                      {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? 'Complete' : 'Pending'}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="brx-docs-progress-bar">
                                   <div
@@ -7655,6 +7850,7 @@ export default function BodyshopRepairPage() {
                                   const uploadSourceLabel = formatBodyshopDocumentUploadSource(attachedDoc)
                                   const checked = advisorVerifiedDoc(selected, k)
                                   const rejected = !checked && rejectedDocKeys(selected).includes(k)
+                                  const rejectReasonText = rejected ? rejectedDocReason(selected, k) : null
                                   const busy = uploadingDocKey === k
                                   return (
                                     <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
@@ -7670,11 +7866,32 @@ export default function BodyshopRepairPage() {
                                       <div className="brx-doc-meta" style={{ flex: 1 }}>
                                         <div className="brx-doc-name" style={{ fontWeight: '700' }}>{label}</div>
                                         <div className={`brx-doc-state ${checked ? 'is-checked' : 'is-required'}`}>
-                                          {checked ? '✅ Approved' : rejected ? '✕ Rejected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
+                                          {checked
+                                            ? 'Approved'
+                                            : rejected
+                                              ? (rejectReasonText ? `Rejected (${rejectReasonText})` : 'Rejected')
+                                              : attachedDoc
+                                                ? 'Uploaded — not verified'
+                                                : 'Pending / Required'}
                                         </div>
                                         {uploadSourceLabel ? (
                                           <div className="brx-doc-sub" title="Upload channel">
                                             Source: {uploadSourceLabel}
+                                          </div>
+                                        ) : null}
+                                        {rejectingDocKey === k ? (
+                                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                            {DOC_REJECTION_REASON_PRESETS.map((preset) => (
+                                              <button
+                                                key={preset}
+                                                type="button"
+                                                className="btn brx-doc-btn"
+                                                style={{ backgroundColor: '#fef2f2', color: '#991b1b', borderColor: '#fecaca', padding: '2px 7px', fontSize: '10.5px', fontWeight: 600 }}
+                                                onClick={() => rejectDoc(k, preset)}
+                                              >
+                                                {preset}
+                                              </button>
+                                            ))}
                                           </div>
                                         ) : null}
                                       </div>

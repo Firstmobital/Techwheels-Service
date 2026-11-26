@@ -144,6 +144,7 @@ interface RepairCard {
   received_at: string | null
   delivered_at: string | null
   created_at: string
+  updated_at?: string | null
 }
 
 interface FloorRoleInfo {
@@ -228,6 +229,94 @@ const STATUS_FILTER: { value: string; label: string }[] = [
   { value: 'delivered', label: 'Delivered' },
   { value: 'cancelled', label: 'Cancelled' },
 ]
+
+const DOC_REJECTION_REASON_PRESETS = [
+  'Photo Blurred',
+  'Wrong Side Uploaded',
+  'Upload Original Copy',
+  'Expired Document',
+  'Name / Details Mismatch',
+] as const
+
+/** KYC keys eligible for 1-click reuse on repeat vehicles (excludes doc_claim_form and current visit insurance). */
+const REUSABLE_KYC_DOC_KEYS: (keyof RepairCard)[] = [
+  'doc_rc',
+  'doc_rc_back',
+  'doc_dl',
+  'doc_dl_back',
+  'doc_aadhaar',
+  'doc_aadhaar_back',
+  'doc_pan',
+  'doc_kyc',
+  'doc_gst',
+  'doc_company_pan',
+  'doc_bank_detail',
+]
+
+function parseRejectedDocReasonMap(card: RepairCard): Record<string, string | null> {
+  const raw = card.doc_rejected_keys
+  const map: Record<string, string | null> = {}
+  if (!Array.isArray(raw)) return map
+  for (const item of raw) {
+    const str = String(item ?? '').trim()
+    if (!str) continue
+    const sepIdx = str.indexOf('::')
+    if (sepIdx === -1) {
+      map[str] = null
+    } else {
+      const k = str.slice(0, sepIdx).trim()
+      const reason = str.slice(sepIdx + 2).trim()
+      if (k) map[k] = reason || null
+    }
+  }
+  return map
+}
+
+function rejectedDocKeys(card: RepairCard): string[] {
+  return Object.keys(parseRejectedDocReasonMap(card))
+}
+
+function rejectedDocReason(card: RepairCard, docKey: string): string | null {
+  return parseRejectedDocReasonMap(card)[docKey] ?? null
+}
+
+function stripRejectedDocEntry(rawList: unknown, docKey: string): string[] {
+  if (!Array.isArray(rawList)) return []
+  return rawList
+    .map(String)
+    .filter((entry) => entry !== docKey && !entry.startsWith(`${docKey}::`))
+}
+
+function upsertRejectedDocEntry(rawList: unknown, docKey: string, reason?: string | null): string[] {
+  const cleaned = stripRejectedDocEntry(rawList, docKey)
+  const trimmedReason = String(reason ?? '').trim()
+  return [...cleaned, trimmedReason ? `${docKey}::${trimmedReason}` : docKey]
+}
+
+const STUCK_VEHICLE_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000
+
+function isCardStuck3PlusDays(card: RepairCard): boolean {
+  if (card.overall_status !== 'active') return false
+  const timestamps = [
+    card.updated_at,
+    card.reinspection_at,
+    card.qc_passed_at,
+    card.qc_checked_at,
+    card.bodyshop_floor_since_at,
+    card.survay_info_updated_at,
+    card.customer_survey_decided_at,
+    card.received_at,
+    card.created_at,
+  ]
+  let latestMs = 0
+  for (const ts of timestamps) {
+    if (!ts) continue
+    const ms = new Date(ts).getTime()
+    if (!Number.isNaN(ms) && ms > latestMs) latestMs = ms
+  }
+  if (!latestMs) return false
+  return Date.now() - latestMs >= STUCK_VEHICLE_THRESHOLD_MS
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -367,6 +456,8 @@ export default function BodyshopRepairScreen() {
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [uploadingDocKey, setUploadingDocKey] = useState<string | null>(null)
   const [surveyDocFeedback, setSurveyDocFeedback] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  const [rejectingDocKey, setRejectingDocKey] = useState<string | null>(null)
+  const [reusingKyc, setReusingKyc] = useState(false)
 
   const loadUploadedDocs = useCallback(async (cardId: number) => {
     setLoadingDocs(true)
@@ -395,18 +486,16 @@ export default function BodyshopRepairScreen() {
     setPatch({})
     setQcOtherOpen(false)
     setSurveyDocFeedback(null)
+    setRejectingDocKey(null)
     void loadUploadedDocs(card.id)
   }
 
-  async function saveDocDecision(docKey: string, approved: boolean) {
+  async function saveDocDecision(docKey: string, approved: boolean, rejectionReason?: string) {
     if (!selectedCard) return
     const cardId = selectedCard.id
-    const currentRejected = Array.isArray(selectedCard.doc_rejected_keys)
-      ? selectedCard.doc_rejected_keys.map(String)
-      : []
     const nextRejected = approved
-      ? currentRejected.filter((k) => k !== docKey)
-      : [...new Set([...currentRejected, docKey])]
+      ? stripRejectedDocEntry(selectedCard.doc_rejected_keys, docKey)
+      : upsertRejectedDocEntry(selectedCard.doc_rejected_keys, docKey, rejectionReason)
 
     const updatePayload = {
       [docKey]: approved,
@@ -416,6 +505,7 @@ export default function BodyshopRepairScreen() {
     const prevSelected = selectedCard
     const prevCards = cards
     const merged = { ...selectedCard, ...updatePayload }
+    setRejectingDocKey(null)
 
     await optimistic.run(`doc-${docKey}`, {
       apply: () => {
@@ -433,8 +523,115 @@ export default function BodyshopRepairScreen() {
           .eq('id', cardId)
         if (error) throw error
       },
-      onSuccess: () => showToast(approved ? 'Document Approved ✓' : 'Document Rejected ✕', 'success'),
+      onSuccess: () =>
+        showToast(
+          approved
+            ? 'Document Approved'
+            : rejectionReason
+              ? `Document Rejected: ${rejectionReason}`
+              : 'Document Rejected',
+          'success',
+        ),
     })
+  }
+
+  async function handleReusePreviousKycDocuments() {
+    if (!selectedCard) return
+    const regNo = String(selectedCard.reg_number ?? '').trim().toUpperCase()
+    if (!regNo) {
+      showToast('Vehicle registration number is required to find previous KYC documents.', 'error')
+      return
+    }
+    setReusingKyc(true)
+    try {
+      const { data: prevCards, error: cardsErr } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id, doc_rc, doc_rc_back, doc_dl, doc_dl_back, doc_aadhaar, doc_aadhaar_back, doc_pan, doc_kyc, doc_gst, doc_company_pan, doc_bank_detail')
+        .ilike('reg_number', regNo)
+        .neq('id', selectedCard.id)
+        .order('id', { ascending: false })
+        .limit(10)
+      if (cardsErr) throw cardsErr
+      if (!prevCards || prevCards.length === 0) {
+        showToast(`No previous repair card found for ${regNo}.`, 'error')
+        return
+      }
+
+      const prevCardIds = prevCards.map((c: any) => Number(c.id)).filter(Boolean)
+      const { data: prevDocs, error: docsErr } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .select('repair_card_id, doc_key, file_name, storage_path, drive_url, mime_type, file_size_bytes, uploaded_by')
+        .in('repair_card_id', prevCardIds)
+        .in('doc_key', REUSABLE_KYC_DOC_KEYS as string[])
+        .order('id', { ascending: false })
+      if (docsErr) throw docsErr
+
+      const latestDocByKey: Record<string, any> = {}
+      for (const row of prevDocs ?? []) {
+        const key = String(row.doc_key ?? '')
+        if (!key || !(REUSABLE_KYC_DOC_KEYS as string[]).includes(key)) continue
+        if (!latestDocByKey[key]) latestDocByKey[key] = row
+      }
+
+      const keysToCopy = Object.keys(latestDocByKey)
+      const booleanPatch: Record<string, boolean> = {}
+      for (const k of REUSABLE_KYC_DOC_KEYS) {
+        const keyStr = String(k)
+        if (latestDocByKey[keyStr]) {
+          booleanPatch[keyStr] = true
+        } else if (prevCards.some((pc: any) => Boolean(pc[keyStr]))) {
+          booleanPatch[keyStr] = true
+        }
+      }
+
+      if (keysToCopy.length === 0 && Object.keys(booleanPatch).length === 0) {
+        showToast(`No reusable KYC documents found on previous visits for ${regNo}.`, 'error')
+        return
+      }
+
+      for (const key of keysToCopy) {
+        if (uploadedDocsByKey[key]) continue
+        const src = latestDocByKey[key]
+        await supabase.from('bodyshop_repair_card_documents').insert({
+          repair_card_id: selectedCard.id,
+          doc_key: key,
+          file_name: src.file_name,
+          storage_path: src.storage_path,
+          drive_url: src.drive_url ?? null,
+          mime_type: src.mime_type ?? null,
+          file_size_bytes: src.file_size_bytes ?? null,
+          uploaded_by: 'Reused from previous visit',
+        })
+      }
+
+      let nextRejected = Array.isArray(selectedCard.doc_rejected_keys)
+        ? selectedCard.doc_rejected_keys.map(String)
+        : []
+      for (const k of Object.keys(booleanPatch)) {
+        nextRejected = stripRejectedDocEntry(nextRejected, k)
+      }
+
+      const updatePayload: Partial<RepairCard> = {
+        ...(booleanPatch as Partial<RepairCard>),
+        doc_rejected_keys: nextRejected,
+      }
+
+      const { error: updErr } = await supabase
+        .from('bodyshop_repair_cards')
+        .update(updatePayload)
+        .eq('id', selectedCard.id)
+      if (updErr) throw updErr
+
+      const merged = { ...selectedCard, ...updatePayload }
+      setSelectedCard(merged)
+      setCards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+      await loadUploadedDocs(selectedCard.id)
+      showToast(`Reused ${Object.keys(booleanPatch).length} KYC document(s) (Claim Form excluded).`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to reuse previous KYC documents', 'error')
+    } finally {
+      setReusingKyc(false)
+    }
   }
 
   async function refreshSurveyCustomerStatus(silent = false) {
@@ -765,8 +962,14 @@ export default function BodyshopRepairScreen() {
     [scopedCards],
   )
 
+  const stuckCardsCount = useMemo(
+    () => scopedCards.filter((c) => isCardStuck3PlusDays(c)).length,
+    [scopedCards],
+  )
+
   const filtered = useMemo(() => {
     if (pipelineGroupFilter === 'all') return scopedCards
+    if (pipelineGroupFilter === 'stuck') return scopedCards.filter((c) => isCardStuck3PlusDays(c))
     const group = DISPLAY_STAGE_GROUPS.find(g => g.label === pipelineGroupFilter)
     if (!group) return scopedCards
     return scopedCards.filter(c => group.stages.includes(c.current_stage))
@@ -826,6 +1029,20 @@ export default function BodyshopRepairScreen() {
             </TouchableOpacity>
           )
         })}
+        <TouchableOpacity
+          key="stuck"
+          onPress={() => setPipelineGroupFilter(pipelineGroupFilter === 'stuck' ? 'all' : 'stuck')}
+          style={[
+            S.pipelineChip,
+            { backgroundColor: '#fef2f2', borderColor: '#dc2626' },
+            pipelineGroupFilter === 'stuck' && S.pipelineChipActive,
+          ]}
+          activeOpacity={0.85}
+        >
+          <Text style={{ fontSize: 10, fontWeight: '700', color: '#dc2626' }}>Stuck (3+ Days)</Text>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: '#dc2626', marginTop: 2 }}>{stuckCardsCount}</Text>
+          {pipelineGroupFilter === 'stuck' ? <Text style={S.pipelineChipActiveHint}>Selected</Text> : null}
+        </TouchableOpacity>
       </ScrollView>
 
       <View style={[S.searchWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
@@ -910,13 +1127,14 @@ export default function BodyshopRepairScreen() {
 
       <Text style={S.listHint}>
         Showing {filtered.length} of {scopedCards.length}
-        {pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter}` : ''}
+        {pipelineGroupFilter !== 'all' ? ` · ${pipelineGroupFilter === 'stuck' ? 'Stuck (3+ Days)' : pipelineGroupFilter}` : ''}
         {statusFilter !== 'all' ? ` · ${statusFilter}` : ''}
         {branchFilter !== 'all' ? ` · ${branchFilter}` : ''}
       </Text>
     </View>
   ), [
     stageCounts,
+    stuckCardsCount,
     pipelineGroupFilter,
     listSearch.hasApplied,
     statusFilter,
@@ -1110,73 +1328,119 @@ export default function BodyshopRepairScreen() {
               {/* Mandatory Docs */}
               {mandatoryDocs.length > 0 && (
                 <>
-                  <Text style={[S.sectionTitle, { marginTop: 16 }]}>Mandatory Documents ({mandatoryDone}/{mandatoryDocs.length})</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 16, marginBottom: 6 }}>
+                    <Text style={[S.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Mandatory Documents ({mandatoryDone}/{mandatoryDocs.length})</Text>
+                    <TouchableOpacity
+                      onPress={() => void handleReusePreviousKycDocuments()}
+                      disabled={reusingKyc || !card.reg_number}
+                      style={{
+                        backgroundColor: '#eff6ff',
+                        borderColor: '#bfdbfe',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        paddingHorizontal: 9,
+                        paddingVertical: 5,
+                        opacity: reusingKyc || !card.reg_number ? 0.55 : 1,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>
+                        {reusingKyc ? 'Checking Previous KYC...' : 'Reuse Previous KYC (Excl. Claim Form)'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                   <View style={{ height: 6, backgroundColor: '#e7e3d9', borderRadius: 3, marginBottom: 10 }}>
                     <View style={{ height: 6, borderRadius: 3, backgroundColor: '#2a4cd0', width: `${mandatoryDocs.length ? (mandatoryDone / mandatoryDocs.length) * 100 : 0}%` }} />
                   </View>
                   <View style={S.formCard}>
                     {mandatoryDocs.map((doc, i) => {
+                      const docKeyStr = String(doc.key)
                       const approved = Boolean(card[doc.key])
-                      const rejectedKeys = Array.isArray(card.doc_rejected_keys) ? card.doc_rejected_keys.map(String) : []
-                      const rejected = !approved && rejectedKeys.includes(String(doc.key))
-                      const uploaded = uploadedDocsByKey[String(doc.key)]
+                      const rejKeys = rejectedDocKeys(card)
+                      const rejected = !approved && rejKeys.includes(docKeyStr)
+                      const rejectReason = rejected ? rejectedDocReason(card, docKeyStr) : null
+                      const uploaded = uploadedDocsByKey[docKeyStr]
                       const uploadSourceLabel = formatBodyshopDocumentUploadSource(uploaded)
+                      const isPickingReason = rejectingDocKey === docKeyStr
                       return (
-                        <View key={doc.key} style={[S.docRow, i < mandatoryDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '500' }}>{doc.label}</Text>
-                              {approved ? (
-                                <View style={[S.statusPill, { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1c8f63' }}>Approved ✓</Text>
-                                </View>
-                              ) : rejected ? (
-                                <View style={[S.statusPill, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#b91c1c' }}>Rejected ✕</Text>
-                                </View>
-                              ) : uploaded ? (
-                                <View style={[S.statusPill, { backgroundColor: '#eff6ff', borderColor: '#3b82f6' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1d4ed8' }}>Uploaded 📄</Text>
-                                </View>
-                              ) : (
-                                <View style={[S.statusPill, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#92400e' }}>Pending ⏳</Text>
-                                </View>
-                              )}
+                        <View key={doc.key} style={[i < mandatoryDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
+                          <View style={S.docRow}>
+                            <View style={{ flex: 1, marginRight: 8 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '500' }}>{doc.label}</Text>
+                                {approved ? (
+                                  <View style={[S.statusPill, { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1c8f63' }}>Approved</Text>
+                                  </View>
+                                ) : rejected ? (
+                                  <View style={[S.statusPill, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#b91c1c' }}>
+                                      {rejectReason ? `Rejected (${rejectReason})` : 'Rejected'}
+                                    </Text>
+                                  </View>
+                                ) : uploaded ? (
+                                  <View style={[S.statusPill, { backgroundColor: '#eff6ff', borderColor: '#3b82f6' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1d4ed8' }}>Uploaded</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[S.statusPill, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#92400e' }}>Pending</Text>
+                                  </View>
+                                )}
+                              </View>
+                              {uploaded?.file_name ? (
+                                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
+                                  {uploaded.file_name}
+                                </Text>
+                              ) : null}
+                              {uploadSourceLabel ? (
+                                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }} numberOfLines={2}>
+                                  Source: {uploadSourceLabel}
+                                </Text>
+                              ) : null}
                             </View>
-                            {uploaded?.file_name ? (
-                              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
-                                📎 {uploaded.file_name}
-                              </Text>
-                            ) : null}
-                            {uploadSourceLabel ? (
-                              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }} numberOfLines={2}>
-                                Source: {uploadSourceLabel}
-                              </Text>
-                            ) : null}
-                          </View>
-                          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                            {uploaded ? (
+                            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                              {uploaded ? (
+                                <TouchableOpacity
+                                  onPress={() => void openUploadedDoc(docKeyStr)}
+                                  style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                                >
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>View</Text>
+                                </TouchableOpacity>
+                              ) : null}
                               <TouchableOpacity
-                                onPress={() => void openUploadedDoc(String(doc.key))}
-                                style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                                onPress={() => void saveDocDecision(docKeyStr, true)}
+                                style={{ backgroundColor: approved ? '#dcfce7' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
                               >
-                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>👁️ View</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803d' }}>{approved ? 'Approved' : 'Approve'}</Text>
                               </TouchableOpacity>
-                            ) : null}
-                            <TouchableOpacity
-                              onPress={() => void saveDocDecision(String(doc.key), true)}
-                              style={{ backgroundColor: approved ? '#dcfce7' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
-                            >
-                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803d' }}>{approved ? '✓ Approved' : '✓ Approve'}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => void saveDocDecision(String(doc.key), false)}
-                              style={{ backgroundColor: rejected ? '#fee2e2' : '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
-                            >
-                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>{rejected ? '✕ Rejected' : '✕ Reject'}</Text>
-                            </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => setRejectingDocKey(isPickingReason ? null : docKeyStr)}
+                                style={{ backgroundColor: rejected || isPickingReason ? '#fee2e2' : '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>{rejected ? 'Rejected' : 'Reject'}</Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
+                          {isPickingReason ? (
+                            <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#fecaca', flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c', width: '100%' }}>Select rejection reason:</Text>
+                              {DOC_REJECTION_REASON_PRESETS.map((reason) => (
+                                <TouchableOpacity
+                                  key={reason}
+                                  onPress={() => void saveDocDecision(docKeyStr, false, reason)}
+                                  style={{ backgroundColor: '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}
+                                >
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#991b1b' }}>{reason}</Text>
+                                </TouchableOpacity>
+                              ))}
+                              <TouchableOpacity
+                                onPress={() => setRejectingDocKey(null)}
+                                style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#475569' }}>Cancel</Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : null}
                         </View>
                       )
                     })}
@@ -1190,64 +1454,91 @@ export default function BodyshopRepairScreen() {
                   <Text style={[S.sectionTitle, { marginTop: 16 }]}>Optional Documents</Text>
                   <View style={S.formCard}>
                     {optionalDocs.map((doc, i) => {
+                      const docKeyStr = String(doc.key)
                       const approved = Boolean(card[doc.key])
-                      const rejectedKeys = Array.isArray(card.doc_rejected_keys) ? card.doc_rejected_keys.map(String) : []
-                      const rejected = !approved && rejectedKeys.includes(String(doc.key))
-                      const uploaded = uploadedDocsByKey[String(doc.key)]
+                      const rejKeys = rejectedDocKeys(card)
+                      const rejected = !approved && rejKeys.includes(docKeyStr)
+                      const rejectReason = rejected ? rejectedDocReason(card, docKeyStr) : null
+                      const uploaded = uploadedDocsByKey[docKeyStr]
+                      const isPickingReason = rejectingDocKey === docKeyStr
                       return (
-                        <View key={doc.key} style={[S.docRow, i < optionalDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            {doc.optionalHint ? (
-                              <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>{doc.optionalHint}</Text>
-                            ) : null}
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '400' }}>{doc.label}</Text>
-                              {approved ? (
-                                <View style={[S.statusPill, { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1c8f63' }}>Approved ✓</Text>
-                                </View>
-                              ) : rejected ? (
-                                <View style={[S.statusPill, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#b91c1c' }}>Rejected ✕</Text>
-                                </View>
-                              ) : uploaded ? (
-                                <View style={[S.statusPill, { backgroundColor: '#eff6ff', borderColor: '#3b82f6' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#1d4ed8' }}>Uploaded 📄</Text>
-                                </View>
-                              ) : (
-                                <View style={[S.statusPill, { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#a7a99f' }}>—</Text>
-                                </View>
-                              )}
+                        <View key={doc.key} style={[i < optionalDocs.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f6f4ee' }, { paddingVertical: 10 }]}>
+                          <View style={S.docRow}>
+                            <View style={{ flex: 1, marginRight: 8 }}>
+                              {doc.optionalHint ? (
+                                <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>{doc.optionalHint}</Text>
+                              ) : null}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <Text style={{ fontSize: 13, color: approved ? '#1a1b21' : '#475569', fontWeight: approved ? '700' : '400' }}>{doc.label}</Text>
+                                {approved ? (
+                                  <View style={[S.statusPill, { backgroundColor: '#e4f4ec', borderColor: '#1c8f63' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1c8f63' }}>Approved</Text>
+                                  </View>
+                                ) : rejected ? (
+                                  <View style={[S.statusPill, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#b91c1c' }}>
+                                      {rejectReason ? `Rejected (${rejectReason})` : 'Rejected'}
+                                    </Text>
+                                  </View>
+                                ) : uploaded ? (
+                                  <View style={[S.statusPill, { backgroundColor: '#eff6ff', borderColor: '#3b82f6' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1d4ed8' }}>Uploaded</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[S.statusPill, { backgroundColor: '#f6f4ee', borderColor: '#d9d4c7' }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#a7a99f' }}>—</Text>
+                                  </View>
+                                )}
+                              </View>
+                              {uploaded?.file_name ? (
+                                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
+                                  {uploaded.file_name}
+                                </Text>
+                              ) : null}
                             </View>
-                            {uploaded?.file_name ? (
-                              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3 }} numberOfLines={1}>
-                                📎 {uploaded.file_name}
-                              </Text>
-                            ) : null}
-                          </View>
-                          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                            {uploaded ? (
+                            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                              {uploaded ? (
+                                <TouchableOpacity
+                                  onPress={() => void openUploadedDoc(docKeyStr)}
+                                  style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                                >
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>View</Text>
+                                </TouchableOpacity>
+                              ) : null}
                               <TouchableOpacity
-                                onPress={() => void openUploadedDoc(String(doc.key))}
-                                style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                                onPress={() => void saveDocDecision(docKeyStr, true)}
+                                style={{ backgroundColor: approved ? '#dcfce7' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
                               >
-                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>👁️ View</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803d' }}>{approved ? 'Approved' : 'Approve'}</Text>
                               </TouchableOpacity>
-                            ) : null}
-                            <TouchableOpacity
-                              onPress={() => void saveDocDecision(String(doc.key), true)}
-                              style={{ backgroundColor: approved ? '#dcfce7' : '#f0fdf4', borderColor: '#86efac', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
-                            >
-                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803d' }}>{approved ? '✓ Approved' : '✓ Approve'}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => void saveDocDecision(String(doc.key), false)}
-                              style={{ backgroundColor: rejected ? '#fee2e2' : '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
-                            >
-                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>{rejected ? '✕ Rejected' : '✕ Reject'}</Text>
-                            </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => setRejectingDocKey(isPickingReason ? null : docKeyStr)}
+                                style={{ backgroundColor: rejected || isPickingReason ? '#fee2e2' : '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>{rejected ? 'Rejected' : 'Reject'}</Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
+                          {isPickingReason ? (
+                            <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#fecaca', flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c', width: '100%' }}>Select rejection reason:</Text>
+                              {DOC_REJECTION_REASON_PRESETS.map((reason) => (
+                                <TouchableOpacity
+                                  key={reason}
+                                  onPress={() => void saveDocDecision(docKeyStr, false, reason)}
+                                  style={{ backgroundColor: '#fef2f2', borderColor: '#fca5a5', borderWidth: 1, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}
+                                >
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#991b1b' }}>{reason}</Text>
+                                </TouchableOpacity>
+                              ))}
+                              <TouchableOpacity
+                                onPress={() => setRejectingDocKey(null)}
+                                style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#475569' }}>Cancel</Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : null}
                         </View>
                       )
                     })}
