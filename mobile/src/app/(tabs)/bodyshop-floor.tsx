@@ -53,6 +53,7 @@ import {
 } from '../../lib/bodyshopFloorWork/defaultEdpAfterRi'
 import { bodyshopFloorAgeSummary, formatIstSinceShort } from '../../lib/bodyshopFloorAge'
 import { resolveBodyshopAssignmentDealerCode } from '../../lib/bodyshopAssignmentDealerCode'
+import { reopenBodyshopFloorForRework } from '../../lib/api/bodyshopFloorReopen'
 import {
   filterBodyshopFloorInchargeCandidates,
   listBodyshopFloorInchargeEmployees,
@@ -1774,6 +1775,57 @@ function BodyshopFloorScreenInner() {
     })
   }
 
+  async function reopenFloorForRework(car: FloorCar) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can reopen the floor', 'error')
+      return
+    }
+    const k = jcKey(car.job_card_no)
+    if (!bsFloorStatus[k]?.completedAt) {
+      showToast('Floor is not marked complete yet', 'error')
+      return
+    }
+    Alert.alert(
+      'Reopen floor for rework?',
+      'Floor Work will unlock again. Completed worker roles return to In Process. Previous daily logs stay saved.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reopen',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setSaving(`${k}-reopen-floor`)
+              try {
+                const result = await reopenBodyshopFloorForRework({ jobCardNumber: car.job_card_no })
+                await reloadAssignmentsForJc(car.job_card_no)
+                setBsFloorStatus(prev => ({
+                  ...prev,
+                  [k]: {
+                    completedAt: null,
+                    completedBy: null,
+                    enteredAt: prev[k]?.enteredAt ?? null,
+                  },
+                }))
+                const n = result.roles_reset_to_in_process ?? 0
+                showToast(
+                  n > 0
+                    ? `Floor reopened — ${n} role(s) back to In Process`
+                    : 'Floor reopened for rework',
+                  'success',
+                )
+              } catch (err) {
+                showToast(err instanceof Error ? err.message : 'Reopen failed', 'error')
+              } finally {
+                setSaving(null)
+              }
+            })()
+          },
+        },
+      ],
+    )
+  }
+
   async function markFloorCompleted(car: FloorCar) {
     if (!canEditBodyshopFloorAssignments(inchargeScope)) {
       showToast('Only Floor Incharge or Admin can mark floor complete', 'error')
@@ -2140,6 +2192,17 @@ function BodyshopFloorScreenInner() {
           {bsComp ? (
             <View style={[S.banner, { backgroundColor: '#e4f4ec', borderColor: '#86efac' }]}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: '#1c8f63' }}>✓ Bodyshop Floor work completed</Text>
+              {canEditFloor ? (
+                <TouchableOpacity
+                  style={[S.markDoneBtn, { marginTop: 10, backgroundColor: '#b45309' }, saving?.includes('-reopen-floor') && { opacity: 0.5 }]}
+                  disabled={!!saving}
+                  onPress={() => reopenFloorForRework(car)}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                    {saving?.includes('-reopen-floor') ? 'Reopening…' : 'Reopen for rework'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <View style={[S.banner, { backgroundColor: anyHold ? '#fbefdd' : '#e9f0fd', borderColor: anyHold ? '#f1dcb8' : '#cadcf8' }]}>

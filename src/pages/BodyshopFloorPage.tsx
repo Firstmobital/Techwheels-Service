@@ -48,6 +48,7 @@ import {
   fetchActiveBodyshopSupportAssignmentsAllPages,
   fetchBodyshopRepairCardsAllPages,
 } from '../lib/api/bodyshopFloorFullLoad'
+import { reopenBodyshopFloorForRework } from '../lib/api/bodyshopFloorReopen'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2158,6 +2159,64 @@ export default function BodyshopFloorPage() {
     }
   }
 
+  async function reopenBsFloorForRework(car: AccidentCar) {
+    if (!canEditBodyshopFloorAssignments(inchargeScope)) {
+      showToast('Only Floor Incharge or Admin can reopen the floor', 'error')
+      return
+    }
+    const k = jcKey(car)
+    if (!bsFloorStatus[k]?.completedAt) {
+      showToast('Floor is not marked complete yet', 'error')
+      return
+    }
+    const reason = typeof window !== 'undefined'
+      ? window.prompt('Optional rework reason (shown in Floor Incharge remark):')?.trim()
+      : ''
+    if (reason === null) return
+
+    setSaving(`${k}-reopen-floor`)
+    try {
+      const result = await reopenBodyshopFloorForRework({
+        jobCardNumber: k,
+        reason: reason || null,
+      })
+      const { data: row, error } = await supabase
+        .from('bodyshop_assignments')
+        .select('*')
+        .eq('id', result.assignment_id ?? 0)
+        .maybeSingle()
+      if (error) throw error
+      if (row) {
+        setAssignmentRawByJc((prev) => ({ ...prev, [k]: row as DBPrimaryAssignmentRow }))
+        const roleMap = mapRowToRoleMap(row as DBPrimaryAssignmentRow)
+        setAssignments((prev) => ({ ...prev, [k]: { ...(prev[k] ?? emptyRoleMap()), ...roleMap } }))
+        setStageDrafts((prev) => {
+          const next = { ...prev, [k]: { ...(prev[k] ?? {}) } as Record<BSRole, { work_status: string; remark: string }> }
+          for (const role of ALL_ROLES) {
+            const a = roleMap[role]
+            next[k][role] = { work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
+          }
+          return next
+        })
+      }
+      setBsFloorStatus((prev) => ({
+        ...prev,
+        [k]: { completedAt: null, completedBy: null },
+      }))
+      const n = result.roles_reset_to_in_process ?? 0
+      showToast(
+        n > 0
+          ? `Floor reopened — ${n} role(s) back to In Process`
+          : 'Floor reopened for rework',
+        'success',
+      )
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to reopen floor', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   async function markBsFloorCompleted(car: AccidentCar) {
     if (!canEditBodyshopFloorAssignments(inchargeScope)) {
       showToast('Only Floor Incharge or Admin can mark floor complete', 'error')
@@ -3340,6 +3399,17 @@ export default function BodyshopFloorPage() {
                             <div className="bsf-floor-note is-success">
                               <div>{fmtDate(floorStatus.completedAt)}</div>
                               <div>{floorStatus.completedBy ?? '—'}</div>
+                              {canEditFloor ? (
+                                <button
+                                  type="button"
+                                  className="btn btn--sm btn--warn"
+                                  style={{ marginTop: 8 }}
+                                  disabled={isSavingFloorStatus}
+                                  onClick={() => void reopenBsFloorForRework(car)}
+                                >
+                                  {saving === `${k}-reopen-floor` ? 'Reopening…' : 'Reopen for rework'}
+                                </button>
+                              ) : null}
                             </div>
                           )}
                         </div>
