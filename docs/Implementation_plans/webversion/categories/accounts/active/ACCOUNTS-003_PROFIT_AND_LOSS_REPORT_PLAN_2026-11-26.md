@@ -105,7 +105,7 @@ Scope: schema money-related fields, web app code search, main salary logic trace
 ## "Not in Payroll" (approved 2026-11-26: "this looks good to me")
 **Decision:** Payroll stays the one source of salary; missed earnings are never added to P&L expenses. Nothing is added to anyone's pay automatically. Approval covers building; production apply and publication need their own authorization.
 
-**Status:** built and tested locally; DBL-0105 PROPOSED.
+**Status:** DBL-0105 applied and verified; apply and publication authorized ("Yes, apply and publish"); signed-in verification pending.
 
 - Payroll Processing shows a "Not in Payroll" list for the month, all branches: no employee code, not in Employee Master, no Salary Type record, base only, role rule, and saved draft figures that differ from the current calculation. A name match is suggested only when exactly one employee matches; a person must confirm and correct the record.
 - Items (except out-of-date saved figures) can be excluded with a reason; an exclusion holds only for the recorded amount, can be withdrawn, is never deleted, and is frozen once the month is finalized.
