@@ -484,10 +484,15 @@ if ! npm run build --if-present; then
   exit 2
 fi
 
-# High-risk files without a current approval: the owner types APPROVE here and it is recorded. The readiness
-# gate below still verifies the record.
+# High-risk files without a current approval: one y from the owner records it and confirms the push (exit 10).
+# The readiness gate below still verifies the record, and nothing is pushed unless it passes.
+push_confirmed=0
 if [[ -f scripts/publish_record_approval.mjs ]]; then
-  if ! node scripts/publish_record_approval.mjs; then
+  approval_status=0
+  node scripts/publish_record_approval.mjs || approval_status=$?
+  if [[ "$approval_status" -eq 10 ]]; then
+    push_confirmed=1
+  elif [[ "$approval_status" -ne 0 ]]; then
     echo >&2
     echo "Error: approval was not given. Nothing was pushed." >&2
     exit 7
@@ -523,10 +528,12 @@ fi
 echo "Commits to be pushed to origin/main:"
 git --no-pager log --oneline origin/main..HEAD
 published_head="$(git rev-parse HEAD)"
-read -r -p "Push to origin main now? [y/N] " confirm_push
-if [[ ! "$confirm_push" =~ ^[Yy]$ ]]; then
-  echo "Aborted by user before push. Local commit(s) remain unpushed."
-  exit 1
+if [[ "$push_confirmed" -ne 1 ]]; then
+  read -r -p "Push to origin main now? [y/N] " confirm_push
+  if [[ ! "$confirm_push" =~ ^[Yy]$ ]]; then
+    echo "Aborted by user before push. Local commit(s) remain unpushed."
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------

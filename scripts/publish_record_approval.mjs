@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Approval step of `npm run publish:safe` (not a separate command). When the commits waiting to be published contain
- * high-risk files without a current approval, it lists them and records the approval typed at the terminal.
+ * high-risk files without a current approval, it lists them and asks once: the owner's `y` records the approval and
+ * is also the push confirmation (exit 10 tells publish:safe not to ask again; the push still waits for every gate).
  * It changes no gate: `publish:ready` still verifies the record afterwards.
  *
  * The approval is the repository owner's own act. AI agents and automation must not answer this prompt.
@@ -41,10 +42,10 @@ console.log(`\nTo read the changes first: git diff origin/main...HEAD -- <file>`
 
 const name = git('config', 'user.name')
 const prompt = readline.createInterface({ input: process.stdin, output: process.stdout })
-const answer = (await prompt.question(`\n${name || 'Owner'}, type APPROVE to approve these files (anything else stops): `)).trim()
+const answer = (await prompt.question(`\n${name || 'Owner'}, approve these files and push to production once checks pass? [y/N] `)).trim()
 prompt.close()
 if (!name) stop('Set git config user.name so the approval can name you. Nothing was recorded.')
-if (answer !== 'APPROVE') stop('Not approved. Nothing was recorded.')
+if (!/^y$/i.test(answer)) stop('Not approved. Nothing was recorded.')
 
 const disposition = JSON.parse(fs.readFileSync(DISPOSITION, 'utf8'))
 const now = new Date().toISOString()
@@ -59,3 +60,4 @@ disposition.reviews = [...(disposition.reviews ?? []), {
 fs.writeFileSync(DISPOSITION, `${JSON.stringify(disposition, null, 2)}\n`)
 git('commit', '--quiet', '-m', 'Disposition: owner approval recorded during publish:safe (no independent review)', '--', DISPOSITION)
 console.log('Approval recorded.')
+process.exit(10)

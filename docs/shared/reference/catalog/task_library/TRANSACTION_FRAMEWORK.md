@@ -62,7 +62,7 @@ How agents carry a workstream through these stages without per-step prompts, wha
 
 Each high-risk file needs an entry in `reviews` of `docs/shared/evidence/publication_readiness_disposition.json` with `status` `completed` (independent review) or `user_approved` (the user's explicit approval), plus `reviewer` (who), `outcome` (basis and open findings), `files`, and `reviewed_content_sha256` from `node scripts/publish_readiness_check.mjs --review-fingerprint <category>`. Editing a listed file afterwards makes the entry stale. An agent never records an approval the user did not give.
 
-When high-risk files lack a current approval, **`npm run publish:safe`** itself lists them, records the approval the repository owner types at the terminal, and then runs the readiness gate. Only the owner answers that prompt; an agent finishing high-risk work asks the owner to run `publish:safe` instead of editing the disposition file.
+When high-risk files lack a current approval, **`npm run publish:safe`** itself lists them, and asks the repository owner once: that `y` records the approval and confirms the push, which happens only if the readiness gate then passes. Only the owner answers that prompt; an agent finishing high-risk work asks the owner to run `publish:safe` instead of editing the disposition file.
 
 Database lifecycle rules are unchanged (`DB_CHANGE_PROTOCOL.md`): a ledger row is required for each migration, and publishing a file never applies it.
 
