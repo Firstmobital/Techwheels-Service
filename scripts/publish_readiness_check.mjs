@@ -14,6 +14,7 @@
 
 import { execFileSync, execSync } from 'child_process'
 import crypto from 'crypto'
+import { readFileSync } from 'fs'
 import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -37,11 +38,6 @@ const READINESS_DISPOSITION_EVIDENCE = new Set([
   'docs/shared/evidence/publication_readiness_disposition.json',
   'docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md',
 ])
-
-// Follow-on commits may publish a strict subset of a prior disposition batch when
-// every changed path is already covered by completed review evidence. High-risk
-// categories always require an exact disposition fingerprint match.
-const FOLLOW_ON_REVIEW_CATEGORIES = new Set(['automation_script', 'generated_artifact', 'evidence'])
 
 function rel(abs) {
   return path.relative(ROOT, abs).replace(/\\/g, '/')
@@ -188,10 +184,6 @@ function skipImpactFileSetComparison(readinessScope) {
   return readinessScope === 'published baseline'
 }
 
-function fingerprintChangeSet(files) {
-  return crypto.createHash('sha256').update(files.join('\n')).digest('hex')
-}
-
 function add(list, severity, area, message, nextAction, evidence = null) {
   list.push({ severity, area, message, next_action: nextAction, evidence })
 }
@@ -245,27 +237,48 @@ export function reviewContentFingerprint(files) {
   return crypto.createHash('sha256').update(lines.join('\n')).digest('hex')
 }
 
-// A completed review must name a reviewer and outcome, list every file of its category in scope,
-// and carry the fingerprint of the content reviewed.
-function reviewProblem(disposition, category, scopedFiles = []) {
-  const entries = (disposition.reviews || []).filter((entry) => entry.category === category)
-  const done = entries.filter((entry) => entry.status === 'completed' && entry.outcome && entry.reviewer)
-  if (done.length === 0) return 'no completed review with reviewer and outcome'
-  let problem = null
-  for (const entry of done) {
-    const listed = Array.isArray(entry.files) ? entry.files : []
-    const missing = scopedFiles.filter((file) => !listed.includes(file))
-    if (missing.length > 0) problem = `completed review does not cover: ${missing.join(', ')}`
-    else if (!entry.reviewed_content_sha256) problem = 'completed review has no reviewed_content_sha256'
-    else if (entry.reviewed_content_sha256 !== reviewContentFingerprint(listed)) problem = 'reviewed files changed after the review (stale reviewed_content_sha256)'
-    else return null
-  }
-  return problem
+// Risk-based approval (TRANSACTION_FRAMEWORK.md, "Review and approval by risk"). Routine changes publish on
+// technical validation. Only the paths below also need a recorded approval: a completed independent review,
+// or the user's explicit approval. The two are labelled differently and neither is inferred.
+const HIGH_RISK_RULES = [
+  [/^supabase\/migrations\/|^scripts\/.*\.sql$/, 'database change'],
+  [/^supabase\/functions\//, 'server function with elevated access'],
+  [/^(\.github\/workflows\/|vercel\.json$|supabase\/config\.toml$)/, 'deployment configuration'],
+  [/^(\.instructions\.md$|scripts\/(git-safe-publish\.sh|publish_readiness_check\.mjs|repo_change_impact\.mjs)$)/, 'publication safeguard or agent authority'],
+  [/^(src|mobile\/src)\/.*(auth|rbac|permission|access|bank|settings)/i, 'security or authorization code'],
+  [/^(src|mobile\/src)\/.*(account|payroll|payment|settlement|voucher|billing|busy|revenue|invoice)/i, 'financial or accounting code'],
+]
+const APPROVAL_STATUSES = new Set(['completed', 'user_approved'])
+
+export function riskReason(filePath) {
+  const rule = HIGH_RISK_RULES.find(([pattern]) => pattern.test(filePath))
+  return rule ? rule[1] : null
 }
 
-function reviewDispositionComplete(disposition, category, scopedFiles = []) {
-  return reviewProblem(disposition, category, scopedFiles) === null
+// An approval names who approved and on what basis, lists the file, and carries the fingerprint of the
+// content approved, so a later edit makes it stale.
+function approvalProblem(disposition, filePath) {
+  const entries = (disposition.reviews || []).filter(
+    (entry) => APPROVAL_STATUSES.has(entry.status) && entry.reviewer && entry.outcome && Array.isArray(entry.files) && entry.files.includes(filePath),
+  )
+  if (entries.length === 0) return 'no recorded approval covers it'
+  const current = entries.some((entry) => entry.reviewed_content_sha256 && entry.reviewed_content_sha256 === reviewContentFingerprint(entry.files))
+  return current ? null : 'approval is stale or has no reviewed_content_sha256'
 }
+
+// The metadata snapshot and manifest are verified directly: the manifest hash must match the snapshot.
+const METADATA_PAIR = new Set(['supabase/backups/full_metadata.sql', 'supabase/evidence/authoritative_metadata_manifest.json'])
+function metadataSnapshotMatchesManifest() {
+  try {
+    const manifest = JSON.parse(readFileSync(path.resolve(ROOT, 'supabase/evidence/authoritative_metadata_manifest.json'), 'utf8'))
+    const snapshot = readFileSync(path.resolve(ROOT, 'supabase/backups/full_metadata.sql'))
+    return manifest.sha256 === crypto.createHash('sha256').update(snapshot).digest('hex')
+  } catch {
+    return false
+  }
+}
+
+const LEDGER_STATUSES = new Set(['PROPOSED', 'APPROVED', 'APPLIED', 'VERIFIED', 'DROPPED', 'ROLLED_BACK'])
 
 function generatedArtifactConfirmed(disposition, filePath) {
   return (disposition.generated_artifacts || []).some(
@@ -301,74 +314,6 @@ function deferredPublicationPaths(disposition) {
 function publishableChangeSetFiles(files, disposition) {
   const deferred = new Set(deferredPublicationPaths(disposition))
   return files.filter((file) => !deferred.has(file)).sort()
-}
-
-function dispositionMatchesChangeSet(disposition, comparableFiles) {
-  if (!disposition || disposition.__read_error) return false
-  if (!Array.isArray(disposition.change_set_files)) return false
-  return sameSet([...disposition.change_set_files].sort(), comparableFiles)
-}
-
-function getImpactFileCategory(impact, filePath) {
-  const entry = (impact.files || []).find((file) => file.path === filePath)
-  return entry?.category || null
-}
-
-function inferCategoryFromDisposition(disposition, filePath) {
-  for (const review of disposition.reviews || []) {
-    if (Array.isArray(review.files) && review.files.includes(filePath)) {
-      return review.category
-    }
-  }
-  if (isPublicationPipelineArtifact(filePath)) return 'generated_artifact'
-  if (READINESS_DISPOSITION_EVIDENCE.has(filePath)) return 'evidence'
-  return null
-}
-
-function resolveFileCategory(impact, disposition, filePath) {
-  return getImpactFileCategory(impact, filePath) || inferCategoryFromDisposition(disposition, filePath)
-}
-
-function fileCoveredByCompletedReview(disposition, filePath) {
-  return (disposition.reviews || []).some(
-    (entry) =>
-      entry.status === 'completed' &&
-      entry.outcome &&
-      Array.isArray(entry.files) &&
-      entry.files.includes(filePath),
-  )
-}
-
-function dispositionCoversFollowOnChangeSet(disposition, comparableFiles, impact) {
-  if (!disposition || disposition.__read_error || !Array.isArray(disposition.change_set_files)) {
-    return false
-  }
-  if (comparableFiles.length === 0) return false
-
-  const dispositionSet = new Set(disposition.change_set_files)
-  if (!comparableFiles.every((file) => dispositionSet.has(file))) return false
-  if (dispositionMatchesChangeSet(disposition, comparableFiles)) return true
-  if (comparableFiles.length >= disposition.change_set_files.length) return false
-
-  for (const filePath of comparableFiles) {
-    if (isPublicationPipelineArtifact(filePath)) {
-      if (!generatedArtifactConfirmed(disposition, filePath)) return false
-      continue
-    }
-
-    const category = resolveFileCategory(impact, disposition, filePath)
-    if (!category || !FOLLOW_ON_REVIEW_CATEGORIES.has(category)) return false
-    if (category !== 'evidence' && !reviewDispositionComplete(disposition, category, [filePath])) return false
-
-    if (category === 'generated_artifact') {
-      if (!generatedArtifactConfirmed(disposition, filePath)) return false
-      continue
-    }
-
-    if (!fileCoveredByCompletedReview(disposition, filePath)) return false
-  }
-
-  return true
 }
 
 function impactFilesInReadinessScope(impactFiles, readinessScope, unpushedCommitFiles, comparableReadinessFiles) {
@@ -428,10 +373,6 @@ async function main() {
     unpushedCommitFiles,
     disposition,
   )
-  const dispositionReady =
-    dispositionMatchesChangeSet(disposition, comparableReadinessFiles) ||
-    dispositionCoversFollowOnChangeSet(disposition, comparableReadinessFiles, impact)
-
   const pubState = getPublicationState()
   if (pubState.upstream && pubState.behind > 0) {
     add(
@@ -506,28 +447,6 @@ async function main() {
     }
   }
 
-  if (disposition.__read_error) {
-    add(
-      blockers,
-      'BLOCKER',
-      'review',
-      `Cannot read ${rel(DISPOSITION_PATH)}: ${disposition.__read_error}`,
-      'Create/update the publication readiness disposition evidence required by SYNC_PROTOCOL.md Evidence routing and TRANSACTION_FRAMEWORK.md Stage 5.',
-    )
-  } else if (!dispositionReady) {
-    add(
-      blockers,
-      'BLOCKER',
-      'review',
-      'Publication readiness disposition does not match the current change set.',
-      'Update docs/shared/evidence/publication_readiness_disposition.json so change_set_files matches the pending files, then rerun `npm run publish:ready`.',
-      {
-        expected_fingerprint: fingerprintChangeSet(comparableReadinessFiles),
-        disposition_files: disposition.change_set_files || [],
-      },
-    )
-  }
-
   if (!impact.__read_error && impactModeAccepted(impact.mode, readinessScope)) {
     const scopedImpactFiles = impactFilesInReadinessScope(
       impact.files || [],
@@ -563,21 +482,6 @@ async function main() {
       )
       if (scopedCategoryFiles.length === 0) continue
 
-      if (category.review_recommended) {
-        const problem = reviewProblem(disposition, category.category, scopedCategoryFiles)
-        if (dispositionReady && problem === null) {
-          continue
-        }
-        add(
-          blockers,
-          'BLOCKER',
-          'review',
-          `${category.label} requires independent review before publication${problem ? ` (${problem})` : ''}.`,
-          `Complete and record the review/routing expected by ${category.owning_authority}, then rerun \`npm run docs:impact\` and \`npm run publish:ready\`.`,
-          scopedCategoryFiles,
-        )
-      }
-
       for (const command of category.required_validation || []) {
         obligations.validation.push({ category: category.category, command })
       }
@@ -586,11 +490,33 @@ async function main() {
       }
     }
 
-    const dbFiles = files.filter((file) => file.category === 'database_schema_truth').map((file) => file.path)
+    const unapproved = new Map()
+    for (const file of files) {
+      const reason = riskReason(file.path)
+      if (!reason) continue
+      const problem = disposition.__read_error ? `cannot read the disposition: ${disposition.__read_error}` : approvalProblem(disposition, file.path)
+      if (!problem) continue
+      const key = `${reason}: ${problem}`
+      unapproved.set(key, [...(unapproved.get(key) || []), file.path])
+    }
+    for (const [key, paths] of unapproved) {
+      add(
+        blockers,
+        'BLOCKER',
+        'approval',
+        `High-risk change needs approval (${key}) for ${paths.length} file(s): ${paths.join(', ')}.`,
+        'Record an independent review or the user\'s explicit approval in docs/shared/evidence/publication_readiness_disposition.json (TRANSACTION_FRAMEWORK.md, Review and approval by risk).',
+        paths,
+      )
+    }
+
+    const dbFiles = files
+      .filter((file) => file.category === 'database_schema_truth' || /^supabase\/migrations\//.test(file.path))
+      .map((file) => file.path)
     for (const filePath of dbFiles) {
       const rows = findLedgerRowsForFile(ledgerText, filePath)
       const isChangeControl = /^supabase\/(migrations|sql_checks|exec_success_migrations)\//.test(filePath) || (/^scripts\//.test(filePath) && filePath.endsWith('.sql'))
-      const deferred = dispositionReady && dbChangeDeferred(disposition, filePath)
+      const deferred = dbChangeDeferred(disposition, filePath)
 
       if (deferred) {
         obligations.database.push({ file: filePath, ledger_rows_found: rows.length, deferred_from_publication: true })
@@ -609,24 +535,13 @@ async function main() {
         add(blockers, 'BLOCKER', 'database', `No DB ledger row found for ${filePath}.`, 'Add/update the DB ledger row required by DB_CHANGE_PROTOCOL.md, then rerun `npm run docs:impact` and `npm run publish:ready`.')
       }
       for (const row of rows) {
+        // An unapplied migration may be published when its ledger status says so truthfully; publication
+        // never applies it. Only a missing or unrecognised status blocks.
         const status = extractLedgerStatus(row)
-        if (!['VERIFIED', 'DROPPED', 'ROLLED_BACK'].includes(status)) {
-          // One blocker per ledger row (a change set's migration and check files share one row).
-          const existing = blockers.find((b) => b.area === 'database' && b.evidence === row)
-          if (existing) {
-            existing.files.push(filePath)
-            existing.message = `DB ledger row ${ledgerRowId(row)} (${existing.files.length} referenced file(s): ${existing.files.join(', ')}) is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`
-            continue
-          }
-          add(
-            blockers,
-            'BLOCKER',
-            'database',
-            `DB ledger row ${ledgerRowId(row)} (1 referenced file(s): ${filePath}) is ${status || 'missing status'}, not VERIFIED/DROPPED/ROLLED_BACK.`,
-            'Complete DB_CHANGE_PROTOCOL.md operator/reviewer evidence or explicitly defer publication of this DB change.',
-            row,
-          )
-          blockers[blockers.length - 1].files = [filePath]
+        if (isChangeControl && !LEDGER_STATUSES.has(status)) {
+          add(blockers, 'BLOCKER', 'database', `DB ledger row ${ledgerRowId(row)} for ${filePath} has no recognised status (found "${status}").`, 'Set the truthful lifecycle status defined in DB_CHANGE_LEDGER.md.')
+        } else if (isChangeControl && !['VERIFIED', 'DROPPED', 'ROLLED_BACK'].includes(status)) {
+          add(advisories, 'ADVISORY', 'database', `${filePath}: ledger ${ledgerRowId(row)} is ${status}. Publishing the file does not apply it.`, 'Apply and verify only under DB_CHANGE_PROTOCOL.md with explicit authorization.')
         }
       }
       obligations.database.push({ file: filePath, ledger_rows_found: rows.length })
@@ -640,7 +555,10 @@ async function main() {
         if (isPublicationPipelineArtifact(filePath)) {
           continue
         }
-        if (dispositionReady && generatedArtifactConfirmed(disposition, filePath)) {
+        if (METADATA_PAIR.has(filePath) && metadataSnapshotMatchesManifest()) {
+          continue
+        }
+        if (!METADATA_PAIR.has(filePath) && generatedArtifactConfirmed(disposition, filePath)) {
           continue
         }
         add(

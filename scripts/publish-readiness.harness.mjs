@@ -242,22 +242,16 @@ process.exitCode = Number(process.argv[3] || 0)
   return fx
 }
 // Commit a change, then record SIMULATED approvals bound to that content in a second commit.
-function reviewedChange(w, { approve = true, omit = null } = {}) {
-  write(w, 'src/app.ts', 'export const a = 1\n')
-  write(w, 'src/other.ts', 'export const b = 2\n')
-  write(w, DISPOSITION, '{}\n')
-  sh(w, 'add', '--', 'src/app.ts', 'src/other.ts')
+const RISKY = ['src/lib/payrollTotals.ts', 'src/lib/authGuard.ts']
+function reviewedChange(w, { approve = true, omit = null, status = 'completed', files = RISKY } = {}) {
+  files.forEach((f, i) => write(w, f, `export const v${i} = ${i}\n`))
+  sh(w, 'add', '--', ...files)
   sh(w, 'commit', '-q', '-m', 'change')
-  const files = ['src/app.ts', 'src/other.ts']
-  const reviewed = files.filter((f) => f !== omit)
-  const disposition = {
-    change_set_files: [...files, DISPOSITION].sort(),
-    reviews: [{ category: 'application_code', status: 'pending', files: reviewed }],
-  }
+  const disposition = { reviews: [{ category: 'high_risk', status: 'pending', files: files.filter((f) => f !== omit) }] }
   write(w, DISPOSITION, JSON.stringify(disposition))
   if (approve) {
-    const fp = spawnSync('node', ['scripts/publish_readiness_check.mjs', '--review-fingerprint', 'application_code'], { cwd: w, encoding: 'utf8' }).stdout.trim()
-    Object.assign(disposition.reviews[0], { status: 'completed', reviewer: 'SIMULATED REVIEWER', outcome: 'SIMULATED approval', reviewed_content_sha256: fp })
+    const fp = spawnSync('node', ['scripts/publish_readiness_check.mjs', '--review-fingerprint', 'high_risk'], { cwd: w, encoding: 'utf8' }).stdout.trim()
+    Object.assign(disposition.reviews[0], { status, reviewer: 'SIMULATED APPROVER', outcome: 'SIMULATED approval', reviewed_content_sha256: fp })
     write(w, DISPOSITION, JSON.stringify(disposition))
   }
   sh(w, 'add', '--', DISPOSITION)
@@ -315,34 +309,34 @@ publishScenario(18, 'user edit to a report that existed before the run is kept, 
   expect(remoteHead(fx) === reviewedHead, 'extra commit published')
   expect(fs.readFileSync(path.join(fx.work, REPORTS[1]), 'utf8') === '{"user":"edit"}\n', 'user edit lost')
 })
-publishScenario(19, 'pending review blocks publication', (fx) => {
+publishScenario(19, 'high-risk change with only a pending entry blocks publication', (fx) => {
   reviewedChange(fx.work, { approve: false })
   const before = remoteHead(fx)
   const r = publish(fx.work)
-  expect(r.code === 7 && /requires independent review/.test(r.out), tail(r))
+  expect(r.code === 7 && /High-risk change needs approval/.test(r.out), tail(r))
   untouched(fx, before)
 })
 publishScenario(20, 'file edited after review: stale review blocks publication', (fx) => {
   reviewedChange(fx.work)
-  commit(fx.work, 'src/app.ts', 'export const a = 999\n', 'late change')
+  commit(fx.work, 'src/lib/payrollTotals.ts', 'export const v0 = 999\n', 'late change')
   const before = remoteHead(fx)
   const r = publish(fx.work)
-  expect(r.code === 7 && /stale reviewed_content_sha256/.test(r.out), tail(r))
+  expect(r.code === 7 && /approval is stale/.test(r.out), tail(r))
   untouched(fx, before)
 })
-publishScenario(21, 'new file added after review blocks publication', (fx) => {
+publishScenario(21, 'new high-risk file added after approval blocks publication', (fx) => {
   reviewedChange(fx.work)
-  commit(fx.work, 'src/late.ts', 'export const c = 3\n', 'late file')
+  commit(fx.work, 'src/lib/bankExport.ts', 'export const c = 3\n', 'late file')
   const before = remoteHead(fx)
   const r = publish(fx.work)
   expect(r.code === 7, tail(r))
   untouched(fx, before)
 })
-publishScenario(22, 'completed review that omits an in-scope file blocks publication', (fx) => {
-  reviewedChange(fx.work, { omit: 'src/other.ts' })
+publishScenario(22, 'approval that omits a high-risk file blocks publication', (fx) => {
+  reviewedChange(fx.work, { omit: 'src/lib/authGuard.ts' })
   const before = remoteHead(fx)
   const r = publish(fx.work)
-  expect(r.code === 7 && /does not cover: src\/other\.ts/.test(r.out), tail(r))
+  expect(r.code === 7 && /no recorded approval covers it\) for 1 file\(s\): src\/lib\/authGuard\.ts/.test(r.out), tail(r))
   untouched(fx, before)
 })
 publishScenario(23, 'remote divergence: stops after intake, nothing pushed', (fx) => {
@@ -367,6 +361,53 @@ publishScenario(25, 'declining the push prompt publishes nothing', (fx) => {
   const before = remoteHead(fx)
   const r = publish(fx.work, { DECLINE: 'Push to origin main' })
   expect(r.code === 1 && /Aborted by user before push/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+
+publishScenario(26, 'routine change publishes on technical validation without any review entry', (fx) => {
+  commit(fx.work, 'src/lib/format.ts', 'export const f = 1\n', 'routine')
+  const head = sh(fx.work, 'rev-parse', 'HEAD')
+  const r = publish(fx.work)
+  expect(r.code === 0 && remoteHead(fx) === head, tail(r))
+})
+publishScenario(27, 'explicit user approval satisfies a high-risk change', (fx) => {
+  reviewedChange(fx.work, { status: 'user_approved' })
+  const head = sh(fx.work, 'rev-parse', 'HEAD')
+  const r = publish(fx.work)
+  expect(r.code === 0 && remoteHead(fx) === head, tail(r))
+})
+const MIG = 'supabase/migrations/29990101000000_fixture.sql'
+const ledgerRow = (status) => `# ledger\n| ID | Date | Change Summary | Type | Migration File | Owner | Reviewer | Status | Applied Env | Validation Evidence | Authority Ref |\n| DBL-9999 | d | s | schema | 29990101000000_fixture.sql | o | r | ${status} | N/A | e | a |\n`
+const dbCase = (id, title, status, expected) =>
+  publishScenario(id, title, (fx) => {
+    if (status !== null) commit(fx.work, 'docs/shared/reference/DB_CHANGE_LEDGER.md', ledgerRow(status), 'ledger')
+    reviewedChange(fx.work, { files: [MIG] })
+    const before = remoteHead(fx)
+    const r = publish(fx.work)
+    if (expected) expect(r.code === 0 && /Publishing the file does not apply it/.test(r.out), tail(r))
+    else {
+      expect(r.code === 7 && /DB ledger row|No DB ledger row/.test(r.out), tail(r))
+      untouched(fx, before)
+    }
+  })
+dbCase(28, 'unapplied migration with a truthful PROPOSED ledger row publishes', 'PROPOSED', true)
+dbCase(29, 'migration without a ledger row blocks publication', null, false)
+dbCase(30, 'migration with an unrecognised ledger status blocks publication', 'DONE-ISH', false)
+publishScenario(31, 'metadata snapshot that does not match its manifest blocks publication', (fx) => {
+  commit(fx.work, 'supabase/backups/full_metadata.sql', '-- edited\n', 'snapshot')
+  commit(fx.work, 'supabase/evidence/authoritative_metadata_manifest.json', '{"sha256":"0"}\n', 'manifest')
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 7 && /generated artifact/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+publishScenario(32, 'failing build blocks publication', (fx) => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(fx.work, 'package.json'), 'utf8'))
+  pkg.scripts.build = 'node -e "process.exit(1)"'
+  commit(fx.work, 'package.json', JSON.stringify(pkg), 'broken build')
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 2 && /build failed/.test(r.out), tail(r))
   untouched(fx, before)
 })
 

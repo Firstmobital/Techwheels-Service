@@ -34,7 +34,7 @@ set -euo pipefail
 #
 # Safety rules (enforced, not optional):
 #   - Never pushes if the pull brought in new commits from origin/main.
-#   - Never pushes if the blocking docs validator (npm run docs:validate) fails.
+#   - Never pushes if the blocking docs validator (npm run docs:validate) or the build (npm run build) fails.
 #   - Never pushes if the rebase produced conflicts.
 #   - Never commits if there are no changes.
 #   - Never commits regenerated validator reports; edits to them that existed before the run are kept.
@@ -477,6 +477,15 @@ else
   health_exit_code=$?
   echo "Note: health audit reported advisory findings during pre-push readiness refresh (exit code $health_exit_code)."
   echo "This is informational only and does not block push (see docs/STRUCTURE_GUIDE.md Section 24)."
+fi
+
+# Technical validation is what routine changes publish on: the application must build.
+echo
+echo "---- npm run build (blocking gate) ----"
+if ! npm run build --if-present; then
+  echo >&2
+  echo "Error: the build failed. Nothing was pushed." >&2
+  exit 2
 fi
 
 publish_upstream="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)"
