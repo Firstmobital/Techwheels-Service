@@ -540,6 +540,25 @@ function normalizeJobCardNumber(raw: unknown): string | null {
 const QUERY_PAGE_SIZE = 1000
 const MAX_REPORT_FETCH_ROWS = 5000
 
+/** Window event raised when a report loader reaches its row cap, so the page can warn that totals may be incomplete. */
+export const REPORT_LOAD_NOTICE_EVENT = 'report-load-notice'
+
+export interface ReportLoadNotice {
+  kind: 'row_cap'
+  limit: number
+}
+
+function noteRowCap(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent<ReportLoadNotice>(REPORT_LOAD_NOTICE_EVENT, { detail: { kind: 'row_cap', limit: MAX_REPORT_FETCH_ROWS } }))
+}
+
+/** Returns at most the cap and raises the notice when the cap was reached (rows beyond it are not loaded). */
+function capRows<T>(rows: T[]): T[] {
+  if (rows.length >= MAX_REPORT_FETCH_ROWS) noteRowCap()
+  return rows.slice(0, MAX_REPORT_FETCH_ROWS)
+}
+
 interface JobCardClosedFetchFilters {
   branch: BranchFilter
   dateFilter: DateRangeFilter
@@ -885,6 +904,7 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
     }
 
     if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
+      noteRowCap()
       break
     }
 
@@ -972,6 +992,7 @@ async function fetchAllJobCardClosedRows(
     }
 
     if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
+      noteRowCap()
       break
     }
 
@@ -2003,7 +2024,7 @@ export async function getBranchLabourRevenueComparison(
         })
       }
 
-    return batch.slice(0, MAX_REPORT_FETCH_ROWS)
+    return capRows(batch)
   }
 
   const [selectedData, previousData] = await Promise.all([
@@ -2630,7 +2651,7 @@ export async function getVasJobPerformance(
   }
 
   const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  allRows.push(...capRows(batch))
 
   interface WorkingPerformanceRow {
     dimension: string
@@ -2734,7 +2755,7 @@ export async function getVasJobPerformanceDashboard(
   }
 
   const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  allRows.push(...capRows(batch))
 
   interface ComplaintWorkingRow {
     complaintCode: string
@@ -2869,7 +2890,7 @@ export async function getVasBillingHoursEfficiency(
   }
 
   const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  allRows.push(...capRows(batch))
 
   interface WorkingBillingHoursRow {
     dimension: string
@@ -3705,7 +3726,7 @@ export async function getServiceDueList(
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
-  const allRows = ((data as Record<string, unknown>[] | null) ?? []).slice(0, MAX_REPORT_FETCH_ROWS)
+  const allRows = capRows(((data as Record<string, unknown>[] | null) ?? []))
 
   interface WorkingDueRow {
     vrn: string
@@ -3951,7 +3972,7 @@ export async function getInvoiceValueDistribution(
   }
 
   const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  allRows.push(...capRows(batch))
 
   const bandTemplate: Array<{ key: InvoiceValueBandRow['bandKey']; label: string; min: number; maxExclusive: number | null }> = [
     { key: 'under-1000', label: 'Under Rs. 1,000', min: 0, maxExclusive: 1000 },
@@ -4116,7 +4137,7 @@ export async function getInvoiceDailyTrend(
   }
 
   const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-  allRows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  allRows.push(...capRows(batch))
 
   interface WorkingInvoiceDailyRow {
     date: string
@@ -4250,7 +4271,7 @@ export async function getJcInvoiceReconciliation(
     throw new Error(error.message)
   }
 
-  const invoiceRows = ((data as unknown as Record<string, unknown>[] | null) ?? []).slice(0, MAX_REPORT_FETCH_ROWS)
+  const invoiceRows = capRows(((data as unknown as Record<string, unknown>[] | null) ?? []))
 
   interface WorkingInvoiceRow {
     amount: number
@@ -5066,7 +5087,7 @@ async function fetchAllPartsOrderRows(
   if (error) throw new Error(error.message)
 
   const batch = (data as unknown as PartsOrderRecord[] | null) ?? []
-  allRows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  allRows.push(...capRows(batch))
 
   return allRows
 }
@@ -5086,7 +5107,7 @@ async function fetchLatestPartsStockByPart(branch: BranchFilter): Promise<Map<st
   if (error) throw new Error(error.message)
 
   const batch = (data as PartsStockRecord[] | null) ?? []
-  rows.push(...batch.slice(0, MAX_REPORT_FETCH_ROWS))
+  rows.push(...capRows(batch))
 
   const latestByPart = new Map<string, PartsStockRecord>()
 

@@ -112,6 +112,12 @@ Policies updated with admin bypass (2026-06-08):
 
 ---
 
+### Approved exception record (2026-11-25, ACCOUNTS-002 PD-22)
+
+The designated administrator account `admin@firstmobital.com`, while it holds the Admin role, keeps unrestricted application-level administrative access across modules and branches. This is provided only by the existing mechanism (`is_admin()` on `public.users` role and `is_active`, the `admin_unrestricted_all_ops_v1` policies and the existing default module grants). No authorization is based on an email string: a caller-supplied email claim is never trusted, and no client-side or hard-coded email check exists. Verified on an isolated database (ACCOUNTS-002 evidence EV-061). Other administrators are unchanged and their review is deferred. Nothing here narrows or redesigns the admin model.
+
+---
+
 **Maintained By:** Engineering Lead  
 **Last Reviewed:** 2026-06-08  
 **Next Review:** After next major RBAC tightening phase

@@ -6,6 +6,7 @@ import { validateAndCanonicalizeRoles } from '../lib/businessRoles'
 import { setEmployeeActive } from '../lib/api/payroll'
 import { isEmployeeCurrentlyActive } from '../lib/employeeActive'
 import { supabase } from '../lib/supabase'
+import { fetchEmployeeBankDetails, setEmployeeBankDetails, withBankDetails } from '../lib/api/employeeBank'
 import Icon from '../components/Icon'
 import { HelpdeskContactsSettingsSection } from '../components/settings/HelpdeskContactsSettingsSection'
 import {
@@ -1119,13 +1120,20 @@ export default function SettingsPage() {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('id, employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc, is_active')
+      .select('id, employee_code, employee_name, location, department, fuel_type, role, is_active')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
       setError(fetchError.message)
     } else {
-      setEmployees((data as EmployeeRow[]) ?? [])
+      // Bank fields are not selectable from employee_master (ACCOUNTS-002 PD-19); read them through the gated RPC.
+      try {
+        const bank = await fetchEmployeeBankDetails()
+        setEmployees(withBankDetails((data as Array<Omit<EmployeeRow, 'bank_name' | 'account_number' | 'ifsc'>>) ?? [], bank) as EmployeeRow[])
+      } catch (bankError) {
+        setError(bankError instanceof Error ? bankError.message : 'Could not load employee bank details')
+        setEmployees(withBankDetails((data as Array<Omit<EmployeeRow, 'bank_name' | 'account_number' | 'ifsc'>>) ?? [], new Map()) as EmployeeRow[])
+      }
     }
     setLoadingEmployees(false)
   }, [])
@@ -1674,13 +1682,24 @@ export default function SettingsPage() {
         }
         return { ...row, role: validated.canonical }
       })
+      // Bank fields cannot be written through an upsert (it reads EXCLUDED columns); write the rest, then the
+      // bank fields through the admin-only RPC. Same values as before, including nulls for blank cells.
+      const nonBankRows = canonicalRows.map(({ bank_name: _b, account_number: _a, ifsc: _i, ...rest }) => rest)
       const { error: upsertError } = await supabase
         .from('employee_master')
-        .upsert(canonicalRows, { onConflict: 'employee_code' })
+        .upsert(nonBankRows, { onConflict: 'employee_code' })
 
       if (upsertError) {
         throw new Error(upsertError.message)
       }
+      await setEmployeeBankDetails(
+        canonicalRows.map((row) => ({
+          employee_code: row.employee_code,
+          bank_name: row.bank_name ?? null,
+          account_number: row.account_number ?? null,
+          ifsc: row.ifsc ?? null,
+        })),
+      )
 
       setMessage(`Uploaded ${canonicalRows.length.toLocaleString()} employee rows.`)
       await fetchEmployees()

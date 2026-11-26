@@ -59,4 +59,20 @@ export function applyBranchFilterToQuery<T extends { eq: Function; in: Function 
 	return query.in('branch', aliases) as T
 }
 
+/** Explicit bucket for amounts whose branch cannot be mapped; never dropped from totals (ACCOUNTS-002, 4.1). */
+export const UNMAPPED_BRANCH = 'Unmapped'
 
+/**
+ * Canonical branch for finance reporting: the first of the supplied labels that maps to a known report branch
+ * (Sitapura / Ajmer Road families via the existing aliases, plus Tonk and Shahpura), otherwise `Unmapped`.
+ */
+export function canonicalReportBranch(...rawLabels: unknown[]): string {
+	for (const raw of rawLabels) {
+		const label = normalizeBranchLabel(raw)
+		if (!label) continue
+		for (const option of REPORT_BRANCH_OPTIONS) {
+			if (branchAliases(option).some((alias) => alias.toLowerCase() === label.toLowerCase())) return option
+		}
+	}
+	return UNMAPPED_BRANCH
+}

@@ -4,6 +4,7 @@ import MonthlyTrendReport from './MonthlyTrendReport'
 import LabourSparesMixReport from './LabourSparesMixReport'
 import ProductLinePerformanceReport from './ProductLinePerformanceReport'
 import ModelWiseRevenueReport from './ModelWiseRevenueReport'
+import InvoiceRevenueFinanceReport from './InvoiceRevenueFinanceReport'
 import VehicleWiseRevenueReport from './VehicleWiseRevenueReport'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -21,6 +22,18 @@ export const REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Daily revenue breakdown with vehicle inflow, invoices, and average billing metrics.',
     cardHint: 'Best for daily operations tracking and revenue monitoring.',
     Component: DailyRevenueReport,
+  },
+  {
+    id: 'invoice-revenue-finance',
+    categoryId: 'revenue',
+    label: 'Invoice Revenue (Finance basis)',
+    description: 'Net revenue per DMS invoice using the GST actually charged, with cancelled and unverified-tax invoices shown apart and the existing method alongside.',
+    cardHint: 'Best for Finance review and reconciliation to invoices and Busy.',
+    owner: 'Finance head / Engineering owner',
+    sources: ['psf_revenue_dms'],
+    dateBasis: 'invoice_date',
+    verification: 'ACCOUNTS-002 ST-04, ST-05, ST-06 (local, synthetic)',
+    Component: InvoiceRevenueFinanceReport,
   },
   {
     id: 'category-wise-revenue',

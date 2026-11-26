@@ -1,0 +1,65 @@
+evidence_id,description,citation_pinned_e7877341,source_layer,status
+EV-001,Repo agent contract (no AGENTS.md/CLAUDE.md exist; .instructions.md is the single contract),.instructions.md:1-60,repo,CONFIRMED
+EV-002,README pointers to contract + DB authority,README.md:3-9,repo,CONFIRMED
+EV-003,Database authority hierarchy and freshness gate,"docs/shared/reference/DATABASE_TRUTH.md:9-30,65-72",repo,CONFIRMED
+EV-004,"Snapshot manifest at HEAD (sha256 0e036266…7b0b, created 2026-11-24T05:59:19Z); a 2026-11-25 refresh (sha256 7809bd2a…5027) was uncommitted at audit time and committed afterwards as 98016773",supabase/evidence/authoritative_metadata_manifest.json:1-8,snapshot,CONFIRMED
+EV-005,"Snapshot header at HEAD: dumped 2026-11-24 11:28:04 IST, PostgreSQL 17.6",supabase/backups/full_metadata.sql:1-10,snapshot,CONFIRMED
+EV-006,Route-to-module map: reports/busy/accounts/payroll/bodyshop-recovery,src/App.tsx:160-189,repo,CONFIRMED
+EV-007,"Busy workbook export page (labour+parts -> sales vouchers, party accounts)",src/pages/BusyAccountingPage.tsx:1-120,repo,CONFIRMED
+EV-008,Hard-coded Busy voucher series PV-S 26-27 / EV-S 26-27 derived from DMS invoice prefix,"src/lib/busy/eligibility.ts:3-6,78-83",repo,CONFIRMED
+EV-009,Busy branch resolved from sr_assigned_to employee codes; any other code falls back to Sitapura,src/lib/busy/branch.ts:12-33,repo,CONFIRMED
+EV-010,"Busy money rounding (paise, GST-inclusive 5%/18%, nearest-rupee round-off)",src/lib/busy/money.ts:1-76,repo,CONFIRMED
+EV-011,Parts import partitions by portal|invoice|date; skips existing invoices,"src/lib/busy/partsPersist.ts:24-26,49-80",repo,CONFIRMED
+EV-012,"Accounts voucher cutoff 2026-09-02, FY 26-27, payment-mode to Busy Account DR","src/lib/api/accounts.ts:19-20,277-290,1306-1311",repo,CONFIRMED
+EV-013,DB function issuing RApp/JApp/26-27 voucher numbers from sequences,supabase/backups/full_metadata.sql:2264-2292,snapshot,CONFIRMED
+EV-014,accounts_mechanical_invoices / payment_lines tables and RLS,"supabase/backups/full_metadata.sql:33517,33635,51959-51982",snapshot,CONFIRMED
+EV-015,"psf_revenue_dms (DMS invoice grain) table, unique key, RLS select/insert/update/delete = true","supabase/backups/full_metadata.sql:38800,44668,56009-56033",snapshot,CONFIRMED
+EV-016,Triggers on psf_revenue_dms: voucher assignment and job_card_closed mirror refresh,"supabase/backups/full_metadata.sql:49985,50033",snapshot,CONFIRMED
+EV-017,job_card_closed_data (JC grain) table and open RLS (authenticated true for select/insert/update/delete),"supabase/backups/full_metadata.sql:37248,48904,54848-54880",snapshot,CONFIRMED
+EV-018,service_invoice_data table and open RLS,"supabase/backups/full_metadata.sql:39263,55232,55376,55520",snapshot,CONFIRMED
+EV-019,Report row cap MAX_REPORT_FETCH_ROWS=5000; loop breaks without flag,"src/lib/reportQueries.ts:541,880-892",repo,CONFIRMED
+EV-020,Ex-GST revenue = Math.round(gross/1.18) per row,src/lib/reportQueries.ts:1854-1859,repo,CONFIRMED
+EV-021,Monthly revenue KPI and service-type revenue formulas,"src/lib/reportQueries.ts:1293-1363,1483-1518",repo,CONFIRMED
+EV-022,Reports page: name-based advisor exclusion; invoice_date forced for revenue categories,"src/pages/ReportsPage.tsx:32-36,139-141",repo,CONFIRMED
+EV-023,"Payroll amounts formula, finalize RPC, payroll tables","src/lib/payroll/calculations.ts:10-14,133-150; src/lib/api/payroll.ts:510-530; supabase/backups/full_metadata.sql:20043,38187,38250",repo+snapshot,CONFIRMED
+EV-024,"Bodyshop settlement lines (append-only, reversal, write-off, voucher immutability)","supabase/backups/full_metadata.sql:34677,34761,24132,29394,49969",snapshot,CONFIRMED
+EV-025,Warranty report tables with open RLS (authenticated true),"supabase/backups/full_metadata.sql:41327,55128-55560",snapshot,CONFIRMED
+EV-026,audit_logs table; select admin-only; insert actor-or-admin,"supabase/backups/full_metadata.sql:34021,53381-53396",snapshot,CONFIRMED
+EV-027,psf_revenue_dms import via run_psf_revenue_dms_import_batch (upsert counts),"src/pages/ImportPage.tsx:2017-2040; supabase/backups/full_metadata.sql:24838,24860",repo+snapshot,CONFIRMED
+EV-028,"Web-mobile parity policy, CI parity guard",CONTRIBUTING.md:7-35; .github/workflows/web-mobile-parity-guard.yml,repo,CONFIRMED
+EV-029,"Sales handoff package (private input, not stored in this repository): README, MANIFEST, assignment prompt, proposal, templates, OD-01..OD-12",private input (local only),external,CONFIRMED (reference only)
+EV-030,Busy labour fetch pages 1000 rows until exhausted (no cap),"src/lib/busy/labourSource.ts:7,85-110",repo,CONFIRMED
+EV-031,Company GSTIN not stored in repo (receipt profile null),src/lib/accounts/receiptCompanyProfile.ts:4-9,repo,CONFIRMED
+EV-032,"Accounts list RPCs are STABLE, check accounts_can_access(), contain no writes",supabase/backups/full_metadata.sql:15831-15977,snapshot,CONFIRMED
+EV-033,Payroll variable earnings read job-card/revenue sources (shared dependency),"src/lib/payroll/variableEarnings.ts:1-60,216",repo,CONFIRMED
+EV-034,"No expense table, view or UI exists (0 matches for ""expense"" in snapshot and app pages)",supabase/backups/full_metadata.sql (grep); src/ (grep),snapshot+repo,CONFIRMED (absence)
+EV-035,Report registry omits the Performance category (10 components unreachable),src/pages/reports/index.ts:7-24; src/pages/reports/performance/index.ts:13-19,repo,CONFIRMED
+EV-036,Accounts page swallows payment-line load errors (.catch -> []),src/pages/AccountsPage.tsx:350-356,repo,CONFIRMED
+EV-037,Accounts payment delete RPC writes audit_logs,supabase/backups/full_metadata.sql:10322,snapshot,CONFIRMED
+EV-038,Branch label sets: report options vs Busy branches,src/lib/branches.ts:1-60; src/lib/busy/branch.ts:1-12,repo,CONFIRMED
+EV-039,Busy insurance/parts-account masters (admin write) and hard-coded insurer GSTIN seed,"src/lib/busy/insuranceMaster.ts:17-40; supabase/backups/full_metadata.sql:45933,54062-54078",repo+snapshot,CONFIRMED
+EV-040,Local HEAD equals remote main (git ls-remote),git ls-remote origin refs/heads/main,git,CONFIRMED
+EV-041,Earnings settings tables are key/value without effective dating,"supabase/backups/full_metadata.sql:35765,39098",snapshot,CONFIRMED
+EV-042,Runtime environment: none provisioned/proven isolated in this session,n/a,runtime,BLOCKED
+EV-043,"Isolated runtime environment: local PostgreSQL 17.7 scratch cluster on loopback only, restored from the committed snapshot (sha256 694ac198…8636 at commit 0c61add8); 4 extensions unavailable (pgtap, pg_net, pg_cron, supabase_vault); synthetic rows only; no edge functions or integrations; destroyed after the run","full_metadata.sql restore log (scratch, not retained)",runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-044,"Access matrix as no-module, reports-view, accounts, payroll users (synthetic): psf_revenue_dms and job_card_closed_data allow select/update/delete/insert to every signed-in user; service_invoice_data and warranty tables allow select/update (insert for valid rows); payroll_entries and accounts/payroll RPCs enforce module rights","docs evidence TEST_MATRIX section 3 (ST-09, ST-26)",runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-045,accounts_mechanical_next_voucher_no returns RApp/26-27 for a 2027-05-01 date; returns NULL before 2026-09-02; CHECK constraints pin the 26-27 pattern,"supabase/backups/full_metadata.sql:2264-2292,33651",runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-046,run_psf_revenue_dms_import_batch: identical retry leaves one row; two invoices for one job card on one date in one batch fail the batch (ON CONFLICT cannot affect a row twice); in separate batches the later invoice overwrites the earlier one,supabase/backups/full_metadata.sql:24838-24860 (function; e7877341 numbering); isolated run,runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-047,"Repository functions executed in Node on synthetic inputs: parseRevenueExcludingGst gives 21,339 for the F1 invoices; computePayrollAmounts gives 28,250.25 / 20,000 (48,250.25 total)",src/lib/reportQueries.ts:1854-1859; src/lib/payroll/calculations.ts:133-150,runtime-isolated,RUNTIME_VERIFIED (function level)
+EV-048,No public RLS policy references branch; a user whose branch is Tonk reads Sitapura and Ajmer Road rows of psf_revenue_dms and job_card_closed_data,pg_policies in the isolated restore (0 branch references); runtime read,runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-049,"employee_master (bank_name, account_number, ifsc) is readable by a signed-in user without any module (synthetic values); payroll code reads those fields directly",src/lib/api/payroll.ts:28-40; runtime read,runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-050,"Hosted Supabase Auth settings (signup enabled, email confirmation, API exposure) and production RLS are not in the repository and were not inspected",src/pages/SignUpPage.tsx:64 (client call only),production,BLOCKED
+EV-051,"Migrations and paired checks for DBL-0101 and DBL-0102 (PROPOSED, isolated verification only)",supabase/migrations/20261125140000_finance_data_access_hardening.sql; supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql; supabase/sql_checks/20261125140000_finance_data_access_hardening_checks.sql; supabase/sql_checks/20261125141000_psf_invoice_overwrite_audit_checks.sql,repo,CONFIRMED
+EV-052,"Post-migration access matrix, bank-field RPCs, idempotent re-run and invoice-replacement audit on the isolated database",test matrix §4,runtime-isolated,RUNTIME_VERIFIED (not production)
+EV-053,"Invoice revenue, grain comparison and report row-cap notice: code and harness executed at function level",src/lib/revenue/invoiceRevenue.ts; src/lib/revenue/invoiceRevenueSource.ts; src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx; scripts/invoice-revenue.harness.ts; src/lib/reportQueries.ts (REPORT_LOAD_NOTICE_EVENT),repo+runtime-isolated,RUNTIME_VERIFIED (function level)
+EV-054,DMS evidence from the local full-database dump (aggregates only): same-day multiple invoices in parts uploads; invoice total equals labour plus spares; parts tax implies 18% for most rows,"local_folder/backups/full_database.sql (private, not in the repository)",private-local,RUNTIME_VERIFIED (aggregate; not reproducible from the repository)
+EV-055,"Financial-year feasibility on the scratch database: derived year label and per-year counters, 160 distinct numbers under 8 parallel sessions","scratch only, not committed",runtime-isolated,RUNTIME_VERIFIED (design feasibility)
+EV-056,Payroll cost summary and branch attribution logic and harness,src/lib/payroll/costSummary.ts; src/pages/payroll/PayrollCostTab.tsx; scripts/payroll-cost-summary.harness.ts; src/lib/branches.ts (canonicalReportBranch),repo+runtime-isolated,RUNTIME_VERIFIED (function level)
+EV-057,Pre-existing build break at HEAD and origin/main: BodyshopRepairPage imports isBillingRecordedForWaiver that bodyshopSettlement.ts does not export,src/pages/BodyshopRepairPage.tsx:53; src/lib/api/bodyshopSettlement.ts,repo,CONFIRMED
+EV-058,"Publication readiness as reported by npm run publish:ready on 2026-11-25: NOT READY (independent review, PROPOSED ledger rows, disposition mismatch, two unmapped harness files)",scripts/publish_readiness_check.mjs (run output; not stored),repo,CONFIRMED
+EV-059,"Change-set disposition record for the local stack (reviews pending, none completed)",docs/shared/evidence/publication_readiness_disposition.json,repo,CONFIRMED
+EV-060,"Extended isolated feasibility of automatic financial-year numbering (boundary, IST, compatibility, back-dated, historical/future, rollback, parallel 8x20, counter isolation, format check); scratch PostgreSQL 17 with synthetic data; not committed",docs plan section Financial-year design,isolated-runtime,CONFIRMED
+EV-061,"Designated administrator exception verified on isolated database: Admin-role account admin@firstmobital.com full access; spoofed email claim with non-admin user id, anonymous and module-less users denied",decision log PD-22; test matrix §7,isolated-runtime,CONFIRMED
+EV-062,"Report catalogue defaults module and harness: 39 registered reports resolve to complete metadata; 10 Performance reports unregistered",src/pages/reports/reportCatalogue.ts; scripts/report-catalogue.harness.ts,repo,CONFIRMED
+EV-063,"Publication-readiness fixture harness: 14 scenarios in isolated git repositories; corrected scripts 14/14 PASS; previous scripts 8 FAIL",scripts/publish-readiness.harness.mjs,repo,CONFIRMED
+EV-064,"Named npm harnesses not run (tsx absent); equivalent runs with Node 24 native TypeScript stripping passed for five harnesses",test matrix §7,local-run,CONFIRMED

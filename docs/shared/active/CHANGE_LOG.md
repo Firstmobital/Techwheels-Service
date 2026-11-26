@@ -27,11 +27,85 @@
 - Date: 2026-11-25
 - Change summary: Brought the completed, workstream-independent governance and validation to `main`: Autonomous Workstream Completion and temporary integration-branch rules (`.instructions.md` Section 11, Transaction Framework), plan creation is not implementation approval (task contracts), post-rebaseline database governance (DATABASE_TRUTH, DB_CHANGE_PROTOCOL, DB_TRUTH_PROTOCOL, ledger policy, update template), corrected publication validation (merge-base outgoing set, strict range evidence, one database blocker per ledger row, TypeScript harness classification, ledger-coverage health check) with its fixture harness, and two behaviour-preserving build corrections (`isBillingRecordedForWaiver` re-export; type narrowing in `BodyshopFloorPage`).
 - Impacted files: see the commit; no application features, migrations, permissions or Finance reports.
+
+## 2026-11-25 (ACCOUNTS-002 continued implementation and publication validation corrections)
+
+- Date: 2026-11-25
+- Change summary: Corrected publication validation (outgoing set is merge-base..HEAD; working-tree impact reports no longer accepted for unpushed scope; range reports must match the current HEAD and merge-base SHAs and file set; behind/diverged and uncommitted-plus-unpushed states block; `scripts/*.harness.ts` classified as automation scripts) with a 14-scenario isolated-git harness (`npm run test:publish-readiness`). Added report catalogue defaults (`src/pages/reports/reportCatalogue.ts`) and a harness. Recorded the designated-administrator exception and deferrals (PD-21, PD-23, PD-24, PD-25), PD-26, and the finalized automatic financial-year design (design only, not implemented). Added unapproved dependency proposals to BUSY-001 and ACCOUNTS-001.
+- Impacted files: `scripts/publish_readiness_check.mjs`, `scripts/repo_change_impact.mjs`, `scripts/publish-readiness.harness.mjs`, `scripts/report-catalogue.harness.ts`, `package.json`, `src/pages/reports/index.ts`, `src/pages/reports/reportCatalogue.ts`, ACCOUNTS-002 plan and evidence, BUSY-001 and ACCOUNTS-001 plans, `ADMIN_BYPASS_RLS_GOVERNANCE.md`, publication readiness disposition.
+- Business logic change: No (report metadata only; validation tooling corrected).
+- Function-level contract change: No
+- RBAC/RLS change: No (administrator exception documented, existing behaviour preserved)
+- Data/schema change: No
+- Docs updated by: ACCOUNTS-002 continued implementation.
+
+## 2026-11-25 (ACCOUNTS-002 documentation reconciliation)
+
+- Date: 2026-11-25
+- Change summary: Documentation only. Reconciled the ACCOUNTS-002 implementation record: implementation by commit, approved decisions compared with what was achieved (PD-17 recorded as not fully satisfied because of the platform administrator bypass and the default module grants; PD-18 preservation is not revenue completeness; PD-19 read paths), completion levels, publication blockers with their origin, cross-plan dependencies, consolidated decision register (PD-20, PD-02/03/16, PD-11, PD-21 to PD-25), financial accuracy evidence kept separate from synthetic figures, validation limits, and DBL-0101/0102 lifecycle stages. Added the change-set disposition record with every review pending. No application, database or migration behaviour changed.
+- Impacted files: ACCOUNTS-002 plan and evidence files, `docs/shared/reference/DB_CHANGE_LEDGER.md` (evidence text of DBL-0101 and DBL-0102 only), `docs/shared/evidence/publication_readiness_disposition.json`.
 - Business logic change: No
 - Function-level contract change: No
 - RBAC/RLS change: No
 - Data/schema change: No
 - Docs updated by: governance synchronization.
+
+- Docs updated by: ACCOUNTS-002 documentation reconciliation.
+
+## 2026-11-25 (ACCOUNTS-002 implementation, local)
+
+- Date: 2026-11-25
+- Change summary: Approved phased implementation of ACCOUNTS-002 (local, verified on an isolated scratch database with synthetic data; nothing applied to any governed environment, published or deployed). Added migrations `20261125140000` (finance and warranty table access by module and branch, explicit `finance_all_branches` right, employee bank-field protection with two RPCs) and `20261125141000` (preserve invoices replaced by an import), both PROPOSED as DBL-0101 and DBL-0102. Application: invoice-level revenue with actual GST and a Finance report, a report row-cap notice, `canonicalReportBranch` with an Unmapped bucket, a read-only payroll Cost Summary tab, and employee bank loaders moved to the gated RPC. Financial-year handling is design only. Activities owned by ACCOUNTS-001 and BUSY-001 are not implemented.
+- Impacted files: see ACCOUNTS-002 evidence EV-051, EV-053, EV-056; `src/lib/api/employeeBank.ts`, `payroll.ts`, `SettingsPage.tsx`, `SATrackerPage.tsx`, `reportQueries.ts`, `ReportsPage.tsx`, `branches.ts`; ledger DBL-0101, DBL-0102.
+- Business logic change: Yes: new invoice-level revenue basis (additive report; existing reports unchanged); report row-cap notice.
+- Function-level contract change: Yes: `employee_master` bank columns are no longer selectable; read them with `get_employee_bank_details`, write them with `set_employee_bank_details` (admin) once DBL-0101 is applied.
+- RBAC/RLS change: Proposed only (DBL-0101, DBL-0102); release prerequisites listed in the plan.
+- Data/schema change: Proposed only; no database was changed.
+- Docs updated by: ACCOUNTS-002 implementation.
+
+## 2026-11-25 (ACCOUNTS-002 readiness verification)
+
+- Date: 2026-11-25
+- Change summary: Documentation-only. Completed implementation-readiness verification for ACCOUNTS-002 using an isolated scratch PostgreSQL restored from the committed schema snapshot with synthetic data, plus execution of the repository's revenue and payroll functions on synthetic inputs. Added the readiness matrix, scope statement, finance decision package (PD-17 to PD-20, options and recommendations), runtime findings G-13 to G-17 and new tests ST-24 to ST-27. The plan stays Proposed with implementation NS awaiting explicit approval.
+- Impacted files: ACCOUNTS-002 plan and its evidence files (test matrix, decision log, fit-gap, lineage, evidence index), web INDEX and tracker row text.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No (gaps verified, not changed)
+- Data/schema change: No (no production access; scratch database destroyed)
+- Docs updated by: ACCOUNTS-002 readiness verification.
+
+## 2026-11-25 (autonomous workstream completion and database governance closure)
+
+- Date: 2026-11-25
+- Change summary: Added `.instructions.md` Section 11 (Autonomous Workstream Completion: autonomous execution, planning authorization distinct from implementation approval, decision boundaries, safe commits, publication separation, existing independent-review requirements, vendor neutrality, stop rule) with one-line pointers in the transaction framework and two task contracts. Closed remaining database-governance review points: removed two active instructions that still told agents to use `exec_success_migrations/` (complaints test guide; VEHICLE-PICKUP-001 task 1.9 and file table), clarified the 88-of-104 / 88-of-105 historical populations, and added a recorded historical inventory (105 files, 88 unmatched) to the ledger boundary rule so the advisory health audit detects out-of-order migrations added at or below the boundary.
+- Impacted files: `.instructions.md`, `docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md`, `FEATURE_IMPLEMENTATION_TASK_CONTRACT.md`, `IMPLEMENTATION_PLAN_TASK_CONTRACT.md`, `DB_CHANGE_LEDGER.md`, `scripts/repo_health_audit.mjs`, the complaints test guide, the VEHICLE-PICKUP-001 plan.
+- Business logic change: No
+- Function-level contract change: Health audit `checks.ledger_coverage` gains `historical_recorded` and `historical_growth`; advisory only.
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: autonomous workstream governance and database governance closure.
+
+## 2026-11-25 (database governance alignment)
+
+- Date: 2026-11-25
+- Change summary: Aligned database governance with the post-rebaseline operating model. Migrations stay in `supabase/migrations/` after execution; the promotion window, `execution_promotion_log.md`, `exec_success_migrations/` and `promote_verified_migration.sh` are marked historical and tied to the full-database dump (artifacts preserved). Evidence terms and one change lifecycle defined in `DATABASE_TRUTH.md`. Ledger policy: one row per approved change set with a prospective boundary (`20261123120000`), historical coverage recorded (88 of 104 post-baseline migrations unmatched at audit time, no back-fill), stale header corrected, DBL-0098/0099/0100 snapshot representation recorded without changing statuses. The repo health audit gained an advisory ledger-coverage check that reuses the publish-readiness matching rule.
+- Impacted files: `DATABASE_TRUTH.md`, `DB_CHANGE_PROTOCOL.md`, `DB_TRUTH_PROTOCOL.md`, `DB_CHANGE_LEDGER.md`, `DATABASE_CHANGE_TASK_CONTRACT.md`, `UPDATE_TEMPLATE.md`, `scripts/repo_health_audit.mjs`, `scripts/publish_readiness_check.mjs` (export + direct-run guard only).
+- Business logic change: No
+- Function-level contract change: Advisory health audit gains `checks.ledger_coverage`; `publish_readiness_check.mjs` exports `findLedgerRowsForFile` and runs `main()` only when executed directly. Gate behavior unchanged (verified by identical output before/after).
+- RBAC/RLS change: No
+- Data/schema change: No (no database access; no backup script changed)
+- Docs updated by: database governance reconciliation.
+
+## 2026-11-25
+
+- Date: 2026-11-25
+- Change summary: Documentation-only promotion of the Service finance-reporting audit (expenses, revenue, reports) into the governed plan ACCOUNTS-002 and its accounts evidence files. The audit is static only; no runtime check was run and no implementation has started. Registered in the web plans index and tracker; cross-reference lines added to ACCOUNTS-001 and BUSY-001.
+- Impacted files: `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_*`, `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_*`, web `INDEX.md` and `IMPLEMENTATION_TRACKER.md`, root tracker last-sync date, ACCOUNTS-001 and BUSY-001 plan headers.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No (access hardening is proposed in ACCOUNTS-002 Phase 3, not applied)
+- Data/schema change: No
+- Docs updated by: ACCOUNTS-002 audit promotion.
 
 ## 2026-10-01
 

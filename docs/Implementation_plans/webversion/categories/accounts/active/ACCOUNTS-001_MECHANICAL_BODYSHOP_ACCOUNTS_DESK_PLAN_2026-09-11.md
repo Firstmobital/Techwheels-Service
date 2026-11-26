@@ -12,7 +12,7 @@
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
-**Related (do not merge):** BODYSHOP-RECOVERY-001 (insurance-due follow-up book); BUSY-001 (`/busy` DMS Labour export)  
+**Related (do not merge):** BODYSHOP-RECOVERY-001 (insurance-due follow-up book); BUSY-001 (`/busy` DMS Labour export); ACCOUNTS-002 (finance reporting audit/plan: revenue reports, table access, voucher series and FY rollover; proposed, not started)  
 **Audit baseline:** HEAD `8c76f16` after rebase onto `fcbbd01`. Schema authority: `supabase/backups/full_metadata.sql`.
 
 ---
@@ -414,6 +414,14 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Mechanical Mark Done still has no invoice number/amount on reception.
 
 ---
+
+## Proposed dependency from ACCOUNTS-002 (task 4.7) — NOT APPROVED, not started
+
+ACCOUNTS-002 lists task 4.7 as owned here. Proposal only; no change is authorized by this note.
+- **What:** the Accounts page swallows payment-line load errors (`.catch(() => [])`), which can show lower received totals without any warning. Show a visible warning that names the failed source and mark totals incomplete.
+- **Why:** ACCOUNTS-002 gap G-09, test ST-03 (static evidence only; not run in a browser).
+- **Constraints:** no change to receipt numbering, vouchers, payment RPCs or Busy export; no new writes.
+- **Related:** voucher numbering and financial-year handling stay under PD-20 (ACCOUNTS-002 plan, Financial-year design).
 
 ## Related Documentation
 

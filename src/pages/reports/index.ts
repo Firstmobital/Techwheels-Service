@@ -4,6 +4,7 @@ import { MASTER_DATA_CATEGORY, MASTER_DATA_REPORTS } from './master-data'
 import { PARTS_CATEGORY, PARTS_REPORTS } from './parts'
 import { REVENUE_CATEGORY, REVENUE_REPORTS } from './revenue'
 import { WARRANTY_CATEGORY, WARRANTY_REPORTS } from './warranty'
+import { withCatalogueDefaults } from './reportCatalogue'
 import type { ReportCategoryDefinition, ReportCategoryId, ReportDefinition, ReportId } from './types'
 
 export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
@@ -22,7 +23,7 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
   ...PARTS_REPORTS,
   ...WARRANTY_REPORTS,
   ...MASTER_DATA_REPORTS,
-]
+].map(withCatalogueDefaults)
 
 export function isCategoryId(value: string | undefined): value is ReportCategoryId {
   if (!value) return false
