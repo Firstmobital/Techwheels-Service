@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (consolidation into main; main-centered, risk-based publication)
+
+- Date: 2026-11-26
+- Change summary: At the user's instruction, merged the shared governance and ACCOUNTS-002 branches into `main`. Replaced blanket independent review with risk-based approval: routine changes publish on docs validation and a successful build; high-risk paths need a recorded independent review or explicit user approval bound to file content. Unapplied migrations with a truthful ledger status no longer block publication; the metadata snapshot is verified against its manifest. Replaced the integration-branch model with main-centered development. Added a default-EDP eligibility guard (web and mobile). Publication harness: 32 scenarios.
+- Impacted files: `.instructions.md`, Transaction Framework, `publish_readiness_check.mjs`, `git-safe-publish.sh`, publication harness, default-EDP modules and floor screens, ACCOUNTS-002 and BODYSHOP-STAGE-002 plans, publication disposition.
+- Business logic change: Yes (default-EDP eligibility guard; ACCOUNTS-002 features now on main).
+- Function-level contract change: Yes (publication gate rules; approval record status `user_approved`).
+- RBAC/RLS change: No (DBL-0101 and DBL-0102 remain unapplied)
+- Data/schema change: No
+- Docs updated by: consolidation.
+
 ## 2026-11-26 (correction: mobile default-EDP containment failed)
 
 - Date: 2026-11-26
