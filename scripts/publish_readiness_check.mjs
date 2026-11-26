@@ -12,7 +12,7 @@
 // question: is the current local work ready to proceed to publication, or are
 // there unresolved repository obligations that still need routing/evidence?
 
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
@@ -226,10 +226,45 @@ function extractLedgerId(row) {
   return cells[1] || ''
 }
 
-function reviewDispositionComplete(disposition, category) {
-  return (disposition.reviews || []).some(
-    (entry) => entry.category === category && entry.status === 'completed' && entry.outcome,
-  )
+// Review evidence is bound to the content that was reviewed, not only to file names or a commit SHA:
+// the fingerprint covers each listed file's git blob, so recording the review (which edits only the
+// disposition) does not change it, while any later edit to a reviewed file invalidates the review.
+export function reviewContentFingerprint(files) {
+  const lines = [...files]
+    .filter((file) => !READINESS_DISPOSITION_EVIDENCE.has(file) && !PUBLICATION_PIPELINE_ARTIFACTS.has(file))
+    .sort()
+    .map((file) => {
+      let blob = 'absent'
+      try {
+        blob = execFileSync('git', ['hash-object', '--', file], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+      } catch {
+        // deleted file
+      }
+      return `${file} ${blob}`
+    })
+  return crypto.createHash('sha256').update(lines.join('\n')).digest('hex')
+}
+
+// A completed review must name a reviewer and outcome, list every file of its category in scope,
+// and carry the fingerprint of the content reviewed.
+function reviewProblem(disposition, category, scopedFiles = []) {
+  const entries = (disposition.reviews || []).filter((entry) => entry.category === category)
+  const done = entries.filter((entry) => entry.status === 'completed' && entry.outcome && entry.reviewer)
+  if (done.length === 0) return 'no completed review with reviewer and outcome'
+  let problem = null
+  for (const entry of done) {
+    const listed = Array.isArray(entry.files) ? entry.files : []
+    const missing = scopedFiles.filter((file) => !listed.includes(file))
+    if (missing.length > 0) problem = `completed review does not cover: ${missing.join(', ')}`
+    else if (!entry.reviewed_content_sha256) problem = 'completed review has no reviewed_content_sha256'
+    else if (entry.reviewed_content_sha256 !== reviewContentFingerprint(listed)) problem = 'reviewed files changed after the review (stale reviewed_content_sha256)'
+    else return null
+  }
+  return problem
+}
+
+function reviewDispositionComplete(disposition, category, scopedFiles = []) {
+  return reviewProblem(disposition, category, scopedFiles) === null
 }
 
 function generatedArtifactConfirmed(disposition, filePath) {
@@ -323,7 +358,7 @@ function dispositionCoversFollowOnChangeSet(disposition, comparableFiles, impact
 
     const category = resolveFileCategory(impact, disposition, filePath)
     if (!category || !FOLLOW_ON_REVIEW_CATEGORIES.has(category)) return false
-    if (!reviewDispositionComplete(disposition, category)) return false
+    if (category !== 'evidence' && !reviewDispositionComplete(disposition, category, [filePath])) return false
 
     if (category === 'generated_artifact') {
       if (!generatedArtifactConfirmed(disposition, filePath)) return false
@@ -357,6 +392,21 @@ function unknownFilesInReadinessScope(unknownFiles, readinessScope, unpushedComm
 }
 
 async function main() {
+  // `--review-fingerprint <category>`: print the value a reviewer records for the files listed in that review.
+  const fpIndex = process.argv.indexOf('--review-fingerprint')
+  if (fpIndex !== -1) {
+    const category = process.argv[fpIndex + 1]
+    const current = await readJson(DISPOSITION_PATH)
+    const entry = (current.reviews || []).find((item) => item.category === category)
+    if (!entry || !Array.isArray(entry.files) || entry.files.length === 0) {
+      console.error(`No review entry with files for category "${category}" in ${rel(DISPOSITION_PATH)}.`)
+      process.exitCode = 1
+      return
+    }
+    console.log(reviewContentFingerprint(entry.files))
+    return
+  }
+
   const blockers = []
   const advisories = []
   const obligations = {
@@ -514,14 +564,15 @@ async function main() {
       if (scopedCategoryFiles.length === 0) continue
 
       if (category.review_recommended) {
-        if (dispositionReady && reviewDispositionComplete(disposition, category.category)) {
+        const problem = reviewProblem(disposition, category.category, scopedCategoryFiles)
+        if (dispositionReady && problem === null) {
           continue
         }
         add(
           blockers,
           'BLOCKER',
           'review',
-          `${category.label} requires independent review before publication.`,
+          `${category.label} requires independent review before publication${problem ? ` (${problem})` : ''}.`,
           `Complete and record the review/routing expected by ${category.owning_authority}, then rerun \`npm run docs:impact\` and \`npm run publish:ready\`.`,
           scopedCategoryFiles,
         )

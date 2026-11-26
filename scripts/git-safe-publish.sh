@@ -19,7 +19,7 @@ set -euo pipefail
 #   5. If the local report raises review-sensitive findings, require an
 #      explicit second confirmation before commit can proceed.
 #   6. Ask for confirmation before committing.
-#   7. git add -A, then unstage any DB paths deferred in
+#   7. git add -A (validator reports are never staged), then unstage any DB paths deferred in
 #      publication_readiness_disposition.json, then commit.
 #   8. Record the local HEAD before pulling (for manual rollback reference).
 #   9. git pull --rebase origin main
@@ -37,6 +37,8 @@ set -euo pipefail
 #   - Never pushes if the blocking docs validator (npm run docs:validate) fails.
 #   - Never pushes if the rebase produced conflicts.
 #   - Never commits if there are no changes.
+#   - Never commits regenerated validator reports; edits to them that existed before the run are kept.
+#   - Runs only on local main tracking origin/main; refuses otherwise before changing anything.
 #   - Never commits if local change impact analysis fails.
 #   - Never pushes if publish-readiness verification fails.
 #   - Never commits or pushes without explicit interactive confirmation.
@@ -98,11 +100,17 @@ echo "== git-safe-publish: starting from repository root ($repo_root) =="
 # ---------------------------------------------------------------------------
 current_branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$current_branch" != "main" ]]; then
-  echo "Error: current branch is '$current_branch'. This script only operates on 'main'." >&2
-  echo "Switch to main first: git checkout main" >&2
+  echo "Error: current branch is '$current_branch'. This script publishes only local 'main' to origin/main." >&2
+  echo "Nothing was changed. To publish another branch's work, first bring it onto main (for example:" >&2
+  echo "  git switch main && git merge --ff-only <branch>) after its reviews are recorded." >&2
   exit 1
 fi
-echo "On branch: main"
+main_upstream="$(git rev-parse --abbrev-ref --symbolic-full-name 'main@{u}' 2>/dev/null || true)"
+if [[ "$main_upstream" != "origin/main" ]]; then
+  echo "Error: local main must track origin/main (tracks: '${main_upstream:-nothing}'). Nothing was changed." >&2
+  exit 1
+fi
+echo "Publication branch: main -> destination: origin/main ($(git remote get-url origin))"
 
 # ---------------------------------------------------------------------------
 # Step 1.5: preflight check for an existing .git/index.lock.
@@ -136,11 +144,63 @@ if [[ -e "$lock_file" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Validator reports are outputs of this pipeline, not part of a publication. They are never committed
+# here: they are reset to HEAD wherever the tree must be clean, copies of this run are kept under
+# .git/publish-safe/ for inspection, and on exit any edits that existed before the run are restored.
+# ---------------------------------------------------------------------------
+pipeline_reports=(
+  "docs/shared/evidence/repo_change_impact_report.json"
+  "docs/shared/evidence/repo_health_audit_report.json"
+  "docs/Implementation_plans/retention_validation_report.json"
+)
+report_backup="$(mktemp -d)"
+run_copy_dir="$(git rev-parse --git-dir)/publish-safe"
+keep_impact_report=0
+
+for index in "${!pipeline_reports[@]}"; do
+  report="${pipeline_reports[$index]}"
+  if [[ -f "$report" ]] && ! git diff --quiet HEAD -- "$report" 2>/dev/null; then
+    cp "$report" "${report_backup}/${index}"
+  fi
+done
+
+reset_reports_to_head() {
+  local report
+  mkdir -p "$run_copy_dir"
+  for report in "${pipeline_reports[@]}"; do
+    [[ -f "$report" ]] && cp "$report" "$run_copy_dir/"
+    if git cat-file -e "HEAD:${report}" 2>/dev/null; then
+      git checkout -q HEAD -- "$report"
+    else
+      rm -f -- "$report"
+    fi
+  done
+}
+
+restore_reports_on_exit() {
+  local index report kept_impact=""
+  if [[ "$keep_impact_report" -eq 1 ]]; then
+    kept_impact="$(mktemp)"
+    cp "${pipeline_reports[0]}" "$kept_impact"
+  fi
+  reset_reports_to_head || true
+  for index in "${!pipeline_reports[@]}"; do
+    report="${pipeline_reports[$index]}"
+    [[ -f "${report_backup}/${index}" ]] && cp "${report_backup}/${index}" "$report"
+  done
+  [[ -n "$kept_impact" ]] && cp "$kept_impact" "${pipeline_reports[0]}"
+  rm -rf -- "${report_backup:?}"
+  echo "Validator reports from this run: ${run_copy_dir}/ (not committed)."
+}
+
+# ---------------------------------------------------------------------------
 # Step 2: status, validation, diff stat.
 # ---------------------------------------------------------------------------
 echo
 echo "---- git status ----"
 git --no-pager status
+
+trap restore_reports_on_exit EXIT
 
 echo
 echo "---- npm run docs:validate (blocking gate) ----"
@@ -159,6 +219,8 @@ else
   echo "Note: health audit reported advisory findings (exit code $health_exit_code)."
   echo "This is informational only and does not block commit/push (see docs/STRUCTURE_GUIDE.md Section 24)."
 fi
+
+reset_reports_to_head
 
 echo
 echo "---- git diff --stat ----"
@@ -253,6 +315,8 @@ if [[ -n "$changed_files" ]]; then
     echo "Local impact intake found no review-sensitive findings."
   fi
 
+  reset_reports_to_head
+
   echo
   echo "---- Changed files after local impact intake ----"
   changed_files="$(git --no-pager status --porcelain)"
@@ -285,6 +349,7 @@ else
   fi
 
   git add -A
+  git reset -q HEAD -- "${pipeline_reports[@]}"
 
   deferred_from_publication="$(
     node -e '
@@ -330,6 +395,8 @@ echo "---- Checking origin/main before rebase ----"
 git fetch origin main --quiet
 new_commit_count="$(git rev-list --count "${prev_head}..origin/main")"
 
+reset_reports_to_head
+
 echo
 echo "---- git pull --rebase origin main ----"
 if git pull --rebase origin main; then
@@ -366,6 +433,7 @@ if [[ "$new_commit_count" -gt 0 ]]; then
     echo "This is advisory tooling only — it does not change the stop-before-push decision below." >&2
   fi
 
+  keep_impact_report=1
   echo
   echo "Push withheld. Run an audit before pushing. Suggested audit prompt:"
   echo
@@ -437,6 +505,9 @@ if [[ ! -t 0 ]]; then
   exit 1
 fi
 
+echo "Commits to be pushed to origin/main:"
+git --no-pager log --oneline origin/main..HEAD
+published_head="$(git rev-parse HEAD)"
 read -r -p "Push to origin main now? [y/N] " confirm_push
 if [[ ! "$confirm_push" =~ ^[Yy]$ ]]; then
   echo "Aborted by user before push. Local commit(s) remain unpushed."
@@ -446,6 +517,11 @@ fi
 # ---------------------------------------------------------------------------
 # Step 11: push.
 # ---------------------------------------------------------------------------
+if [[ "$(git rev-parse HEAD)" != "$published_head" || "$(git rev-parse --abbrev-ref HEAD)" != "main" ]]; then
+  echo "Error: HEAD changed after the readiness gate. Nothing was pushed." >&2
+  exit 7
+fi
+
 echo
 echo "---- git push origin main ----"
 git push origin main

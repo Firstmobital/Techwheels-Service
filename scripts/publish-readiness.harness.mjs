@@ -181,6 +181,195 @@ scenario(14, 'pipeline artifact-only dirt + unpushed: not an uncommitted blocker
   expect(!has(r, 'publication_state', /Uncommitted/), 'artifact-only dirt flagged')
 })
 
+// ---------------------------------------------------------------------------
+// End-to-end publication (scripts/git-safe-publish.sh) against a dummy bare remote.
+// All approvals below are SIMULATED fixture data, never real review evidence.
+// ---------------------------------------------------------------------------
+const SAFE = path.join(HERE, 'git-safe-publish.sh')
+const REPORTS = [
+  'docs/shared/evidence/repo_change_impact_report.json',
+  'docs/shared/evidence/repo_health_audit_report.json',
+  'docs/Implementation_plans/retention_validation_report.json',
+]
+const DISPOSITION = 'docs/shared/evidence/publication_readiness_disposition.json'
+// Answers "y" to every [y/N] prompt (or "n" to the one matching DECLINE) on a pseudo-terminal.
+const PTY = `
+import os,pty,select,sys,time
+decline=os.environ.get('DECLINE','')
+pid,fd=pty.fork()
+if pid==0: os.execvp('bash',['bash','scripts/git-safe-publish.sh'])
+out=b'';seen=0;t=time.time()
+while time.time()-t<90:
+    r,_,_=select.select([fd],[],[],0.5)
+    if r:
+        try: c=os.read(fd,4096)
+        except OSError: break
+        if not c: break
+        out+=c
+    if out.count(b'[y/N] ')>seen:
+        seen=out.count(b'[y/N] ')
+        line=out[:out.rfind(b'[y/N] ')].split(b'\\n')[-1].decode(errors='replace')
+        os.write(fd,b'n\\n' if decline and decline in line else b'y\\n')
+_,st=os.waitpid(pid,0)
+sys.stdout.write(out.decode(errors='replace'));sys.exit(os.waitstatus_to_exitcode(st))
+`
+const publish = (cwd, env = {}) => {
+  const r = spawnSync('python3', ['-c', PTY], { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
+  return { code: r.status, out: r.stdout }
+}
+const remoteHead = (fx) => sh(fx.remote, 'rev-parse', 'main')
+
+function makePublishRepo({ validateFails = false } = {}) {
+  const fx = makeRepo()
+  const w = fx.work
+  fs.mkdirSync(path.join(w, 'scripts'), { recursive: true })
+  for (const f of [SAFE, IMPACT, READY]) fs.copyFileSync(f, path.join(w, 'scripts', path.basename(f)))
+  // Stub validators rewrite their reports with fresh content on every run, like the real ones.
+  write(w, 'scripts/stub.mjs', `import fs from 'node:fs'
+fs.mkdirSync('docs/Implementation_plans', { recursive: true })
+fs.writeFileSync(process.argv[2], JSON.stringify({ generated_at: process.hrtime.bigint().toString() }))
+process.exitCode = Number(process.argv[3] || 0)
+`)
+  write(w, 'package.json', JSON.stringify({ scripts: {
+    'docs:validate': `node scripts/stub.mjs ${REPORTS[2]} ${validateFails ? 1 : 0}`,
+    'docs:validate:health': `node scripts/stub.mjs ${REPORTS[1]}`,
+    'publish:ready': 'node scripts/publish_readiness_check.mjs',
+  } }))
+  write(w, REPORTS[2], '{}\n')
+  sh(w, 'add', '-A')
+  sh(w, 'commit', '-q', '-m', 'tooling')
+  sh(w, 'push', '-q', 'origin', 'main')
+  return fx
+}
+// Commit a change, then record SIMULATED approvals bound to that content in a second commit.
+function reviewedChange(w, { approve = true, omit = null } = {}) {
+  write(w, 'src/app.ts', 'export const a = 1\n')
+  write(w, 'src/other.ts', 'export const b = 2\n')
+  write(w, DISPOSITION, '{}\n')
+  sh(w, 'add', '--', 'src/app.ts', 'src/other.ts')
+  sh(w, 'commit', '-q', '-m', 'change')
+  const files = ['src/app.ts', 'src/other.ts']
+  const reviewed = files.filter((f) => f !== omit)
+  const disposition = {
+    change_set_files: [...files, DISPOSITION].sort(),
+    reviews: [{ category: 'application_code', status: 'pending', files: reviewed }],
+  }
+  write(w, DISPOSITION, JSON.stringify(disposition))
+  if (approve) {
+    const fp = spawnSync('node', ['scripts/publish_readiness_check.mjs', '--review-fingerprint', 'application_code'], { cwd: w, encoding: 'utf8' }).stdout.trim()
+    Object.assign(disposition.reviews[0], { status: 'completed', reviewer: 'SIMULATED REVIEWER', outcome: 'SIMULATED approval', reviewed_content_sha256: fp })
+    write(w, DISPOSITION, JSON.stringify(disposition))
+  }
+  sh(w, 'add', '--', DISPOSITION)
+  sh(w, 'commit', '-q', '-m', 'disposition')
+}
+
+function publishScenario(id, title, fn, options) {
+  const fx = makePublishRepo(options)
+  let pass = false
+  let detail = ''
+  try {
+    fn(fx)
+    pass = true
+  } catch (e) {
+    detail = e.message
+  }
+  results.push({ id, title, pass, detail })
+  fs.rmSync(fx.base, { recursive: true, force: true })
+}
+const untouched = (fx, before) => expect(remoteHead(fx) === before, 'dummy remote changed')
+const tail = (r) => `exit ${r.code}\n${r.out.split('\n').slice(-25).join('\n')}`
+
+publishScenario(15, 'wrong branch is rejected before any change', (fx) => {
+  reviewedChange(fx.work)
+  sh(fx.work, 'switch', '-q', '-c', 'governance/x')
+  const before = remoteHead(fx)
+  const head = sh(fx.work, 'rev-parse', 'HEAD')
+  const status = sh(fx.work, 'status', '--porcelain')
+  const r = publish(fx.work)
+  expect(r.code === 1 && /publishes only local 'main' to origin\/main/.test(r.out), tail(r))
+  expect(sh(fx.work, 'rev-parse', 'HEAD') === head && sh(fx.work, 'status', '--porcelain') === status, 'work changed')
+  untouched(fx, before)
+})
+publishScenario(16, 'main tracking another upstream is rejected', (fx) => {
+  sh(fx.work, 'push', '-q', 'origin', 'main:other')
+  sh(fx.work, 'branch', '-q', '--set-upstream-to=origin/other', 'main')
+  const r = publish(fx.work)
+  expect(r.code === 1 && /must track origin\/main/.test(r.out), tail(r))
+})
+publishScenario(17, 'reviewed change set publishes; regenerated reports are not committed; review stays valid', (fx) => {
+  reviewedChange(fx.work)
+  const reviewedHead = sh(fx.work, 'rev-parse', 'HEAD')
+  const r = publish(fx.work)
+  expect(r.code === 0, tail(r))
+  expect(remoteHead(fx) === reviewedHead, 'published head differs from the reviewed head')
+  expect(sh(fx.work, 'status', '--porcelain') === '', 'tree dirty after publish: ' + sh(fx.work, 'status', '--porcelain'))
+  expect(/Publication branch: main -> destination: origin\/main/.test(r.out), 'destination not stated')
+})
+publishScenario(18, 'user edit to a report that existed before the run is kept, not committed', (fx) => {
+  reviewedChange(fx.work)
+  const reviewedHead = sh(fx.work, 'rev-parse', 'HEAD')
+  write(fx.work, REPORTS[1], '{"user":"edit"}\n')
+  const r = publish(fx.work)
+  expect(r.code === 0, tail(r))
+  expect(remoteHead(fx) === reviewedHead, 'extra commit published')
+  expect(fs.readFileSync(path.join(fx.work, REPORTS[1]), 'utf8') === '{"user":"edit"}\n', 'user edit lost')
+})
+publishScenario(19, 'pending review blocks publication', (fx) => {
+  reviewedChange(fx.work, { approve: false })
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 7 && /requires independent review/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+publishScenario(20, 'file edited after review: stale review blocks publication', (fx) => {
+  reviewedChange(fx.work)
+  commit(fx.work, 'src/app.ts', 'export const a = 999\n', 'late change')
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 7 && /stale reviewed_content_sha256/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+publishScenario(21, 'new file added after review blocks publication', (fx) => {
+  reviewedChange(fx.work)
+  commit(fx.work, 'src/late.ts', 'export const c = 3\n', 'late file')
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 7, tail(r))
+  untouched(fx, before)
+})
+publishScenario(22, 'completed review that omits an in-scope file blocks publication', (fx) => {
+  reviewedChange(fx.work, { omit: 'src/other.ts' })
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 7 && /does not cover: src\/other\.ts/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+publishScenario(23, 'remote divergence: stops after intake, nothing pushed', (fx) => {
+  reviewedChange(fx.work)
+  const other = clone(fx, 'other')
+  commit(other, 'remote.txt', 'r\n', 'remote change')
+  sh(other, 'push', '-q', 'origin', 'main')
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 4 && /Push withheld/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+publishScenario(24, 'failing mandatory validator blocks publication', (fx) => {
+  reviewedChange(fx.work)
+  const before = remoteHead(fx)
+  const r = publish(fx.work)
+  expect(r.code === 2, tail(r))
+  untouched(fx, before)
+}, { validateFails: true })
+publishScenario(25, 'declining the push prompt publishes nothing', (fx) => {
+  reviewedChange(fx.work)
+  const before = remoteHead(fx)
+  const r = publish(fx.work, { DECLINE: 'Push to origin main' })
+  expect(r.code === 1 && /Aborted by user before push/.test(r.out), tail(r))
+  untouched(fx, before)
+})
+
 let failed = 0
 for (const r of results) {
   if (!r.pass) failed++
