@@ -996,7 +996,6 @@ function BodyshopFloorScreenInner() {
   async function autoAssignDefaultEdpAfterRiComplete(car: FloorCar, k: string): Promise<boolean> {
     const edpSlot = assignments[k]?.EDP
     if (!shouldAutoAssignDefaultEdpAfterRi(edpSlot, car.branch)) return false
-    if (bsFloorStatus[k]?.completedAt) return false
 
     const { data: defaultEdp, error: defaultEdpError } = await supabase
       .from('employee_master')
@@ -1073,7 +1072,7 @@ function BodyshopFloorScreenInner() {
       showToast('Complete Re-Inspection (RI) before assigning EDP', 'error')
       return
     }
-    if (bsFloorStatus[k]?.completedAt) {
+    if (bsFloorStatus[k]?.completedAt && role !== 'EDP') {
       showToast('Floor is completed — assignments are locked', 'error')
       return
     }
@@ -1315,12 +1314,12 @@ function BodyshopFloorScreenInner() {
       .order('updated_at', { ascending: false })
     if (error) throw error
     const matching = ((data ?? []) as DBAssignmentRow[]).filter(r => jcKey(r.job_card_number) === k)
-    const canonical = resolveCanonicalAssignmentRowForJobCard(matching)
+    const canonical = resolveCanonicalAssignmentRowForJobCard(matching as unknown as Record<string, unknown>[])
     if (!canonical) return
     const assMap: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
     const rawByJc: Record<string, DBAssignmentRow> = {}
     const floorMap: Record<string, { completedAt: string | null; completedBy: string | null; enteredAt: string | null }> = {}
-    mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, canonical as DBAssignmentRow)
+    mergeAssignmentRowIntoMaps(assMap, rawByJc, floorMap, canonical as unknown as DBAssignmentRow)
     const merged = assMap[k]
     if (!merged) return
     setAssignments(prev => ({ ...prev, [k]: merged }))
@@ -2341,7 +2340,7 @@ function BodyshopFloorScreenInner() {
                           (notRequired ? 'Not Required' : assignment ? (STATUS_OPTIONS.find(o => o.value === assignment.work_status)?.label ?? assignment.work_status) : 'Unassigned')}
                       </Text>
                     </View>
-                    {assignment && !notRequired && !stepLocked && assignment.work_status !== 'completed' && canEditFloor && !bsComp ? (
+                    {assignment && !notRequired && !stepLocked && assignment.work_status !== 'completed' && canEditFloor && (!bsComp || role === 'EDP') ? (
                       <TouchableOpacity
                         onPress={() => { void saveStage(car, role, { statusOverride: 'completed' }) }}
                         disabled={Boolean(saving)}
@@ -2372,7 +2371,7 @@ function BodyshopFloorScreenInner() {
                     <TouchableOpacity
                       style={S.selectBtn}
                       onPress={() => { setEmpPickerRole(role); setEmpPickerSearch('') }}
-                      disabled={!canEditFloor || bsComp || stepLocked || (role === 'FLOOR_INCHARGE' && fiReassignBlocked)}
+                      disabled={!canEditFloor || (bsComp && role !== 'EDP') || stepLocked || (role === 'FLOOR_INCHARGE' && fiReassignBlocked)}
                     >
                       <Text style={[S.selectBtnText, !assignment && { color: '#82858f' }]}>
                         {notRequired ? NOT_REQUIRED_NAME : (assignment?.employee_name ?? 'Select employee...')}
@@ -2744,7 +2743,7 @@ function BodyshopFloorScreenInner() {
           loading ? (
             <ActivityIndicator style={{ marginTop: 40 }} color="#2563eb" />
           ) : (
-            <View style={S.empty}><Text style={S.emptyIcon}>🚗</Text><Text style={S.emptyText}>No vehicles found</Text></View>
+            <View style={S.empty}><Text style={S.emptyText}>No vehicles found</Text></View>
           )
         }
         renderItem={({ item: car }) => {
