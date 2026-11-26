@@ -22,9 +22,10 @@ import {
 } from '../src/lib/bodyshopFloorAge.ts'
 import {
   DEFAULT_BODYSHOP_FLOOR_EDP,
+  isEligibleDefaultEdpEmployee,
   shouldAutoAssignDefaultEdpAfterRi,
 } from '../src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts'
-import { shouldAutoAssignDefaultEdpAfterRi as mobileShouldAutoAssignDefaultEdpAfterRi } from '../mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi'
+import { isEligibleDefaultEdpEmployee as mobileIsEligibleDefaultEdpEmployee, shouldAutoAssignDefaultEdpAfterRi as mobileShouldAutoAssignDefaultEdpAfterRi } from '../mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi'
 
 type Row = Record<string, unknown>
 
@@ -242,6 +243,15 @@ check('floor flow — QC active then RI after pass then EDP after RI', () => {
 })
 
 check('default EDP auto-assign — only when slot empty', () => {
+  for (const eligible of [isEligibleDefaultEdpEmployee, mobileIsEligibleDefaultEdpEmployee]) {
+    const row = { employee_code: 'EDS1_500A840', role: 'EDP', location: 'Sitapura', is_active: true }
+    assert.equal(eligible(row), true)
+    assert.equal(eligible(null), false)
+    assert.equal(eligible(undefined), false)
+    for (const bad of [{ is_active: false }, { is_active: null }, { role: 'TECHNICIAN' }, { role: null }, { location: 'Ajmer Road' }, { location: null }, { employee_code: 'OTHER' }]) {
+      assert.equal(eligible({ ...row, ...bad }), false, JSON.stringify(bad))
+    }
+  }
   for (const decide of [shouldAutoAssignDefaultEdpAfterRi, mobileShouldAutoAssignDefaultEdpAfterRi]) {
     // Sitapura, empty slot: assign
     for (const branch of ['Sitapura', 'Sitapura PV', 'Sitapura EV', ' sitapura ']) {

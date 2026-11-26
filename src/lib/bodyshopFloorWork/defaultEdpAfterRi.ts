@@ -33,6 +33,22 @@ export function shouldAutoAssignDefaultEdpAfterRi(slot: EdpAssignmentSlot, branc
   return false
 }
 
+/**
+ * The default EDP is assigned only after their current employee record is confirmed: active, role EDP, at
+ * Sitapura. A missing, unreadable or different record means no automatic assignment.
+ */
+export function isEligibleDefaultEdpEmployee(
+  row: { employee_code?: string | null; role?: string | null; location?: string | null; is_active?: boolean | null } | null | undefined,
+): boolean {
+  if (!row) return false
+  return (
+    String(row.employee_code ?? '').trim().toUpperCase() === DEFAULT_BODYSHOP_FLOOR_EDP.employee_code &&
+    row.is_active === true &&
+    String(row.role ?? '').trim().toUpperCase() === 'EDP' &&
+    matchesBranchSelection(row.location, 'Sitapura')
+  )
+}
+
 export function buildDefaultEdpAssignmentFields(
   nowIso: string,
   assignedBy: string | null,

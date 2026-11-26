@@ -48,6 +48,7 @@ import { isBodyshopWorkerPipelineAssignRole } from '../../lib/bodyshopFloorWork/
 import {
   buildDefaultEdpAssignmentFields,
   DEFAULT_BODYSHOP_FLOOR_EDP,
+  isEligibleDefaultEdpEmployee,
   shouldAutoAssignDefaultEdpAfterRi,
 } from '../../lib/bodyshopFloorWork/defaultEdpAfterRi'
 import { bodyshopFloorAgeSummary, formatIstSinceShort } from '../../lib/bodyshopFloorAge'
@@ -996,6 +997,13 @@ function BodyshopFloorScreenInner() {
     const edpSlot = assignments[k]?.EDP
     if (!shouldAutoAssignDefaultEdpAfterRi(edpSlot, car.branch)) return false
     if (bsFloorStatus[k]?.completedAt) return false
+
+    const { data: defaultEdp, error: defaultEdpError } = await supabase
+      .from('employee_master')
+      .select('employee_code, role, location, is_active')
+      .eq('employee_code', DEFAULT_BODYSHOP_FLOOR_EDP.employee_code)
+      .maybeSingle()
+    if (defaultEdpError || !isEligibleDefaultEdpEmployee(defaultEdp)) return false
 
     const now = new Date().toISOString()
     const { data: { user } } = await supabase.auth.getUser()
