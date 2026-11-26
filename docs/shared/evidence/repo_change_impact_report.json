@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-26T05:01:01.920Z",
+  "generated_at_utc": "2026-11-26T05:17:07.683Z",
   "mode": "pending_working_tree_changes",
   "advisory_only": true,
   "read_only": true,
@@ -7,7 +7,7 @@
   "commit_range": null,
   "commit_range_resolved": null,
   "commits": null,
-  "total_files_changed": 15,
+  "total_files_changed": 13,
   "files": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
@@ -15,6 +15,30 @@
       "git_status": "modified",
       "category": "generated_artifact",
       "category_label": "Generated artifact",
+      "note": null
+    },
+    {
+      "path": "docs/Implementation_plans/webversion/IMPLEMENTATION_TRACKER.md",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "implementation_plan",
+      "category_label": "Implementation plan",
+      "note": null
+    },
+    {
+      "path": "docs/Implementation_plans/webversion/INDEX.md",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "implementation_plan",
+      "category_label": "Implementation plan",
+      "note": null
+    },
+    {
+      "path": "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "implementation_plan",
+      "category_label": "Implementation plan",
       "note": null
     },
     {
@@ -34,6 +58,30 @@
       "note": null
     },
     {
+      "path": "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "evidence",
+      "category_label": "Evidence",
+      "note": null
+    },
+    {
+      "path": "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "evidence",
+      "category_label": "Evidence",
+      "note": null
+    },
+    {
+      "path": "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "evidence",
+      "category_label": "Evidence",
+      "note": null
+    },
+    {
       "path": "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_TEST_MATRIX.md",
       "old_path": null,
       "git_status": "modified",
@@ -42,141 +90,58 @@
       "note": null
     },
     {
-      "path": "docs/shared/evidence/publication_readiness_disposition.json",
+      "path": "docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md",
       "old_path": null,
       "git_status": "modified",
+      "category": "implementation_plan",
+      "category_label": "Implementation plan",
+      "note": null
+    },
+    {
+      "path": "docs/shared/active/CHANGE_LOG.md",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "documentation_reference_truth",
+      "category_label": "Documentation / reference truth",
+      "note": null
+    },
+    {
+      "path": "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md",
+      "old_path": null,
+      "git_status": "untracked (new)",
       "category": "evidence",
       "category_label": "Evidence",
-      "note": null
-    },
-    {
-      "path": "docs/shared/evidence/repo_change_impact_report.json",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "generated_artifact",
-      "category_label": "Generated artifact",
-      "note": null
-    },
-    {
-      "path": "scripts/report-catalogue.harness.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "automation_script",
-      "category_label": "Automation script (general repository automation)",
-      "note": null
-    },
-    {
-      "path": "src/lib/branches.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/lib/reportQueries.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/pages/ReportsPage.tsx",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/pages/reports/index.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/pages/reports/performance/index.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/pages/reports/reportCatalogue.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "src/pages/reports/revenue/index.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
       "note": null
     }
   ],
   "categories_present": [
     {
-      "category": "application_code",
-      "label": "Application code",
+      "category": "documentation_reference_truth",
+      "label": "Documentation / reference truth",
       "files": [
-        "src/lib/branches.ts",
-        "src/lib/reportQueries.ts",
-        "src/pages/ReportsPage.tsx",
-        "src/pages/reports/index.ts",
-        "src/pages/reports/performance/index.ts",
-        "src/pages/reports/reportCatalogue.ts",
-        "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
-        "src/pages/reports/revenue/index.ts"
+        "docs/shared/active/CHANGE_LOG.md"
       ],
-      "owning_authority": ".instructions.md Section 2 item 1; docs/DOCS_IMPACT_MATRIX.md; docs/shared/README.md; docs/shared/reference/CURRENT_STATE.md",
-      "required_doc_updates": "Per docs/DOCS_IMPACT_MATRIX.md row for the matched path: CURRENT_STATE.md snapshot fields, CHANGE_LOG.md entry, README.md section if architecture/logic/contracts changed.",
+      "owning_authority": "docs/STRUCTURE_GUIDE.md (placement, Sections 2-3, 14); the specific reference doc's own domain.",
+      "required_doc_updates": "SYNC_PROTOCOL.md Index Update Rule if the doc is new/moved/materially changed (update the owning category README.md and docs/MASTER_INDEX.md if it introduces a new section that index doesn't list).",
       "required_validation": [
-        "npm run docs:validate"
+        "npm run docs:validate",
+        "npm run docs:validate:health"
       ],
-      "practical_verification": "Standard feature/bug-fix verification for the changed behavior. If the change touches business logic, the Cross-Platform Parity Protocol (SYNC_PROTOCOL.md) applies: run `npx --prefix mobile tsc --noEmit -p mobile/tsconfig.json` if mobile parity is affected, and the Practical Verification Gate does not apply unless the file is also a script/automation.",
-      "publish_safe_without_review": false,
-      "review_recommended": true,
-      "review_reason": "Business-logic changes require an explicit Web-Mobile Parity declaration before merge (SYNC_PROTOCOL.md Merge Guard); standard code review otherwise."
-    },
-    {
-      "category": "automation_script",
-      "label": "Automation script (general repository automation)",
-      "files": [
-        "scripts/report-catalogue.harness.ts"
-      ],
-      "owning_authority": "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md (names scripts/git-safe-publish.sh for Stage 5); SYNC_PROTOCOL.md Practical Verification Gate.",
-      "required_doc_updates": "None unless its documented behavior changes — then update whichever authority names it.",
-      "required_validation": [
-        "node --check <file> (or bash -n for .sh)"
-      ],
-      "practical_verification": "SYNC_PROTOCOL.md Practical Verification Gate, \"For scripts\" (mandatory). If the file is scripts/git-safe-publish.sh specifically, the five additional script-specific checks in that Gate also apply (no push during test; stops on validation failure; stops on rebase conflict; prints AUDIT_PROMPT; does not scan local_folder/backups/).",
-      "publish_safe_without_review": false,
-      "review_recommended": true,
-      "review_reason": "Always review — repository automation, and at maximum sensitivity if the file is scripts/git-safe-publish.sh (the Publication mechanism for every transaction type)."
+      "practical_verification": "Not applicable unless the doc is itself a script/contract/prompt (then use the repository_authority verification instead).",
+      "publish_safe_without_review": true,
+      "review_recommended": false,
+      "review_reason": "Safe for wording/clarity edits. Recommend review only if the edit redefines a policy/protocol meaning rather than clarifying existing text."
     },
     {
       "category": "evidence",
       "label": "Evidence",
       "files": [
         "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md",
+        "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv",
+        "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv",
+        "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv",
         "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_TEST_MATRIX.md",
-        "docs/shared/evidence/publication_readiness_disposition.json"
+        "docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md"
       ],
       "owning_authority": "The relevant module/category/plan evidence/ folder (docs/STRUCTURE_GUIDE.md Sections 2-3).",
       "required_doc_updates": "None beyond the evidence file itself, unless it underpins a promotion claim (STRUCTURE_GUIDE.md Section 28).",
@@ -192,8 +157,7 @@
       "category": "generated_artifact",
       "label": "Generated artifact",
       "files": [
-        "docs/Implementation_plans/retention_validation_report.json",
-        "docs/shared/evidence/repo_change_impact_report.json"
+        "docs/Implementation_plans/retention_validation_report.json"
       ],
       "owning_authority": "SYNC_PROTOCOL.md Generated Artifact Rule; docs/shared/reference/DATABASE_TRUTH.md for DB dumps/manifests specifically.",
       "required_doc_updates": "None — never hand-edit a generated artifact.",
@@ -209,7 +173,11 @@
       "category": "implementation_plan",
       "label": "Implementation plan",
       "files": [
-        "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md"
+        "docs/Implementation_plans/webversion/IMPLEMENTATION_TRACKER.md",
+        "docs/Implementation_plans/webversion/INDEX.md",
+        "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md",
+        "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md",
+        "docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md"
       ],
       "owning_authority": "docs/Implementation_plans/INDEX.md + platform IMPLEMENTATION_TRACKER.md; docs/STRUCTURE_GUIDE.md Sections 3.5/5/7/19/30.",
       "required_doc_updates": "Platform INDEX.md / IMPLEMENTATION_TRACKER.md if status changed; promotion-before-removal summary (STRUCTURE_GUIDE.md Section 28) if any item became Done+Verified.",
@@ -224,11 +192,10 @@
   ],
   "validation_commands_to_run": [
     "npm run docs:validate",
-    "node --check <file> (or bash -n for .sh)",
     "npm run docs:validate:health",
     "npm run docs:validate:plans"
   ],
   "unknown_or_unmapped_files": [],
-  "independent_review_recommended_before_publication": true,
+  "independent_review_recommended_before_publication": false,
   "push_should_remain_stopped_until_reviewed": null
 }

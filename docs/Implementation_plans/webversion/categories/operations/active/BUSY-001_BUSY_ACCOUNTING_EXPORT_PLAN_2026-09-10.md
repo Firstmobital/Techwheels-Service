@@ -9,7 +9,7 @@
 **Platform:** webversion  
 **Category:** operations  
 **Reference page:** `/busy`
-**Related (do not merge):** ACCOUNTS-002 (proposes a Busy export-run log and series/FY rollover work to be executed under this plan after approval; proposed, not started)
+**Related (do not merge):** [ACCOUNTS-002](../../accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md) (**IP**; proposes task **4.4** export-run log and FY series coordination — not approved in BUSY-001; PD-11 Busy reconciliation blocked)
 
 ---
 

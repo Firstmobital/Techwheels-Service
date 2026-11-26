@@ -42,7 +42,7 @@ Use this file as daily command center:
 | Plan ID | Category | Status | Owner | File |
 |---|---|---|---|---|
 | ACCOUNTS-001 | accounts | Active (DBL-0068 APPLIED Admin Mechanical receipt edit; DBL-0061 Gatepass 2% / Keep on Credit / overpay) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
-| ACCOUNTS-002 | accounts | In Progress (conditional approval 2026-11-25; local implementation verified on an isolated database; DBL-0101/0102 proposed, not applied; not published) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md` |
+| ACCOUNTS-002 | accounts | In Progress (web source on `main` @ `ed9b7ec0`; harness/build PASS; DBL-0101/0102 PROPOSED not applied; signed-in production verification outstanding) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md` |
 | CHAT-001 | chat | In progress (migration applied; live two-way check pending) | Web + Mobile + Platform | `docs/Implementation_plans/webversion/categories/chat/active/CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md` |
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
 | BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
@@ -100,6 +100,7 @@ Use this file as daily command center:
 | accounts | `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv` |
 | accounts | `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv` |
 | accounts | `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv` |
+| accounts | `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md` |
 | chat | `docs/Implementation_plans/webversion/categories/chat/evidence/CHAT-001_PHASE1_APPLY_2026-09-25.md` |
 | autodoc | `docs/Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BP-01_DASHBOARD_DEEP_AUDIT.md` |

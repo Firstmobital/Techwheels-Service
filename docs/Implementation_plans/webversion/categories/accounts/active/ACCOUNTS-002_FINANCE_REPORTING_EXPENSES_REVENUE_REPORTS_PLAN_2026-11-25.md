@@ -23,7 +23,7 @@ Service already holds DMS invoice revenue, exports sales and receipt vouchers to
 
 Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts, payroll), **management reporting** (`/reports` and proposed read-only views), **formal accounting** (Busy). Service posts nothing to a ledger.
 
-**Implementation status (2026-11-26):** conditional phased implementation approved; application source published on `main` with production-schema fallbacks; database change sets not applied; signed-in workflows not verified (see Consolidation and release status and Implementation Record).  
+**Implementation status (2026-11-26):** conditional phased implementation approved; application source published on `main` (`ed9b7ec0` latest ACCOUNTS-002 batch) with production-schema fallbacks; database change sets not applied; signed-in workflows not verified (see Consolidation and release status and Implementation Record). **Business impact (layman):** [before-and-after report](../evidence/ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md) (EV-067).  
 **Fit-gap totals (21 handoff requirements):** REUSE 2 · CONFIGURE 0 · EXTEND 10 · BUILD 1 · DEFER 8.  
 **Risk Level:** MEDIUM (access hardening and revenue arithmetic change visible behaviour)  
 **Estimated Duration:** about 6–9 working days of engineering after decisions, in 5 phases; Phase 4 has a hard date (before 2027-04-01)  
@@ -45,10 +45,35 @@ Three layers stay distinct: **operational records** (DMS invoices, JCs, receipts
 
 | Track | State | Evidence |
 |---|---|---|
-| **Audit and readiness verification (completed work)** | Done (static, then isolated runtime) | [baseline and current state](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md), [fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv), [source mapping](../evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv), [lineage](../evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv), [reports catalogue](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv), [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md), [evidence index](../evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv) |
+| **Audit and readiness verification (completed work)** | Done (static, then isolated runtime) | [baseline and current state](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md), [fit-gap](../evidence/ACCOUNTS-002_FIT_GAP_2026-11-25.csv), [source mapping](../evidence/ACCOUNTS-002_SOURCE_TO_TARGET_MAPPING_2026-11-25.csv), [lineage](../evidence/ACCOUNTS-002_REPORT_LINEAGE_2026-11-25.csv), [reports catalogue](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv), [test matrix](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [decision log](../evidence/ACCOUNTS-002_DECISION_LOG_2026-11-25.md), [evidence index](../evidence/ACCOUNTS-002_EVIDENCE_INDEX_2026-11-25.csv), [business functionality before/after](../evidence/ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md) |
 | **Implementation** | In progress on `main`. Approved security, accuracy and reporting activities implemented; isolated-database verification done; web source published; migrations PROPOSED; release prerequisites, owner-plan activities and unapproved items pending | Consolidation and release status; Implementation Record |
-| Runtime verification | Isolated runtime done on synthetic data (second pass); read-only production API probes recorded 2026-11-26; signed-in page workflows and hosted Auth settings not verified | [Test matrix §3](../evidence/ACCOUNTS-002_TEST_MATRIX.md) |
+| Runtime verification | Isolated runtime + function-level harnesses (2026-11-26); read-only production API probes recorded 2026-11-26; **signed-in production UI not verified** | [Test matrix §3–§4](../evidence/ACCOUNTS-002_TEST_MATRIX.md), [§6 production verification gaps](../evidence/ACCOUNTS-002_TEST_MATRIX.md) |
 | Schema evidence limits | Committed and local snapshots agree on every cited `public` definition; neither proves production | [Audit baseline §3.2](../evidence/ACCOUNTS-002_AUDIT_BASELINE_AND_CURRENT_STATE_2026-11-25.md) |
+
+### Report inventory and count reconciliation (EV-066)
+
+| Count | Meaning | When |
+|---|---|---|
+| **38** | Reports **registered in the menu** at audit baseline `e7877341` (6 categories; Performance components existed but were **not** in `reports/index.ts`) | 2026-11-25 audit |
+| **+1** | **Invoice Revenue (Finance basis)** added to Revenue category (`b1034ea9`) | 2026-11-25 implementation |
+| **39** | Registered in menu before PD-26 | After `b1034ea9`, before `ed9b7ec0` |
+| **48** | Rows in the [reports catalogue CSV](../evidence/ACCOUNTS-002_REPORTS_CATALOGUE_2026-11-25.csv) at audit time: 38 registered + 10 Performance definitions (same components, marked unreachable) | Static audit |
+| **+10** | Performance category wired in registry (`ed9b7ec0`, PD-26) — **navigation registration only**; report logic pre-existed | 2026-11-26 |
+| **49** | **Authoritative registered count today** (`REPORT_DEFINITIONS` in `src/pages/reports/index.ts`): dashboard 2, labour-revenue 5, revenue 8, performance 10, parts 15, warranty 8, master-data 1 | 2026-11-26 |
+
+**40** in some audit notes was **38 menu + 2 dashboard KPI reports counted separately** or **39 + Performance category shell** before reports were wired — use **49** as the registry truth.
+
+### Chronology (selected commits)
+
+| Commit | Milestone |
+|---|---|
+| `e7877341` | Audit baseline |
+| `b52c1e83` | DBL-0101/0102 authored (PROPOSED) |
+| `b1034ea9` | Invoice finance report, payroll cost, initial row-cap notice |
+| `31fd5b0a` / `779fb2f4` | Consolidation and web publication to `main` |
+| `513b018b` | Governance doc reconciliation |
+| `ed9b7ec0` | PD-26 Performance + web pagination + labelling |
+| (docs) 2026-11-26 | Governed documentation consolidation; EV-067 business report |
 
 ---
 
@@ -103,7 +128,7 @@ Assumptions are marked (A). Items trace to fit-gap rows (CAP-nnn) and evidence I
 | Capability | Evidence | Use in this plan |
 |---|---|---|
 | DMS invoice revenue in `psf_revenue_dms` (invoice grain, status, cancellation, unique key, idempotent import RPC) | EV-015, EV-027 | Proposed finance revenue basis (CAP-009) |
-| JC-grain `job_card_closed_data` mirror and report loaders | EV-017, EV-021 | Stays the operational basis for the 38 registered reports |
+| JC-grain `job_card_closed_data` mirror and report loaders | EV-017, EV-021 | Stays the operational basis for **47** registered reports (all except **Invoice Revenue (Finance basis)**); **49** total registered in menu (see Report inventory below) |
 | Busy sales-voucher/party export with GST 5%/18% slabs, paise rounding, cancelled-invoice exclusion | EV-007, EV-008, EV-010 | Existing posting arrangement; unchanged |
 | Accounts receipts, RApp/JApp vouchers with immutable numbers and a unique index; delete audited | EV-012, EV-013, EV-014, EV-037 | Unchanged; series inventory input to CAP-021 |
 | Bodyshop settlement lines: append-only, reversal and write-off RPCs | EV-024 | Model for corrections (negative entries) |
@@ -253,7 +278,7 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | 1.1, 1.2 | ACCOUNTS-002 | Implemented-local (approval and decisions recorded here and in the decision log) | Decision log §F |
 | 1.3 | ACCOUNTS-002 | Partly done: DMS evidence from the local full-database dump (aggregates only). Busy extract and Sales series list unavailable: Blocked | EV-054 |
 | 1.4, 1.5 | ACCOUNTS-002 | Implemented-local: scratch database from the committed snapshot; baseline findings from the second pass reused, not re-run before the change. A maintained disposable environment is still pending | EV-043 |
-| 2.1 | ACCOUNTS-002 (Accounts page part: ACCOUNTS-001) | Implemented-local: report loaders raise a visible notice at the 5,000-row cap; new loaders read to completion or fail | Test matrix §4 |
+| 2.1 | ACCOUNTS-002 (Accounts page part: ACCOUNTS-001) | **Partial:** web shared `reportQueries` loaders paginate to completion or throw (`ed9b7ec0`); row-cap notice UI largely dormant; **Job Card Details** and **Service Invoice Order Status** still `.limit(5000)`; mobile unchanged; Accounts payment-line warning still ACCOUNTS-001 **4.7** | Test matrix §4 ST-02; EV-063; EV-067 |
 | 2.2, 2.3, 2.6 | ACCOUNTS-002 | Implemented-local: invoice-level net, GST, cancelled apart, flagged invoices, headline equals detail | EV-053 |
 | 2.4 | ACCOUNTS-002 | Blocked: no business authority identifies the hard-coded advisor names; left unchanged (PD-23) | — |
 | 2.5 | ACCOUNTS-002 | Done: web-mobile assessment below | — |
@@ -281,6 +306,8 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | `f573fae4` | Bank-field callers moved to the gated RPCs | `src/lib/api/employeeBank.ts`, `src/lib/api/payroll.ts`, `src/pages/SettingsPage.tsx`, `src/pages/SATrackerPage.tsx` | 3.5 | `tsc` and ESLint on changed files; not run against a database with the RPCs (page level NOT RUN) |
 | `b1034ea9` | Invoice-level revenue and report, row-cap notice, branch helper, payroll Cost Summary, harnesses | `src/lib/revenue/invoiceRevenue.ts`, `src/lib/revenue/invoiceRevenueSource.ts`, `src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx`, `src/pages/reports/revenue/index.ts`, `src/pages/reports/types.ts`, `src/lib/reportQueries.ts`, `src/pages/ReportsPage.tsx`, `src/lib/branches.ts`, `src/lib/payroll/costSummary.ts`, `src/pages/payroll/PayrollCostTab.tsx`, `src/pages/PayrollPage.tsx`, `scripts/invoice-revenue.harness.ts`, `scripts/payroll-cost-summary.harness.ts`, `package.json` | 2.1, 2.2, 2.3, 2.6, 4.1, 4.2, 4.3 (partial), 4.5 (internal) | Function-level harness runs through the TypeScript compiler (named npm commands not executed); `tsc` and ESLint on changed files |
 | `e8a97700`, `321ed3fb` | Plan, decision log, test matrix, evidence CSVs, tracker, index, change log, caller inventory | ACCOUNTS-002 plan and evidence files, web tracker and index, `docs/shared/active/CHANGE_LOG.md` | 1.1, 1.2, 3.1, 4.6, 5.1 to 5.3 | `docs:validate`, `docs:validate:health` |
+| `ed9b7ec0` | Performance registration (PD-26); web shared-loader pagination; operational-vs-finance labelling; branch hints | `src/pages/reports/index.ts`, `reportQueries.ts`, `branches.ts`, revenue/Reports copy, governed evidence updates | 2.1 (web shared), 4.3, PD-26 | build; report-catalogue; invoice-revenue; payroll-cost harnesses |
+| (docs only) 2026-11-26 | Governed documentation consolidation; business before/after report preserved | Evidence index, lineage, catalogue CSV, plan, test matrix §6, web INDEX, CHANGE_LOG | All documentation authorities | `docs:validate` |
 
 ### Approved decisions compared with the achieved implementation
 | Decision | Achieved locally (isolated verification only) | Not achieved or exception | Open record |
@@ -318,7 +345,8 @@ Classification of other items: TECHNICAL DEBT: `validate_migrations_ci.mjs` orde
 | Bank-field callers | yes | yes (`f573fae4`) | type-check and lint only | web source on `main` (`779fb2f4`); RPC fallback on current DB | signed-in pages not run | no |
 | Invoice revenue and report | yes | yes (`b1034ea9`) | function level; page not run | web source on `main` | signed-in workflows not run | no |
 | Payroll Cost Summary | yes | yes (`b1034ea9`) | function level; page not run | web source on `main` | signed-in workflows not run | no |
-| Row-cap notice | yes | yes (`b1034ea9`) | logic level; page not run | web source on `main` | signed-in workflows not run | no |
+| Shared-loader pagination (web) | yes | yes (`ed9b7ec0`) | harness/build; not production volume test | web source on `main` | signed-in workflows not run | no |
+| Row-cap notice UI | yes | yes (`b1034ea9`) | largely dormant after cap removal | web source on `main` | not run | no |
 | Financial-year change | design only | design recorded | feasibility on scratch only | not authorized | no | no |
 
 ### Release prerequisites (before any migration is applied to a governed environment)
@@ -381,7 +409,8 @@ At the user's instruction the ACCOUNTS-002 history was merged into `main` with t
 - **Database:** DBL-0101 and DBL-0102 are **PROPOSED and not applied**. Publishing the files does not apply them (a migration deferred on `main` since 2026-11-16, DBL-0097, is still absent from the snapshot).
 - **Compatibility with the current database (checked 2026-11-26):** employee bank reads and writes fall back to the direct columns when the RPC is missing; production returns `PGRST202` for `get_employee_bank_details` (read-only probe with the public key). The invoice replacement summary reports "not available" when its table is missing (production returns `PGRST205`). The invoice report's columns exist. Signed-in page workflows were not exercised in production.
 - **Must be resolved before applying DBL-0101** (findings of an AI review; tracked, not defects of the current release): dealer-code mapping knows only three codes, so Tonk, Shahpura and other users would see no finance rows; bank columns stay directly writable where row policy allows (pre-existing); the invoice report would still say the source was read completely when row policy filters it; `finance_data_can_import` accepts view access; payroll employee loading fails if the bank RPC errors; apply order is application first.
-- **Deferred decisions unchanged:** other administrators, banking-path restrictions, Finance UI permission separation, advisor exclusions, invoice identity redesign, report registration (PD-26), financial-year implementation (design only).
+- **Deferred decisions unchanged:** other administrators, banking-path restrictions, Finance UI permission separation, advisor exclusions, invoice identity redesign **implementation** (PD-24), financial-year **implementation** (PD-20; design only), database apply (DBL-0101/0102).
+- **Completed since consolidation:** PD-26 Performance report registration (`ed9b7ec0`); web shared-loader pagination; governed business before/after report (EV-067).
 
 ## Implementation Tasks
 
@@ -454,7 +483,7 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 🔄 1.3 | Collect inputs | Accounting owner | 2026-11-25 | - | DMS evidence done; Busy extract and Sales series list missing
 ✅ 1.4 | Isolated scratch database and fixtures | Eng | 2026-11-25 | 2026-11-25 | A maintained environment is still pending
 ✅ 1.5 | Baseline | Eng | 2026-11-25 | 2026-11-25 | Second-pass findings reused, not re-run
-✅ 2.1 | Report completeness notice | Eng | 2026-11-25 | 2026-11-25 | Accounts part is 4.7 (ACCOUNTS-001)
+🔄 2.1 | Report completeness / pagination | Eng | 2026-11-25 | 2026-11-26 | Web shared loaders fixed `ed9b7ec0`; 2 reports + mobile cap remain; Accounts 4.7 open
 ✅ 2.2 | Invoice-level revenue with real GST | Eng | 2026-11-25 | 2026-11-25 | invoiceRevenue.ts; ST-04
 ✅ 2.3 | Cancelled invoices apart | Eng | 2026-11-25 | 2026-11-25 | ST-05
 ❌ 2.4 | Advisor exclusion | Business owner | - | - | No authority names these advisors (PD-23)
@@ -469,7 +498,7 @@ Status key: ⏳ pending, 🔄 in progress, ✅ done, ❌ blocked. Every row trac
 ✅ 3.6 | Branch scope model | Eng | 2026-11-25 | 2026-11-25 | Isolated; production mapping is a release prerequisite
 ✅ 4.1 | Branch attribution with Unmapped | Eng | 2026-11-25 | 2026-11-25 | New report and payroll cost
 ✅ 4.2 | Payroll cost summary | Eng | 2026-11-25 | 2026-11-25 | Employer cost not available
-✅ 4.3 | Report catalogue fields | Eng | 2026-11-25 | 2026-11-26 | 49 registered reports (PD-26); Performance category wired
+✅ 4.3 | Report catalogue fields | Eng | 2026-11-25 | 2026-11-26 | 49 registered reports (PD-26); Performance category wired; business report EV-067
 ⏳ 4.4 | busy_export_runs | Eng (BUSY-001) | - | - | Owned by BUSY-001; no separate authorization
 ❌ 4.5 | Reconciliation to Busy | Finance head | - | - | Internal comparison done; Busy part blocked (PD-11)
 ✅ 4.6 | Lineage and mapping | Eng | 2026-11-25 | 2026-11-25 | Lineage CSV
@@ -525,6 +554,8 @@ Tightening RLS may break importers or mobile paths that rely on open writes (mit
 1. 2026-11-25 IST, isolated runtime second pass: test matrix §3 (27 tests: PASS 5, FAIL 7, STATIC_ONLY 6, NOT_RUN 6, BLOCKED 3).
 2. 2026-11-25 IST, implementation verification: test matrix §4 (27 tests: PASS 15, FAILED 2, STATIC EVIDENCE ONLY 3, NOT RUN 4, BLOCKED 3). Comparison with evidence 1: the security failures (ST-09, ST-24, ST-25) now pass on the isolated database after DBL-0101; ST-04 passes at function level; ST-07 passes for the safeguard. Still failing: ST-15 (catalogue incomplete) and ST-23 (financial year, not approved). Signed-in production workflows were not verified.
 3. 2026-11-26, consolidation: application source on `main` at `779fb2f4`; read-only production probes (missing bank RPC, missing conflicts table, invoice report columns present) recorded in **Consolidation and release status**.
+4. 2026-11-26, implementation batch `ed9b7ec0`: PD-26 Performance registration, web pagination, labelling; harness/build PASS; push synchronized.
+5. 2026-11-26, governed documentation consolidation: [business before/after report](../evidence/ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md) (EV-067); authorities synchronized; production UI checks listed in test matrix §8.
 
 ## Next Actions
 

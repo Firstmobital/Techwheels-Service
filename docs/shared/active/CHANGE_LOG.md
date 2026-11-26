@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (ACCOUNTS-002 governed documentation consolidation)
+
+- Date: 2026-11-26
+- Change summary: Documentation-only transaction synchronizing ACCOUNTS-002 authorities: implementation plan (report inventory, activity statuses, chronology), decision log (G1 documentation note), test matrix (§7–§8 production gaps), evidence index (EV-063–EV-067), report catalogue CSV (Performance registered), report lineage (LIN-R2b, operational labelling), business functionality before/after report preserved in evidence, web INDEX and cross-plan pointers (ACCOUNTS-001, BUSY-001). No application, migration, or database changes.
+- Impacted files: `docs/Implementation_plans/webversion/categories/accounts/**`, `docs/Implementation_plans/webversion/INDEX.md`, ACCOUNTS-001 and BUSY-001 plan headers, this log.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No (DBL-0101/0102 remain PROPOSED unapplied)
+- Data/schema change: No
+- Docs updated by: ACCOUNTS-002 documentation consolidation.
+
 ## 2026-11-26 (consolidation into main; main-centered, risk-based publication)
 
 - Date: 2026-11-26

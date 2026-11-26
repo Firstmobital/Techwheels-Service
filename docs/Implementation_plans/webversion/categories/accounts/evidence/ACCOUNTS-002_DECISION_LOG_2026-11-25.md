@@ -109,6 +109,7 @@ The open decisions that follow from the approvals are in section G (not repeated
 | PD-20 | Automatic FY design may proceed at application layer only where compatible with current DB; all migration work deferred. |
 | Pagination / revenue | Unify financial vs operational labeling; remove silent 5k web cap; do not change JC report grain. |
 | Publication | Safe compatible web publication on `main` authorized; no DB apply, no mobile OTA. |
+| Documentation | Governed consolidation 2026-11-26: synchronize plan, decisions, test matrix, catalogue, lineage, evidence index; preserve [business before/after report](ACCOUNTS-002_BUSINESS_FUNCTIONALITY_BEFORE_AFTER_2026-11-26.md) (EV-067). No application changes in that transaction. |
 
 **PD-24 design summary (approval-ready, not implemented):** authoritative identity = DMS invoice number within dealer scope; same job card + date may hold multiple invoices (EVidence EV-054); re-import updates the active row but DBL-0102 preserves replaced rows for audit; financial totals must count every non-cancelled invoice row, not only the surviving key; implementation requires unique-key change, voucher trigger, JC mirror, Busy export key, importer parity (web + mobile), backfill from `invoice_overwrite_audit` where present, migration + rollback playbook. Blocked until PD-24 implementation approval.
 

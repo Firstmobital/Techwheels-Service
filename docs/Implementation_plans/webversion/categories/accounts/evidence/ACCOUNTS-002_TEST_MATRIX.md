@@ -190,20 +190,47 @@ Counts above were re-checked on 2026-11-26 after PD-26 registration and paginati
 ## 6. Validation record and limitations
 - **Isolated database:** a scratch PostgreSQL 17 on loopback, restored from the committed schema snapshot; four extensions unavailable (pgtap, pg_net, pg_cron, supabase_vault); synthetic users and rows; destroyed afterwards; not a governed environment.
 - **Function-level execution (alternative harness command):** the named npm commands `npm run test:invoice-revenue` and `npm run test:payroll-cost` were **not executed** (they use `npx tsx`, which was not installed and would download it). Instead each harness and its library were transpiled with the repository's `typescript` package (`ts.transpileModule`, CommonJS) and run with Node through `node -e`; both printed OK. The row-cap helper was run the same way (4,999 rows: no notice; 5,000: notice).
-- **Type-check:** `npx tsc -p tsconfig.app.json --noEmit` reports only two pre-existing errors in `BodyshopRepairPage.tsx`; none in changed files. A full repository build is **not** claimed: `npm run build` fails at `HEAD` and `origin/main` for that unrelated reason.
+- **Type-check / build:** `npm run build` **PASS** on `main` at `ed9b7ec0` (2026-11-26 publication batch). Pre-consolidation build failure (Bodyshop export) was fixed before merge (EV-057).
 - **Lint:** ESLint on the changed files reports no errors (pre-existing warnings only). Repo-wide `npm run lint` reports 1,590 pre-existing errors, none in changed files.
 - **Documentation validators:** `npm run docs:validate` passes (89 active plans); the health audit reports 0 broken links, the same 6 pre-existing advisory findings, and ledger coverage 0 unmatched of 2 prospective migrations.
 - **Not performed:** page-level checks of the new report, the Cost Summary tab, Settings, SA Tracker and payroll; mobile import and payroll earnings regression; staging verification; production role and Auth verification (signup, confirmation, API exposure); real Busy import; independent review.
 
-## 7. Addendum — continued implementation (2026-11-25, later session)
-Status counts in §4 are unchanged (ST-15 and ST-23 remain FAILED by scope: partial catalogue, FY not implemented). New evidence:
+## 7. Addendum — implementation batch 2026-11-26 (`ed9b7ec0`)
 
 | Check | Result | Evidence |
 |---|---|---|
-| Publication-readiness corrections: 14 scenarios in isolated git repositories (`npm run test:publish-readiness`) | 14/14 PASS on the corrected scripts; 8 of 14 FAIL on the previous scripts (original defect reproduced) | EV-063 |
-| Designated administrator exception (`admin@firstmobital.com` with Admin role) on the isolated database | Full read/write on finance tables and bank RPCs; same email claim from a non-admin user id, anonymous and module-less users denied; other administrators unchanged | EV-061 |
-| Named npm harness commands (`npx tsx …`) | NOT RUN: `tsx` is not installed and was not downloaded. Equivalent run with Node 24 native TypeScript stripping plus a local resolver: invoice-revenue OK (22,000.00), payroll-cost-summary OK (net 48,250.25), bodyshop-stage-queue OK, bodyshop-floor-pipeline exit 0, floor-work-facet-count OK | EV-064 |
-| `npm run build` | Still FAILS at HEAD on `BodyshopRepairPage` importing `isBillingRecordedForWaiver` (pre-existing, unrelated Bodyshop code, not modified) | EV-057 |
-| Report catalogue harness | 39 registered reports complete; 10 unregistered noted | EV-062 |
-| FY automatic design feasibility (extended) | PASS on scratch; not the real function | EV-060 |
+| `npm run build` | PASS | publication batch 2026-11-26 |
+| `npm run test:report-catalogue` | PASS — **49** reports, **7** categories | EV-065 |
+| `npm run test:invoice-revenue` | PASS (verified net 22,000.00 on F1) | EV-064, ST-04 |
+| `npm run test:payroll-cost` | PASS (net 48,250.25 on F2) | EV-064, ST-13 |
+| Web shared-loader pagination | Code changed; logic/harness; **not** production volume test | EV-063, ST-02 |
+| `git push origin main` | Synchronized at `ed9b7ec0` | EV-064 |
+
+§4 counts updated: ST-15 **PASS**; ST-23 **FAILED** (FY not implemented by design). See §8 for production UI gaps.
+
+## 8. Production verification gaps (explicit NOT RUN)
+
+None of the following were performed as signed-in production workflows after `ed9b7ec0`. Blockers are recorded; absence of a row does **not** imply PASS in production.
+
+| Check | Status | Blocker or note |
+|---|---|---|
+| Invoice Revenue (Finance basis) page render and export | NOT RUN | Needs authorized sign-in; DB RLS not applied |
+| Payroll Cost Summary tab | NOT RUN | Needs payroll module + finalized month |
+| All 10 Performance reports (filters, data, export) | NOT RUN | Registry/harness only |
+| Report completeness beyond 5k rows in production volume | NOT RUN | Shared loaders changed in code; no measured prod row count |
+| Branch-restricted user (non-admin) finance row visibility | NOT RUN | DBL-0101 not applied; app filter only |
+| Designated administrator cross-branch access in production | NOT RUN | PD-22 isolated test only (EV-061) |
+| BUSY reconciliation (ST-21) | BLOCKED | PD-11 — no approved Busy extract |
+| Vercel deployment health after `ed9b7ec0` | Not re-verified in this doc transaction | Prior deploy evidence under consolidation CHANGE_LOG |
+| Mobile report 5k cap | UNCHANGED | Tracked under task 2.5; not ACCOUNTS-002 web scope |
+| Job Card Details / Service Invoice Order Status 5k limit | UNCHANGED | Known residual (EV-067) |
+
+## 7 (historical). Addendum — 2026-11-25 session
+
+| Check | Result | Evidence |
+|---|---|---|
+| Publication-readiness fixture harness | 14/14 PASS corrected scripts | scripts/publish-readiness.harness.mjs |
+| Designated administrator exception (isolated DB) | EV-061 | test matrix §7 prior |
+| Report catalogue harness (pre-PD-26) | 39 registered; 10 unregistered | EV-062 |
+| FY automatic design feasibility (extended) | PASS on scratch; not production function | EV-060 |
 
