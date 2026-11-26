@@ -8,6 +8,17 @@
 
 ---
 
+## Approved rules and release preparation (2026-11-26)
+
+Both rules below are business approvals given by the user; they are not an independent technical review.
+
+- **Default EDP after Re-Inspection: Sitapura only.** A job card gets the default EDP (`EDS1_500A840`) only when its branch is a canonical Sitapura label (`lib/branches`) and the EDP slot is empty. Other, missing or unrecognised branches never do; existing, manual and Not Required assignments are unchanged. Same rule in web and mobile `lib/bodyshopFloorWork/defaultEdpAfterRi.ts`. It is enforced in the clients only (no database constraint), and the empty-slot check uses the loaded screen state, as before.
+- **₹0 admin pre-billing waiver: approved as built.** Billing must be recorded (amount may be ₹0, or parts status `billed`); only the `admin@firstmobital.com` JWT identity may waive (checked in the RPC). Verified on an isolated database restored from the metadata snapshot: ₹0, above ₹0 and parts-billed succeed; missing billing returns `billing_amount_missing`; another user, no claims and `anon` are denied. Migration `20261123120000` is present in the metadata snapshot of the production project; who applied it and when is not recorded.
+- **Mobile state found 2026-11-26:** EAS channel `production` serves update `fe064d31` (2026-11-25 10:18 UTC, commit `91deea70`), which assigns the default EDP for **every** branch until an update containing the Sitapura rule (or a republish of `ddbe8372`, commit `ba49fac2`, which has no default EDP) is released. Not released: needs separate approval.
+- **Open before release:** current eligibility of `EDS1_500A840` (last evidence: production dump 2026-10-02, active EDP, Sitapura); review of assignments made by the unrestricted mobile update; human reviews; web and mobile release approval.
+
+---
+
 ## Executive Summary
 
 Since 3 Nov 2026 the Repair Tracker has shown stage counts that disagree with the card labels. The Stage Queue tiles for stages 15, 16 and 18 are driven by billing and settlement data. The label on each card, and stages 1-14 and 17, are driven by the `current_stage` pointer. After the manual "Mark Stage Done" button was removed, nothing moves the pointer past 15, so the two have drifted apart.

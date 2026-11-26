@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (Bodyshop release corrections and publication workflow fix)
+
+- Date: 2026-11-26
+- Change summary: Default EDP after Re-Inspection limited to Sitapura job cards on web and mobile (user-approved). ₹0 admin waiver kept as built and verified in isolation. `publish:safe` no longer commits regenerated validator reports; a completed review is now bound to the reviewed file content (`reviewed_content_sha256`) and must cover every in-scope file of its category; main must track origin/main. Publication harness extended to 25 scenarios (14 readiness, 11 end-to-end against a dummy remote with simulated approvals). Correction: the earlier statement that `publish:safe` would publish `main` from another branch was wrong; it already refused other branches.
+- Impacted files: `defaultEdpAfterRi.ts` (web, mobile), `BodyshopFloorPage.tsx`, mobile `bodyshop-floor.tsx`, Bodyshop harnesses, `git-safe-publish.sh`, `publish_readiness_check.mjs`, publication harness, Transaction Framework, BODYSHOP-STAGE-002.
+- Business logic change: Yes (default EDP branch rule).
+- Function-level contract change: Yes (`shouldAutoAssignDefaultEdpAfterRi(slot, branch)`; review record fields).
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: Bodyshop and publication corrections.
+
 ## 2026-11-25 (shared governance and publication validation sync)
 
 - Date: 2026-11-25
