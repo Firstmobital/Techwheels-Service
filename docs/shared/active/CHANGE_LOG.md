@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (correction: mobile default-EDP containment failed)
+
+- Date: 2026-11-26
+- Change summary: Documentation only. Republishing mobile update `ddbe8372` (as `d7098e02`) did not contain the all-branch default-EDP defect: both contain it. It has been published since at least 2026-11-24 06:50 UTC. Neither is a rollback target. EAS commit labels do not establish bundle contents. The user will release the corrected mobile OTA separately. Details: BODYSHOP-STAGE-002.
+- Impacted files: BODYSHOP-STAGE-002, this log.
+- Business logic change: No
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No (the mobile update republish is recorded above; no database change)
+- Docs updated by: incident correction.
+
 ## 2026-11-26 (Bodyshop release corrections and publication workflow fix)
 
 - Date: 2026-11-26
