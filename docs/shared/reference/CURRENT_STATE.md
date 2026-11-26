@@ -103,6 +103,10 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - Dedicated Reception edits require Reception MODIFY and authorize by the receptionist's single active Employee Master location for both the existing entry and the newly selected SA. Other Reception-capable users retain the existing dealer-scoped update path; this does not alter table RLS policies or general dealer tenancy enforcement.
 - Missing mapping, missing `RECEPTION` role, inactive Employee Master identity, missing location, or multiple mapped Reception locations fail closed with explicit setup guidance.
 
+### Profit & Loss (ACCOUNTS-003, added 2026-11-26; not part of the audit above)
+- Reports -> Profit & Loss, visible to admins and holders of module `pnl_report` (covers all branches).
+- Tables `pnl_settings`, `pnl_expense_heads`, `pnl_expenses`; RPC `pnl_payroll_cost`. Management estimate; nothing is read from or posted to Busy. Details: ACCOUNTS-003 plan.
+
 ## Mobile Version (Audited)
 
 ### Stack and Runtime

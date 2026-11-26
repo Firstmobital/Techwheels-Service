@@ -1,5 +1,17 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (ACCOUNTS-003 Profit & Loss report)
+
+- Date: 2026-11-26
+- Change summary: Added Reports -> Profit & Loss (statement and monthly expense entry). Profit = labour margin (default 100%) + parts margin (default 9%) on job-card revenue excluding estimated GST, less monthly expenses and Payroll totals.
+- Impacted files: `src/pages/reports/pnl/**`, `src/lib/pnl/**`, `src/lib/api/pnl.ts`, Reports navigation, migration `20261126120000` (DBL-0103).
+- Business logic change: Yes (new management P&L). Existing reports unchanged.
+- Function-level contract change: Yes (new RPC `pnl_payroll_cost`).
+- RBAC/RLS change: Yes (new module `pnl_report`; admins granted automatically). Existing access unchanged.
+- Data/schema change: Yes (three new tables; applied to production and verified 2026-11-26).
+- Mobile: no impact.
+- Docs updated by: ACCOUNTS-003.
+
 ## 2026-11-26 (ACCOUNTS-002 governed documentation consolidation)
 
 - Date: 2026-11-26

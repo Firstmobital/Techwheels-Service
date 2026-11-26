@@ -1,9 +1,9 @@
 # ACCOUNTS-003: Profit & Loss Report
 
-**Classification:** state = implementation, scope = web, intent = active · **Created:** 2026-11-26 · **Status:** IP (code complete locally; migration not applied; not published)
+**Classification:** state = implementation, scope = web, intent = active · **Created:** 2026-11-26 · **Status:** IP (migration applied and verified; web publication authorized; signed-in verification pending)
 
 ## Authorization
-On 2026-11-26 the user asked to propose and implement, end to end, a P&L based on the Daily Revenue Report: labour revenue as 100% profit, 9% of parts revenue as profit, less interest, salary, rent, electricity and other expenses, with placement left to the agent. This supersedes, for this report only, the ACCOUNTS-002 exclusion of an expense register (PD-13/07, item 6.1) and of a management P&L (SP-11/OD-06). Applying the migration to production and publishing need their own authorization.
+On 2026-11-26 the user asked to propose and implement, end to end, a P&L based on the Daily Revenue Report: labour revenue as 100% profit, 9% of parts revenue as profit, less interest, salary, rent, electricity and other expenses, with placement left to the agent. This supersedes, for this report only, the ACCOUNTS-002 exclusion of an expense register (PD-13/07, item 6.1) and of a management P&L (SP-11/OD-06). Later on 2026-11-26 the user authorized applying the migration to production and pushing to `main`, "as per governance".
 
 ## What existed (evidence)
 - No expense, rent, electricity or loan table in `full_metadata.sql` (snapshot of 2026-11-25).
@@ -33,10 +33,15 @@ On 2026-11-26 the user asked to propose and implement, end to end, a P&L based o
 | ✅ | Calculation `src/lib/pnl/pnl.ts`, harness `npm run test:pnl` |
 | ✅ | Screens, navigation, access gating, CSV export |
 | ✅ | Local verification: harness, build, lint on new files; migration, 7 checks and RLS allow/deny cases on a disposable PostgreSQL 17 with stubbed base tables and the snapshot's permission functions; both screens viewed with sample data |
-| ⏳ | Authorize: apply migration to production, run checks, refresh metadata snapshot |
-| ⏳ | Authorize: publish (high-risk: migration and access; `npm run publish:ready`) |
+| ✅ | Authorized; migration applied to production, 8/8 checks, live access test, metadata snapshot refreshed (DBL-0103 VERIFIED) |
+| ✅ | Publication authorized (user approval, not independent review); goes through `npm run publish:safe` |
 | ⏳ | Signed-in verification: billed figures against the Daily Revenue Report; grant `pnl_report` to non-admin users |
 | ⏳ | Accounts enters monthly expenses; owner confirms margins and GST basis |
 
 ## Rollback
 Revert the web commit. Database objects are additive; the drop statements are in the migration header.
+
+## Production findings (2026-11-26)
+- Payroll totals through the new RPC: August and September finalized, October draft, nothing for November. This replaces the older data-copy finding above. November salary shows as missing until Payroll has November entries or an amount is entered.
+- Platform automation granted `pnl_report` (view, modify, delete) to the 7 active admin accounts.
+- No expenses are entered yet.
