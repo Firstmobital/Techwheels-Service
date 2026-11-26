@@ -56,6 +56,21 @@
         "supabase/migrations/20261126150000_pnl_expense_entries.sql"
       ],
       "reviewed_content_sha256": "7a16d9dfb5e1eb37ef307a20eb5140f291bebbb1a34f0328ca7ee736dcb35532"
+    },
+    {
+      "category": "accounts_003_not_in_payroll_high_risk",
+      "status": "user_approved",
+      "reviewer": "Repository owner (user), 2026-11-26; entry written by Claude Code at the user's request",
+      "outcome": "I approve publishing the Not in Payroll list, finalize check and P&L warning. I understand finalizing is blocked while items are open. This is my approval, not an independent review. DBL-0105 is applied and checked. The new screens and signed-in production checks are still pending. [Basis: the user saw this wording in chat and replied 'do urself', after replying 'Yes, apply and publish'. The agent that wrote the change only self-checked it.]",
+      "files": [
+        "src/lib/api/payrollExceptions.ts",
+        "src/lib/payroll/notInPayroll.ts",
+        "src/lib/payroll/variableEarnings.ts",
+        "src/pages/payroll/NotInPayrollPanel.tsx",
+        "src/pages/payroll/PayrollProcessingTab.tsx",
+        "supabase/migrations/20261126180000_payroll_earning_exclusions.sql"
+      ],
+      "reviewed_content_sha256": "0c59013d28126aea406ca5d9b69b9f2426fcd591612046f74cf7f65600fdff84"
     }
   ],
   "validation_evidence": [
