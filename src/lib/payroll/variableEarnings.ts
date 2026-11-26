@@ -76,12 +76,16 @@ async function fetchCompletedJobCards(jcNumbers: string[]): Promise<Set<string>>
   return completed
 }
 
-export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promise<Map<string, number>> {
+export async function fetchMonthlySaEarningsByCode(
+  payrollMonth: string,
+  /** Told about completed jobs whose earning has no employee code, which Payroll therefore cannot pay. */
+  onUncoded?: (item: { jobCardNumber: string; personName: string; amount: number }) => void,
+): Promise<Map<string, number>> {
   const { fromDate, toDate } = invoiceDateBounds(payrollMonth)
   const { pvPercent, evPercent } = await fetchSharePercents('sa_earnings_settings')
   const fuelMap = await fetchSaEmployeeFuelMap()
 
-  const rows: Array<{ employee_code: string | null; labour: number; job_card_number: string | null }> = []
+  const rows: Array<{ employee_code: string | null; sr_assigned_to: string | null; labour: number; job_card_number: string | null }> = []
   let offset = 0
   while (true) {
     const res = await supabase
@@ -98,6 +102,7 @@ export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promis
       if (isAccidentSrType(srType) || !isSaTrackerAllowedServiceType(srType)) return
       rows.push({
         employee_code: (r as { employee_code?: string }).employee_code ?? null,
+        sr_assigned_to: (r as { sr_assigned_to?: string }).sr_assigned_to ?? null,
         labour: parseAmount((r as { dms_final_labour_amount?: unknown }).dms_final_labour_amount),
         job_card_number: (r as { job_card_number?: string }).job_card_number ?? null,
       })
@@ -112,8 +117,12 @@ export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promis
   const totals = new Map<string, number>()
   rows.forEach((r) => {
     const code = normalizeEmployeeCode(r.employee_code)
-    if (!code) return
     if (!completedJcs.has(normalizeJobCardNumber(r.job_card_number))) return
+    if (!code) {
+      const amount = calculateSAIncome(r.labour, pvPercent)
+      if (amount > 0) onUncoded?.({ jobCardNumber: String(r.job_card_number ?? ''), personName: String(r.sr_assigned_to ?? '').trim(), amount })
+      return
+    }
     const fuel = normFuelBucket(fuelMap.get(code))
     const pct = fuel === 'EV' ? evPercent : pvPercent
     const income = calculateSAIncome(r.labour, pct)

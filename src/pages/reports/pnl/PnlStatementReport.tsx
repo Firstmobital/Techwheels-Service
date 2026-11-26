@@ -17,6 +17,7 @@ interface LoadedData {
   payroll: SalaryInputs['payroll']
   live: SalaryInputs['live']
   liveProblem: string | null
+  notInPayroll: SalaryInputs['notInPayroll']
   asOf: string
   recurring: RecurringExpense[]
   revenue: DailyRevenueReport[]

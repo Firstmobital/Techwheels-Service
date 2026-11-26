@@ -1,5 +1,6 @@
 /** Verifies Profit & Loss arithmetic (ACCOUNTS-003) on hand-calculated figures. Run: npm run test:pnl */
 import { computePnl, monthSlices, addMonths, pendingRecurring, DEFAULT_PNL_SETTINGS, type ExpenseHead, type PnlInput, type RecurringExpense } from '../src/lib/pnl/pnl.ts'
+import { applyExclusions, findNotInPayroll, openSummary } from '../src/lib/payroll/notInPayroll.ts'
 import { buildLiveMonthSalary, type LiveMonthSalary } from '../src/lib/pnl/liveSalary.ts'
 
 let failures = 0
@@ -129,6 +130,37 @@ eq('outside period, other branch or stopped', [
   pendingRecurring([rent], [], '2026-11', ['Tonk']).length, pendingRecurring([{ ...rent, isActive: false }], [], '2026-11', ['Sitapura']).length,
 ], [0, 0, 0, 0])
 eq('pending repeat makes figure provisional but is not counted', (() => { const r = computePnl({ ...base, recurring: [rent] }); return [r.expensePaise, r.warnings.length] })(), [full.expensePaise, 1])
+
+const flagged = computePnl({ ...base, notInPayroll: { '2026-11': { count: 2, missingPaise: 15364700, outOfDate: 1 } } })
+eq('missed earnings warn but are never deducted', [flagged.expensePaise, flagged.warnings.length, flagged.warnings[0].includes('1,53,647')], [full.expensePaise, 1, true])
+eq('nothing open, no warning', computePnl({ ...base, notInPayroll: { '2026-11': { count: 0, missingPaise: 0, outOfDate: 0 } } }).warnings, [])
+eq('unavailable check is said so', computePnl({ ...base, notInPayroll: { '2026-11': 'unavailable' } }).warnings.length, 1)
+
+const person = (code: string, name: string, role: string, active = true) => ({ employee_code: code, employee_name: name, role, location: 'Sitapura', department: null, is_active: active })
+const none = new Map<string, number>()
+const input = {
+  employees: [person('A', 'Asha Verma', 'Service Advisor'), person('B', 'Bal Singh', 'Service Advisor'), person('C', 'Chand Rao', 'Technician'), person('D', 'Dev Jain', 'Painter'), person('E', 'Dev Jain', 'Painter')],
+  compensation: new Map([comp('A', 'both', 10), comp('B', 'base', 10), comp('C', 'variable', 0)]),
+  earnings: { advisor: new Map([['A', 100], ['B', 200], ['D', 300], ['Z', 400], ['C', 50]]), technician: none, bodyshop: none },
+  uncoded: [
+    { type: 'bodyshop' as const, jobCardNumber: 'J1', personName: 'VERMA, ASHA', role: 'SA', amount: 10 },
+    { type: 'bodyshop' as const, jobCardNumber: 'J1', personName: 'VERMA, ASHA', role: 'SA', amount: 5 },
+    { type: 'bodyshop' as const, jobCardNumber: 'J2', personName: 'Dev Jain', role: 'SA', amount: 7 },
+  ],
+  draftEntries: [],
+}
+const found = findNotInPayroll(input)
+eq('each reason found, counted pay absent', found.filter((i) => i.reason !== 'no_code').map((i) => `${i.employeeCode}:${i.reason}:${i.amountPaise}`).sort(), ['B:base_only:20000', 'C:role_rule:5000', 'D:no_salary_record:30000', 'Z:not_in_master:40000'])
+eq('uncoded grouped by job card; only a unique name is suggested', found.filter((i) => i.reason === 'no_code').map((i) => [i.jobCardNumber, i.amountPaise, i.suggestion]), [['J1', 1500, 'A Asha Verma'], ['J2', 700, '']])
+const entry = (code: string, sa: number) => ({ employee_code: code, sa_variable_earning: sa, technician_variable_earning: 0, bodyshop_variable_earning: 0 }) as never
+eq('stale saved figure is found', findNotInPayroll({ ...input, draftEntries: [entry('A', 60)] }).filter((i) => i.reason === 'out_of_date').map((i) => [i.employeeCode, i.amountPaise]), [['A', 4000]])
+eq('saved and current agree', findNotInPayroll({ ...input, draftEntries: [entry('A', 100)] }).filter((i) => i.reason === 'out_of_date').length, 0)
+const stale = findNotInPayroll({ ...input, draftEntries: [entry('A', 60)] })
+const exclude = (itemKey: string, amountPaise: number) => ({ id: 1, itemKey, amountPaise, reason: 'r', createdBy: '', createdAt: '' })
+const openKeys = (list: ReturnType<typeof applyExclusions>) => list.filter((i) => i.open).map((i) => i.key)
+eq('exclusion closes the same amount only', [openKeys(applyExclusions(found, [exclude('advisor|base_only|B', 20000)])).includes('advisor|base_only|B'), openKeys(applyExclusions(found, [exclude('advisor|base_only|B', 15000)])).includes('advisor|base_only|B')], [false, true])
+eq('stale figures cannot be excluded', openKeys(applyExclusions(stale, [exclude('advisor|out_of_date|A', 4000)])).includes('advisor|out_of_date|A'), true)
+eq('summary keeps stale out of the amount', openSummary(applyExclusions(stale, [])).missingPaise, openSummary(applyExclusions(found, [])).missingPaise)
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1) }
 console.log('OK: Profit & Loss arithmetic matches hand-calculated figures')

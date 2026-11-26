@@ -101,3 +101,17 @@ Scope: schema money-related fields, web app code search, main salary logic trace
 - Part periods: base pay is spread by days shown; work-based pay, incentives and additions are to date and only apportioned by the share of elapsed days shown.
 - Flaw removed before release: a draft recalculated before attendance (work pay, no base pay) is no longer preferred over a sound figure.
 - Limits: the live figure inherits Payroll's calculation behaviour, including that some earnings lookups ignore read errors (a zero earnings type is warned); incentives show only when recorded. Non-admins see saved figures or an estimate.
+
+## "Not in Payroll" (approved 2026-11-26: "this looks good to me")
+**Decision:** Payroll stays the one source of salary; missed earnings are never added to P&L expenses. Nothing is added to anyone's pay automatically. Approval covers building; production apply and publication need their own authorization.
+
+**Status:** built and tested locally; DBL-0105 PROPOSED.
+
+- Payroll Processing shows a "Not in Payroll" list for the month, all branches: no employee code, not in Employee Master, no Salary Type record, base only, role rule, and saved draft figures that differ from the current calculation. A name match is suggested only when exactly one employee matches; a person must confirm and correct the record.
+- Items (except out-of-date saved figures) can be excluded with a reason; an exclusion holds only for the recorded amount, can be withdrawn, is never deleted, and is frozen once the month is finalized.
+- Finalize runs the check first and stops while items are open or if the check cannot run. This is enforced by the screen, not the database; later changes before the final click are not re-checked.
+- P&L warns with the open amount (all branches) and does not deduct it. Admins only; others are told the check is unavailable. Recent months only (as for live salary).
+- Finalized months are never changed.
+- Not detected: technician assignments with no code or to a non-technician role (Payroll's technician lookup drops them before this check); CRE and extended-warranty payments; payments made outside Payroll.
+
+**Verification:** harness cases; disposable PostgreSQL (5/5 checks, allow/deny cases); the new loader run on a temporary copy of November data (deleted after) matched the audit for SA and bodyshop (₹1,53,647) and also found technician ₹4,132. All 41 uncoded bodyshop lines had a single name match (matches unconfirmed). Signed-in screens not verified.

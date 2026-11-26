@@ -29,6 +29,9 @@ import {
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
 import { usePayrollSecurity } from './PayrollSecurityGate'
+import NotInPayrollPanel from './NotInPayrollPanel'
+import { loadNotInPayroll } from '../../lib/api/payrollExceptions'
+import { openSummary } from '../../lib/payroll/notInPayroll'
 
 function formatUnlockMonthLabel(monthInput: string): string {
   const [year, month] = monthInput.split('-').map(Number)
@@ -344,6 +347,22 @@ export default function PayrollProcessingTab({
   async function handleFinalize() {
     if (!canModify || monthStatus === 'finalized') return
     await requireSecurityThen(async () => {
+      // Every missed earning must be fixed or excluded first. If the check cannot run, the month is not locked.
+      setError(null)
+      setLoading(true)
+      try {
+        const summary = openSummary((await loadNotInPayroll(payrollMonth)).items)
+        if (summary.count) {
+          setError(`Cannot finalize: ${summary.count} item(s) in “Not in Payroll” are open. Fix them, or exclude each with a reason.`)
+          await reload()
+          return
+        }
+      } catch (err) {
+        setError(`Cannot finalize: the “Not in Payroll” check did not run. ${err instanceof Error ? err.message : ''}`)
+        return
+      } finally {
+        setLoading(false)
+      }
       if (!window.confirm('Finalize and lock this payroll month?')) return
       const { data: { user } } = await supabase.auth.getUser()
       setLoading(true)
@@ -516,6 +535,8 @@ export default function PayrollProcessingTab({
           </button>
         )}
       </div>
+
+      <NotInPayrollPanel payrollMonth={payrollMonth} canModify={canModify} refreshToken={entries} runSecured={requireSecurityThen} />
 
       {error && <div className="toast error">{error}</div>}
       {message && <div className="toast">{message}</div>}

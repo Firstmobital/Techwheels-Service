@@ -1,5 +1,16 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (ACCOUNTS-003 "Not in Payroll")
+
+- Date: 2026-11-26
+- Change summary: Payroll lists calculated earnings it does not include, with reason and action; exclusions need a reason; finalize is blocked in the screen while items are open; the P&L warns without deducting.
+- Impacted files: `src/lib/payroll/notInPayroll.ts`, `src/lib/api/payrollExceptions.ts`, Payroll Processing screen, `src/lib/bodyshopMonthlyEarnings.ts` and `src/lib/payroll/variableEarnings.ts` (report uncoded earnings; totals unchanged), P&L warning, migration `20261126180000` (DBL-0105, PROPOSED).
+- Business logic change: Yes (new finalize pre-check). Pay calculation unchanged.
+- RBAC/RLS change: Yes (policies on the new table).
+- Data/schema change: Pending (DBL-0105 not applied).
+- Mobile: no impact.
+- Docs updated by: ACCOUNTS-003.
+
 ## 2026-11-26 (ACCOUNTS-003 Phase 1 and salary rebuild)
 
 - Date: 2026-11-26

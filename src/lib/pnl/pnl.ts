@@ -222,6 +222,8 @@ export interface PnlInput {
   recurring?: RecurringExpense[]
   /** Live salary by month, for months Payroll has not finalized. */
   live?: Record<string, LiveMonthSalary>
+  /** Open "Not in Payroll" items by month: a warning only, never an expense. */
+  notInPayroll?: Record<string, { count: number; missingPaise: number; outOfDate: number } | 'unavailable'>
   /** Today (`YYYY-MM-DD`): work-based pay is earned up to this day. Defaults to `to`. */
   asOf?: string
 }
@@ -325,6 +327,15 @@ export function computePnl(input: PnlInput): PnlResult {
         warnings.push(`${slice.month}: salary for ${who} comes from a saved Payroll draft, which may be incomplete.`)
       }
     }
+    const missed = input.notInPayroll?.[slice.month]
+    if (missed === 'unavailable') {
+      warnings.push(`${slice.month}: the “Not in Payroll” check is not available, so some earnings may be missing from salary.`)
+    } else if (missed && missed.count > 0) {
+      const amount = Math.round(missed.missingPaise / 100).toLocaleString('en-IN')
+      const stale = missed.outOfDate ? ` ${missed.outOfDate} saved Payroll figure(s) are also out of date.` : ''
+      warnings.push(`${slice.month}: Rs. ${amount} of calculated earnings (all branches, month so far) is open in Payroll’s “Not in Payroll” list. It is not included in salary, so profit may be overstated.${stale}`)
+    }
+
     const pending = pendingRecurring(input.recurring ?? [], input.expenses, slice.month, scope)
     if (pending.length) warnings.push(`${slice.month}: ${pending.length} repeating expense(s) not confirmed yet.`)
 

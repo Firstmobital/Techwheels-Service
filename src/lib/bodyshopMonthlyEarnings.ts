@@ -41,6 +41,7 @@ const BODYSHOP_ASSIGNMENT_SELECT = [
 ].join(', ')
 
 type AccidentClosedRow = {
+  sr_assigned_to?: string | null
   job_card_number: string
   employee_code: string | null
   dms_final_labour_amount: unknown
@@ -54,7 +55,15 @@ export interface BodyshopEmployeeComponent {
   amount: number
 }
 
+export interface UncodedEarning {
+  jobCardNumber: string
+  role: string
+  amount: number
+  personName: string
+}
+
 export interface BodyshopStakeholderEarnings {
+  unmappedItems: UncodedEarning[]
   earningsByEmployeeCode: Map<string, number>
   componentsByEmployeeCode: Map<string, BodyshopEmployeeComponent[]>
   byRole: Record<BodyshopStakeholderRole, number>
@@ -104,7 +113,7 @@ async function fetchAccidentClosedByClosedDate(payrollMonth: string): Promise<Ac
   while (true) {
     const res = await supabase
       .from('job_card_closed_data')
-      .select('job_card_number, employee_code, dms_final_labour_amount')
+      .select('job_card_number, employee_code, sr_assigned_to, dms_final_labour_amount')
       .eq('sr_type', 'Accident')
       .gte('closed_date_time', from)
       .lte('closed_date_time', to)
@@ -180,12 +189,16 @@ export async function fetchMonthlyBodyshopStakeholderEarnings(
   const byRole = emptyRoleTotals()
   let supportEarning = 0
   let unmappedBodyshopEarning = 0
+  // Same amounts as the unmapped total, kept per job card so they can be corrected.
+  const unmappedItems: UncodedEarning[] = []
 
   const addStakeholder = (
     rawCode: string | null | undefined,
     amount: number,
     role: BodyshopStakeholderRole,
     kind: 'primary' | 'support',
+    jobCardNumber: string,
+    personName: string | null | undefined,
   ) => {
     if (!Number.isFinite(amount) || amount === 0) return
     byRole[role] += amount
@@ -193,6 +206,7 @@ export async function fetchMonthlyBodyshopStakeholderEarnings(
     const code = normalizeEmployeeCode(rawCode)
     if (!code) {
       unmappedBodyshopEarning += amount
+      unmappedItems.push({ jobCardNumber, role, amount, personName: String(personName ?? '').trim() })
       return
     }
     earningsByEmployeeCode.set(code, (earningsByEmployeeCode.get(code) ?? 0) + amount)
@@ -201,7 +215,7 @@ export async function fetchMonthlyBodyshopStakeholderEarnings(
 
   accidentJCs.forEach((row) => {
     const dmsLabour = parseAmount(row.dms_final_labour_amount)
-    addStakeholder(row.employee_code, calculateSAIncome(dmsLabour, sharePct.SA), 'SA', 'primary')
+    addStakeholder(row.employee_code, calculateSAIncome(dmsLabour, sharePct.SA), 'SA', 'primary', row.job_card_number, row.sr_assigned_to)
   })
 
   for (const bsRow of bsRows) {
@@ -214,13 +228,13 @@ export async function fetchMonthlyBodyshopStakeholderEarnings(
       if (!incomeMeta) continue
 
       const primary = getRolePrimaryFields(bsRow, role)
-      addStakeholder(primary.employee_code, incomeMeta.technician_income, role, 'primary')
+      addStakeholder(primary.employee_code, incomeMeta.technician_income, role, 'primary', bsRow.job_card_number, primary.employee_name)
 
       const primaryCode = normalizeEmployeeCode(primary.employee_code)
       getActiveSupportForRole(supportByJcRole, bsRow.job_card_number, role).forEach((supportRow) => {
         const supportCode = normalizeEmployeeCode(supportRow.employee_code)
         if (!supportCode || supportCode === primaryCode) return
-        addStakeholder(supportCode, incomeMeta.technician_income, role, 'support')
+        addStakeholder(supportCode, incomeMeta.technician_income, role, 'support', bsRow.job_card_number, supportRow.employee_name)
       })
     }
   }
@@ -246,6 +260,7 @@ export async function fetchMonthlyBodyshopStakeholderEarnings(
     supportEarning,
     mappedBodyshopEarning,
     unmappedBodyshopEarning,
+    unmappedItems,
     totalBodyshopEarning,
   }
 }
