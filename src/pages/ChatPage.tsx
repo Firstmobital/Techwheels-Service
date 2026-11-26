@@ -154,6 +154,7 @@ export default function ChatPage() {
     const withReplies = filteredReportRows.filter((r) => r.avgReplySeconds != null && r.repliedTurns > 0)
     const totalRepliedTurns = filteredReportRows.reduce((s, r) => s + r.repliedTurns, 0)
     const totalPendingTurns = filteredReportRows.reduce((s, r) => s + r.pendingTurns, 0)
+    const totalEndedThreads = filteredReportRows.reduce((s, r) => s + r.endedThreads, 0)
     const weightedSecondsSum = withReplies.reduce(
       (s, r) => s + (r.avgReplySeconds ?? 0) * r.repliedTurns,
       0,
@@ -164,6 +165,7 @@ export default function ChatPage() {
       totalAdvisors,
       totalRepliedTurns,
       totalPendingTurns,
+      totalEndedThreads,
       overallAvgSeconds,
     }
   }, [filteredReportRows])
@@ -244,6 +246,13 @@ export default function ChatPage() {
                 <span className="chat-report__kpi-label">Pending Replies</span>
                 <span className="chat-report__kpi-val">{reportSummary.totalPendingTurns}</span>
               </div>
+              <div className="chat-report__kpi">
+                <span className="chat-report__kpi-label">Ended Chats (Payment / Completed)</span>
+                <span className="chat-report__kpi-val">{reportSummary.totalEndedThreads}</span>
+              </div>
+            </div>
+            <div className="chat-report__rule-note">
+              Note: Once a vehicle reaches Payment or Completed stage, its chat is treated as Ended in this report (post-completion messages do not count as pending replies, while customer and advisor can continue messaging in Chat).
             </div>
             <div className="chat-report__filter-row">
               <input
@@ -277,6 +286,7 @@ export default function ChatPage() {
                     <th>Employee Code</th>
                     <th>Branch</th>
                     <th>Active Chats</th>
+                    <th>Ended Chats (Payment/Done)</th>
                     <th>Customer Messages</th>
                     <th>Replied</th>
                     <th>Pending Reply</th>
@@ -291,7 +301,8 @@ export default function ChatPage() {
                       <td className="chat-report__name">{row.advisorName}</td>
                       <td>{row.employeeCode || '—'}</td>
                       <td>{row.location || '—'}</td>
-                      <td>{row.totalThreads}</td>
+                      <td>{row.activeThreads}</td>
+                      <td>{row.endedThreads}</td>
                       <td>{row.customerTurns}</td>
                       <td>{row.repliedTurns}</td>
                       <td className={row.pendingTurns > 0 ? 'chat-report__pending' : ''}>
