@@ -71,6 +71,16 @@
         "supabase/migrations/20261126180000_payroll_earning_exclusions.sql"
       ],
       "reviewed_content_sha256": "0c59013d28126aea406ca5d9b69b9f2426fcd591612046f74cf7f65600fdff84"
+    },
+    {
+      "category": "owner_approval_20261126074645",
+      "status": "user_approved",
+      "reviewer": "Vinod Bijarnia (typed in terminal during publish:safe, 2026-11-26T07:46:45.837Z)",
+      "outcome": "Owner approval to publish 547a4bc3. This is not an independent review.",
+      "files": [
+        "scripts/git-safe-publish.sh"
+      ],
+      "reviewed_content_sha256": "11ef2ff0ffac587a20f5a352d233461ad65312710d54182e1294239da40daa98"
     }
   ],
   "validation_evidence": [
