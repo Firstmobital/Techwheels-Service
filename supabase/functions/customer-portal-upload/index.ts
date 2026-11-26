@@ -181,7 +181,7 @@ async function markDocAwaitingAdvisor(
     .maybeSingle()
   if (readError) throw new Error(readError.message)
   const current = Array.isArray(data?.doc_rejected_keys) ? data.doc_rejected_keys.map(String) : []
-  const nextRejected = current.filter((key: string) => key !== docKey)
+  const nextRejected = current.filter((key: string) => key !== docKey && !key.startsWith(`${docKey}::`))
   const patch: Record<string, unknown> = {
     doc_rejected_keys: nextRejected,
     updated_at: new Date().toISOString(),

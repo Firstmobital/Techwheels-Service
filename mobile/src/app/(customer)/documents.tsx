@@ -60,22 +60,48 @@ function isImageName(name?: string | null, contentType?: string | null) {
 }
 
 function parseRejectedDocKeys(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String)
+  const entries = parseRejectedDocEntries(raw)
+  return Object.keys(entries)
+}
+
+function parseRejectedDocEntries(raw: unknown): Record<string, string | null> {
+  const map: Record<string, string | null> = {}
+  const addEntry = (item: string) => {
+    const trimmed = String(item || '').trim()
+    if (!trimmed) return
+    const idx = trimmed.indexOf('::')
+    if (idx > 0) {
+      const key = trimmed.slice(0, idx).trim()
+      const reason = trimmed.slice(idx + 2).trim()
+      if (key) map[key] = reason || null
+    } else {
+      map[trimmed] = map[trimmed] ?? null
+    }
+  }
+
+  if (Array.isArray(raw)) {
+    raw.forEach((v) => addEntry(String(v)))
+    return map
+  }
   if (typeof raw === 'string') {
     const trimmed = raw.trim()
-    if (!trimmed) return []
+    if (!trimmed) return map
     try {
       const parsed = JSON.parse(trimmed)
-      if (Array.isArray(parsed)) return parsed.map(String)
+      if (Array.isArray(parsed)) {
+        parsed.forEach((v) => addEntry(String(v)))
+        return map
+      }
     } catch {
-      return trimmed
+      trimmed
         .replace(/^\{|\}$/g, '')
         .split(',')
         .map((s) => s.trim().replace(/^"|"$/g, ''))
         .filter(Boolean)
+        .forEach(addEntry)
     }
   }
-  return []
+  return map
 }
 
 export default function CustomerDocumentsScreen() {
@@ -415,8 +441,9 @@ export default function CustomerDocumentsScreen() {
     const base = mergedRepairCard
     const rawApproved = base?.[slot.docKey]
     const approved = Boolean(rawApproved === true || rawApproved === 'true' || rawApproved === 1)
-    const rejectedKeys = parseRejectedDocKeys(base?.doc_rejected_keys)
-    const rejected = !approved && rejectedKeys.includes(slot.docKey)
+    const rejectedEntries = parseRejectedDocEntries(base?.doc_rejected_keys)
+    const rejected = !approved && Object.prototype.hasOwnProperty.call(rejectedEntries, slot.docKey)
+    const rejectionReason = rejected ? rejectedEntries[slot.docKey] ?? null : null
     return {
       row,
       fileAvailable,
@@ -424,6 +451,7 @@ export default function CustomerDocumentsScreen() {
       submitted: fileAvailable,
       approved,
       rejected,
+      rejectionReason,
       busy: busyKey === slot.docKey,
       isReuploading: Boolean(reuploadingKeys[slot.docKey]),
     }
@@ -476,7 +504,7 @@ export default function CustomerDocumentsScreen() {
 
   const renderTwoSidedSide = (sideLabel: 'Front' | 'Back', slot: CustomerClaimDocumentDef) => {
     const ui = getSlotUi(slot)
-    const { row, fileAvailable, driveSynced, submitted, approved, rejected, busy, isReuploading } = ui
+    const { row, fileAvailable, driveSynced, submitted, approved, rejected, rejectionReason, busy, isReuploading } = ui
 
     let statusText = 'Not uploaded yet'
     let statusColor: string = CustomerTheme.inkMuted
@@ -484,7 +512,9 @@ export default function CustomerDocumentsScreen() {
       statusText = 'Approved by advisor'
       statusColor = '#15803D'
     } else if (rejected) {
-      statusText = 'Rejected — please re-upload'
+      statusText = rejectionReason
+        ? `Rejected (${rejectionReason}) — please re-upload`
+        : 'Rejected — please re-upload'
       statusColor = '#B91C1C'
     } else if (submitted) {
       statusText = 'Uploaded · awaiting advisor review'
@@ -608,7 +638,7 @@ export default function CustomerDocumentsScreen() {
   }
 
   const renderSlot = (slot: CustomerClaimDocumentDef) => {
-    const { row, fileAvailable, driveSynced, submitted, approved, rejected, busy, isReuploading } = getSlotUi(slot)
+    const { row, fileAvailable, driveSynced, submitted, approved, rejected, rejectionReason, busy, isReuploading } = getSlotUi(slot)
 
     const badgeBg = approved
       ? '#DEF7EC'
@@ -629,9 +659,9 @@ export default function CustomerDocumentsScreen() {
             ? '#92400E'
             : CustomerTheme.inkMuted
     const badgeLabel = approved
-      ? '✓ Approved'
+      ? 'Approved'
       : rejected
-        ? '✕ Rejected'
+        ? 'Rejected'
         : submitted
           ? 'Approval Pending'
           : slot.required
@@ -678,12 +708,17 @@ export default function CustomerDocumentsScreen() {
         {rejected ? (
           <View style={{ marginTop: 12, padding: 10, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' }}>
             <Text style={{ color: '#B91C1C', fontSize: 12, fontWeight: '800' }}>
-              ⚠️ Document Rejected by Service Advisor
+              Document Rejected by Service Advisor
             </Text>
+            {rejectionReason ? (
+              <Text style={{ color: '#7F1D1D', fontSize: 12, fontWeight: '700', marginTop: 3 }}>
+                Reason: {rejectionReason}
+              </Text>
+            ) : null}
             <Text style={{ color: '#991B1B', fontSize: 11, marginTop: 2 }}>
               Please re-upload a clear and valid copy using the options below.
-                </Text>
-              </View>
+            </Text>
+          </View>
         ) : null}
 
         {/* 3. Uploaded / Awaiting Review State */}
