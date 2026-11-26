@@ -47,7 +47,7 @@ Revert the web commit. Database objects are additive; the drop statements are in
 - No expenses are entered yet.
 
 ## Phase 1: easy expense posting (approved 2026-11-26: "Yes, build Phase 1")
-**Status:** built and tested locally; DBL-0104 PROPOSED; not applied, not published. The approval covers building; production apply and publication need their own authorization.
+**Status:** DBL-0104 applied and verified in production 2026-11-26; apply and publication authorized by the user ("document - apply - deploy"); signed-in verification pending.
 
 | Topic | Design (replaces the monthly grid and "copy previous month" above) |
 |---|---|
@@ -65,7 +65,7 @@ Not in Phase 1: bill attachments, vendor and payment status, month lock, approva
 | ✅ | Migration `20261126150000_pnl_expense_entries.sql` and paired checks |
 | ✅ | Calculation, harness, screens; build and lint |
 | ✅ | Disposable PostgreSQL: 8/8 checks, carry-over, history, allow/deny cases. Screens exercised with sample data |
-| ⏳ | Authorize: apply migration, run checks, refresh snapshot, publish. Apply immediately before publishing; the web release depends on it |
+| ✅ | Authorized; applied, 8/8 checks, role test, snapshot refreshed. Publication through `npm run publish:safe` |
 | ⏳ | Signed-in verification in production |
 
 ## Audit of existing sources (2026-11-26)
