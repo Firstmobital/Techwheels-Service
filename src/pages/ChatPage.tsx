@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
+  fetchBodyshopAdvisorReplyReport,
+  formatReplyDuration,
   getAdvisorChat,
   listAdvisorChats,
   sendAdvisorChatMessage,
   type AdvisorChatMessage,
+  type AdvisorChatReplyReportRow,
   type AdvisorChatThread,
 } from '../lib/api/advisorChat'
 import {
@@ -29,6 +33,8 @@ function mergeMessage(current: AdvisorChatMessage[], next: AdvisorChatMessage): 
 }
 
 export default function ChatPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeView = searchParams.get('view') === 'reports' ? 'reports' : 'chat'
   const [threads, setThreads] = useState<AdvisorChatThread[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [messages, setMessages] = useState<AdvisorChatMessage[]>([])
@@ -36,6 +42,9 @@ export default function ChatPage() {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const [reportRows, setReportRows] = useState<AdvisorChatReplyReportRow[]>([])
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportSearch, setReportSearch] = useState('')
   const selectedIdRef = useRef<string | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
@@ -111,6 +120,62 @@ export default function ChatPage() {
     [messages],
   )
 
+  const loadReport = useCallback(async (currentThreads?: AdvisorChatThread[]) => {
+    setReportLoading(true)
+    setError(null)
+    try {
+      const rows = await fetchBodyshopAdvisorReplyReport(currentThreads)
+      setReportRows(rows)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load advisor reply time report')
+    } finally {
+      setReportLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeView !== 'reports') return
+    void loadReport(threads.length > 0 ? threads : undefined)
+  }, [activeView, loadReport, threads])
+
+  const filteredReportRows = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase()
+    if (!q) return reportRows
+    return reportRows.filter(
+      (r) =>
+        r.advisorName.toLowerCase().includes(q)
+        || (r.employeeCode || '').toLowerCase().includes(q)
+        || (r.location || '').toLowerCase().includes(q),
+    )
+  }, [reportRows, reportSearch])
+
+  const reportSummary = useMemo(() => {
+    const totalAdvisors = filteredReportRows.length
+    const withReplies = filteredReportRows.filter((r) => r.avgReplySeconds != null && r.repliedTurns > 0)
+    const totalRepliedTurns = filteredReportRows.reduce((s, r) => s + r.repliedTurns, 0)
+    const totalPendingTurns = filteredReportRows.reduce((s, r) => s + r.pendingTurns, 0)
+    const weightedSecondsSum = withReplies.reduce(
+      (s, r) => s + (r.avgReplySeconds ?? 0) * r.repliedTurns,
+      0,
+    )
+    const overallAvgSeconds =
+      totalRepliedTurns > 0 ? weightedSecondsSum / totalRepliedTurns : null
+    return {
+      totalAdvisors,
+      totalRepliedTurns,
+      totalPendingTurns,
+      overallAvgSeconds,
+    }
+  }, [filteredReportRows])
+
+  function switchView(view: 'chat' | 'reports') {
+    if (view === 'reports') {
+      setSearchParams({ view: 'reports' })
+    } else {
+      setSearchParams({})
+    }
+  }
+
   async function onSend(event: FormEvent) {
     event.preventDefault()
     const body = draft.trim()
@@ -135,7 +200,114 @@ export default function ChatPage() {
 
   return (
     <div className="chat-page">
+      <div className="chat-topbar">
+        <div className="chat-topbar__title">
+          {activeView === 'reports' ? 'Bodyshop Advisor Chat Reply Time Report' : 'Customer Chat'}
+        </div>
+        <div className="chat-topbar__actions">
+          <button
+            type="button"
+            className={`chat-topbar__btn ${activeView === 'chat' ? 'is-active' : ''}`}
+            onClick={() => switchView('chat')}
+          >
+            Chats
+          </button>
+          <button
+            type="button"
+            className={`chat-topbar__btn ${activeView === 'reports' ? 'is-active' : ''}`}
+            onClick={() => switchView('reports')}
+          >
+            Reports
+          </button>
+        </div>
+      </div>
+
       {error && <div className="chat-error">{error}</div>}
+
+      {activeView === 'reports' ? (
+        <div className="chat-report">
+          <div className="chat-report__controls">
+            <div className="chat-report__kpis">
+              <div className="chat-report__kpi">
+                <span className="chat-report__kpi-label">Bodyshop Advisors</span>
+                <span className="chat-report__kpi-val">{reportSummary.totalAdvisors}</span>
+              </div>
+              <div className="chat-report__kpi">
+                <span className="chat-report__kpi-label">Overall Avg Reply Time</span>
+                <span className="chat-report__kpi-val">{formatReplyDuration(reportSummary.overallAvgSeconds)}</span>
+              </div>
+              <div className="chat-report__kpi">
+                <span className="chat-report__kpi-label">Replied Messages</span>
+                <span className="chat-report__kpi-val">{reportSummary.totalRepliedTurns}</span>
+              </div>
+              <div className="chat-report__kpi">
+                <span className="chat-report__kpi-label">Pending Replies</span>
+                <span className="chat-report__kpi-val">{reportSummary.totalPendingTurns}</span>
+              </div>
+            </div>
+            <div className="chat-report__filter-row">
+              <input
+                className="chat-report__search"
+                value={reportSearch}
+                onChange={(e) => setReportSearch(e.target.value)}
+                placeholder="Search advisor name, code, or branch..."
+                aria-label="Search bodyshop advisor"
+              />
+              <button
+                type="button"
+                className="chat-topbar__btn"
+                disabled={reportLoading}
+                onClick={() => void loadReport()}
+              >
+                {reportLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          <div className="chat-report__table-wrap">
+            {reportLoading ? (
+              <div className="chat-empty" style={{ padding: 24 }}>Loading bodyshop advisor reply time report...</div>
+            ) : filteredReportRows.length === 0 ? (
+              <div className="chat-empty" style={{ padding: 24 }}>No bodyshop advisors found.</div>
+            ) : (
+              <table className="chat-report__table">
+                <thead>
+                  <tr>
+                    <th>Advisor Name</th>
+                    <th>Employee Code</th>
+                    <th>Branch</th>
+                    <th>Active Chats</th>
+                    <th>Customer Messages</th>
+                    <th>Replied</th>
+                    <th>Pending Reply</th>
+                    <th>Average Reply Time</th>
+                    <th>Fastest Reply</th>
+                    <th>Slowest Reply</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredReportRows.map((row) => (
+                    <tr key={row.advisorKey}>
+                      <td className="chat-report__name">{row.advisorName}</td>
+                      <td>{row.employeeCode || '—'}</td>
+                      <td>{row.location || '—'}</td>
+                      <td>{row.totalThreads}</td>
+                      <td>{row.customerTurns}</td>
+                      <td>{row.repliedTurns}</td>
+                      <td className={row.pendingTurns > 0 ? 'chat-report__pending' : ''}>
+                        {row.pendingTurns}
+                      </td>
+                      <td className="chat-report__avg">{formatReplyDuration(row.avgReplySeconds)}</td>
+                      <td>{formatReplyDuration(row.minReplySeconds)}</td>
+                      <td>{formatReplyDuration(row.maxReplySeconds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className={`chat-split ${selected ? 'has-thread' : ''}`}>
         <section className="chat-list">
           <input
@@ -230,6 +402,7 @@ export default function ChatPage() {
           )}
         </section>
       </div>
+      )}
     </div>
   )
 }

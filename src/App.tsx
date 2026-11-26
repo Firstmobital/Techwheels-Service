@@ -658,20 +658,30 @@ function TopNav({
           <Icon name="search" size={17} strokeWidth={1.9} />
         </button>
         {canOpenChat && (
-          <button
-            type="button"
-            className="util__icon"
-            title="Chat"
-            onClick={() => onNavigate('/chat')}
-          >
-            <Icon name="message-circle" size={17} strokeWidth={1.9} />
-            {chatUnread > 0 && (
-              <>
-                <span className="dot" />
-                <span className="dot-count">{chatUnread > 9 ? '9+' : chatUnread}</span>
-              </>
-            )}
-          </button>
+          <>
+            <button
+              type="button"
+              className="util__icon"
+              title="Chat"
+              onClick={() => onNavigate('/chat')}
+            >
+              <Icon name="message-circle" size={17} strokeWidth={1.9} />
+              {chatUnread > 0 && (
+                <>
+                  <span className="dot" />
+                  <span className="dot-count">{chatUnread > 9 ? '9+' : chatUnread}</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              className="util__chat-report-btn"
+              title="Bodyshop Advisor Chat Reply Time Report"
+              onClick={() => onNavigate('/chat?view=reports')}
+            >
+              Reports
+            </button>
+          </>
         )}
         <div className="navrel">
           <button
