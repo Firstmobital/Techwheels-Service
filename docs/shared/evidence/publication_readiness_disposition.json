@@ -44,6 +44,18 @@
         "supabase/migrations/20261126120000_pnl_report.sql"
       ],
       "reviewed_content_sha256": "8542d3abc0de14c104a15f712325b072cc9083a1814009494b85355c9f3f84ef"
+    },
+    {
+      "category": "accounts_003_phase1_high_risk",
+      "status": "user_approved",
+      "reviewer": "Repository owner (user), 2026-11-26; entry written by Claude Code at the user's request",
+      "outcome": "I approve publishing the P&L Phase 1 and salary rebuild, including the shared Payroll calculation. This is my approval, not an independent review. DBL-0104 is applied and checked. Signed-in production checks are pending. [Basis: the user saw this wording in chat and replied 'do it urself', after instructing 'document - apply - deploy (yes rebuild)' and 'push it now'. The agent that wrote the change only self-checked it.]",
+      "files": [
+        "src/lib/api/payroll.ts",
+        "src/lib/payroll/monthCalculation.ts",
+        "supabase/migrations/20261126150000_pnl_expense_entries.sql"
+      ],
+      "reviewed_content_sha256": "7a16d9dfb5e1eb37ef307a20eb5140f291bebbb1a34f0328ca7ee736dcb35532"
     }
   ],
   "validation_evidence": [
