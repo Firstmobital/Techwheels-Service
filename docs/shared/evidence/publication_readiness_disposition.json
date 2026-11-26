@@ -1,9 +1,10 @@
 {
-  "generated_at_utc": "2026-11-25T16:00:00.000Z",
+  "generated_at_utc": "2026-11-26T06:00:00.000Z",
   "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5; .instructions.md Section 11",
   "status_note": "Proposed main-bound governance synchronization (branch governance/shared-sync). NOT a completed review: every review below is pending. Contains no ACCOUNTS-002 application, migration, ledger rows DBL-0101/DBL-0102 or permission changes.",
   "change_set_files": [
     ".instructions.md",
+    "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-STAGE-002_STAGE_POINTER_AND_QUEUE_REALIGNMENT_PLAN_2026-11-16.md",
     "docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md",
     "docs/shared/active/CHANGE_LOG.md",
     "docs/shared/evidence/publication_readiness_disposition.json",
@@ -17,12 +18,18 @@
     "docs/shared/reference/catalog/task_library/generic/FEATURE_IMPLEMENTATION_TASK_CONTRACT.md",
     "docs/shared/reference/catalog/task_library/generic/IMPLEMENTATION_PLAN_TASK_CONTRACT.md",
     "docs/web/modules/complaints/reference/COMPLAINTS_TEST_EXECUTION_GUIDE.md",
+    "mobile/src/app/(tabs)/bodyshop-floor.tsx",
+    "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
     "package.json",
+    "scripts/bodyshop-floor-pipeline.harness.ts",
+    "scripts/bodyshop-stage-queue.harness.ts",
+    "scripts/git-safe-publish.sh",
     "scripts/publish-readiness.harness.mjs",
     "scripts/publish_readiness_check.mjs",
     "scripts/repo_change_impact.mjs",
     "scripts/repo_health_audit.mjs",
     "src/lib/api/bodyshopSettlement.ts",
+    "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
     "src/pages/BodyshopFloorPage.tsx",
     "src/pages/BodyshopRepairPage.tsx"
   ],
@@ -32,7 +39,10 @@
       "status": "pending",
       "reviewer": null,
       "files": [
+        "mobile/src/app/(tabs)/bodyshop-floor.tsx",
+        "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
         "src/lib/api/bodyshopSettlement.ts",
+        "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
         "src/pages/BodyshopFloorPage.tsx",
         "src/pages/BodyshopRepairPage.tsx"
       ],
@@ -41,13 +51,16 @@
         "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "outcome": null,
-      "note": "Independent review required before publication; not performed. Authoring checks are self-checks: build passes, docs:validate passes, publication-readiness harness 14/14."
+      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
     },
     {
       "category": "automation_script",
       "status": "pending",
       "reviewer": null,
       "files": [
+        "scripts/bodyshop-floor-pipeline.harness.ts",
+        "scripts/bodyshop-stage-queue.harness.ts",
+        "scripts/git-safe-publish.sh",
         "scripts/publish-readiness.harness.mjs",
         "scripts/publish_readiness_check.mjs",
         "scripts/repo_change_impact.mjs"
@@ -57,7 +70,7 @@
         "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "outcome": null,
-      "note": "Independent review required before publication; not performed. Authoring checks are self-checks: build passes, docs:validate passes, publication-readiness harness 14/14."
+      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
     },
     {
       "category": "database_schema_truth",
@@ -73,7 +86,7 @@
         "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "outcome": null,
-      "note": "Independent review required before publication; not performed. Authoring checks are self-checks: build passes, docs:validate passes, publication-readiness harness 14/14."
+      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
     },
     {
       "category": "repository_authority",
@@ -89,7 +102,7 @@
         "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "outcome": null,
-      "note": "Independent review required before publication; not performed. Authoring checks are self-checks: build passes, docs:validate passes, publication-readiness harness 14/14."
+      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
     },
     {
       "category": "validation_script",
@@ -103,10 +116,10 @@
         "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
       ],
       "outcome": null,
-      "note": "Independent review required before publication; not performed. Authoring checks are self-checks: build passes, docs:validate passes, publication-readiness harness 14/14."
+      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
     }
   ],
   "generated_artifacts": [],
   "deferred_db_changes": [],
-  "how_to_measure": "Run `node scripts/repo_change_impact.mjs --range origin/main..HEAD` and then `npm run publish:ready`."
+  "how_to_measure": "Run `node scripts/repo_change_impact.mjs --range origin/main..HEAD`, then `npm run publish:ready`. To record a review set status, reviewer, outcome and reviewed_content_sha256 from `node scripts/publish_readiness_check.mjs --review-fingerprint <category>`."
 }
