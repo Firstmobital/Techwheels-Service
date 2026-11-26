@@ -1,125 +1,41 @@
 {
-  "generated_at_utc": "2026-11-26T06:00:00.000Z",
-  "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5; .instructions.md Section 11",
-  "status_note": "Proposed main-bound governance synchronization (branch governance/shared-sync). NOT a completed review: every review below is pending. Contains no ACCOUNTS-002 application, migration, ledger rows DBL-0101/DBL-0102 or permission changes.",
-  "change_set_files": [
-    ".instructions.md",
-    "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-STAGE-002_STAGE_POINTER_AND_QUEUE_REALIGNMENT_PLAN_2026-11-16.md",
-    "docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md",
-    "docs/shared/active/CHANGE_LOG.md",
-    "docs/shared/evidence/publication_readiness_disposition.json",
-    "docs/shared/reference/DATABASE_TRUTH.md",
-    "docs/shared/reference/DB_CHANGE_LEDGER.md",
-    "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
-    "docs/shared/reference/DB_TRUTH_PROTOCOL.md",
-    "docs/shared/reference/catalog/UPDATE_TEMPLATE.md",
-    "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
-    "docs/shared/reference/catalog/task_library/generic/DATABASE_CHANGE_TASK_CONTRACT.md",
-    "docs/shared/reference/catalog/task_library/generic/FEATURE_IMPLEMENTATION_TASK_CONTRACT.md",
-    "docs/shared/reference/catalog/task_library/generic/IMPLEMENTATION_PLAN_TASK_CONTRACT.md",
-    "docs/web/modules/complaints/reference/COMPLAINTS_TEST_EXECUTION_GUIDE.md",
-    "mobile/src/app/(tabs)/bodyshop-floor.tsx",
-    "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
-    "package.json",
-    "scripts/bodyshop-floor-pipeline.harness.ts",
-    "scripts/bodyshop-stage-queue.harness.ts",
-    "scripts/git-safe-publish.sh",
-    "scripts/publish-readiness.harness.mjs",
-    "scripts/publish_readiness_check.mjs",
-    "scripts/repo_change_impact.mjs",
-    "scripts/repo_health_audit.mjs",
-    "src/lib/api/bodyshopSettlement.ts",
-    "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
-    "src/pages/BodyshopFloorPage.tsx",
-    "src/pages/BodyshopRepairPage.tsx"
-  ],
+  "generated_at_utc": "2026-11-26T02:14:55.008Z",
+  "authority": "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md (Review and Approval by Risk); .instructions.md Section 11",
+  "status_note": "Consolidated main publication. No independent human review was performed for any item. High-risk files are covered by the user's explicit approval, which was given for the consolidated work as a whole and is not a line-by-line review. Publishing applies no migration; DBL-0101 and DBL-0102 stay PROPOSED.",
   "reviews": [
     {
-      "category": "application_code",
-      "status": "pending",
-      "reviewer": null,
-      "files": [
-        "mobile/src/app/(tabs)/bodyshop-floor.tsx",
-        "mobile/src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
-        "src/lib/api/bodyshopSettlement.ts",
-        "src/lib/bodyshopFloorWork/defaultEdpAfterRi.ts",
-        "src/pages/BodyshopFloorPage.tsx",
-        "src/pages/BodyshopRepairPage.tsx"
-      ],
-      "authority_checked": [
-        ".instructions.md Section 11 item 6",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "outcome": null,
-      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
-    },
-    {
-      "category": "automation_script",
-      "status": "pending",
-      "reviewer": null,
-      "files": [
-        "scripts/bodyshop-floor-pipeline.harness.ts",
-        "scripts/bodyshop-stage-queue.harness.ts",
-        "scripts/git-safe-publish.sh",
-        "scripts/publish-readiness.harness.mjs",
-        "scripts/publish_readiness_check.mjs",
-        "scripts/repo_change_impact.mjs"
-      ],
-      "authority_checked": [
-        ".instructions.md Section 11 item 6",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "outcome": null,
-      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
-    },
-    {
-      "category": "database_schema_truth",
-      "status": "pending",
-      "reviewer": null,
-      "files": [
-        "docs/shared/reference/DB_CHANGE_LEDGER.md",
-        "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
-        "docs/shared/reference/DB_TRUTH_PROTOCOL.md"
-      ],
-      "authority_checked": [
-        ".instructions.md Section 11 item 6",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "outcome": null,
-      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
-    },
-    {
-      "category": "repository_authority",
-      "status": "pending",
-      "reviewer": null,
+      "category": "high_risk",
+      "status": "user_approved",
+      "reviewer": "Repository owner (user), by written instruction in the agent session on 2026-11-26",
+      "outcome": "Explicit approval: \"The user explicitly authorizes merging all legitimate compatible work and safely publishing main\", including simplification of publication governance. Open tracked findings, to be resolved before DBL-0101 is applied, are in the ACCOUNTS-002 plan (Consolidation and release status); an earlier AI review of part of this work is not a human review.",
       "files": [
         ".instructions.md",
-        "docs/shared/reference/DATABASE_TRUTH.md",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
+        "scripts/git-safe-publish.sh",
+        "scripts/publish_readiness_check.mjs",
+        "scripts/repo_change_impact.mjs",
+        "src/lib/api/bodyshopSettlement.ts",
+        "src/lib/api/employeeBank.ts",
+        "src/lib/api/payroll.ts",
+        "src/lib/payroll/costSummary.ts",
+        "src/lib/revenue/invoiceRevenue.ts",
+        "src/lib/revenue/invoiceRevenueSource.ts",
+        "src/pages/PayrollPage.tsx",
+        "src/pages/SettingsPage.tsx",
+        "src/pages/payroll/PayrollCostTab.tsx",
+        "src/pages/reports/revenue/InvoiceRevenueFinanceReport.tsx",
+        "src/pages/reports/revenue/index.ts",
+        "supabase/migrations/20261125140000_finance_data_access_hardening.sql",
+        "supabase/migrations/20261125141000_psf_invoice_overwrite_audit.sql"
       ],
-      "authority_checked": [
-        ".instructions.md Section 11 item 6",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "outcome": null,
-      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
-    },
-    {
-      "category": "validation_script",
-      "status": "pending",
-      "reviewer": null,
-      "files": [
-        "scripts/repo_health_audit.mjs"
-      ],
-      "authority_checked": [
-        ".instructions.md Section 11 item 6",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "outcome": null,
-      "note": "Independent review required before publication; not performed. Author self-checks: web build, Bodyshop harnesses, publication harness 25/25, docs:validate. User approval of business rules is not a technical review."
+      "reviewed_content_sha256": "387c5529e4e3d2bf50cb921f21dff51eb1236774d23b5595f9806880e46ca0b2"
     }
   ],
-  "generated_artifacts": [],
-  "deferred_db_changes": [],
-  "how_to_measure": "Run `node scripts/repo_change_impact.mjs --range origin/main..HEAD`, then `npm run publish:ready`. To record a review set status, reviewer, outcome and reviewed_content_sha256 from `node scripts/publish_readiness_check.mjs --review-fingerprint <category>`."
+  "validation_evidence": [
+    "npm run build: pass",
+    "scripts/*.harness.ts: 7/7 pass (Node 24 type stripping)",
+    "npm run test:publish-readiness: 32/32",
+    "npm run docs:validate: pass",
+    "production read-only probe: PGRST202 for missing bank RPC, PGRST205 for missing conflicts table, invoice report columns present",
+    "mobile tsc: no new errors against ba49fac2; mobile bundle export not completed"
+  ]
 }
