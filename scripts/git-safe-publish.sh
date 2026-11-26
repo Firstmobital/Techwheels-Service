@@ -484,6 +484,16 @@ if ! npm run build --if-present; then
   exit 2
 fi
 
+# High-risk files without a current approval: the owner types APPROVE here and it is recorded. The readiness
+# gate below still verifies the record.
+if [[ -f scripts/publish_record_approval.mjs ]]; then
+  if ! node scripts/publish_record_approval.mjs; then
+    echo >&2
+    echo "Error: approval was not given. Nothing was pushed." >&2
+    exit 7
+  fi
+fi
+
 publish_upstream="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)"
 unpushed_count=0
 if [[ -n "$publish_upstream" ]]; then
