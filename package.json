@@ -23,6 +23,7 @@
     "supabase:audit:cycle:postdeploy": "node scripts/supabase_audit_cycle.mjs",
     "db:backup:metadata": "bash scripts/backup-metadata.sh",
     "db:backup:full": "bash scripts/backup-full-db.sh",
+    "publish:approve": "node scripts/publish-approve.mjs",
     "publish:safe": "bash scripts/git-safe-publish.sh",
     "git:safe-publish": "npm run publish:safe",
     "mobile:start": "npm --prefix ./mobile run start -- --tunnel",
