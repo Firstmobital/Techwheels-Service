@@ -63,6 +63,10 @@ const zeroInvoiceBilled = {
   billed_amount: 0,
 }
 assert.equal(isBillingRecordedForWaiver(zeroInvoiceBilled), true)
+assert.equal(isBillingRecordedForWaiver({ billed_amount: 1500, parts_entry_status: null }), true)
+assert.equal(isBillingRecordedForWaiver({ billed_amount: null, parts_entry_status: 'billed' }), true)
+assert.equal(isBillingRecordedForWaiver({ billed_amount: null, parts_entry_status: null }), false)
+assert.equal(isBillingRecordedForWaiver({ billed_amount: null, parts_entry_status: 'pending' }), false)
 assert.equal(hasBillingAmountOnCard(zeroInvoiceBilled), false)
 assert.equal(isBillingStage16Done(billedOnly), false)
 assert.equal(deriveBillingDisplayStage(billedOnly, 15), 16)
