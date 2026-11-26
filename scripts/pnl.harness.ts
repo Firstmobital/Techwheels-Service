@@ -1,5 +1,6 @@
 /** Verifies Profit & Loss arithmetic (ACCOUNTS-003) on hand-calculated figures. Run: npm run test:pnl */
 import { computePnl, monthSlices, addMonths, pendingRecurring, DEFAULT_PNL_SETTINGS, type ExpenseHead, type PnlInput, type RecurringExpense } from '../src/lib/pnl/pnl.ts'
+import { buildLiveMonthSalary, type LiveMonthSalary } from '../src/lib/pnl/liveSalary.ts'
 
 let failures = 0
 function eq(name: string, actual: unknown, expected: unknown): void {
@@ -72,14 +73,52 @@ const octoberOnly = [
   { month: '2026-10', branch: 'Sitapura', gross: 40000, status: 'draft' },
   { month: '2026-10', branch: 'Jagatpura', gross: 5000, status: 'draft' },
 ]
-const estimate = computePnl({ ...base, payroll: octoberOnly })
-eq('missing month estimated from previous', estimate.expensePaise, full.expensePaise)
-eq('estimate labelled', [estimate.lines.find((l) => l.headId === 1)?.source, estimate.warnings.length, estimate.warnings[0].includes('estimated from 2026-10')], ['estimate', 1, true])
-eq('real payroll replaces estimate', computePnl({ ...base, payroll: [...octoberOnly, ...base.payroll] }).lines.find((l) => l.headId === 1)?.source, 'payroll')
-eq('all-zero month still estimated', computePnl({ ...base, payroll: [...octoberOnly, { month: '2026-11', branch: 'Sitapura', gross: 0, status: 'draft' }] }).expensePaise, full.expensePaise)
-eq('recorded month does not borrow for an unpaid branch', computePnl({ ...base, branch: 'Tonk', payroll: [{ month: '2026-10', branch: 'Tonk', gross: 100, status: 'draft' }, ...base.payroll] }).expensePaise, 0)
+const octoberFinal = octoberOnly.map((r) => ({ ...r, status: 'finalized' }))
+const salaryOf = (r: ReturnType<typeof computePnl>) => r.lines.find((l) => l.headId === 1)
+const estimate = computePnl({ ...base, payroll: octoberFinal })
+eq('missing month estimated from earlier finalized', estimate.expensePaise, full.expensePaise)
+eq('estimate labelled', [salaryOf(estimate)?.source, estimate.warnings.length, estimate.warnings[0].includes('estimated from 2026-10')], ['estimate', 1, true])
+eq('finalized month wins', salaryOf(computePnl({ ...base, payroll: [...octoberFinal, ...base.payroll] }))?.source, 'payroll')
+// The flaw this rebuild fixes: a draft holding work pay with no base pay must not replace a sound figure.
+const thinDraft = [{ month: '2026-11', branch: 'Sitapura', gross: 100, status: 'draft' }]
+eq('thin draft ignored when an earlier finalized month exists', computePnl({ ...base, payroll: [...octoberFinal, ...thinDraft] }).expensePaise, full.expensePaise)
+const onlyDraft = computePnl({ ...base, payroll: thinDraft, expenses: [] })
+eq('draft used only as last resort, with warning', [onlyDraft.expensePaise, onlyDraft.warnings.some((w) => w.includes('may be incomplete'))], [10000, true])
+eq('recorded month does not borrow for an unpaid branch', computePnl({ ...base, branch: 'Tonk', payroll: [{ month: '2026-10', branch: 'Tonk', gross: 100, status: 'finalized' }, ...base.payroll] }).expensePaise, 0)
 eq('no estimate beyond lookback', computePnl({ ...base, expenses: [], payroll: [{ month: '2026-07', branch: 'Sitapura', gross: 1000, status: 'finalized' }] }).expensePaise, 0)
-eq('entry beats estimate for its branch only', computePnl({ ...base, payroll: octoberOnly, expenses: [{ month: '2026-11', branch: 'Sitapura', headId: 1, amount: 100 }] }).expensePaise, 510000)
+eq('entry beats estimate for its branch only', computePnl({ ...base, payroll: octoberFinal, expenses: [{ month: '2026-11', branch: 'Sitapura', headId: 1, amount: 100 }] }).expensePaise, 510000)
+
+const liveNov: LiveMonthSalary = { month: '2026-11', rows: [{ branch: 'Sitapura', monthly: 30000, toDate: 13000 }], attendance: 'assumed', salariedWithoutAttendance: 0, salaried: 1, earnings: { advisor: 1, technician: 1, bodyshop: 1 } }
+const liveBase: PnlInput = { ...base, expenses: [], payroll: [...octoberFinal, ...thinDraft], live: { '2026-11': liveNov } }
+const liveFull = computePnl(liveBase)
+eq('live beats draft and estimate', [liveFull.expensePaise, salaryOf(liveFull)?.source], [4300000, 'live'])
+eq('live warns not finalized and assumed attendance', liveFull.warnings.filter((w) => w.includes('not finalized') || w.includes('full attendance')).length, 2)
+// 26 days elapsed: base is spread over 26/30; work pay already earned is not reduced again.
+eq('this month: base by days, work pay whole', computePnl({ ...liveBase, to: '2026-11-26', asOf: '2026-11-26' }).expensePaise, 2600000 + 1300000)
+eq('half of elapsed days takes half the work pay', computePnl({ ...liveBase, to: '2026-11-13', asOf: '2026-11-26' }).expensePaise, 1300000 + 650000)
+eq('full month option takes both whole', computePnl({ ...liveBase, to: '2026-11-13', asOf: '2026-11-26', prorate: false }).expensePaise, 4300000)
+eq('finalized beats live', computePnl({ ...liveBase, payroll: base.payroll }).expensePaise, 4500000)
+
+// Live salary uses Payroll's own per-employee rules.
+const comp = (code: string, salary_type: 'base' | 'variable' | 'both', base_salary: number) => [code, { id: 1, employee_code: code, salary_type, base_salary, created_at: '', updated_at: '' }] as const
+const earn = (code: string, sa: number, tech: number, body: number) => [code, { employeeCode: code, saEarning: sa, technicianEarning: tech, bodyshopEarning: body, detail: { saEarning: sa, technicianEarning: tech, bodyshopEarning: body, needsReview: false } }] as const
+const liveInput = {
+  month: '2026-11',
+  employees: [
+    { employee_code: 'A', location: 'Sitapura', role: 'Technician', is_active: true },
+    { employee_code: 'B', location: 'Sitapura', role: 'Service Advisor', is_active: true },
+    { employee_code: 'C', location: 'Ajmer Road', role: 'Clerk', is_active: false },
+  ],
+  compensation: new Map([comp('A', 'both', 30000), comp('B', 'base', 20000), comp('C', 'base', 9000)]),
+  attendance: new Map(), existing: [], incentives: new Map([['B', 500]]),
+  variable: new Map([earn('A', 111, 1000, 0), earn('B', 700, 0, 0)]),
+}
+const built = buildLiveMonthSalary(liveInput)
+eq('live: salary type, role and activity rules', built.rows, [{ branch: 'Sitapura', monthly: 50000, toDate: 1500 }])
+eq('live: attendance assumed', [built.attendance, built.salaried], ['assumed', 2])
+const partial = buildLiveMonthSalary({ ...liveInput, attendance: new Map([['A', { payable_days: 15 } as never]]) })
+eq('live: partial attendance gives no base to the rest', [partial.attendance, partial.salariedWithoutAttendance, partial.rows[0].monthly, partial.rows[0].toDate], ['partial', 1, 15000, 1500])
+
 eq('addMonths across years', [addMonths('2027-01', -3), addMonths('2026-12', 1)], ['2026-10', '2027-01'])
 
 const rent: RecurringExpense = { id: 9, headId: 2, branch: 'Sitapura', amount: 30000, amountVaries: false, startMonth: '2026-10', endMonth: '2026-12', note: null, isActive: true }

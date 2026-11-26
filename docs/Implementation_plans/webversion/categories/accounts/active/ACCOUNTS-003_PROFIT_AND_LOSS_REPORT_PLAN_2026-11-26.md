@@ -19,7 +19,7 @@ On 2026-11-26 the user asked to propose and implement, end to end, a P&L based o
 | GST | Default: profit on revenue excluding GST (18% estimate, as in the operational report). Switchable to billed amount with GST. Parts taxed at other rates make this an estimate; Invoice Revenue (Finance basis) uses actual GST |
 | Margins | Labour 100%, parts 9%; editable. One current value applies to all periods (not effective-dated) |
 | Expenses | One amount per month, branch (4 branches + Common) and head; 24 starter heads; users can add heads; "copy previous month" (never copies salary) |
-| Salary | Payroll gross pay (totals only, through `pnl_payroll_cost`). An entered amount, including 0, replaces Payroll for that branch and month. Payroll branches outside the four report branches count as Common |
+| Salary | See the salary rebuild below. An entered amount, including 0, replaces the figure for that branch and month. Branches outside the four report branches count as Common |
 | Part periods | Monthly expenses counted by days shown; can be switched to full month |
 | Branch view | Carries only that branch's expenses; Common is not allocated |
 | Completeness | Marked provisional when Salary, Rent, Electricity or Interest is missing for a month, or salary comes from unfinalized Payroll |
@@ -53,7 +53,7 @@ Revert the web commit. Database objects are additive; the drop statements are in
 |---|---|
 | Entries | `pnl_expense_entries`: month the cost belongs to, branch, type, amount, note. Several entries add up. Edit or cancel with a reason; never deleted. Each change is stored in `pnl_expense_entry_history` (database records who; the screen shows what and when) |
 | Repeating | `pnl_recurring_expenses`: fixed or changing amount, first and optional last month. Counts only after confirmation; once per month; salary excluded. Stopping or editing never changes confirmed months |
-| Salary | Order per branch: entered amount, then that month's Payroll, then, only when a month has no Payroll pay at all, the nearest earlier month within 3 months, labelled estimated and marking the figure provisional |
+| Salary | Superseded before release by the salary rebuild below |
 | Pending | Unconfirmed repeats listed in Expenses and counted in the provisional warning; core types with nothing entered or repeating are listed (all branches together) |
 | Screens | *Expenses* (add, pending, entries, month summary) and *Repeating & Settings* (repeats, margins, expense types) |
 | Old grid | Rows are copied into entries; `pnl_expenses` becomes read-only (kept for rollback). Between migration and web release the old grid cannot save |
@@ -67,3 +67,37 @@ Not in Phase 1: bill attachments, vendor and payment status, month lock, approva
 | ✅ | Disposable PostgreSQL: 8/8 checks, carry-over, history, allow/deny cases. Screens exercised with sample data |
 | ⏳ | Authorize: apply migration, run checks, refresh snapshot, publish. Apply immediately before publishing; the web release depends on it |
 | ⏳ | Signed-in verification in production |
+
+## Audit of existing sources (2026-11-26)
+**Why it was needed:** the first design read only saved `payroll_entries`; it did not trace how the Payroll screens create them, although the first data query had shown Salary Type totals. The user directed: audit what exists and reuse it before proposing or building.
+
+Scope: schema money-related fields, web app code search, main salary logic traced; live totals for selected sources only. Not covered: payments made outside these screens, warranty rejection/goodwill cost, mobile app, server functions.
+
+| Source | Finding | P&L treatment |
+|---|---|---|
+| Job-card revenue | Powers Daily Revenue | Reused |
+| Saved Payroll results | Gross pay per employee | Reused when finalized |
+| Salary Type, attendance, advisor/technician/bodyshop earnings, Payroll incentives, saved additions | October draft: base ₹23.14L, work-based ₹22.87L, incentives separately recorded ₹1.58L (Oct entries held 0) | Reused through Payroll's own functions (rebuild below) |
+| Advance recovery | Does not change salary cost | Gross pay used |
+| Bodyshop waivers | ₹887 in November at audit | Not used; check revenue treatment first |
+| DMS invoice discounts | About ₹4,300 November | Not deducted separately; revenue treatment unverified |
+| Parts consumption cost | 17,015 rows, none with positive total cost | Not usable; 9% margin kept |
+| Parts receipt (GRN) charges | 465 rows, charges not analysed | Not used |
+| CRE incentive | Rates and on-screen calculation; payment route unknown | Not used; **open question** whether paid outside Payroll |
+| Extended warranty incentive | Price-list fields; payments not traced | Not used; **open question** |
+| Rent, electricity, interest | No ready source found | Manual and repeating entry |
+
+## Salary rebuild (approved 2026-11-26: "document - apply - deploy (yes rebuild)")
+| Order (per month; a typed amount still overrides per branch) | Figure |
+|---|---|
+| 1 | Finalized Payroll |
+| 2 | Live calculation, admins only, current month and up to 3 months back; nothing is saved |
+| 3 | Nearest earlier **finalized** month within 3, labelled estimated |
+| 4 | The month's saved draft, labelled possibly incomplete |
+
+- Shared rules: `src/lib/payroll/monthCalculation.ts` is used by both Payroll recompute and the live figure. One-off comparison with the previous inline Payroll code on 200,000 generated cases: no mismatches.
+- Live inputs are Payroll's own loaders: Salary Type, attendance, saved draft additions, incentives, advisor/technician/bodyshop earnings. Bank details are not loaded. Only branch totals are shown.
+- No attendance uploaded: base pay assumes full attendance of active employees (labelled). Any attendance uploaded: Payroll's rule applies (no row, no base pay) and gaps are reported.
+- Part periods: base pay is spread by days shown; work-based pay, incentives and additions are to date and only apportioned by the share of elapsed days shown.
+- Flaw removed before release: a draft recalculated before attendance (work pay, no base pay) is no longer preferred over a sound figure.
+- Limits: the live figure inherits Payroll's calculation behaviour, including that some earnings lookups ignore read errors (a zero earnings type is warned); incentives show only when recorded. Non-admins see saved figures or an estimate.

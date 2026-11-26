@@ -105,7 +105,7 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 
 ### Profit & Loss (ACCOUNTS-003, added 2026-11-26; not part of the audit above)
 - Reports -> Profit & Loss, visible to admins and holders of module `pnl_report` (covers all branches).
-- Tables `pnl_settings`, `pnl_expense_heads`, `pnl_expenses`; RPC `pnl_payroll_cost`. Management estimate; nothing is read from or posted to Busy. Details: ACCOUNTS-003 plan.
+- Tables `pnl_settings`, `pnl_expense_heads`, `pnl_expense_entries` (+ history), `pnl_recurring_expenses`; `pnl_expenses` is read-only legacy; RPC `pnl_payroll_cost`. Salary reuses Payroll (`computeEmployeeMonth`), live calculation for admins only. Management estimate; nothing is read from or posted to Busy. Details: ACCOUNTS-003 plan.
 
 ## Mobile Version (Audited)
 

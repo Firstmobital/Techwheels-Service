@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   addExpenseEntries, canModifyPnl, cancelExpenseEntry, editExpenseEntry, getEntryHistory, getExpenseHeads, getExpenses,
-  getPayrollCost, getRecurringExpenses, type EntryChange, type ExpenseEntryRow,
+  getRecurringExpenses, type EntryChange, type ExpenseEntryRow,
 } from '../../../lib/api/pnl'
+import { loadSalaryInputs } from '../../../lib/api/pnlSalary'
 import {
-  addMonths, COMMON_BRANCH, payrollByMonthBranch, pendingRecurring, PNL_BRANCHES, salarySourceMonth, SALARY_ESTIMATE_LOOKBACK_MONTHS,
-  type ExpenseHead, type RecurringExpense,
+  chooseSalary, COMMON_BRANCH, payrollByMonthBranch, pendingRecurring, PNL_BRANCHES,
+  type ExpenseHead, type RecurringExpense, type SalaryChoice,
 } from '../../../lib/pnl/pnl'
 import { cardClass, currentMonth, monthName, parseAmount, rupees, inputClass, primaryButton, secondaryButton } from './format'
 import { HeadOptions, Notices } from './shared'
@@ -16,7 +17,8 @@ interface MonthData {
   heads: ExpenseHead[]
   entries: ExpenseEntryRow[]
   recurring: RecurringExpense[]
-  payroll: Map<string, { paise: number; finalized: boolean }>
+  salary: SalaryChoice | null
+  liveProblem: string | null
   canEdit: boolean
 }
 
@@ -25,10 +27,11 @@ async function loadMonth(month: string): Promise<MonthData> {
     getExpenseHeads(),
     getExpenses(month, month, true),
     getRecurringExpenses(),
-    getPayrollCost(`${addMonths(month, -SALARY_ESTIMATE_LOOKBACK_MONTHS)}-01`, `${month}-01`),
+    loadSalaryInputs([month], currentMonth()),
     canModifyPnl(),
   ])
-  return { month, heads, entries, recurring, payroll: payrollByMonthBranch(pay), canEdit }
+  const salary = chooseSalary(month, payrollByMonthBranch(pay.payroll), pay.live[month])
+  return { month, heads, entries, recurring, salary, liveProblem: pay.liveProblem, canEdit }
 }
 
 export default function PnlExpensesPage() {
@@ -73,6 +76,7 @@ export default function PnlExpensesPage() {
       </div>
 
       <Notices error={action.error} message={action.message} />
+      {ready?.liveProblem && <p className="text-sm text-amber-800">{ready.liveProblem}</p>}
 
       {!ready ? (
         <div className={`${cardClass} text-sm text-gray-500`}>Loading expenses...</div>
@@ -96,13 +100,14 @@ interface SectionProps {
   save: (change: () => Promise<void>, done: string) => Promise<boolean>
 }
 
+const SALARY_LABEL = { payroll: 'finalized Payroll', live: 'calculated now from Payroll data', estimate: 'estimate', draft: 'saved Payroll draft' }
+
+/** The figure the P&L uses when no salary is typed: base pay for the month plus work-based pay so far. */
 function salaryFor(data: MonthData, branch: string): { paise: number; label: string } | null {
-  const source = salarySourceMonth(data.month, data.payroll)
-  if (!source) return null
-  const pay = data.payroll.get(`${source.month}|${branch}`)
-  if (!pay?.paise) return null
-  const label = source.estimated ? `estimate from ${monthName(source.month)}` : pay.finalized ? 'Payroll' : 'Payroll draft'
-  return { paise: pay.paise, label }
+  const pay = data.salary?.branches.get(branch)
+  if (!data.salary || !pay) return null
+  const label = data.salary.basis === 'estimate' ? `estimate from ${monthName(data.salary.sourceMonth)}` : SALARY_LABEL[data.salary.basis]
+  return { paise: pay.monthlyPaise + pay.toDatePaise, label }
 }
 
 function AddExpenseForm({ data, busy, save }: SectionProps) {
@@ -161,7 +166,7 @@ function AddExpenseForm({ data, busy, save }: SectionProps) {
       </div>
       {salary && (
         <p className="text-sm text-amber-800">
-          A salary entry replaces the {salary.label} figure of {rupees(salary.paise)} for {branch}. Enter the full month’s salary here. For extra payments, choose “Incentives paid outside Payroll”.
+          A salary entry replaces the figure ({salary.label}) of {rupees(salary.paise)} for {branch}. Enter the full month’s salary here. For extra payments, choose “Incentives paid outside Payroll”.
         </p>
       )}
       {problem && <p className="text-sm text-red-700">{problem}</p>}
@@ -361,7 +366,7 @@ function MonthSummary({ data }: { data: MonthData }) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <h3 className="px-4 py-3 text-sm font-semibold text-gray-900">Month summary (full month)</h3>
+      <h3 className="px-4 py-3 text-sm font-semibold text-gray-900">Month summary (base pay for the full month; work-based salary so far)</h3>
       {rows.length === 0 ? <p className="px-4 pb-4 text-sm text-gray-500">Nothing to show yet.</p> : (
         <div className="table-scroll-pane">
           <table className="w-full text-sm">

@@ -1,5 +1,17 @@
 # Project Handbook Change Log
 
+## 2026-11-26 (ACCOUNTS-003 Phase 1 and salary rebuild)
+
+- Date: 2026-11-26
+- Change summary: P&L gains individual expense entries with history, repeating expenses with monthly confirmation, and a salary figure that reuses Payroll: finalized results, otherwise a live admin-only calculation with Payroll's own rules (nothing saved), otherwise a labelled earlier or draft figure.
+- Impacted files: `src/lib/pnl/**`, `src/lib/api/pnl.ts`, `src/lib/api/pnlSalary.ts`, `src/lib/payroll/monthCalculation.ts`, `src/lib/api/payroll.ts` (recompute now calls the shared function), `src/pages/reports/pnl/**`, migration `20261126150000` (DBL-0104).
+- Business logic change: Yes (P&L salary and expense rules). Payroll results unchanged (rules moved to a shared function).
+- Function-level contract change: Yes (new shared `computeEmployeeMonth`).
+- RBAC/RLS change: Yes (policies on three new tables; old P&L grid table made read-only). Payroll access unchanged.
+- Data/schema change: Yes (see DBL-0104 for applied status).
+- Mobile: no impact.
+- Docs updated by: ACCOUNTS-003.
+
 ## 2026-11-26 (ACCOUNTS-003 Profit & Loss report)
 
 - Date: 2026-11-26

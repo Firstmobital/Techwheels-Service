@@ -2,15 +2,12 @@ import { supabase } from '../supabase'
 import { fetchEmployeeBankDetails, withBankDetails } from './employeeBank'
 import {
   computePayrollAmounts,
-  hasGenuinePayrollMonthActivity,
   isValidPayableDays,
   parseEmployeeIncentiveWriteFields,
   parsePayrollMonthInput,
-  payrollActivityFromEntry,
-  salaryTypeIncludesVariable,
-  shouldIncludeInPayrollWorkingRoster,
 } from '../payroll/calculations'
 import { roundPayrollPaise } from '../payroll/advanceSchedule'
+import { computeEmployeeMonth } from '../payroll/monthCalculation'
 import { fetchMonthlyVariableEarnings } from '../payroll/variableEarnings'
 import { isEmployeeIncentiveType } from '../payroll/types'
 import type {
@@ -413,59 +410,21 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
     const comp = compMap.get(code)
     if (!comp) continue
 
-    const attendance = attendanceMap.get(code)
-    const payableDays = attendance?.payable_days ?? 0
+    const payableDays = attendanceMap.get(code)?.payable_days ?? 0
     const variable = variableMap.get(code)
-    const saVar = variable?.saEarning ?? 0
-    const techVar = variable?.technicianEarning ?? 0
-    const bodyshopVar = variable?.bodyshopEarning ?? 0
-
-    const role = String(emp.role ?? '').trim().toUpperCase()
-    let finalSaVar = saVar
-    let finalTechVar = techVar
-    if (role.includes('SERVICE') || role.includes('SA') || role.includes('ADVISOR')) {
-      finalTechVar = 0
-    } else if (role.includes('TECH')) {
-      finalSaVar = 0
-    }
-
     const existing = existingByCode.get(code)
-    const customAdditions = existing?.custom_additions ?? 0
-    const otherDeductions = existing?.other_deductions ?? 0
-    const incentiveAmount = incentiveTotals.get(code) ?? 0
     const advanceDeduction = await getAdvanceDeductionForMonth(code, month)
-    const currentActivity = {
+    const result = computeEmployeeMonth({
+      employee: emp,
+      compensation: comp,
       payableDays,
-      saVariableEarning: finalSaVar,
-      technicianVariableEarning: finalTechVar,
-      bodyshopVariableEarning: bodyshopVar,
-      customAdditions,
-      incentiveAmount,
-      otherDeductions,
-      advanceDeduction,
-    }
-    if (
-      !shouldIncludeInPayrollWorkingRoster(emp, currentActivity)
-      && !hasGenuinePayrollMonthActivity(payrollActivityFromEntry(existing))
-    ) {
-      continue
-    }
-
-    const needsReview = salaryTypeIncludesVariable(comp.salary_type)
-      && finalSaVar + finalTechVar + bodyshopVar <= 0
-
-    const amounts = computePayrollAmounts({
-      salaryType: comp.salary_type,
-      baseSalary: Number(comp.base_salary),
-      payableDays,
-      saVariableEarning: finalSaVar,
-      technicianVariableEarning: finalTechVar,
-      bodyshopVariableEarning: bodyshopVar,
-      incentiveAmount,
-      customAdditions,
-      otherDeductions,
+      variable,
+      existing,
+      incentiveAmount: incentiveTotals.get(code) ?? 0,
       advanceDeduction,
     })
+    if (!result) continue
+    const { amounts, needsReview } = result
 
     upsertRows.push({
       employee_code: code,
@@ -481,13 +440,13 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
       account_number_snapshot: emp.account_number ?? null,
       ifsc_snapshot: emp.ifsc ?? null,
       earned_base: amounts.earnedBase,
-      sa_variable_earning: finalSaVar,
-      technician_variable_earning: finalTechVar,
-      bodyshop_variable_earning: bodyshopVar,
+      sa_variable_earning: result.saEarning,
+      technician_variable_earning: result.technicianEarning,
+      bodyshop_variable_earning: result.bodyshopEarning,
       variable_earning_total: amounts.variableTotal,
       incentive_amount: amounts.incentiveAmount,
-      custom_additions: customAdditions,
-      other_deductions: otherDeductions,
+      custom_additions: result.customAdditions,
+      other_deductions: result.otherDeductions,
       advance_deduction: advanceDeduction,
       gross_payout: amounts.grossPayout,
       net_payable: amounts.netPayable,

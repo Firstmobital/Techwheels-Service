@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getDailyRevenueReport, getDateRangeBounds, type DailyRevenueReport } from '../../../lib/reportQueries'
-import { getExpenseHeads, getExpenses, getPayrollCost, getPnlSettings, getRecurringExpenses } from '../../../lib/api/pnl'
-import { addMonths, computePnl, SALARY_ESTIMATE_LOOKBACK_MONTHS, type ExpenseEntry, type ExpenseHead, type PayrollCostRow, type PnlSettings, type RecurringExpense } from '../../../lib/pnl/pnl'
+import { getExpenseHeads, getExpenses, getPnlSettings, getRecurringExpenses } from '../../../lib/api/pnl'
+import { loadSalaryInputs, type SalaryInputs } from '../../../lib/api/pnlSalary'
+import { computePnl, monthSlices, type ExpenseEntry, type ExpenseHead, type PnlSettings, type RecurringExpense } from '../../../lib/pnl/pnl'
 import { REPORT_BRANCH_OPTIONS } from '../../../lib/branches'
 import { exportToCSV } from '../../../lib/exportUtils'
 import type { ReportViewProps } from '../types'
@@ -13,13 +14,16 @@ interface LoadedData {
   settings: PnlSettings
   heads: ExpenseHead[]
   expenses: ExpenseEntry[]
-  payroll: PayrollCostRow[]
+  payroll: SalaryInputs['payroll']
+  live: SalaryInputs['live']
+  liveProblem: string | null
+  asOf: string
   recurring: RecurringExpense[]
   revenue: DailyRevenueReport[]
   byBranch: Array<{ branch: string; revenue: DailyRevenueReport[] }>
 }
 
-const SOURCE_LABEL = { entered: '', payroll: ' (from Payroll)', estimate: ' (ESTIMATED from earlier Payroll)', mixed: ' (more than one source)' }
+const SOURCE_LABEL = { entered: '', payroll: ' (from Payroll)', live: ' (calculated now from Payroll data, not finalized)', estimate: ' (ESTIMATED from earlier Payroll)', mixed: ' (more than one source)' }
 
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -43,17 +47,18 @@ export default function PnlStatementReport({ branch, dateFilter }: ReportViewPro
       const to = localDate(lastDay)
       // Settings first: it fails fast with a clear message when access or setup is missing.
       const settings = await getPnlSettings()
-      const [heads, expenses, payroll, recurring, revenue, byBranch] = await Promise.all([
+      const asOf = localDate(new Date())
+      const [heads, expenses, salary, recurring, revenue, byBranch] = await Promise.all([
         getExpenseHeads(),
         getExpenses(from.slice(0, 7), to.slice(0, 7)),
-        getPayrollCost(`${addMonths(from.slice(0, 7), -SALARY_ESTIMATE_LOOKBACK_MONTHS)}-01`, to),
+        loadSalaryInputs(monthSlices(from, to).map((s) => s.month), asOf.slice(0, 7)),
         getRecurringExpenses(),
         getDailyRevenueReport(branch, dateFilter),
         branch === 'ALL'
           ? Promise.all(REPORT_BRANCH_OPTIONS.map(async (b) => ({ branch: b as string, revenue: await getDailyRevenueReport(b, dateFilter) })))
           : Promise.resolve([]),
       ])
-      return { from, to, settings, heads, expenses, payroll, recurring, revenue, byBranch }
+      return { from, to, asOf, settings, heads, expenses, ...salary, recurring, revenue, byBranch }
     }
 
     load()
@@ -153,6 +158,8 @@ export default function PnlStatementReport({ branch, dateFilter }: ReportViewPro
           {coverage === null ? ' No expenses recorded for this period.' : ` Gross profit covers ${coverage.toFixed(0)}% of expenses.`}
         </p>
       </div>
+
+      {data.liveProblem && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{data.liveProblem}</div>}
 
       {provisional && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">

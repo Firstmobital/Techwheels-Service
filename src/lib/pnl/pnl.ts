@@ -3,6 +3,7 @@
  * Money is summed in paise. Dates are plain `YYYY-MM-DD` strings; months are `YYYY-MM`.
  */
 import { canonicalReportBranch, REPORT_BRANCH_OPTIONS, UNMAPPED_BRANCH } from '../branches'
+import type { LiveMonthSalary } from './liveSalary'
 
 /** Expenses not belonging to one report branch (head office, group loan interest, unmapped payroll). */
 export const COMMON_BRANCH = 'Common'
@@ -52,19 +53,65 @@ export function addMonths(month: string, delta: number): string {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`
 }
 
+export interface SalaryAmount {
+  /** Spread over the days shown. */
+  monthlyPaise: number
+  /** Already earned to date. */
+  toDatePaise: number
+}
+export interface SalaryChoice {
+  /** payroll: finalized. live: calculated now. estimate: an earlier finalized month. draft: saved, unfinalized figures. */
+  basis: 'payroll' | 'live' | 'estimate' | 'draft'
+  sourceMonth: string
+  branches: Map<string, SalaryAmount>
+}
+
+const mapBranch = (raw: string | null) => {
+  const canonical = canonicalReportBranch(raw)
+  return canonical === UNMAPPED_BRANCH ? COMMON_BRANCH : canonical
+}
+
 /**
- * The month whose Payroll should be used for `month`: itself when Payroll has any pay for it, otherwise the nearest
- * earlier month (within the lookback) as an estimate. Decided per month, so a branch that Payroll really pays nothing
- * in a recorded month is not filled from an older one.
+ * Which salary figure a month uses (a typed entry still overrides it per branch):
+ * finalized Payroll, else the live calculation, else the nearest earlier FINALIZED month within the lookback,
+ * else the month's own saved draft. A draft is never preferred, because it can hold work-based pay with no base pay.
+ * Decided per month, so an unpaid branch in a recorded month is not filled from another one.
  */
-export function salarySourceMonth(month: string, payroll: Map<string, { paise: number }>): { month: string; estimated: boolean } | null {
-  for (let back = 0; back <= SALARY_ESTIMATE_LOOKBACK_MONTHS; back += 1) {
-    const candidate = addMonths(month, -back)
+export function chooseSalary(month: string, payroll: Map<string, { paise: number; finalized: boolean }>, live?: LiveMonthSalary): SalaryChoice | null {
+  const saved = (source: string, finalizedOnly: boolean): Map<string, SalaryAmount> | null => {
+    const out = new Map<string, SalaryAmount>()
     for (const [key, value] of payroll) {
-      if (value.paise > 0 && key.startsWith(`${candidate}|`)) return { month: candidate, estimated: back > 0 }
+      const [m, branch] = key.split('|')
+      if (m !== source || value.paise <= 0 || (finalizedOnly && !value.finalized)) continue
+      out.set(branch, { monthlyPaise: value.paise, toDatePaise: 0 })
     }
+    return out.size ? out : null
   }
-  return null
+
+  const own = saved(month, true)
+  if (own) return { basis: 'payroll', sourceMonth: month, branches: own }
+
+  if (live) {
+    const branches = new Map<string, SalaryAmount>()
+    for (const row of live.rows) {
+      const branch = mapBranch(row.branch)
+      const current = branches.get(branch) ?? { monthlyPaise: 0, toDatePaise: 0 }
+      current.monthlyPaise += toPaise(row.monthly)
+      current.toDatePaise += toPaise(row.toDate)
+      branches.set(branch, current)
+    }
+    for (const [branch, value] of branches) if (value.monthlyPaise + value.toDatePaise <= 0) branches.delete(branch)
+    if (branches.size) return { basis: 'live', sourceMonth: month, branches }
+  }
+
+  for (let back = 1; back <= SALARY_ESTIMATE_LOOKBACK_MONTHS; back += 1) {
+    const source = addMonths(month, -back)
+    const earlier = saved(source, true)
+    if (earlier) return { basis: 'estimate', sourceMonth: source, branches: earlier }
+  }
+
+  const draft = saved(month, false)
+  return draft ? { basis: 'draft', sourceMonth: month, branches: draft } : null
 }
 
 /** Repeating expenses due in `month` that have no active entry yet. */
@@ -110,7 +157,7 @@ export interface ExpenseLine {
   name: string
   category: string
   amountPaise: number
-  source: 'entered' | 'payroll' | 'estimate' | 'mixed'
+  source: 'entered' | 'payroll' | 'live' | 'estimate' | 'mixed'
 }
 
 export interface PnlResult extends PnlFigures {
@@ -173,6 +220,10 @@ export interface PnlInput {
   /** Should start SALARY_ESTIMATE_LOOKBACK_MONTHS before `from` so that missing months can be estimated. */
   payroll: PayrollCostRow[]
   recurring?: RecurringExpense[]
+  /** Live salary by month, for months Payroll has not finalized. */
+  live?: Record<string, LiveMonthSalary>
+  /** Today (`YYYY-MM-DD`): work-based pay is earned up to this day. Defaults to `to`. */
+  asOf?: string
 }
 
 const emptyFigures = (): PnlFigures => ({
@@ -213,14 +264,19 @@ export function computePnl(input: PnlInput): PnlResult {
 
     const factor = prorate ? slice.daysIncluded / slice.daysInMonth : 1
     const present = new Set<number>()
-    const draftPayroll: string[] = []
-    const estimated: string[] = []
-    const salarySource = salarySourceMonth(slice.month, payroll)
+    const salaryUsed: string[] = []
+    const salary = chooseSalary(slice.month, payroll, input.live?.[slice.month])
+    // Share of the work-based pay earned so far that falls inside the days shown.
+    const asOf = input.asOf ?? to
+    const elapsed = slice.month < asOf.slice(0, 7) ? slice.daysInMonth : slice.month === asOf.slice(0, 7) ? Number(asOf.slice(8, 10)) : 0
+    const firstDay = slice.month === from.slice(0, 7) ? Number(from.slice(8, 10)) : 1
+    const covered = Math.max(0, Math.min(firstDay + slice.daysIncluded - 1, elapsed) - firstDay + 1)
+    const toDateFactor = prorate && elapsed > 0 ? covered / elapsed : 1
     for (const head of heads) {
       let monthPaise = 0
+      let toDatePaise = 0
       let fromEntry = false
-      let fromPayroll = false
-      let fromEstimate = false
+      let salaryKind: ExpenseLine['source'] | null = null
       for (const b of scope) {
         const manual = entered.get(`${slice.month}|${b}|${head.id}`)
         if (manual !== undefined) {
@@ -230,22 +286,18 @@ export function computePnl(input: PnlInput): PnlResult {
           present.add(head.id)
           continue
         }
-        const pay = head.code === 'salary' && salarySource ? payroll.get(`${salarySource.month}|${b}`) : undefined
-        if (pay && pay.paise > 0) {
-          monthPaise += pay.paise
+        const pay = head.code === 'salary' ? salary?.branches.get(b) : undefined
+        if (pay && salary) {
+          monthPaise += pay.monthlyPaise
+          toDatePaise += pay.toDatePaise
+          salaryKind = salary.basis === 'draft' ? 'payroll' : salary.basis
           present.add(head.id)
-          if (salarySource?.estimated) {
-            fromEstimate = true
-            estimated.push(b)
-          } else {
-            fromPayroll = true
-            if (!pay.finalized) draftPayroll.push(b)
-          }
+          salaryUsed.push(b)
         }
       }
-      const kinds = [fromEntry && 'entered', fromPayroll && 'payroll', fromEstimate && 'estimate'].filter(Boolean) as ExpenseLine['source'][]
+      const kinds = [fromEntry && 'entered', salaryKind].filter(Boolean) as ExpenseLine['source'][]
       if (!kinds.length) continue
-      const share = Math.round(monthPaise * factor)
+      const share = Math.round(monthPaise * factor) + Math.round(toDatePaise * toDateFactor)
       m.expensePaise += share
       const source: ExpenseLine['source'] = kinds.length > 1 ? 'mixed' : kinds[0]
       const line = lines.get(head.id)
@@ -258,10 +310,20 @@ export function computePnl(input: PnlInput): PnlResult {
     }
     const missing = coreHeads.filter((h) => !present.has(h.id)).map((h) => h.name)
     if (missing.length) warnings.push(`${slice.month}: no amount for ${missing.join(', ')}. Profit is overstated if these apply.`)
-    if (draftPayroll.length) warnings.push(`${slice.month}: salary for ${draftPayroll.join(', ')} comes from Payroll that is not finalized.`)
-
-    if (estimated.length && salarySource) {
-      warnings.push(`${slice.month}: salary for ${estimated.join(', ')} is estimated from ${salarySource.month} Payroll.`)
+    if (salaryUsed.length && salary) {
+      const who = salaryUsed.join(', ')
+      const live = input.live?.[slice.month]
+      if (salary.basis === 'live' && live) {
+        warnings.push(`${slice.month}: salary for ${who} is calculated now from Payroll data. Payroll has not finalized it.`)
+        if (live.attendance === 'assumed') warnings.push(`${slice.month}: no attendance uploaded, so base pay assumes full attendance.`)
+        if (live.attendance === 'partial') warnings.push(`${slice.month}: attendance is incomplete. ${live.salariedWithoutAttendance} of ${live.salaried} salaried employees have none and get no base pay here.`)
+        const none = Object.entries(live.earnings).filter(([, value]) => value <= 0).map(([kind]) => kind)
+        if (none.length) warnings.push(`${slice.month}: no ${none.join(', ')} work-based pay found yet.`)
+      } else if (salary.basis === 'estimate') {
+        warnings.push(`${slice.month}: salary for ${who} is estimated from ${salary.sourceMonth} finalized Payroll.`)
+      } else if (salary.basis === 'draft') {
+        warnings.push(`${slice.month}: salary for ${who} comes from a saved Payroll draft, which may be incomplete.`)
+      }
     }
     const pending = pendingRecurring(input.recurring ?? [], input.expenses, slice.month, scope)
     if (pending.length) warnings.push(`${slice.month}: ${pending.length} repeating expense(s) not confirmed yet.`)
