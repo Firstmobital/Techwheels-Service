@@ -297,6 +297,14 @@ const STUCK_VEHICLE_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000
 
 function isCardStuck3PlusDays(card: RepairCard): boolean {
   if (card.overall_status !== 'active') return false
+  const rawStage = Number(card.current_stage ?? 1)
+  if (rawStage >= 16) return false
+  const partsStatus = String(card.parts_entry_status ?? '').trim().toLowerCase()
+  if (partsStatus === 'billed' && card.billed_amount != null) return false
+  const doStatus = String(card.do_status ?? '').trim().toLowerCase()
+  if (doStatus === 'received' && card.do_amount != null) return false
+  const doPay = String(card.do_payment_status ?? '').trim().toLowerCase()
+  if (doPay === 'partial' || doPay === 'received') return false
   const timestamps = [
     card.updated_at,
     card.reinspection_at,

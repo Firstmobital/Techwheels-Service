@@ -1080,6 +1080,13 @@ function upsertRejectedDocEntry(raw: string[] | null | undefined, docKey: string
 
 function isCardStuck3PlusDays(card: RepairCard): boolean {
   if (card.overall_status !== 'active') return false
+  const rawStage = Number(card.current_stage ?? 1)
+  if (rawStage >= 16) return false
+  const displayStage = resolveBodyshopCardDisplayStage(card, clampStageUntilRiComplete(card, rawStage))
+  if (displayStage >= 16) return false
+  if (isBillingStage16Done(card)) return false
+  const doPay = String(card.do_payment_status ?? '').trim().toLowerCase()
+  if (doPay === 'partial' || doPay === 'received') return false
   const refIso = card.updated_at || card.survay_info_updated_at || card.bodyshop_floor_since_at || card.received_at || card.created_at
   if (!refIso) return false
   const ms = new Date(refIso).getTime()
