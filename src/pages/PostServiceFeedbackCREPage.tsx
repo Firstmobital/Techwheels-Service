@@ -1,4 +1,13 @@
 import { Fragment, useCallback, useEffect, useState, useMemo } from 'react'
+import { PsfStars } from '../components/postServiceFeedback/PsfStars'
+import {
+  PSF_UI_FOLLOWUP_MAX,
+  PSF_UI_POSITIVE_MIN,
+  PSF_UI_STAR_LEVELS,
+  psfInternalStarColor,
+  psfInternalToDisplayStars,
+  psfUiStarIndexToInternal,
+} from '../lib/postServiceFeedbackDisplay'
 import { supabase } from '../lib/supabase'
 import { getWhatsAppLink, whatsappLocal10 } from '../lib/whatsappLink'
 
@@ -140,19 +149,6 @@ const STATUS_LABEL: Record<string, string> = {
   resolved:    'Resolved',
 }
 
-function starColor(rating: number): string {
-  return rating <= 2 ? 'text-red-600' : rating <= 3 ? 'text-yellow-600' : 'text-green-600'
-}
-
-function Stars({ rating }: { rating: number | null }) {
-  if (rating == null) return <span className="text-gray-400 text-xs">—</span>
-  return (
-    <span className={starColor(rating)}>
-      {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
-    </span>
-  )
-}
-
 function PsfWhatsAppButton({ mobile }: { mobile: string }) {
   const chip = 'rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 whitespace-nowrap'
   const local10 = whatsappLocal10(mobile || '')
@@ -191,22 +187,24 @@ function RatingPicker({
 }: {
   value: number | null
   disabled: boolean
-  onSelect: (rating: number) => void
+  onSelect: (internalRating: number) => void
 }) {
+  const displayFilled = psfInternalToDisplayStars(value) ?? 0
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Rating">
-      <span className="text-xs text-gray-500 mr-1">Rating</span>
-      {[1, 2, 3, 4, 5].map(n => {
-        const selected = value != null && n <= value
+    <div className="flex flex-wrap items-center gap-0.5 max-w-[14rem]" role="group" aria-label="Rating out of 10">
+      <span className="text-xs text-gray-500 mr-1 w-full sm:w-auto">Rating</span>
+      {PSF_UI_STAR_LEVELS.map(n => {
+        const selected = displayFilled > 0 && n <= displayFilled
+        const pressed = value != null && n === displayFilled
         return (
           <button
             key={n}
             type="button"
-            aria-label={`${n} star${n === 1 ? '' : 's'}`}
-            aria-pressed={value === n}
+            aria-label={`${n} of 10`}
+            aria-pressed={pressed}
             disabled={disabled}
-            onClick={() => onSelect(n)}
-            className={`text-lg leading-none disabled:opacity-50 ${selected ? starColor(value) : 'text-gray-300 hover:text-gray-500'}`}
+            onClick={() => onSelect(psfUiStarIndexToInternal(n))}
+            className={`text-sm leading-none disabled:opacity-50 ${selected && value != null ? psfInternalStarColor(value) : 'text-gray-300 hover:text-gray-500'}`}
           >
             {selected ? '★' : '☆'}
           </button>
@@ -281,7 +279,7 @@ function PsfFollowUpMetricPanels({
       <div className={`min-w-0 flex flex-[1.65] flex-col gap-1 p-1.5 ${METRIC_PANEL_SHELL}`}>
         <p className="text-[10px] font-semibold leading-none text-slate-700">Today&apos;s Activity</p>
         <div className="flex min-w-0 flex-wrap gap-1.5">
-          <MetricTile label="Today's 4★ & Above" value={todayProductivity.positive} variant="positive" />
+          <MetricTile label={`Today's ${PSF_UI_POSITIVE_MIN}+`} value={todayProductivity.positive} variant="positive" />
           <MetricTile label="Today's In Progress" value={todayProductivity.inProgress} variant="warn" />
           <MetricTile label="Today's Call Not Picked" value={todayProductivity.callNotPicked} variant="orange" />
           <MetricTile label="Today's Resolved" value={todayProductivity.resolved} variant="positive" />
@@ -454,7 +452,7 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Customer's Original Feedback</h3>
         {row.rating != null && (
           <p className="text-sm text-gray-600 mb-2">
-            Customer rating: <Stars rating={row.rating} />
+            Customer rating: <PsfStars internalRating={row.rating} />
           </p>
         )}
         <div className="bg-white border border-gray-200 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">
@@ -764,8 +762,8 @@ export default function PostServiceFeedbackCREPage() {
         <h1 className="text-lg font-semibold text-gray-900 leading-tight lg:pr-1">Post Service Feedback</h1>
         <div className="flex flex-nowrap gap-1.5">
           <MetricTile overview label="Messages Sent" value={overview.totalSent} variant="neutral" />
-          <MetricTile overview label="4★ & Above" value={overview.positiveCount} variant="positive" />
-          <MetricTile overview label="3★ & Below" value={overview.needsFollowupCount} variant="negative" />
+          <MetricTile overview label={`${PSF_UI_POSITIVE_MIN}+`} value={overview.positiveCount} variant="positive" />
+          <MetricTile overview label={`${PSF_UI_FOLLOWUP_MAX} & Below`} value={overview.needsFollowupCount} variant="negative" />
         </div>
         <div className="flex min-w-0 flex-nowrap items-end gap-2 overflow-x-auto pb-px lg:justify-end">
           {showStatusFilter && (
@@ -846,7 +844,7 @@ export default function PostServiceFeedbackCREPage() {
           onClick={() => { setTier('low'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
           className={`py-1.5 text-sm font-medium border-b-2 transition-colors ${tier === 'low' ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
-          Needs Follow-up (≤3★)
+          {`Needs Follow-up (≤${PSF_UI_FOLLOWUP_MAX})`}
           <span className="ml-1.5 text-xs text-gray-400">{overview.needsFollowupCount}</span>
         </button>
         <button
@@ -860,7 +858,7 @@ export default function PostServiceFeedbackCREPage() {
           onClick={() => { setTier('high'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
           className={`py-1.5 text-sm font-medium border-b-2 transition-colors ${tier === 'high' ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
-          Positive (≥4★)
+          {`Positive (≥${PSF_UI_POSITIVE_MIN})`}
           <span className="ml-1.5 text-xs text-gray-400">{overview.positiveCount}</span>
         </button>
         <button
@@ -925,7 +923,7 @@ export default function PostServiceFeedbackCREPage() {
                       </>
                     ) : (
                       <>
-                        <td className="px-3 py-2"><Stars rating={r.effective_rating} /></td>
+                        <td className="px-3 py-2"><PsfStars internalRating={r.effective_rating} /></td>
                         <td className="px-3 py-2 text-xs text-gray-600 max-w-[220px] truncate" title={r.feedback_text || ''}>
                           {r.feedback_text || '—'}
                         </td>

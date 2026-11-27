@@ -1,4 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
+import { PsfStars } from '../components/postServiceFeedback/PsfStars'
+import {
+  PSF_INTERNAL_LEVELS_DESC,
+  PSF_UI_MAX_STARS,
+  psfFormatRatingText,
+} from '../lib/postServiceFeedbackDisplay'
 import { supabase } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,15 +98,6 @@ function highlightVars(text: string | null | undefined) {
     /^\{\{.*\}\}$/.test(part)
       ? <span key={i} className="bg-yellow-100 text-yellow-800 font-mono px-1 rounded">{part}</span>
       : <span key={i}>{part}</span>
-  )
-}
-
-function Stars({ rating }: { rating: number | null }) {
-  if (rating === null) return <span className="text-gray-400 text-xs">—</span>
-  return (
-    <span className={rating >= 4 ? 'text-green-600' : rating === 3 ? 'text-yellow-600' : 'text-red-600'}>
-      {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
-    </span>
   )
 }
 
@@ -332,7 +329,11 @@ export default function PostServiceFeedbackPage() {
           <StatCard label="Read"               value={stats.read}        color="text-teal-700" />
           <StatCard label="Responded"         value={stats.responded}   color="text-green-700" />
           <StatCard label="Failed"            value={stats.failed}      color="text-red-700" />
-          <StatCard label="Avg Rating (All Time)" value={stats.avg_rating !== null ? stats.avg_rating.toFixed(1) : '—'} color="text-yellow-600" />
+          <StatCard
+            label={`Avg Rating (of ${PSF_UI_MAX_STARS}, display scale)`}
+            value={stats.avg_rating !== null ? (stats.avg_rating * 2).toFixed(1) : '—'}
+            color="text-yellow-600"
+          />
           <StatCard label="Review Links Sent" value={stats.review_links_sent} color="text-orange-700" />
         </div>
       </div>
@@ -577,11 +578,11 @@ export default function PostServiceFeedbackPage() {
               onChange={e => { setFilterRating(e.target.value); setPage(1) }}
             >
               <option value="all">All</option>
-              <option value="5">★★★★★ (5)</option>
-              <option value="4">★★★★☆ (4)</option>
-              <option value="3">★★★☆☆ (3)</option>
-              <option value="2">★★☆☆☆ (2)</option>
-              <option value="1">★☆☆☆☆ (1)</option>
+              {PSF_INTERNAL_LEVELS_DESC.map(internal => (
+                <option key={internal} value={String(internal)}>
+                  {psfFormatRatingText(internal)}
+                </option>
+              ))}
               <option value="none">No Response Yet</option>
             </select>
           </div>
@@ -637,7 +638,7 @@ export default function PostServiceFeedbackPage() {
                       {l.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3"><Stars rating={l.rating} /></td>
+                  <td className="px-4 py-3"><PsfStars internalRating={l.rating} /></td>
                   <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate" title={l.feedback_text || ''}>
                     {l.feedback_text || '—'}
                   </td>
