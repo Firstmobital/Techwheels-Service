@@ -1,5 +1,17 @@
 # Project Handbook Change Log
 
+## 2026-11-27 (Post Service Feedback — genuine 10-star rating migration, DBL-0106)
+
+- Date: 2026-11-27
+- Change summary: Converted the Post Service Feedback (PSF) module from 5-star storage / display-only doubling to a genuine 1–10 integer rating system across database schema, idempotent historical migration (`1→2, 2→4, 3→6, 4→8, 5→10`), non-atomic cutover safety trigger (`trg_psf_guard_legacy_scale_transition`), two-regime lossless recovery strategy, WhatsApp Meta Flow v2 JSON, Edge Functions (`wa-post-service-feedback`, `wa-webhook`, `_shared/psfRating.ts` with `resolvePsfWebhookTarget` exact `context.id` correlation, scale-conflict rejection, already-rated non-spillover, and ambiguity retention in `wa_messages`), and both PSF web dashboards (`PostServiceFeedbackCREPage.tsx`, `PostServiceFeedbackPage.tsx`). Replaced display-only doubling (`×2`) and CRE halving with direct 1–10 storage and new thresholds (`1–4` Poor/Red, `5–7` Average/Amber → Needs Follow-up `≤7★`; `8–10` Positive/Green → Positive `≥8★` + Google Review link).
+- Impacted files: `supabase/migrations/20261127140000_post_service_feedback_ten_star_rating.sql`, `supabase/sql_checks/20261127140000_post_service_feedback_ten_star_rating_checks.sql`, `supabase/sql_checks/20261127140000_post_service_feedback_ten_star_rating_practical.sql`, `supabase/functions/_shared/psfRating.ts`, `supabase/functions/wa-post-service-feedback/index.ts`, `supabase/functions/wa-webhook/index.ts`, `src/lib/postServiceFeedbackDisplay.ts`, `src/components/postServiceFeedback/PsfStars.tsx`, `src/pages/PostServiceFeedbackCREPage.tsx`, `src/pages/PostServiceFeedbackPage.tsx`, `scripts/psf-rating-migration.harness.ts`, `package.json`, `docs/web/cross-cutting/wa_templates/reference/post_service_feedback_10star_flow.json`, `docs/web/cross-cutting/wa_templates/reference/post_service_feedback_wa.md`, `docs/web/cross-cutting/wa_templates/README.md`, `docs/shared/reference/DB_CHANGE_LEDGER.md`, `docs/shared/reference/CURRENT_STATE.md`, `docs/Implementation_plans/webversion/categories/operations/active/OPS-PSF-BOT-001_POST_FEEDBACK_BOT_ROUTING_PLAN_2026-09-11.md`, this log.
+- Business logic change: Yes (genuine 1–10 PSF scale; 1–7 Needs Follow-up incl. 7, 8–10 Positive, Google Review link at ≥8, red/amber/green tiers; legacy 5-star transition).
+- Function-level contract change: Yes (`psf_set_cre_rating` validates 1–10; `psf_get_today_productivity`, `post_service_feedback_cre_due_today`, `insert_post_feedback_bot_from_message`, and `trg_route_eligible_post_feedback_to_bot` updated to `<=7` / `>=8`; `PsfStars` prop renamed `rating`).
+- RBAC/RLS change: No (existing `post_service_feedback_cre` / `auto_service_reminder` / admin policies and RPC permission gates preserved unchanged).
+- Data/schema change: Yes (`DBL-0106`, status `PROPOSED` — verified on isolated local PostgreSQL 17; NOT applied to production; coordinated cutover required with Edge Function + web deploy + Meta Flow publish).
+- Web-Mobile Parity: No mobile PSF CRE screens exist in `mobile/src/` (`mobile/src/app/(customer)/feedback.tsx` is the separate Customer Portal review screen writing `customer_portal_feedback` to `post_feedback_bot_data`, intentionally left unchanged as an unrelated module).
+- Docs updated by: Antigravity Agent.
+
 ## 2026-11-26 (ACCOUNTS-003 "Not in Payroll")
 
 - Date: 2026-11-26

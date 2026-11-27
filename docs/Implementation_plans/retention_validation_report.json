@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-11-26T05:17:07.433Z",
-  "scanned_files": 89,
+  "generated_at_utc": "2026-11-27T08:10:51.702Z",
+  "scanned_files": 90,
   "violations": 0,
   "scanned": [
     {
@@ -253,6 +253,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-002_FINANCE_REPORTING_EXPENSES_REVENUE_REPORTS_PLAN_2026-11-25.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-003_PROFIT_AND_LOSS_REPORT_PLAN_2026-11-26.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

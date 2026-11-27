@@ -37,6 +37,7 @@
     "test:invoice-revenue": "npx tsx scripts/invoice-revenue.harness.ts",
     "test:pnl": "npx tsx scripts/pnl.harness.ts",
     "test:payroll-cost": "npx tsx scripts/payroll-cost-summary.harness.ts",
+    "test:psf-rating": "node --experimental-strip-types scripts/psf-rating-migration.harness.ts",
     "test:customer-portal": "npm --prefix ./mobile run test -- src/lib/api/customerPortalQueryLog.test.ts src/lib/customer/customerDocumentsCache.test.ts src/lib/api/customerPortal.api.test.ts src/lib/customer/mechanicalServiceType.test.ts"
   },
   "dependencies": {

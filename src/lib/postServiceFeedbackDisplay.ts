@@ -1,54 +1,94 @@
 /**
- * Post-service feedback stores ratings 1–5 in the database / WhatsApp flow.
- * UI shows a 10-star scale by doubling for display only (internal 2 → 4 stars shown).
+ * Post Service Feedback (PSF) genuine 1–10 rating scale utilities.
+ *
+ * Stored ratings in post_service_feedback_messages (rating, cre_rating, effective_rating)
+ * are native integers 1..10 (no display-only multiplication or halving).
+ *
+ * Classification:
+ *   1–4  → Poor (Red)      — Needs Follow-up
+ *   5–7  → Average (Amber) — Needs Follow-up
+ *   8–10 → Positive (Green) — Positive
+ *   null → No Rating / No Response
  */
 
-export const PSF_UI_MAX_STARS = 10
-export const PSF_INTERNAL_MAX = 5
-/** Internal ≥4 — shown as 8+ in UI */
-export const PSF_UI_POSITIVE_MIN = 8
-/** Internal ≤3 — shown as ≤6 in UI */
-export const PSF_UI_FOLLOWUP_MAX = 6
+export const PSF_MIN_RATING = 1
+export const PSF_MAX_STARS = 10
+export const PSF_POOR_MAX = 4
+export const PSF_AVERAGE_MIN = 5
+export const PSF_AVERAGE_MAX = 7
+export const PSF_FOLLOWUP_MAX = 7
+export const PSF_POSITIVE_MIN = 8
 
-export const PSF_UI_STAR_LEVELS = Array.from({ length: PSF_UI_MAX_STARS }, (_, i) => i + 1)
-export const PSF_INTERNAL_LEVELS_DESC = Array.from({ length: PSF_INTERNAL_MAX }, (_, i) => PSF_INTERNAL_MAX - i)
+export const PSF_STAR_LEVELS = Array.from({ length: PSF_MAX_STARS }, (_, i) => i + 1)
+export const PSF_STAR_LEVELS_DESC = Array.from({ length: PSF_MAX_STARS }, (_, i) => PSF_MAX_STARS - i)
 
-export function psfInternalToDisplayStars(internal: number | null | undefined): number | null {
-  if (internal == null) return null
-  const clamped = Math.min(PSF_INTERNAL_MAX, Math.max(1, Math.round(internal)))
-  return clamped * 2
+export type PsfRatingTier = 'poor' | 'average' | 'positive'
+export type PsfOperationalBucket = 'needs_followup' | 'positive'
+
+export interface PsfRatingClassification {
+  tier: PsfRatingTier
+  label: 'Poor' | 'Average' | 'Positive'
+  operational: PsfOperationalBucket
+  colorClass: string
 }
 
-/** Map a clicked star index (1–10) to the stored 1–5 CRE/customer scale. */
-export function psfUiStarIndexToInternal(displayStarIndex: number): number {
-  return Math.min(PSF_INTERNAL_MAX, Math.max(1, Math.ceil(displayStarIndex / 2)))
+/** Validate and normalize a stored 1–10 integer rating. Returns null for null/undefined/invalid values. */
+export function psfNormalizeRating(rating: number | null | undefined): number | null {
+  if (rating == null || !Number.isFinite(rating) || !Number.isInteger(rating)) return null
+  if (rating < PSF_MIN_RATING || rating > PSF_MAX_STARS) return null
+  return rating
 }
 
-export function psfInternalStarColor(internal: number): string {
-  if (internal <= 2) return 'text-red-600'
-  if (internal <= 3) return 'text-yellow-600'
-  return 'text-green-600'
+/** Business classification for a 1–10 rating (1–4 Poor/Red, 5–7 Average/Amber, 8–10 Positive/Green). */
+export function psfRatingClassification(rating: number | null | undefined): PsfRatingClassification | null {
+  const n = psfNormalizeRating(rating)
+  if (n == null) return null
+  if (n <= PSF_POOR_MAX) {
+    return { tier: 'poor', label: 'Poor', operational: 'needs_followup', colorClass: 'text-red-600' }
+  }
+  if (n <= PSF_FOLLOWUP_MAX) {
+    return { tier: 'average', label: 'Average', operational: 'needs_followup', colorClass: 'text-amber-600' }
+  }
+  return { tier: 'positive', label: 'Positive', operational: 'positive', colorClass: 'text-green-600' }
 }
 
-export function psfStarGlyphsFromInternal(internal: number | null | undefined): { filled: string; empty: string } | null {
-  const display = psfInternalToDisplayStars(internal)
-  if (display == null) return null
+export function psfStarColor(rating: number | null | undefined): string {
+  return psfRatingClassification(rating)?.colorClass ?? 'text-gray-400'
+}
+
+export function psfStarGlyphs(rating: number | null | undefined): { filled: string; empty: string } | null {
+  const n = psfNormalizeRating(rating)
+  if (n == null) return null
   return {
-    filled: '★'.repeat(display),
-    empty: '☆'.repeat(PSF_UI_MAX_STARS - display),
+    filled: '★'.repeat(n),
+    empty: '☆'.repeat(PSF_MAX_STARS - n),
   }
 }
 
-/** Plain text for tables, exports, and clipboard. */
-export function psfFormatRatingText(internal: number | null | undefined): string {
-  const display = psfInternalToDisplayStars(internal)
-  if (display == null) return '—'
-  return `${display}/${PSF_UI_MAX_STARS}`
+/** Plain numeric text for tables, tooltips, exports, and clipboard (e.g. "7/10"). */
+export function psfFormatRatingText(rating: number | null | undefined): string {
+  const n = psfNormalizeRating(rating)
+  if (n == null) return '—'
+  return `${n}/${PSF_MAX_STARS}`
 }
 
-/** Star string for export columns (10-char scale). */
-export function psfFormatRatingExport(internal: number | null | undefined): string {
-  const glyphs = psfStarGlyphsFromInternal(internal)
+/** Star string with numeric score for export columns (genuine 10-star scale). */
+export function psfFormatRatingExport(rating: number | null | undefined): string {
+  const glyphs = psfStarGlyphs(rating)
   if (!glyphs) return ''
-  return `${glyphs.filled}${glyphs.empty} (${psfFormatRatingText(internal)})`
+  return `${glyphs.filled}${glyphs.empty} (${psfFormatRatingText(rating)})`
+}
+
+/** Compute arithmetic average of valid 1–10 ratings, excluding nulls / no-response rows. */
+export function psfComputeAverageRating(ratings: Array<number | null | undefined>): number | null {
+  let sum = 0
+  let count = 0
+  for (const r of ratings) {
+    const n = psfNormalizeRating(r)
+    if (n != null) {
+      sum += n
+      count += 1
+    }
+  }
+  return count > 0 ? sum / count : null
 }

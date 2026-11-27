@@ -22,6 +22,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { inferPsfTemplateRatingScale, type WaTemplateButton } from '../_shared/psfRating.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -188,6 +189,8 @@ Deno.serve(async (req) => {
 
   const templateName = tpl.name as string
   const templateLang = (cfg.post_service_feedback_template_lang as string) || (tpl.language as string) || 'en'
+  const templateButtons = (tpl.buttons as WaTemplateButton[] | null) || null
+  const requestRatingScale = inferPsfTemplateRatingScale(templateName, templateButtons)
   const varExamples  = (tpl.variable_examples as Array<{ name?: string; example_value?: string; example?: string }>) || []
   const variableMap  = (cfg.post_service_feedback_variable_map as Record<string, string>) || {
     customer_name: 'first_name',
@@ -320,12 +323,13 @@ Deno.serve(async (req) => {
       const bodyParams = buildBodyParams(varExamples, variableMap, c.row)
       stats.sent++
       log.push({
-        job_card_id:  c.jobCardId,
-        reg_no:       c.regNo,
-        phone:        c.phone.e164,
-        action:       'dry_run_would_send',
-        template:     templateName,
-        body_params:  bodyParams,
+        job_card_id:          c.jobCardId,
+        reg_no:               c.regNo,
+        phone:                c.phone.e164,
+        action:               'dry_run_would_send',
+        template:             templateName,
+        request_rating_scale: requestRatingScale,
+        body_params:          bodyParams,
       })
     }
     console.log('PSF: dry run completed —', JSON.stringify(stats))
@@ -351,6 +355,8 @@ Deno.serve(async (req) => {
           closed_date:                 c.closedDate,
           scheduled_for_date:          today,
           template_name:               templateName,
+          request_rating_scale:        requestRatingScale,
+          rating_scale:                requestRatingScale,
           status:                      'pending',
         }])
         .select('id')

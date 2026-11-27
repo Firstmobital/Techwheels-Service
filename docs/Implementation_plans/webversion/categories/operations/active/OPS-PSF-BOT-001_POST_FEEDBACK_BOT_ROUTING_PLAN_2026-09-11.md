@@ -128,10 +128,20 @@ Do not delete or sync-away bot rows when `cre_status` later leaves `open`.
 ## Related Documentation
 
 - `docs/shared/reference/DB_CHANGE_PROTOCOL.md`
-- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0049)
+- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0049, DBL-0106)
 - `docs/shared/reference/DATABASE_TRUTH.md`
+- `docs/web/cross-cutting/wa_templates/reference/post_service_feedback_wa.md`
+- `docs/web/cross-cutting/wa_templates/reference/post_service_feedback_10star_flow.json`
+
+## 10-Star Rating Scale Update (`DBL-0106`, 2026-11-27 — PROPOSED)
+
+Migration `supabase/migrations/20261127140000_post_service_feedback_ten_star_rating.sql` (`DBL-0106`, isolated PostgreSQL 17 verified, pending production apply authorization) upgrades PSF from 1–5 to a genuine 1–10 scale:
+
+- `trg_route_eligible_post_feedback_to_bot` and `insert_post_feedback_bot_from_message(bigint)` eligibility threshold updates from `rating <= 3` to `rating <= 7` (Needs Follow-up = 1–7, Positive = 8–10).
+- Existing linked `post_feedback_bot_data` rows (`source_feedback_message_id IS NOT NULL`, 198 live prod rows) are idempotently migrated `× 2` (`1→2, 2→4, 3→6`) and stamped `rating_scale = 10`; unlinked bot rows are untouched.
+- New PSF-routed bot rows record `rating_scale = 10` alongside their exact 1–7 rating.
 
 ---
 
-**Last Updated:** 2026-09-11 by Cursor Agent  
-**Status:** 🟢 COMPLETED (metadata dump refresh remaining)
+**Last Updated:** 2026-11-27
+**Status:** 🟢 DBL-0049 COMPLETED; DBL-0106 (10-star threshold update) PROPOSED & isolated-verified

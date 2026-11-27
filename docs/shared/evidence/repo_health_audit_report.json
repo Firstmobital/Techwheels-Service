@@ -1,14 +1,31 @@
 {
-  "generated_at_utc": "2026-09-30T07:19:11.643Z",
+  "generated_at_utc": "2026-11-27T07:39:04.801Z",
   "advisory_only": true,
-  "governance_docs_scanned": 36,
+  "governance_docs_scanned": 37,
   "checks": {
-    "broken_or_stale_links": [],
+    "broken_or_stale_links": [
+      {
+        "file": "docs/shared/reference/MODULE_ROUTE_CONTRACT.md",
+        "link_target": "../../../local_folder/backups/full_database.sql",
+        "resolved_path": "local_folder/backups/full_database.sql",
+        "possible_moved_to": null
+      }
+    ],
     "root_level_doc_violations": [
+      {
+        "scope": "repo-root",
+        "file": "deploy-content-only.txt",
+        "rule": "STRUCTURE_GUIDE.md Section 2.0 — only README.md (and the AI contract .instructions.md / CONTRIBUTING.md) belong at repo root"
+      },
       {
         "scope": "repo-root",
         "file": "workflow-log.txt",
         "rule": "STRUCTURE_GUIDE.md Section 2.0 — only README.md (and the AI contract .instructions.md / CONTRIBUTING.md) belong at repo root"
+      },
+      {
+        "scope": "docs-root",
+        "file": "docs/BODYSHOP_INTEGRITY_FIX_PLAN.md",
+        "rule": "STRUCTURE_GUIDE.md Section 2.1 — docs/ root reserved for governance anchors only"
       },
       {
         "scope": "docs-root",
@@ -30,11 +47,33 @@
     },
     "promotion_gaps_best_effort": [
       {
+        "file": "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-003_PROFIT_AND_LOSS_REPORT_PLAN_2026-11-26.md",
+        "done_verified_rows_detected": 1,
+        "note": "File contains Done+Verified table row(s) but no mention of \"promote/promoted/promotion\" anywhere in the file. Verify manually against STRUCTURE_GUIDE.md Section 28 (promotion-before-removal contract) — this is a coarse, file-level signal, not row-level proof."
+      },
+      {
         "file": "docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md",
         "done_verified_rows_detected": 6,
         "note": "File contains Done+Verified table row(s) but no mention of \"promote/promoted/promotion\" anywhere in the file. Verify manually against STRUCTURE_GUIDE.md Section 28 (promotion-before-removal contract) — this is a coarse, file-level signal, not row-level proof."
       }
-    ]
+    ],
+    "ledger_coverage": {
+      "checked": true,
+      "boundary": "20261123120000",
+      "prospective_migrations": 8,
+      "prospective_unmatched": [
+        "20261126210000_bodyshop_floor_reopen_for_rework.sql",
+        "20261127130000_revert_post_service_feedback_five_star_rating.sql"
+      ],
+      "historical_migrations": 105,
+      "historical_unmatched_count": 88,
+      "historical_recorded": {
+        "files": 105,
+        "unmatched": 88
+      },
+      "historical_growth": [],
+      "detail": "Historical unmatched migrations are informational only (no back-fill; unmatched does not mean unverified or failed)."
+    }
   },
-  "total_issues": 4
+  "total_issues": 10
 }

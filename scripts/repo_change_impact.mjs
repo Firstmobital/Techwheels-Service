@@ -309,7 +309,7 @@ function classify(relPath) {
   if (/^src\//.test(relPath) || /^mobile\/src\//.test(relPath) || /^supabase\/functions\//.test(relPath)) {
     return { category: 'application_code', note: relPath.startsWith('supabase/functions/') ? 'Edge function — also consult .instructions.md Section 2 item 8 (Infrastructure) for deployment-specific requirements.' : null }
   }
-  if (/^docs\/.*\.md$/.test(relPath)) {
+  if (/^docs\/.*\.md$/.test(relPath) || /^docs\/web\/cross-cutting\/wa_templates\/reference\/.*\.json$/.test(relPath)) {
     return { category: 'documentation_reference_truth', note: null }
   }
   if (relPath === 'README.md' || relPath === 'CONTRIBUTING.md') {

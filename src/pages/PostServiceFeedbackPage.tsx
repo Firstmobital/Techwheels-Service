@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { PsfStars } from '../components/postServiceFeedback/PsfStars'
 import {
-  PSF_INTERNAL_LEVELS_DESC,
-  PSF_UI_MAX_STARS,
+  PSF_MAX_STARS,
+  PSF_STAR_LEVELS_DESC,
+  psfComputeAverageRating,
   psfFormatRatingText,
 } from '../lib/postServiceFeedbackDisplay'
 import { supabase } from '../lib/supabase'
@@ -24,6 +25,8 @@ interface FeedbackLog {
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'responded' | 'failed'
   failure_reason: string | null
   rating: number | null
+  request_rating_scale?: number | null
+  rating_scale?: number | null
   feedback_text: string | null
   responded_at: string | null
   review_link_sent: boolean
@@ -252,10 +255,7 @@ export default function PostServiceFeedbackPage() {
 
   const stats = useMemo<Stats>(() => {
     const todayLogs = logs.filter(l => l.scheduled_for_date === today)
-    const rated = logs.filter(l => l.rating !== null)
-    const avg = rated.length
-      ? rated.reduce((sum, l) => sum + (l.rating || 0), 0) / rated.length
-      : null
+    const avg = psfComputeAverageRating(logs.map(l => l.rating))
     return {
       total_today: todayLogs.length,
       sent:        todayLogs.filter(l => ['sent', 'delivered', 'read', 'responded'].includes(l.status)).length,
@@ -330,9 +330,9 @@ export default function PostServiceFeedbackPage() {
           <StatCard label="Responded"         value={stats.responded}   color="text-green-700" />
           <StatCard label="Failed"            value={stats.failed}      color="text-red-700" />
           <StatCard
-            label={`Avg Rating (of ${PSF_UI_MAX_STARS}, display scale)`}
-            value={stats.avg_rating !== null ? (stats.avg_rating * 2).toFixed(1) : '—'}
-            color="text-yellow-600"
+            label={`Avg Rating (of ${PSF_MAX_STARS})`}
+            value={stats.avg_rating !== null ? `${stats.avg_rating.toFixed(1)}/${PSF_MAX_STARS}` : '—'}
+            color="text-amber-600"
           />
           <StatCard label="Review Links Sent" value={stats.review_links_sent} color="text-orange-700" />
         </div>
@@ -578,9 +578,9 @@ export default function PostServiceFeedbackPage() {
               onChange={e => { setFilterRating(e.target.value); setPage(1) }}
             >
               <option value="all">All</option>
-              {PSF_INTERNAL_LEVELS_DESC.map(internal => (
-                <option key={internal} value={String(internal)}>
-                  {psfFormatRatingText(internal)}
+              {PSF_STAR_LEVELS_DESC.map(score => (
+                <option key={score} value={String(score)}>
+                  {psfFormatRatingText(score)}
                 </option>
               ))}
               <option value="none">No Response Yet</option>
@@ -638,7 +638,7 @@ export default function PostServiceFeedbackPage() {
                       {l.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3"><PsfStars internalRating={l.rating} /></td>
+                  <td className="px-4 py-3 whitespace-nowrap"><PsfStars rating={l.rating} /></td>
                   <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate" title={l.feedback_text || ''}>
                     {l.feedback_text || '—'}
                   </td>

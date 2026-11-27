@@ -1,27 +1,42 @@
 import {
   psfFormatRatingText,
-  psfInternalStarColor,
-  psfStarGlyphsFromInternal,
+  psfRatingClassification,
+  psfStarGlyphs,
 } from '../../lib/postServiceFeedbackDisplay'
 
-/** Renders stored 1–5 rating as 10-star glyphs (display = internal × 2). */
-export function PsfStars({ internalRating }: { internalRating: number | null | undefined }) {
-  if (internalRating == null) {
+/**
+ * Renders a genuine stored 1–10 PSF rating as 10 star glyphs with red/amber/green
+ * classification and compact numeric score (plus accessible tooltip).
+ */
+export function PsfStars({
+  rating,
+  showNumeric = true,
+}: {
+  rating: number | null | undefined
+  showNumeric?: boolean
+}) {
+  const glyphs = psfStarGlyphs(rating)
+  const classification = psfRatingClassification(rating)
+  if (!glyphs || !classification) {
     return <span className="text-gray-400 text-xs">—</span>
   }
-  const glyphs = psfStarGlyphsFromInternal(internalRating)
-  if (!glyphs) {
-    return <span className="text-gray-400 text-xs">—</span>
-  }
-  const title = psfFormatRatingText(internalRating)
+  const scoreText = psfFormatRatingText(rating)
+  const tooltip = `${scoreText} · ${classification.label}`
   return (
     <span
-      className={`text-[10px] leading-none tracking-tighter whitespace-nowrap ${psfInternalStarColor(internalRating)}`}
-      title={title}
+      className={`inline-flex items-center gap-1 whitespace-nowrap ${classification.colorClass}`}
+      title={tooltip}
+      aria-label={tooltip}
     >
-      {glyphs.filled}
-      {glyphs.empty}
-      <span className="sr-only">{title}</span>
+      <span className="text-[11px] leading-none tracking-[-0.06em]" aria-hidden="true">
+        {glyphs.filled}
+        {glyphs.empty}
+      </span>
+      {showNumeric && (
+        <span className="text-[11px] font-semibold tabular-nums leading-none">
+          {scoreText}
+        </span>
+      )}
     </span>
   )
 }

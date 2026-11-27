@@ -9,6 +9,11 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  isPsfFlowPayload,
+  resolvePsfWebhookTarget,
+  type PsfCandidateRow,
+} from '../_shared/psfRating.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -556,10 +561,10 @@ Deno.serve(async (req) => {
   const todayStr = new Date().toISOString().split('T')[0]
 
   // ── POST SERVICE FEEDBACK: handle WhatsApp Flow feedback submission ──────
-  // When customer taps "Submit Feedback" on the post_service_feedback_v1
-  // template and submits the Flow form, Meta sends an nfm_reply keyed by that
-  // Flow's field names (screen_0_Choose_one_0 / screen_0_Remarks_1). Detect
-  // this before the auto-reminder booking-flow handler below, since both are
+  // Supports both:
+  //   - New 10-star Flow (psf_10_star_v2: rating_10 / rating_scale="10" / remarks)
+  //   - Legacy 5-star Flow (post_service_feedback_v1: screen_0_Choose_one_0 "(N/5)" / screen_0_Remarks_1)
+  // Detect this before the booking-flow handlers below, since all arrive as
   // nfm_reply on a non-flow_active conversation.
   if (msgType === 'interactive') {
     const inter     = msg.interactive as Record<string, unknown>
@@ -574,52 +579,137 @@ Deno.serve(async (req) => {
         flowFields = rawResp as Record<string, unknown>
       }
 
-      const rawRating = flowFields['screen_0_Choose_one_0']
-      if (typeof rawRating === 'string') {
-        const remarks = (flowFields['screen_0_Remarks_1'] as string) || ''
-        // Rating options are labelled "... (N/5)" regardless of on-screen order
-        const ratingMatch = rawRating.match(/\((\d)\/5\)/)
-        const rating = ratingMatch ? parseInt(ratingMatch[1], 10) : null
+      if (isPsfFlowPayload(flowFields)) {
+        const contextMsgId = ((msg.context as Record<string, unknown> | undefined)?.id as string) || null
 
-        await sb.from('wa_messages').insert([{
-          conversation_id: convId, direction: 'inbound', sender: 'customer',
-          body: `[Feedback submitted] Rating: ${rating ?? 'n/a'}/5, Remarks: ${remarks || '(none)'}`,
-          wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
-        }])
-        await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+        // 1. Exact outbound correlation via Meta msg.context.id -> wa_message_id (always priority).
+        //    Do NOT filter by rating IS NULL here so a repeated response to an already-rated request
+        //    is explicitly detected and never spills over to another pending visit for the same phone.
+        let contextRow: PsfCandidateRow | null = null
+        if (contextMsgId) {
+          const { data: byContext } = await sb.from('post_service_feedback_messages')
+            .select('id, rating, request_rating_scale, wa_message_id, job_card_number')
+            .eq('wa_message_id', contextMsgId)
+            .maybeSingle()
+          if (byContext) {
+            contextRow = byContext as PsfCandidateRow
+          }
+        }
 
-        // Find the pending feedback row for this customer (select then update —
-        // JS client doesn't support order+limit on update)
-        const { data: psfRow } = await sb.from('post_service_feedback_messages')
-          .select('id')
-          .eq('mobile_number', from10)
-          .is('rating', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        // 2. Only when exact context correlation is unavailable, load pending unrated rows for this
+        //    phone (limit 5 is sufficient to distinguish 0 vs 1 unambiguous vs >1 ambiguous).
+        let unratedRowsForPhone: PsfCandidateRow[] = []
+        if (!contextRow) {
+          const { data: pendingRows } = await sb.from('post_service_feedback_messages')
+            .select('id, rating, request_rating_scale, wa_message_id, job_card_number')
+            .eq('mobile_number', from10)
+            .is('rating', null)
+            .order('created_at', { ascending: false })
+            .limit(5)
+          unratedRowsForPhone = (pendingRows || []) as PsfCandidateRow[]
+        }
 
-        if (psfRow?.id) {
-          await sb.from('post_service_feedback_messages').update({
-            rating:        rating,
-            feedback_text: remarks || null,
-            responded_at:  new Date().toISOString(),
-            status:        'responded',
-            updated_at:    new Date().toISOString(),
-          }).eq('id', psfRow.id)
+        const decision = resolvePsfWebhookTarget({
+          flowFields,
+          contextRow,
+          unratedRowsForPhone,
+        })
 
-          const reviewLink = (config.google_review_link as string) || ''
-          const replyMsg = rating !== null && rating >= 4 && reviewLink
-            ? `Thank you for the wonderful feedback! 🙏 We'd really appreciate it if you could share a quick Google review:\n${reviewLink}`
-            : `Thank you for your feedback! 🙏 We've noted your comments and our team will look into it.`
+        if (decision.action === 'skip_already_rated') {
+          console.log('PSF webhook ignored repeated response for already-rated row:', JSON.stringify({
+            wa_message_id: waMessageId,
+            context_id: contextMsgId,
+            matched_row_id: decision.matchedRowId,
+            existing_rating: decision.existingRating,
+          }))
+          await sb.from('wa_messages').insert([{
+            conversation_id: convId, direction: 'inbound', sender: 'customer',
+            body: `[Feedback duplicate ignored] Already rated row #${decision.matchedRowId} (${decision.existingRating}/10), Context: ${contextMsgId || 'none'}`,
+            wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+          }])
+          await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+          return new Response('OK', { status: 200 })
+        }
+
+        if (decision.action === 'retain_for_review') {
+          const recoveryRecord = {
+            reason: decision.reason,
+            context_id: contextMsgId,
+            matched_row_id: decision.matchedRowId,
+            candidate_ids: decision.candidateIds,
+            payload_scale: decision.payloadScale,
+            raw_input: decision.rawInput,
+            remarks: decision.remarks || null,
+            response_json: flowFields,
+          }
+          console.warn('PSF webhook retained response for manual review (no feedback row mutated):', JSON.stringify({
+            wa_message_id: waMessageId,
+            ...recoveryRecord,
+          }))
+          await sb.from('wa_messages').insert([{
+            conversation_id: convId, direction: 'inbound', sender: 'customer',
+            body: `[Feedback needs review: ${decision.reason}] ${JSON.stringify(recoveryRecord)}`,
+            wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+          }])
+          await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+          return new Response('OK', { status: 200 })
+        }
+
+        if (decision.action === 'update') {
+          const { parsed, targetRowId, matchStrategy } = decision
+          const nowIso = new Date().toISOString()
+          const scaleNote = parsed.convertedFromLegacy ? ` (legacy ${parsed.rawRating}/5)` : ''
 
           await sb.from('wa_messages').insert([{
-            conversation_id: convId, direction: 'outbound', sender: 'ai',
-            body: replyMsg, ai_generated: true, status: 'sent',
+            conversation_id: convId, direction: 'inbound', sender: 'customer',
+            body: `[Feedback submitted] Rating: ${parsed.storedRating}/10${scaleNote}, Match: ${matchStrategy} (#${targetRowId}), Remarks: ${parsed.remarks || '(none)'}`,
+            wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
           }])
-          await sendWA(phoneId, metaToken, fromE164, replyMsg)
+          await sb.from('wa_conversations').update({ last_message_at: nowIso }).eq('id', convId)
 
-          if (rating !== null && rating >= 4 && reviewLink) {
-            await sb.from('post_service_feedback_messages').update({ review_link_sent: true }).eq('id', psfRow.id)
+          // Atomic update guarded by rating IS NULL so concurrent deliveries cannot overwrite or send duplicate replies
+          const updatePayload: Record<string, unknown> = {
+            rating:        parsed.storedRating,
+            rating_scale:  10,
+            feedback_text: parsed.remarks || null,
+            responded_at:  nowIso,
+            status:        'responded',
+            updated_at:    nowIso,
+          }
+          if (parsed.convertedFromLegacy) {
+            updatePayload.rating_migrated_from_scale = 5
+            updatePayload.rating_migrated_at = nowIso
+          }
+
+          const { data: updatedRows, error: updErr } = await sb.from('post_service_feedback_messages')
+            .update(updatePayload)
+            .eq('id', targetRowId)
+            .is('rating', null)
+            .select('id')
+
+          if (updErr) {
+            console.error('PSF webhook DB update failed (payload preserved in wa_messages):', updErr.message, JSON.stringify({
+              wa_message_id: waMessageId,
+              target_row_id: targetRowId,
+              stored_rating: parsed.storedRating,
+              response_json: flowFields,
+            }))
+          } else if (updatedRows && updatedRows.length > 0) {
+            const reviewLink = (config.google_review_link as string) || ''
+            const shouldSendReviewLink = parsed.sendReviewLink && Boolean(reviewLink)
+            const replyMsg = shouldSendReviewLink
+              ? `Thank you for the wonderful feedback! 🙏 We'd really appreciate it if you could share a quick Google review:\n${reviewLink}`
+              : `Thank you for your feedback! 🙏 We've noted your comments and our team will look into it.`
+
+            await sb.from('wa_messages').insert([{
+              conversation_id: convId, direction: 'outbound', sender: 'ai',
+              body: replyMsg, ai_generated: true, status: 'sent',
+            }])
+            await sendWA(phoneId, metaToken, fromE164, replyMsg)
+
+            if (shouldSendReviewLink) {
+              await sb.from('post_service_feedback_messages').update({ review_link_sent: true }).eq('id', targetRowId)
+            }
           }
         }
 
